@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
-import { flightsTable } from "@workspace/db/schema";
-import { eq, count } from "drizzle-orm";
+import { flightsTable, tripsTable, queueEntriesTable, notificationsTable, usersTable } from "@workspace/db/schema";
+import { eq, and, count, sql } from "drizzle-orm";
 import { logger } from "./logger";
 
 function makeId(): string {
@@ -113,6 +113,103 @@ const SEED_FLIGHTS = [
     status: "available",
   },
 ];
+
+/**
+ * Seeds demo data for a user so the app feels alive after login:
+ * a completed trip, an upcoming trip, an active queue entry,
+ * a few notifications, and 2 Skip the Line passes.
+ * Safe to call repeatedly — no-ops if the user already has trips.
+ */
+export async function seedDemoDataForUser(userId: string): Promise<void> {
+  try {
+    const [{ value: existingTrips }] = await db
+      .select({ value: count() })
+      .from(tripsTable)
+      .where(eq(tripsTable.userId, userId));
+    if (Number(existingTrips) > 0) return;
+
+    const flights = await db.select().from(flightsTable).limit(4);
+    if (flights.length < 3) return;
+
+    const [completedFlight, upcomingFlight, queuedFlight] = flights;
+
+    // One completed and one upcoming trip
+    await db.insert(tripsTable).values([
+      {
+        id: makeId(),
+        userId,
+        flightId: completedFlight.id,
+        status: "completed",
+        bookedAt: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: makeId(),
+        userId,
+        flightId: upcomingFlight.id,
+        status: "upcoming",
+        bookedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+      },
+    ]);
+
+    // An active queue entry (skip if already queued for that flight)
+    const [alreadyQueued] = await db
+      .select()
+      .from(queueEntriesTable)
+      .where(and(eq(queueEntriesTable.userId, userId), eq(queueEntriesTable.flightId, queuedFlight.id)));
+    if (!alreadyQueued) {
+      const [{ value: queueCount }] = await db
+        .select({ value: count() })
+        .from(queueEntriesTable)
+        .where(and(eq(queueEntriesTable.flightId, queuedFlight.id), eq(queueEntriesTable.status, "waiting")));
+      await db.insert(queueEntriesTable).values({
+        id: makeId(),
+        userId,
+        flightId: queuedFlight.id,
+        position: Number(queueCount) + 1,
+        status: "waiting",
+        usedLinePass: false,
+      });
+    }
+
+    // Demo notifications
+    await db.insert(notificationsTable).values([
+      {
+        id: makeId(),
+        userId,
+        title: "Seat confirmed ✈️",
+        body: `Your seat on ${upcomingFlight.fromCity} → ${upcomingFlight.toCity} is confirmed. See you onboard!`,
+        type: "queue_update",
+        read: false,
+      },
+      {
+        id: makeId(),
+        userId,
+        title: "You're in the queue",
+        body: `You joined the queue for ${queuedFlight.fromCity} → ${queuedFlight.toCity}. We'll notify you when a seat opens.`,
+        type: "queue_update",
+        read: false,
+      },
+      {
+        id: makeId(),
+        userId,
+        title: "2 Skip the Line passes added ⚡",
+        body: "Welcome gift: two Skip the Line passes have been added to your account.",
+        type: "membership",
+        read: true,
+      },
+    ]);
+
+    // Welcome gift: 2 line passes so Skip the Line is usable right away
+    await db
+      .update(usersTable)
+      .set({ linePassCount: sql`${usersTable.linePassCount} + 2` })
+      .where(and(eq(usersTable.id, userId), sql`${usersTable.linePassCount} = 0`));
+
+    logger.info({ userId }, "Seeded demo data for user");
+  } catch (err) {
+    logger.error({ err, userId }, "Failed to seed demo data for user");
+  }
+}
 
 export async function seedFlights(): Promise<void> {
   try {

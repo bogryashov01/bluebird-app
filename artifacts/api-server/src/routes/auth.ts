@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { usersTable, notificationsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { signToken, authMiddleware } from "../middlewares/auth";
+import { seedDemoDataForUser } from "../lib/seed";
 
 const router = Router();
 
@@ -58,8 +59,13 @@ router.post("/register", async (req, res) => {
       type: "system",
     });
 
+    // Populate demo trips, queue entry, notifications, and welcome line passes
+    await seedDemoDataForUser(userId);
+
+    // Re-read so the response reflects seeded line passes
+    const [freshUser] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
     const token = signToken(userId);
-    const { passwordHash: _, ...safeUser } = user;
+    const { passwordHash: _, ...safeUser } = freshUser ?? user;
     return res.status(201).json({ token, user: safeUser });
   } catch (err) {
     return res.status(500).json({ error: "Registration failed" });
@@ -84,8 +90,12 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
+    // Backfill demo data for accounts created before demo seeding existed
+    await seedDemoDataForUser(user.id);
+
+    const [freshUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
     const token = signToken(user.id);
-    const { passwordHash: _, ...safeUser } = user;
+    const { passwordHash: _, ...safeUser } = freshUser ?? user;
     return res.json({ token, user: safeUser });
   } catch (err) {
     return res.status(500).json({ error: "Login failed" });
