@@ -81,6 +81,15 @@ export interface Flight {
 export interface JoinQueueRequest {
   flightId: string;
   useLinePass?: boolean;
+  /**
+     * @minimum 1
+     * @maximum 10
+     */
+  passengers?: number;
+}
+
+export interface CancelQueueResponse {
+  success: boolean;
 }
 
 export type QueueEntryStatus = typeof QueueEntryStatus[keyof typeof QueueEntryStatus];

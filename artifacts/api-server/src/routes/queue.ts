@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, pool } from "@workspace/db";
 import { queueEntriesTable, flightsTable, usersTable, notificationsTable } from "@workspace/db/schema";
-import { eq, and, count, sql } from "drizzle-orm";
+import { eq, and, count, sql, sum, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
@@ -21,7 +21,8 @@ function makeId(): string {
 // client can safely retry.
 router.post("/join", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
-  const { flightId, useLinePass } = req.body;
+  const { flightId, useLinePass, passengers: passengersRaw } = req.body;
+  const passengers = Math.max(1, Math.min(10, parseInt(passengersRaw ?? "1", 10) || 1));
 
   if (!flightId) {
     return res.status(400).json({ error: "Flight ID is required" });
@@ -44,6 +45,27 @@ router.post("/join", authMiddleware, async (req, res) => {
     if (flight.status !== "available") {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Flight is no longer available" });
+    }
+    // 1b. Aggregate seat capacity enforcement — sum passengers already reserved
+    //     by all active (waiting or confirmed) entries for this flight, then
+    //     reject when existing + requested would exceed seats_available.
+    const [{ value: reservedPassengers }] = await txDb
+      .select({ value: sql<number>`coalesce(sum(${queueEntriesTable.passengers}), 0)` })
+      .from(queueEntriesTable)
+      .where(
+        and(
+          eq(queueEntriesTable.flightId, String(flightId)),
+          inArray(queueEntriesTable.status, ["waiting", "confirmed"]),
+        ),
+      );
+    if (Number(reservedPassengers) + passengers > flight.seatsAvailable) {
+      await client.query("ROLLBACK");
+      const remaining = flight.seatsAvailable - Number(reservedPassengers);
+      return res.status(400).json({
+        error: remaining <= 0
+          ? "This flight is fully booked"
+          : `Only ${remaining} seat${remaining === 1 ? "" : "s"} remaining for this flight`,
+      });
     }
 
     // 2. Guard against duplicate queue entry
@@ -108,6 +130,7 @@ router.post("/join", authMiddleware, async (req, res) => {
         position,
         status: "waiting",
         usedLinePass: Boolean(useLinePass),
+        passengers,
       })
       .returning();
 
@@ -163,25 +186,52 @@ router.get("/status", authMiddleware, async (req, res) => {
 });
 
 // DELETE /queue/:id (cancel)
+//
+// Cancels the entry and atomically renumbers every remaining waiting entry
+// for the same flight so positions stay contiguous (no gaps after removal).
 router.delete("/:id", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
+  const client = await pool.connect();
   try {
-    const [entry] = await db
+    await client.query("BEGIN");
+    const txDb = drizzle(client, { schema });
+
+    const [entry] = await txDb
       .select()
       .from(queueEntriesTable)
       .where(and(eq(queueEntriesTable.id, String(req.params.id)), eq(queueEntriesTable.userId, userId)));
 
     if (!entry) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Queue entry not found" });
     }
 
-    await db
+    // Mark the entry cancelled
+    await txDb
       .update(queueEntriesTable)
       .set({ status: "cancelled" })
       .where(eq(queueEntriesTable.id, String(req.params.id)));
+
+    // Close the gap: decrement position of every waiting entry ranked after
+    // the one we just removed, keeping positions contiguous.
+    await txDb
+      .update(queueEntriesTable)
+      .set({ position: sql`${queueEntriesTable.position} - 1` })
+      .where(
+        and(
+          eq(queueEntriesTable.flightId, entry.flightId),
+          eq(queueEntriesTable.status, "waiting"),
+          sql`${queueEntriesTable.position} > ${entry.position}`,
+        ),
+      );
+
+    await client.query("COMMIT");
     return res.json({ success: true });
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
     return res.status(500).json({ error: "Failed to cancel queue entry" });
+  } finally {
+    client.release();
   }
 });
 

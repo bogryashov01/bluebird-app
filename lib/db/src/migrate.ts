@@ -44,14 +44,17 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE flights ADD COLUMN IF NOT EXISTS featured     BOOLEAN NOT NULL DEFAULT false;
 
     CREATE TABLE IF NOT EXISTS queue_entries (
-      id            TEXT        PRIMARY KEY,
-      user_id       TEXT        NOT NULL REFERENCES users(id),
-      flight_id     TEXT        NOT NULL REFERENCES flights(id),
-      position      INTEGER     NOT NULL,
-      status        TEXT        NOT NULL DEFAULT 'waiting',
-      used_line_pass BOOLEAN    NOT NULL DEFAULT false,
-      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      id             TEXT        PRIMARY KEY,
+      user_id        TEXT        NOT NULL REFERENCES users(id),
+      flight_id      TEXT        NOT NULL REFERENCES flights(id),
+      position       INTEGER     NOT NULL,
+      status         TEXT        NOT NULL DEFAULT 'waiting',
+      used_line_pass BOOLEAN     NOT NULL DEFAULT false,
+      passengers     INTEGER     NOT NULL DEFAULT 1,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS passengers INTEGER NOT NULL DEFAULT 1;
 
     CREATE TABLE IF NOT EXISTS trips (
       id         TEXT        PRIMARY KEY,

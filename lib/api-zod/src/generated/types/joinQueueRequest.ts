@@ -9,4 +9,9 @@
 export interface JoinQueueRequest {
   flightId: string;
   useLinePass?: boolean;
+  /**
+     * @minimum 1
+     * @maximum 10
+     */
+  passengers?: number;
 }

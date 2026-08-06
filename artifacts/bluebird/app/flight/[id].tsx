@@ -1,204 +1,369 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Platform, Alert,
+  ActivityIndicator, Platform, Alert, ImageBackground,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import { useColors } from '@/hooks/useColors';
 import { useGetFlight } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
 
-function formatDate(dateStr: string): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+// ── Aircraft image matching (same regex as Discover) ──────────────────────────
+const AIRCRAFT_IMAGES = [
+  { match: /gulfstream|g280|challenger|falcon/i,      source: require('@/assets/images/aircraft-heavy.jpg') },
+  { match: /king air|pilatus|pc-12|turboprop/i,       source: require('@/assets/images/aircraft-turboprop.jpg') },
+  { match: /phenom|xls|latitude/i,                   source: require('@/assets/images/aircraft-midsize.jpg') },
+];
+const LIGHT_JET = require('@/assets/images/aircraft-light.jpg');
+function aircraftImage(type: string) {
+  for (const { match, source } of AIRCRAFT_IMAGES) if (match.test(type)) return source;
+  return LIGHT_JET;
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+/** Compute arrival time from "HH:MM" departure and "Xh YYm" duration. */
+function computeArrival(departureTime: string, duration: string): string {
+  const [depH, depM] = departureTime.split(':').map(Number);
+  const hours = duration.match(/(\d+)h/);
+  const mins  = duration.match(/(\d+)m/);
+  const totalMins = depH * 60 + depM
+    + (hours ? parseInt(hours[1]) * 60 : 0)
+    + (mins  ? parseInt(mins[1])       : 0);
+  const arrH = Math.floor(totalMins / 60) % 24;
+  const arrM = totalMins % 60;
+  return `${String(arrH).padStart(2, '0')}:${String(arrM).padStart(2, '0')}`;
+}
+
+function formatDate(d: string) {
+  const [y, m, day] = d.split('-').map(Number);
+  return new Date(y, m - 1, day).toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
+}
+
+// Amenity tile data (mixes real flight fields + standard charter amenities)
+function amenities(f: any) {
+  return [
+    { label: 'Duration',   value: f.duration },
+    { label: 'Seats',      value: `${f.seatsAvailable} / ${f.aircraftCapacity}` },
+    { label: 'WiFi',       value: 'Onboard' },
+    { label: 'Pets',       value: 'Welcome' },
+    { label: 'Baggage',    value: '2 per seat' },
+    { label: 'Aircraft',   value: (f.aircraftType as string).split(' ').slice(-2).join(' ') },
+  ];
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 export default function FlightDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const [passengers, setPassengers] = useState(1);
 
   const { data: flight, isLoading, isError } = useGetFlight(id!);
 
-  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const topPad  = Platform.OS === 'web' ? 60 : insets.top;
+  const botPad  = Platform.OS === 'web' ? 34 : insets.bottom;
+  const backTop = topPad + 14;
 
+  // ── Loading / Error — guards before any flight-property access ──
   if (isLoading) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.primary} size="large" />
+      <View style={styles.centered}>
+        <ActivityIndicator color="#1259F2" size="large" />
       </View>
     );
   }
-
   if (isError || !flight) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <Text style={[styles.errorText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>Flight not found</Text>
+      <View style={styles.centered}>
+        <Text style={styles.errText}>Flight not found</Text>
       </View>
     );
   }
 
-  // @ts-ignore
-  const f = flight as any;
+  // f is guaranteed non-null below this point
+  const f         = flight as any;
+  const imgSource = aircraftImage(f.aircraftType);
+  const price     = f.priceUsd ? `$${f.priceUsd.toLocaleString()}` : null;
 
   const handleJoinQueue = () => {
-    router.push({ pathname: '/queue/join', params: { flightId: f.id, fromCity: f.fromCity, toCity: f.toCity, from: f.fromAirport, to: f.toAirport } });
-  };
-
-  const handleSkipLine = () => {
-    if (!user || user.linePassCount < 1) {
-      Alert.alert('No Line Passes', 'Upgrade to Plus or Concierge membership to get Skip the Line passes.', [
-        { text: 'View Membership', onPress: () => router.push('/(tabs)/membership') },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-      return;
-    }
-    router.push({ pathname: '/queue/join', params: { flightId: f.id, fromCity: f.fromCity, toCity: f.toCity, from: f.fromAirport, to: f.toAirport, useLinePass: '1' } });
+    router.push({
+      pathname: '/queue/join',
+      params: {
+        flightId:   f.id,
+        fromCity:   f.fromCity,
+        toCity:     f.toCity,
+        from:       f.fromAirport,
+        to:         f.toAirport,
+        passengers: String(passengers),
+      },
+    });
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 100 }]} showsVerticalScrollIndicator={false}>
-        {/* Aircraft hero */}
-        <View style={[styles.hero, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={[styles.heroIconBg, { backgroundColor: colors.primary + '20', borderColor: colors.primary + '30' }]}>
-            <Feather name="send" size={48} color={colors.primary} style={{ transform: [{ rotate: '-45deg' }] }} />
+    <View style={styles.root}>
+      {/* ── Frosted back button (floats above hero) ── */}
+      <TouchableOpacity
+        style={[styles.backBtn, { top: backTop }]}
+        onPress={() => router.back()}
+        activeOpacity={0.75}
+      >
+        <Text style={styles.backChevron}>‹</Text>
+      </TouchableOpacity>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: botPad + 100 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Hero image with gradient ── */}
+        <ImageBackground source={imgSource} style={styles.hero}>
+          {/* Top-to-middle dark fade so back button is visible */}
+          <LinearGradient
+            colors={['rgba(6,11,31,0.50)', 'rgba(6,11,31,0.0)']}
+            locations={[0, 0.55]}
+            style={StyleSheet.absoluteFill}
+          />
+          {/* Bottom fade to #FAFAF8 so hero blends into content below */}
+          <LinearGradient
+            colors={['rgba(250,250,248,0)', '#FAFAF8']}
+            locations={[0.55, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+
+          {/* Route pill at bottom of hero */}
+          <View style={styles.routePill}>
+            <Text style={styles.routePillText}>
+              {f.fromAirport} → {f.toAirport}
+            </Text>
           </View>
-          <Text style={[styles.heroAircraft, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            {f.aircraftType}
-          </Text>
+        </ImageBackground>
+
+        {/* ── Title row ── */}
+        <View style={styles.titleRow}>
+          <Text style={styles.aircraftName} numberOfLines={1}>{f.aircraftType}</Text>
+          {price && <Text style={styles.priceText}>{price}</Text>}
         </View>
 
-        {/* Route */}
-        <View style={styles.section}>
-          <View style={styles.routeRow}>
-            <View style={styles.airportBlock}>
-              <Text style={[styles.airportCode, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{f.fromAirport}</Text>
-              <Text style={[styles.cityName, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{f.fromCity}</Text>
-            </View>
-            <View style={styles.routeCenter}>
-              <View style={[styles.routeLine, { backgroundColor: colors.border }]} />
-              <Feather name="send" size={16} color={colors.primary} style={{ transform: [{ rotate: '-45deg' }] }} />
-              <View style={[styles.routeLine, { backgroundColor: colors.border }]} />
-            </View>
-            <View style={[styles.airportBlock, { alignItems: 'flex-end' }]}>
-              <Text style={[styles.airportCode, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{f.toAirport}</Text>
-              <Text style={[styles.cityName, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{f.toCity}</Text>
-            </View>
+        {/* ── Date row ── */}
+        <Text style={styles.dateText}>{formatDate(f.departureDate)}</Text>
+
+        {/* ── Horizontal route card ── */}
+        <View style={styles.routeCard}>
+          <View style={styles.routeEndpoint}>
+            <Text style={styles.routeCode}>{f.fromAirport}</Text>
+            <Text style={styles.routeTime}>{f.departureTime}</Text>
+            <Text style={styles.routeCity} numberOfLines={1}>{f.fromCity}</Text>
+          </View>
+          <View style={styles.routeCenter}>
+            <View style={styles.routeLine} />
+            <View style={styles.routeDot} />
+            <Text style={styles.routeDuration}>{f.duration}</Text>
+            <View style={styles.routeDot} />
+            <View style={styles.routeLine} />
+          </View>
+          <View style={[styles.routeEndpoint, { alignItems: 'flex-end' }]}>
+            <Text style={styles.routeCode}>{f.toAirport}</Text>
+            <Text style={styles.routeTime}>{computeArrival(f.departureTime, f.duration)}</Text>
+            <Text style={styles.routeCity} numberOfLines={1}>{f.toCity}</Text>
           </View>
         </View>
 
-        {/* Details card */}
-        <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {[
-            { icon: 'calendar', label: 'Date', value: formatDate(f.departureDate) },
-            { icon: 'clock', label: 'Departure', value: f.departureTime },
-            { icon: 'activity', label: 'Duration', value: f.duration },
-            { icon: 'users', label: 'Seats available', value: `${f.seatsAvailable} of ${f.aircraftCapacity}` },
-          ].map((row, i) => (
-            <React.Fragment key={row.label}>
-              {i > 0 && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
-              <View style={styles.detailRow}>
-                <View style={styles.detailLeft}>
-                  <Feather name={row.icon as any} size={16} color={colors.mutedForeground} />
-                  <Text style={[styles.detailLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{row.label}</Text>
-                </View>
-                <Text style={[styles.detailValue, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>{row.value}</Text>
-              </View>
-            </React.Fragment>
+        {/* ── Amenity tile grid ── */}
+        <View style={styles.amenityGrid}>
+          {amenities(f).map((a) => (
+            <View key={a.label} style={styles.amenityTile}>
+              <Text style={styles.amenityLabel}>{a.label}</Text>
+              <Text style={styles.amenityValue}>{a.value}</Text>
+            </View>
           ))}
         </View>
 
-        {/* Policy link */}
+        {/* ── Passenger stepper ── */}
+        <View style={styles.stepperCard}>
+          <View style={styles.stepperLeft}>
+            <Text style={styles.stepperTitle}>Passengers</Text>
+            <Text style={styles.stepperHint}>Max {f.seatsAvailable} seat{f.seatsAvailable !== 1 ? 's' : ''} available</Text>
+          </View>
+          <View style={styles.stepper}>
+            <TouchableOpacity
+              style={[styles.stepBtn, passengers <= 1 && styles.stepBtnDisabled]}
+              onPress={() => setPassengers(Math.max(1, passengers - 1))}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.stepBtnText}>−</Text>
+            </TouchableOpacity>
+            <Text style={styles.stepCount}>{passengers}</Text>
+            <TouchableOpacity
+              style={[styles.stepBtn, passengers >= f.seatsAvailable && styles.stepBtnDisabled]}
+              onPress={() => setPassengers(Math.min(f.seatsAvailable, passengers + 1))}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.stepBtnText}>+</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── Policy link ── */}
         <TouchableOpacity
-          style={[styles.policyLink, { borderColor: colors.border }]}
+          style={styles.policyRow}
           onPress={() => router.push('/flight/policy')}
           activeOpacity={0.7}
         >
-          <Feather name="file-text" size={16} color={colors.mutedForeground} />
-          <Text style={[styles.policyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            View Flight Policy & Terms
-          </Text>
-          <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+          <Text style={styles.policyText}>View Flight Policy & Terms</Text>
+          <Text style={styles.policyChevron}>›</Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* CTA buttons */}
-      <View style={[styles.ctaBar, { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: bottomPad + 12 }]}>
+      {/* ── Bottom sticky CTA ── */}
+      <View style={[styles.ctaBar, { paddingBottom: botPad + 12 }]}>
         {user && user.linePassCount > 0 && (
           <TouchableOpacity
-            style={[styles.skipBtn, { backgroundColor: colors.secondary, borderColor: colors.primary + '60' }]}
-            onPress={handleSkipLine}
+            style={styles.skipBtn}
+            onPress={() =>
+              router.push({
+                pathname: '/queue/join',
+                params: {
+                  flightId: f.id, fromCity: f.fromCity, toCity: f.toCity,
+                  from: f.fromAirport, to: f.toAirport, useLinePass: '1',
+                  passengers: String(passengers),
+                },
+              })
+            }
             activeOpacity={0.8}
           >
-            <Feather name="zap" size={16} color={colors.primary} />
-            <Text style={[styles.skipBtnText, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>
-              Skip the Line ({user.linePassCount})
-            </Text>
+            <Text style={styles.skipBtnText}>⚡ Skip the Line ({user.linePassCount})</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={[styles.queueBtn, { backgroundColor: colors.primary }]} onPress={handleJoinQueue} activeOpacity={0.8}>
-          <Text style={[styles.queueBtnText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>Join the Queue</Text>
-          <Feather name="arrow-right" size={18} color="#fff" />
+        <TouchableOpacity style={styles.joinBtn} onPress={handleJoinQueue} activeOpacity={0.8}>
+          <Text style={styles.joinBtnText}>Request to Join</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.conciergeLink}
+          onPress={() => router.push('/concierge')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.conciergeLinkText}>Ask AI Concierge about this flight</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 }
 
+// ── Styles ────────────────────────────────────────────────────────────────────
+const BG   = '#FAFAF8';
+const DARK = '#0A1128';
+const MUTED = 'rgba(10,17,40,0.45)';
+const BLUE  = '#1259F2';
+const CARD  = '#fff';
+
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { fontSize: 16 },
-  scrollContent: { paddingTop: 8 },
-  hero: {
-    marginHorizontal: 16, marginBottom: 8, borderRadius: 16, borderWidth: 1,
-    padding: 32, justifyContent: 'center', alignItems: 'center', gap: 16,
+  root:    { flex: 1, backgroundColor: BG },
+  centered: { flex: 1, backgroundColor: BG, justifyContent: 'center', alignItems: 'center' },
+  errText: { fontFamily: 'Inter_400Regular', fontSize: 16, color: MUTED },
+
+  // Back button
+  backBtn: {
+    position: 'absolute', zIndex: 20, left: 16,
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.80)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  heroIconBg: {
-    width: 100, height: 100, borderRadius: 50,
-    borderWidth: 1, justifyContent: 'center', alignItems: 'center',
+  backChevron: { fontFamily: 'Inter_500Medium', fontSize: 22, color: DARK, marginTop: -2 },
+
+  // Hero
+  hero: { width: '100%', height: 280, justifyContent: 'flex-end' },
+  routePill: {
+    marginBottom: 18, alignSelf: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 100, paddingHorizontal: 16, paddingVertical: 6,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.30)',
   },
-  heroAircraft: { fontSize: 14 },
-  section: { paddingHorizontal: 16, marginVertical: 16 },
-  routeRow: { flexDirection: 'row', alignItems: 'center' },
-  airportBlock: { flex: 1 },
-  airportCode: { fontSize: 32 },
-  cityName: { fontSize: 14, marginTop: 2 },
-  routeCenter: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, gap: 6 },
-  routeLine: { flex: 1, height: 1, width: 30 },
-  detailCard: {
-    marginHorizontal: 16, borderRadius: 16, borderWidth: 1, overflow: 'hidden',
-  },
-  detailRow: {
+  routePillText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#fff', letterSpacing: 0.5 },
+
+  // Title row
+  titleRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 14, paddingHorizontal: 16,
+    paddingHorizontal: 20, marginTop: 8,
   },
-  detailLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  detailLabel: { fontSize: 14 },
-  detailValue: { fontSize: 14 },
-  separator: { height: 1 },
-  policyLink: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    marginHorizontal: 16, marginTop: 12, paddingVertical: 14, paddingHorizontal: 16,
-    borderWidth: 1, borderRadius: 12,
+  aircraftName: { fontFamily: 'Inter_700Bold', fontSize: 22, color: DARK, flex: 1, marginRight: 12 },
+  priceText:   { fontFamily: 'Inter_700Bold', fontSize: 22, color: BLUE },
+
+  // Date
+  dateText: { fontFamily: 'Inter_400Regular', fontSize: 14, color: MUTED, paddingHorizontal: 20, marginTop: 4, marginBottom: 18 },
+
+  // Horizontal route card
+  routeCard: {
+    marginHorizontal: 16, backgroundColor: CARD,
+    borderRadius: 18, padding: 18, flexDirection: 'row', alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, shadowOpacity: 0.05, elevation: 3,
+    marginBottom: 14,
   },
-  policyText: { flex: 1, fontSize: 14 },
+  routeEndpoint: { flex: 1, alignItems: 'flex-start' },
+  routeCode:   { fontFamily: 'Inter_700Bold', fontSize: 18, color: DARK },
+  routeTime:   { fontFamily: 'Inter_500Medium', fontSize: 14, color: DARK, marginTop: 2 },
+  routeCity:   { fontFamily: 'Inter_400Regular', fontSize: 12, color: MUTED, marginTop: 2 },
+  routeCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  routeLine:   { flex: 1, height: 1, backgroundColor: 'rgba(10,17,40,0.10)' },
+  routeDot:    { width: 5, height: 5, borderRadius: 3, backgroundColor: BLUE },
+  routeDuration: { fontFamily: 'Inter_500Medium', fontSize: 11, color: MUTED },
+
+  // Amenity grid: 2-column
+  amenityGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 10, marginBottom: 14,
+  },
+  amenityTile: {
+    width: '47.5%', backgroundColor: CARD, borderRadius: 14, padding: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
+  },
+  amenityLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 },
+  amenityValue: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: DARK },
+
+  // Passenger stepper
+  stepperCard: {
+    marginHorizontal: 16, backgroundColor: CARD, borderRadius: 18,
+    paddingVertical: 14, paddingHorizontal: 18,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
+    marginBottom: 16,
+  },
+  stepperLeft:  {},
+  stepperTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: DARK },
+  stepperHint:  { fontFamily: 'Inter_400Regular', fontSize: 12, color: MUTED, marginTop: 2 },
+  stepper:      { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  stepBtn: {
+    width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(10,17,40,0.06)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  stepBtnDisabled: { opacity: 0.35 },
+  stepBtnText: { fontFamily: 'Inter_700Bold', fontSize: 18, color: DARK },
+  stepCount:   { fontFamily: 'Inter_700Bold', fontSize: 18, color: DARK, minWidth: 22, textAlign: 'center' },
+
+  // Policy link
+  policyRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: 16, paddingVertical: 14,
+    borderTopWidth: 1, borderTopColor: 'rgba(10,17,40,0.08)',
+  },
+  policyText:    { fontFamily: 'Inter_400Regular', fontSize: 14, color: MUTED },
+  policyChevron: { fontFamily: 'Inter_400Regular', fontSize: 20, color: MUTED },
+
+  // CTA bar
   ctaBar: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, gap: 10,
+    backgroundColor: BG, paddingHorizontal: 16, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: 'rgba(10,17,40,0.08)',
+    gap: 10,
   },
   skipBtn: {
-    height: 50, borderRadius: 14, flexDirection: 'row', justifyContent: 'center',
-    alignItems: 'center', gap: 8, borderWidth: 1,
+    borderWidth: 1.5, borderColor: BLUE, borderRadius: 14, paddingVertical: 13, alignItems: 'center',
   },
-  skipBtnText: { fontSize: 15 },
-  queueBtn: {
-    height: 56, borderRadius: 14, flexDirection: 'row',
-    justifyContent: 'center', alignItems: 'center', gap: 8,
+  skipBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: BLUE },
+  joinBtn: {
+    backgroundColor: BLUE, borderRadius: 14, paddingVertical: 15, alignItems: 'center',
   },
-  queueBtnText: { fontSize: 16 },
+  joinBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: '#fff' },
+  conciergeLink: { alignItems: 'center', paddingBottom: 4 },
+  conciergeLinkText: { fontFamily: 'Inter_500Medium', fontSize: 13, color: MUTED },
 });

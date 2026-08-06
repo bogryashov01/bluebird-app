@@ -203,6 +203,33 @@ paths:
                 items:
                   $ref: "#/components/schemas/QueueEntry"
 
+  /queue/{id}:
+    delete:
+      operationId: cancelQueueEntry
+      tags: [queue]
+      summary: Cancel (leave) a queue entry
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Queue entry cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelQueueResponse"
+        "404":
+          description: Queue entry not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /trips:
     get:
       operationId: listTrips
@@ -455,8 +482,21 @@ components:
           type: string
         useLinePass:
           type: boolean
+        passengers:
+          type: number
+          minimum: 1
+          maximum: 10
+          default: 1
       required:
         - flightId
+
+    CancelQueueResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required:
+        - success
 
     QueueEntry:
       type: object

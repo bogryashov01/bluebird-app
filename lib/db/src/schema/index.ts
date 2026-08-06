@@ -41,6 +41,7 @@ export const queueEntriesTable = pgTable("queue_entries", {
   position: integer("position").notNull(),
   status: text("status").notNull().default("waiting"),
   usedLinePass: boolean("used_line_pass").notNull().default(false),
+  passengers: integer("passengers").notNull().default(1),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

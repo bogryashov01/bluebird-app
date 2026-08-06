@@ -1,199 +1,283 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import { useColors } from '@/hooks/useColors';
-import { useGetMembership, useUpgradeMembership } from '@workspace/api-client-react';
+import { useGetMembership, useUpgradeMembership, useListTrips } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
+import { StatCard } from '@/components/StatCard';
 
+// ── Tier config ───────────────────────────────────────────────────────────────
 const TIERS = [
   {
     id: 'base',
-    name: 'Base',
-    price: '$99/mo',
-    description: 'Get started with private aviation',
-    features: ['Browse empty leg flights', 'Join queue for any flight', 'Flight notifications', 'Community access'],
+    label: 'Base',
+    price: '$99 / mo',
+    tagline: 'Get started with private aviation',
+    features: ['Browse empty-leg flights', 'Join queue for any flight', 'Flight notifications', 'Community access'],
     color: '#8896B3',
   },
   {
     id: 'plus',
-    name: 'Plus',
-    price: '$299/mo',
-    description: 'More access, more freedom',
-    features: ['Everything in Base', '2 Skip the Line passes/mo', 'Priority support', 'International flights', 'Guest pass'],
+    label: 'Plus',
+    price: '$299 / mo',
+    tagline: 'More access, more freedom',
+    features: ['Everything in Base', '2 Skip the Line passes / mo', 'Priority support', 'International flights', 'Guest pass'],
     color: '#1259F2',
   },
   {
     id: 'concierge',
-    name: 'Concierge',
-    price: '$799/mo',
-    description: 'The complete Bluebird experience',
+    label: 'Concierge',
+    price: '$799 / mo',
+    tagline: 'The complete Bluebird experience',
     features: ['Everything in Plus', 'Unlimited Line passes', 'AI Concierge 24/7', 'Dedicated coordinator', 'Lounge access', 'Custom flights'],
     color: '#F59E0B',
   },
 ];
 
+const TIER_IDX: Record<string, number> = { base: 0, plus: 1, concierge: 2 };
+
+// ── Upgrade card solid-color backgrounds (LinearGradient not needed on web) ──
+const UPGRADE_BG: Record<string, string> = {
+  base:       '#1259F2',
+  plus:       '#0A1128',
+  concierge:  '#92400E',
+};
+
+function tierDisplayName(t: string) {
+  return TIERS.find((x) => x.id === t)?.label ?? t;
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 export default function MembershipScreen() {
-  const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets      = useSafeAreaInsets();
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
-  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { data: membership, isLoading, refetch } = useGetMembership({});
+  const { data: membership, isLoading: memLoading } = useGetMembership({});
+  const { data: tripsRaw,   isLoading: tripsLoading } = useListTrips({});
+
   const upgradeMutation = useUpgradeMembership({
     mutation: {
-      onSuccess: (data) => {
-        const d = data as any;
+      onSuccess: (data: any) => {
         queryClient.invalidateQueries({ queryKey: ['getMembership'] });
-        // Sync the cached auth user so profile/header reflect the new tier and pass count immediately
-        if (user) {
-          updateUser({ ...user, membershipTier: d.tier, linePassCount: d.linePassCount });
-        }
-        Alert.alert('Membership Upgraded! ✨', `Welcome to ${d.tier} membership!`);
+        if (user) updateUser({ ...user, membershipTier: data.tier, linePassCount: data.linePassCount });
+        Alert.alert('Membership Upgraded! ✨', `Welcome to ${tierDisplayName(data.tier)} membership!`);
       },
-      onError: (err: any) => {
-        Alert.alert('Error', err?.response?.data?.error || 'Upgrade failed');
-      },
+      onError: (err: any) => Alert.alert('Error', err?.response?.data?.error ?? 'Upgrade failed'),
     },
   });
 
-  const currentTier = (membership as any)?.tier ?? user?.membershipTier ?? 'base';
+  const mem         = membership as any;
+  const trips       = (tripsRaw as any[]) ?? [];
+  const currentTier = mem?.tier ?? user?.membershipTier ?? 'base';
+  const currentIdx  = TIER_IDX[currentTier] ?? 0;
+
+  // Derivable stats only (plan decision C)
+  const flightsFlown  = trips.filter((t) => t.status === 'completed').length;
+  const linePasses    = mem?.linePassCount ?? user?.linePassCount ?? 0;
+  const memberSince   = user?.createdAt ? new Date(user.createdAt).getFullYear() : '—';
+  const tierLabel     = tierDisplayName(currentTier);
 
   const handleUpgrade = (tierId: string) => {
-    if (tierId === currentTier) return;
+    if (tierId === currentTier || TIER_IDX[tierId] < currentIdx) return;
     Alert.alert(
-      `Upgrade to ${tierId.charAt(0).toUpperCase() + tierId.slice(1)}?`,
-      `This will upgrade your membership. You'll receive bonus Skip the Line passes immediately.`,
+      `Upgrade to ${tierDisplayName(tierId)}?`,
+      "You'll receive bonus Skip the Line passes immediately.",
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Upgrade', onPress: () => upgradeMutation.mutate({ data: { tier: tierId as 'plus' | 'concierge' } }) },
-      ]
+      ],
     );
   };
 
-  if (isLoading) {
+  if (memLoading || tripsLoading) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.primary} size="large" />
+      <View style={styles.centered}>
+        <ActivityIndicator color={BLUE} size="large" />
       </View>
     );
   }
 
+  // Next upgrade tier
+  const nextTier = TIERS[currentIdx + 1];
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: topPad + 16, paddingBottom: bottomPad + 80 }]} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.headerTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Membership</Text>
-
-        {/* Line passes badge */}
-        {(membership as any)?.linePassCount !== undefined && (
-          <View style={[styles.passCard, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '40' }]}>
-            <Feather name="zap" size={20} color={colors.primary} />
-            <View style={styles.passCardText}>
-              <Text style={[styles.passCardNum, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
-                {(membership as any).linePassCount}
-              </Text>
-              <Text style={[styles.passCardLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                Skip the Line passes remaining
-              </Text>
-            </View>
+    <View style={styles.root}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingTop: topPad + 16, paddingBottom: botPad + 80 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Header ── */}
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.headerName}>{user?.name ?? 'Member'}</Text>
+            <Text style={styles.headerSub}>Member since {memberSince}</Text>
           </View>
-        )}
+          <View style={[styles.tierPill, { backgroundColor: TIERS.find(t => t.id === currentTier)?.color + '18' }]}>
+            <Text style={[styles.tierPillText, { color: TIERS.find(t => t.id === currentTier)?.color ?? DARK }]}>
+              {tierLabel}
+            </Text>
+          </View>
+        </View>
 
-        {/* Tier cards */}
-        <View style={styles.tierList}>
-          {TIERS.map((tier) => {
-            const isCurrent = tier.id === currentTier;
-            const isUpgrade = TIERS.findIndex(t => t.id === currentTier) < TIERS.findIndex(t => t.id === tier.id);
-            return (
-              <View
-                key={tier.id}
-                style={[
-                  styles.tierCard,
-                  { backgroundColor: colors.card, borderColor: isCurrent ? tier.color : colors.border, borderWidth: isCurrent ? 2 : 1 },
-                ]}
-              >
-                {/* Header */}
-                <View style={styles.tierCardHeader}>
-                  <View>
-                    <View style={styles.tierNameRow}>
-                      <Text style={[styles.tierName, { color: tier.color, fontFamily: 'Inter_700Bold' }]}>{tier.name}</Text>
-                      {isCurrent && (
-                        <View style={[styles.currentBadge, { backgroundColor: tier.color + '20' }]}>
-                          <Text style={[styles.currentBadgeText, { color: tier.color, fontFamily: 'Inter_500Medium' }]}>Current</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={[styles.tierDesc, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{tier.description}</Text>
-                  </View>
-                  <Text style={[styles.tierPrice, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{tier.price}</Text>
-                </View>
+        {/* ── 2×2 Stats grid ── */}
+        <Text style={styles.sectionLabel}>Activity</Text>
+        <View style={styles.statRow}>
+          <StatCard label="Flights Flown" value={flightsFlown} />
+          <StatCard label="Line Passes" value={linePasses} />
+        </View>
+        <View style={[styles.statRow, { marginTop: 10 }]}>
+          <StatCard label="Member Since" value={memberSince} />
+          <StatCard label="Membership" value={tierLabel} />
+        </View>
 
-                {/* Features */}
-                <View style={[styles.featureList, { borderTopColor: colors.border }]}>
-                  {tier.features.map((f) => (
-                    <View key={f} style={styles.featureRow}>
-                      <Feather name="check" size={14} color={tier.color} />
-                      <Text style={[styles.featureText, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}>{f}</Text>
+        {/* ── Upgrade card ── */}
+        {nextTier && (
+          <>
+            <Text style={[styles.sectionLabel, { marginTop: 28 }]}>Upgrade</Text>
+            <TouchableOpacity activeOpacity={0.85} onPress={() => handleUpgrade(nextTier.id)}>
+              <View style={[styles.upgradeCard, { backgroundColor: UPGRADE_BG[currentTier] }]}>
+                <Text style={styles.upgradeCardTitle}>Upgrade to {nextTier.label}</Text>
+                <Text style={styles.upgradeCardBody}>{nextTier.tagline}</Text>
+                <View style={styles.upgradeChipRow}>
+                  {nextTier.features.slice(1, 3).map((feat) => (
+                    <View key={feat} style={styles.upgradeChip}>
+                      <Text style={styles.upgradeChipText}>{feat}</Text>
                     </View>
                   ))}
                 </View>
+                <View style={styles.upgradeBtn}>
+                  <Text style={styles.upgradeBtnText}>See {nextTier.label} → {nextTier.price}</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
+        {!nextTier && (
+          <>
+            <Text style={[styles.sectionLabel, { marginTop: 28 }]}>Status</Text>
+            <View style={[styles.upgradeCard, { backgroundColor: '#92400E' }]}>
+              <Text style={styles.upgradeCardTitle}>Concierge — Elite Status</Text>
+              <Text style={styles.upgradeCardBody}>You're on the highest tier. Enjoy unlimited access and dedicated support.</Text>
+            </View>
+          </>
+        )}
 
-                {/* CTA */}
-                {isUpgrade && (
+        {/* ── Tier comparison list ── */}
+        <Text style={[styles.sectionLabel, { marginTop: 28 }]}>All Plans</Text>
+        {TIERS.map((tier) => {
+          const isCurrent = tier.id === currentTier;
+          const canUpgrade = TIER_IDX[tier.id] > currentIdx;
+          return (
+            <View
+              key={tier.id}
+              style={[
+                styles.tierCard,
+                isCurrent && { borderColor: tier.color, borderWidth: 2 },
+              ]}
+            >
+              <View style={styles.tierCardHeader}>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.tierNameRow}>
+                    <Text style={[styles.tierName, { color: tier.color }]}>{tier.label}</Text>
+                    {isCurrent && (
+                      <View style={[styles.currentBadge, { backgroundColor: tier.color + '20' }]}>
+                        <Text style={[styles.currentBadgeText, { color: tier.color }]}>Current</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.tierPrice}>{tier.price}</Text>
+                </View>
+                {canUpgrade && (
                   <TouchableOpacity
-                    style={[styles.upgradeBtn, { backgroundColor: tier.color }, upgradeMutation.isPending && { opacity: 0.7 }]}
+                    style={[styles.upgradeSmallBtn, { backgroundColor: tier.color }]}
                     onPress={() => handleUpgrade(tier.id)}
-                    disabled={upgradeMutation.isPending}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.upgradeBtnText, { fontFamily: 'Inter_600SemiBold' }]}>
-                      Upgrade to {tier.name}
-                    </Text>
+                    <Text style={styles.upgradeSmallBtnText}>Upgrade</Text>
                   </TouchableOpacity>
                 )}
               </View>
-            );
-          })}
-        </View>
+              {tier.features.map((feat, i) => (
+                <View key={feat} style={[styles.featureRow, i === 0 && { borderTopWidth: 1, borderTopColor: 'rgba(10,17,40,0.07)' }]}>
+                  <Text style={styles.featureCheck}>✓</Text>
+                  <Text style={styles.featureText}>{feat}</Text>
+                </View>
+              ))}
+            </View>
+          );
+        })}
       </ScrollView>
     </View>
   );
 }
 
+// ── Palette ────────────────────────────────────────────────────────────────────
+const BG   = '#FAFAF8';
+const DARK  = '#0A1128';
+const MUTED = 'rgba(10,17,40,0.45)';
+const BLUE  = '#1259F2';
+const CARD  = '#fff';
+
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scrollContent: { paddingHorizontal: 16, gap: 20 },
-  headerTitle: { fontSize: 28, paddingHorizontal: 4 },
-  passCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    padding: 16, borderRadius: 14, borderWidth: 1,
+  root:    { flex: 1, backgroundColor: BG },
+  centered: { flex: 1, backgroundColor: BG, justifyContent: 'center', alignItems: 'center' },
+  scroll:   { paddingHorizontal: 16 },
+
+  // Header
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  headerName: { fontFamily: 'Inter_700Bold', fontSize: 27, color: DARK },
+  headerSub:  { fontFamily: 'Inter_400Regular', fontSize: 13, color: MUTED, marginTop: 2 },
+  tierPill: {
+    borderRadius: 100, paddingHorizontal: 12, paddingVertical: 5,
   },
-  passCardText: { gap: 2 },
-  passCardNum: { fontSize: 24 },
-  passCardLabel: { fontSize: 13 },
-  tierList: { gap: 16 },
-  tierCard: { borderRadius: 16, overflow: 'hidden', padding: 16 },
-  tierCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-  tierNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  tierName: { fontSize: 20 },
-  currentBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  currentBadgeText: { fontSize: 11 },
-  tierDesc: { fontSize: 13 },
-  tierPrice: { fontSize: 18 },
-  featureList: { borderTopWidth: 1, paddingTop: 14, gap: 10 },
-  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  featureText: { fontSize: 14 },
+  tierPillText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
+
+  // Section label
+  sectionLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 },
+
+  // Stat rows
+  statRow: { flexDirection: 'row', gap: 10 },
+
+  // Upgrade card
+  upgradeCard: {
+    borderRadius: 20, padding: 20, marginBottom: 4,
+  },
+  upgradeCardTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, color: '#fff', marginBottom: 6 },
+  upgradeCardBody:  { fontFamily: 'Inter_400Regular', fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 18, marginBottom: 14 },
+  upgradeChipRow:   { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 16 },
+  upgradeChip: {
+    backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 100,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  upgradeChipText: { fontFamily: 'Inter_500Medium', fontSize: 12, color: '#fff' },
   upgradeBtn: {
-    marginTop: 16, height: 48, borderRadius: 12,
-    justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.20)', borderRadius: 10,
+    paddingVertical: 11, alignItems: 'center',
   },
-  upgradeBtnText: { color: '#fff', fontSize: 15 },
+  upgradeBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#fff' },
+
+  // Tier comparison cards
+  tierCard: {
+    backgroundColor: CARD, borderRadius: 18, borderWidth: 1,
+    borderColor: 'rgba(10,17,40,0.08)', marginBottom: 12, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
+  },
+  tierCardHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
+  tierNameRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
+  tierName:       { fontFamily: 'Inter_700Bold', fontSize: 17 },
+  tierPrice:      { fontFamily: 'Inter_400Regular', fontSize: 13, color: MUTED },
+  currentBadge:   { borderRadius: 100, paddingHorizontal: 8, paddingVertical: 2 },
+  currentBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
+  upgradeSmallBtn: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
+  upgradeSmallBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#fff' },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 9, borderTopWidth: 0, borderTopColor: 'rgba(10,17,40,0.06)' },
+  featureCheck: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: BLUE },
+  featureText:  { fontFamily: 'Inter_400Regular', fontSize: 13, color: DARK, flex: 1 },
 });

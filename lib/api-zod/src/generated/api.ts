@@ -136,9 +136,15 @@ export const GetFlightResponse = zod.object({
 /**
  * @summary Join queue for a flight
  */
+export const joinQueueBodyPassengersDefault = 1;
+export const joinQueueBodyPassengersMax = 10;
+
+
+
 export const JoinQueueBody = zod.object({
   "flightId": zod.string(),
-  "useLinePass": zod.boolean().optional()
+  "useLinePass": zod.boolean().optional(),
+  "passengers": zod.number().min(1).max(joinQueueBodyPassengersMax).default(joinQueueBodyPassengersDefault)
 })
 
 export const JoinQueueResponse = zod.object({
@@ -201,6 +207,18 @@ export const GetQueueStatusResponseItem = zod.object({
   "createdAt": zod.string()
 })
 export const GetQueueStatusResponse = zod.array(GetQueueStatusResponseItem)
+
+
+/**
+ * @summary Cancel (leave) a queue entry
+ */
+export const CancelQueueEntryParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const CancelQueueEntryResponse = zod.object({
+  "success": zod.boolean()
+})
 
 
 /**

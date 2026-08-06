@@ -5,146 +5,250 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
+import { useListNotifications } from '@workspace/api-client-react';
+import type { Notification } from '@workspace/api-client-react';
+import { SettingsGroup } from '@/components/SettingsGroup';
 
-type MenuItem = { icon: string; label: string; route?: string; onPress?: () => void; badge?: string | number; danger?: boolean };
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  });
+}
 
 export default function ProfileScreen() {
-  const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const initials = user?.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) ?? '?';
+  const { data: notifications } = useListNotifications({});
+  const recentActivity = ((notifications as Notification[]) ?? []).slice(0, 5);
 
-  const tierColor = { base: '#8896B3', plus: '#1259F2', concierge: '#F59E0B' }[user?.membershipTier ?? 'base'] ?? '#8896B3';
-  const tierLabel = (user?.membershipTier ?? 'base').charAt(0).toUpperCase() + (user?.membershipTier ?? 'base').slice(1);
-
-  const MENU_ITEMS: MenuItem[][] = [
-    [
-      { icon: 'bell', label: 'Notifications', route: '/notifications' },
-      { icon: 'users', label: 'Community', route: '/community' },
-      { icon: 'gift', label: 'Referral', route: '/referral' },
-      { icon: 'cpu', label: 'AI Concierge', route: '/concierge' },
-    ],
-    [
-      { icon: 'star', label: 'Membership', route: '/(tabs)/membership' },
-      { icon: 'help-circle', label: 'Help & Support', onPress: () => Alert.alert('Support', 'Email us at support@bluebird.com') },
-      {
-        icon: 'log-out',
-        label: 'Sign out',
-        danger: true,
-        onPress: () => Alert.alert('Sign out?', 'Are you sure you want to sign out?', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign out', style: 'destructive', onPress: signOut },
-        ]),
-      },
-    ],
-  ];
+  const initials = user?.name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) ?? '?';
+  const tierLabel = {
+    base: 'Base Member',
+    plus: 'Plus Member',
+    concierge: 'Concierge Member',
+  }[user?.membershipTier ?? 'base'] ?? 'Base Member';
+  const memberSince = user?.createdAt
+    ? new Date(user.createdAt).getFullYear()
+    : new Date().getFullYear();
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: topPad + 16, paddingBottom: bottomPad + 80 }]} showsVerticalScrollIndicator={false}>
-        {/* Profile card */}
-        <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={[styles.avatar, { backgroundColor: colors.primary + '30', borderColor: colors.primary + '50' }]}>
-            <Text style={[styles.avatarText, { color: colors.primary, fontFamily: 'Inter_700Bold' }]}>{initials}</Text>
+    <View style={[styles.container]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: topPad + 16, paddingBottom: bottomPad + 100 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Avatar + name ───────────────────────────────────── */}
+        <View style={styles.avatarRow}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials}</Text>
           </View>
-          <View style={styles.profileInfo}>
-            <Text style={[styles.userName, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{user?.name ?? 'User'}</Text>
-            <Text style={[styles.userEmail, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{user?.email ?? ''}</Text>
-          </View>
-          <View style={[styles.tierBadge, { backgroundColor: tierColor + '20', borderColor: tierColor + '40' }]}>
-            <Feather name="star" size={12} color={tierColor} />
-            <Text style={[styles.tierText, { color: tierColor, fontFamily: 'Inter_500Medium' }]}>{tierLabel}</Text>
-          </View>
-        </View>
-
-        {/* Stats row */}
-        <View style={[styles.statsRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{user?.linePassCount ?? 0}</Text>
-            <Text style={[styles.statLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>Line Passes</Text>
-          </View>
-          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{tierLabel}</Text>
-            <Text style={[styles.statLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>Membership</Text>
-          </View>
-          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <View style={styles.statItem}>
-            <View style={[styles.verifiedDot, { backgroundColor: user?.emailVerified ? colors.success : colors.mutedForeground }]} />
-            <Text style={[styles.statLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-              {user?.emailVerified ? 'Verified' : 'Unverified'}
-            </Text>
+          <View>
+            <Text style={styles.name}>{user?.name ?? 'Member'}</Text>
+            <Text style={styles.memberSince}>{tierLabel} since {memberSince}</Text>
           </View>
         </View>
 
-        {/* Menu groups */}
-        {MENU_ITEMS.map((group, gi) => (
-          <View key={gi} style={[styles.menuGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            {group.map((item, ii) => (
-              <React.Fragment key={item.label}>
-                {ii > 0 && <View style={[styles.menuSep, { backgroundColor: colors.border }]} />}
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={item.onPress ?? (() => item.route && router.push(item.route as any))}
-                  activeOpacity={0.7}
+        {/* ── Account ─────────────────────────────────────────── */}
+        <SettingsGroup
+          title="Account"
+          rows={[
+            {
+              label: 'Personal Information',
+              onPress: () => Alert.alert('Personal Information', 'Edit your profile details.'),
+            },
+            {
+              label: 'Connect Contacts',
+              hint: 'find & invite members',
+              onPress: () => Alert.alert('Connect Contacts', 'Find friends who are members.'),
+            },
+            {
+              label: 'Payment Methods',
+              onPress: () => Alert.alert('Payment Methods', 'Manage your saved payment methods.'),
+            },
+          ]}
+        />
+
+        {/* ── Preferences ─────────────────────────────────────── */}
+        <SettingsGroup
+          title="Preferences"
+          rows={[
+            {
+              label: 'Notification Settings',
+              hint: 'incl. travel preferences',
+              onPress: () => router.push('/notifications'),
+            },
+            {
+              label: 'Community',
+              onPress: () => router.push('/community'),
+            },
+          ]}
+        />
+
+        {/* ── Support ─────────────────────────────────────────── */}
+        <SettingsGroup
+          title="Support"
+          rows={[
+            {
+              label: 'AI Concierge',
+              onPress: () => router.push('/concierge'),
+            },
+            {
+              label: 'Help Center',
+              onPress: () => Alert.alert('Help Center', 'Email us at support@bluebird.com'),
+            },
+            {
+              label: 'Referral',
+              onPress: () => router.push('/referral'),
+            },
+            {
+              label: 'Legal',
+              onPress: () => Alert.alert('Legal', 'Terms of service and privacy policy.'),
+            },
+          ]}
+        />
+
+        {/* ── Sign out ─────────────────────────────────────────── */}
+        <SettingsGroup
+          rows={[
+            {
+              label: 'Sign Out',
+              onPress: () =>
+                Alert.alert('Sign out?', 'Are you sure you want to sign out?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Sign out', style: 'destructive', onPress: signOut },
+                ]),
+              right: <Text style={styles.signOutChevron}>›</Text>,
+            },
+          ]}
+        />
+
+        {/* ── Recent Activity ──────────────────────────────────── */}
+        {recentActivity.length > 0 && (
+          <View style={styles.activitySection}>
+            <Text style={styles.activityTitle}>Recent Activity</Text>
+            <View style={styles.activityList}>
+              {recentActivity.map((item, i) => (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.activityRow,
+                    i < recentActivity.length - 1 && styles.activityRowBorder,
+                  ]}
                 >
-                  <View style={[styles.menuIconWrap, { backgroundColor: item.danger ? '#EF444420' : colors.secondary }]}>
-                    <Feather name={item.icon as any} size={16} color={item.danger ? '#EF4444' : colors.foreground} />
+                  <View style={[styles.activityDot, !item.read && styles.activityDotBlue]} />
+                  <View style={styles.activityContent}>
+                    <Text style={styles.activityLabel}>{item.title}</Text>
+                    <Text style={styles.activityDate}>{fmtDate(item.createdAt)}</Text>
                   </View>
-                  <Text style={[styles.menuLabel, { color: item.danger ? '#EF4444' : colors.foreground, fontFamily: 'Inter_400Regular' }]}>
-                    {item.label}
-                  </Text>
-                  {!item.danger && <Feather name="chevron-right" size={16} color={colors.mutedForeground} style={styles.menuChevron} />}
-                </TouchableOpacity>
-              </React.Fragment>
-            ))}
+                </View>
+              ))}
+            </View>
           </View>
-        ))}
+        )}
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, gap: 16 },
-  profileCard: {
-    borderRadius: 16, borderWidth: 1, padding: 20,
-    flexDirection: 'row', alignItems: 'center', gap: 14,
+  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  scroll: { paddingHorizontal: 20, gap: 18 },
+
+  // ── Avatar row
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingBottom: 4,
   },
   avatar: {
-    width: 60, height: 60, borderRadius: 30,
-    borderWidth: 2, justifyContent: 'center', alignItems: 'center',
+    width: 58, height: 58, borderRadius: 29,
+    backgroundColor: '#0A1128',
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
   },
-  avatarText: { fontSize: 22 },
-  profileInfo: { flex: 1 },
-  userName: { fontSize: 18 },
-  userEmail: { fontSize: 13, marginTop: 2 },
-  tierBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1,
+  avatarText: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 20,
+    color: '#fff',
   },
-  tierText: { fontSize: 12 },
-  statsRow: {
-    borderRadius: 14, borderWidth: 1, flexDirection: 'row',
-    paddingVertical: 16,
+  name: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 20,
+    color: '#0A1128',
+    letterSpacing: -0.4,
   },
-  statItem: { flex: 1, alignItems: 'center', gap: 4 },
-  statValue: { fontSize: 16 },
-  statLabel: { fontSize: 11 },
-  statDivider: { width: 1 },
-  verifiedDot: { width: 10, height: 10, borderRadius: 5 },
-  menuGroup: { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
-  menuSep: { height: 1 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, gap: 14 },
-  menuIconWrap: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  menuLabel: { flex: 1, fontSize: 15 },
-  menuChevron: { marginLeft: 'auto' as any },
+  memberSince: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    color: 'rgba(10,17,40,0.5)',
+    marginTop: 2,
+  },
+
+  // ── Sign-out danger style
+  signOutChevron: {
+    fontSize: 20,
+    color: 'rgba(10,17,40,0.3)',
+    lineHeight: 22,
+  },
+
+  // ── Activity log
+  activitySection: { gap: 10 },
+  activityTitle: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 11,
+    color: 'rgba(10,17,40,0.4)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: 4,
+  },
+  activityList: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 20,
+    shadowOpacity: 0.05,
+    elevation: 3,
+    overflow: 'hidden',
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  activityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 13,
+  },
+  activityRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(10,17,40,0.06)',
+  },
+  activityDot: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: 'rgba(10,17,40,0.25)',
+    flexShrink: 0,
+  },
+  activityDotBlue: { backgroundColor: '#1259F2' },
+  activityContent: { flex: 1 },
+  activityLabel: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
+    color: '#0A1128',
+  },
+  activityDate: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12,
+    color: 'rgba(10,17,40,0.45)',
+    marginTop: 1,
+  },
 });

@@ -1,0 +1,1 @@
+- [API contract & schema sync](api-contract-sync.md) — new endpoints/fields go through openapi.yaml + codegen; new columns need ensureSchema() too, not just a live-DB ALTER.

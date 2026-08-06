@@ -21,6 +21,7 @@ import type {
 
 import type {
   AuthResponse,
+  CancelQueueResponse,
   ErrorResponse,
   Flight,
   HealthStatus,
@@ -668,6 +669,77 @@ export function useGetQueueStatus<TData = Awaited<ReturnType<typeof getQueueStat
 
 
 
+
+export const getCancelQueueEntryUrl = (id: string,) => {
+
+
+
+
+  return `/api/queue/${id}`
+}
+
+/**
+ * @summary Cancel (leave) a queue entry
+ */
+export const cancelQueueEntry = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<CancelQueueResponse> => {
+
+  return customFetch<CancelQueueResponse>(getCancelQueueEntryUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getCancelQueueEntryMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelQueueEntry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelQueueEntry>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['cancelQueueEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelQueueEntry>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  cancelQueueEntry(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelQueueEntryMutationResult = NonNullable<Awaited<ReturnType<typeof cancelQueueEntry>>>
+
+    export type CancelQueueEntryMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Cancel (leave) a queue entry
+ */
+export const useCancelQueueEntry = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelQueueEntry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelQueueEntry>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getCancelQueueEntryMutationOptions(options));
+    }
 
 export const getListTripsUrl = () => {
 

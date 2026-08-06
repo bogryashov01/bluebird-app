@@ -15,10 +15,11 @@ import * as Haptics from 'expo-haptics';
 export default function JoinQueueScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { flightId, fromCity, toCity, from, to, useLinePass: useLinePassParam } = useLocalSearchParams<{
+  const { flightId, fromCity, toCity, from, to, useLinePass: useLinePassParam, passengers: passengersParam } = useLocalSearchParams<{
     flightId: string; fromCity: string; toCity: string;
-    from: string; to: string; useLinePass?: string;
+    from: string; to: string; useLinePass?: string; passengers?: string;
   }>();
+  const passengers = Math.max(1, parseInt(passengersParam ?? '1', 10) || 1);
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [useLinePass, setUseLinePass] = useState(useLinePassParam === '1');
@@ -31,7 +32,7 @@ export default function JoinQueueScreen() {
     mutation: {
       onSuccess: async () => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        queryClient.invalidateQueries({ queryKey: ['getQueueStatus'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
         // Sync line pass count in the cached auth user immediately so UI stays accurate
         if (useLinePass && user) {
           updateUser({ ...user, linePassCount: Math.max(0, (user.linePassCount ?? 0) - 1) });
@@ -47,7 +48,7 @@ export default function JoinQueueScreen() {
 
   const handleJoin = () => {
     if (!flightId) return;
-    joinMutation.mutate({ data: { flightId, useLinePass } });
+    joinMutation.mutate({ data: { flightId, useLinePass, passengers } });
   };
 
   return (

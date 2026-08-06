@@ -7,6 +7,7 @@
  */
 
 export * from './authResponse';
+export * from './cancelQueueResponse';
 export * from './errorResponse';
 export * from './flight';
 export * from './flightStatus';

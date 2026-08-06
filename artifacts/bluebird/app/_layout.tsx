@@ -25,8 +25,6 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
 }
 
 
-
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -48,7 +46,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen
         name="flight/[id]"
-        options={{ headerShown: true, title: 'Flight Details', headerStyle: HEADER_STYLE, headerTintColor: '#fff', headerTitleStyle: { fontFamily: 'Inter_600SemiBold' } }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="flight/policy"
@@ -64,7 +62,7 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="queue/status"
-        options={{ headerShown: true, title: 'Queue Status', headerStyle: HEADER_STYLE, headerTintColor: '#fff', headerTitleStyle: { fontFamily: 'Inter_600SemiBold' } }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="concierge"
@@ -76,7 +74,7 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="notifications"
-        options={{ headerShown: true, title: 'Notifications', headerStyle: HEADER_STYLE, headerTintColor: '#fff', headerTitleStyle: { fontFamily: 'Inter_600SemiBold' } }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="community"
