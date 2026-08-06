@@ -19,6 +19,9 @@ export interface Flight {
   departureTime: string;
   duration: string;
   seatsAvailable: number;
+  priceUsd?: number;
+  discountPct?: number;
+  featured?: boolean;
   status: FlightStatus;
   imageUrl?: string;
   createdAt: string;

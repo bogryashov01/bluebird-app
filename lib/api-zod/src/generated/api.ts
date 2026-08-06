@@ -76,7 +76,7 @@ export const GetMeResponse = zod.object({
 
 
 /**
- * @summary List available empty leg flights
+ * @summary List available empty leg flights (public)
  */
 export const ListFlightsQueryParams = zod.object({
   "from": zod.coerce.string().optional(),
@@ -95,6 +95,9 @@ export const ListFlightsResponseItem = zod.object({
   "departureTime": zod.string(),
   "duration": zod.string(),
   "seatsAvailable": zod.number(),
+  "priceUsd": zod.number().optional(),
+  "discountPct": zod.number().optional(),
+  "featured": zod.boolean().optional(),
   "status": zod.enum(['available', 'boarding', 'departed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()
@@ -103,7 +106,7 @@ export const ListFlightsResponse = zod.array(ListFlightsResponseItem)
 
 
 /**
- * @summary Get flight details
+ * @summary Get flight details (public)
  */
 export const GetFlightParams = zod.object({
   "id": zod.coerce.string()
@@ -121,6 +124,9 @@ export const GetFlightResponse = zod.object({
   "departureTime": zod.string(),
   "duration": zod.string(),
   "seatsAvailable": zod.number(),
+  "priceUsd": zod.number().optional(),
+  "discountPct": zod.number().optional(),
+  "featured": zod.boolean().optional(),
   "status": zod.enum(['available', 'boarding', 'departed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()
@@ -150,6 +156,9 @@ export const JoinQueueResponse = zod.object({
   "departureTime": zod.string(),
   "duration": zod.string(),
   "seatsAvailable": zod.number(),
+  "priceUsd": zod.number().optional(),
+  "discountPct": zod.number().optional(),
+  "featured": zod.boolean().optional(),
   "status": zod.enum(['available', 'boarding', 'departed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()
@@ -179,6 +188,9 @@ export const GetQueueStatusResponseItem = zod.object({
   "departureTime": zod.string(),
   "duration": zod.string(),
   "seatsAvailable": zod.number(),
+  "priceUsd": zod.number().optional(),
+  "discountPct": zod.number().optional(),
+  "featured": zod.boolean().optional(),
   "status": zod.enum(['available', 'boarding', 'departed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()
@@ -209,6 +221,9 @@ export const ListTripsResponseItem = zod.object({
   "departureTime": zod.string(),
   "duration": zod.string(),
   "seatsAvailable": zod.number(),
+  "priceUsd": zod.number().optional(),
+  "discountPct": zod.number().optional(),
+  "featured": zod.boolean().optional(),
   "status": zod.enum(['available', 'boarding', 'departed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()

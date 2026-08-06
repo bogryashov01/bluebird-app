@@ -376,7 +376,7 @@ export const getListFlightsUrl = (params?: ListFlightsParams,) => {
 }
 
 /**
- * @summary List available empty leg flights
+ * @summary List available empty leg flights (public)
  */
 export const listFlights = async (params?: ListFlightsParams, options?: Parameters<typeof customFetch>[1]): Promise<Flight[]> => {
 
@@ -423,7 +423,7 @@ export type ListFlightsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List available empty leg flights
+ * @summary List available empty leg flights (public)
  */
 
 export function useListFlights<TData = Awaited<ReturnType<typeof listFlights>>, TError = ErrorType<unknown>>(
@@ -453,7 +453,7 @@ export const getGetFlightUrl = (id: string,) => {
 }
 
 /**
- * @summary Get flight details
+ * @summary Get flight details (public)
  */
 export const getFlight = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<Flight> => {
 
@@ -500,7 +500,7 @@ export type GetFlightQueryError = ErrorType<ErrorResponse>
 
 
 /**
- * @summary Get flight details
+ * @summary Get flight details (public)
  */
 
 export function useGetFlight<TData = Awaited<ReturnType<typeof getFlight>>, TError = ErrorType<ErrorResponse>>(

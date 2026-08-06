@@ -114,9 +114,7 @@ paths:
     get:
       operationId: listFlights
       tags: [flights]
-      summary: List available empty leg flights
-      security:
-        - bearerAuth: []
+      summary: List available empty leg flights (public)
       parameters:
         - name: from
           in: query
@@ -140,9 +138,7 @@ paths:
     get:
       operationId: getFlight
       tags: [flights]
-      summary: Get flight details
-      security:
-        - bearerAuth: []
+      summary: Get flight details (public)
       parameters:
         - name: id
           in: path
@@ -424,6 +420,12 @@ components:
           type: string
         seatsAvailable:
           type: number
+        priceUsd:
+          type: number
+        discountPct:
+          type: number
+        featured:
+          type: boolean
         status:
           type: string
           enum: [available, boarding, departed, cancelled]

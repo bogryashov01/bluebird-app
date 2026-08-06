@@ -32,9 +32,16 @@ export async function ensureSchema(): Promise<void> {
       departure_time   TEXT        NOT NULL,
       duration         TEXT        NOT NULL,
       seats_available  INTEGER     NOT NULL,
+      price_usd        INTEGER     NOT NULL DEFAULT 0,
+      discount_pct     INTEGER     NOT NULL DEFAULT 0,
+      featured         BOOLEAN     NOT NULL DEFAULT false,
       status           TEXT        NOT NULL DEFAULT 'available',
       created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE flights ADD COLUMN IF NOT EXISTS price_usd    INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE flights ADD COLUMN IF NOT EXISTS discount_pct INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE flights ADD COLUMN IF NOT EXISTS featured     BOOLEAN NOT NULL DEFAULT false;
 
     CREATE TABLE IF NOT EXISTS queue_entries (
       id            TEXT        PRIMARY KEY,

@@ -27,6 +27,9 @@ export const flightsTable = pgTable("flights", {
   departureTime: text("departure_time").notNull(),
   duration: text("duration").notNull(),
   seatsAvailable: integer("seats_available").notNull(),
+  priceUsd: integer("price_usd").notNull().default(0),
+  discountPct: integer("discount_pct").notNull().default(0),
+  featured: boolean("featured").notNull().default(false),
   status: text("status").notNull().default("available"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
