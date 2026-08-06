@@ -10,6 +10,7 @@ import { useListTrips, useGetQueueStatus } from '@workspace/api-client-react';
 import type { Trip, QueueEntry } from '@workspace/api-client-react';
 
 // ─── Aircraft images (same matching logic as Discover) ────────────────────────
+import { useAuth } from '@/context/AuthContext';
 const AIRCRAFT_IMAGES: { match: RegExp; source: any }[] = [
   { match: /gulfstream|g280|challenger|falcon/i, source: require('@/assets/images/aircraft-heavy.jpg') },
   { match: /king air|pilatus|pc-12|turboprop/i,  source: require('@/assets/images/aircraft-turboprop.jpg') },
@@ -72,12 +73,17 @@ export default function TripsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<ActiveTab>('upcoming');
+  const { user } = useAuth();
 
   const topPad = Platform.OS === 'web' ? 40 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { data: trips, isLoading: tripsLoading } = useListTrips({});
-  const { data: queueEntries, isLoading: queueLoading } = useGetQueueStatus({});
+  const { data: trips, isLoading: tripsLoading } = useListTrips({
+    query: { enabled: !!user },
+  });
+  const { data: queueEntries, isLoading: queueLoading } = useGetQueueStatus({
+    query: { enabled: !!user },
+  });
 
   const upcomingTrips = useMemo(() =>
     ((trips as Trip[]) ?? []).filter((t) => t.status === 'upcoming'),

@@ -11,6 +11,8 @@ export * from './cancelQueueResponse';
 export * from './errorResponse';
 export * from './flight';
 export * from './flightStatus';
+export * from './flightUserStatus';
+export * from './flightUserStatusStatus';
 export * from './healthStatus';
 export * from './joinQueueRequest';
 export * from './listFlightsParams';

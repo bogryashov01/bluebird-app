@@ -33,6 +33,7 @@ export default function JoinQueueScreen() {
       onSuccess: async () => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
+        queryClient.invalidateQueries({ queryKey: [`/api/flights/${flightId}/my-status`] });
         // Sync line pass count in the cached auth user immediately so UI stays accurate
         if (useLinePass && user) {
           updateUser({ ...user, linePassCount: Math.max(0, (user.linePassCount ?? 0) - 1) });
@@ -40,7 +41,7 @@ export default function JoinQueueScreen() {
         router.replace('/queue/status');
       },
       onError: (err: any) => {
-        const msg = err?.response?.data?.error || 'Failed to join queue';
+        const msg = err?.response?.data?.error || err?.data?.error || 'Failed to join queue';
         Alert.alert('Error', msg);
       },
     },

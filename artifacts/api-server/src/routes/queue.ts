@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, pool } from "@workspace/db";
-import { queueEntriesTable, flightsTable, usersTable, notificationsTable } from "@workspace/db/schema";
-import { eq, and, count, sql, sum, inArray } from "drizzle-orm";
+import { queueEntriesTable, flightsTable, usersTable, notificationsTable, tripsTable } from "@workspace/db/schema";
+import { eq, and, count, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
@@ -46,6 +46,7 @@ router.post("/join", authMiddleware, async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Flight is no longer available" });
     }
+
     // 1b. Aggregate seat capacity enforcement — sum passengers already reserved
     //     by all active (waiting or confirmed) entries for this flight, then
     //     reject when existing + requested would exceed seats_available.
@@ -68,7 +69,8 @@ router.post("/join", authMiddleware, async (req, res) => {
       });
     }
 
-    // 2. Guard against duplicate queue entry
+    // 2. Guard against duplicate entry — blocks both waiting AND confirmed entries
+    //    so a confirmed user cannot re-join the same flight.
     const [existing] = await txDb
       .select()
       .from(queueEntriesTable)
@@ -76,12 +78,16 @@ router.post("/join", authMiddleware, async (req, res) => {
         and(
           eq(queueEntriesTable.userId, userId),
           eq(queueEntriesTable.flightId, String(flightId)),
-          eq(queueEntriesTable.status, "waiting"),
+          inArray(queueEntriesTable.status, ["waiting", "confirmed"]),
         ),
       );
     if (existing) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ error: "You are already in the queue for this flight" });
+      const msg =
+        existing.status === "confirmed"
+          ? "You are already confirmed for this flight"
+          : "You are already in the queue for this flight";
+      return res.status(409).json({ error: msg });
     }
 
     // 3. Consume a line pass (conditional update — fails if balance is 0)
@@ -160,13 +166,21 @@ router.post("/join", authMiddleware, async (req, res) => {
 });
 
 // GET /queue/status
+// Returns all active (waiting + confirmed) entries for the authenticated user.
+// Terminal states (cancelled, expired) are excluded.
+// Each waiting entry includes canConfirm (position===1 AND seats available).
 router.get("/status", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
   try {
     const entries = await db
       .select()
       .from(queueEntriesTable)
-      .where(and(eq(queueEntriesTable.userId, userId), eq(queueEntriesTable.status, "waiting")));
+      .where(
+        and(
+          eq(queueEntriesTable.userId, userId),
+          inArray(queueEntriesTable.status, ["waiting", "confirmed"]),
+        ),
+      );
 
     const enriched = await Promise.all(
       entries.map(async (entry) => {
@@ -175,7 +189,23 @@ router.get("/status", authMiddleware, async (req, res) => {
           .select({ value: count() })
           .from(queueEntriesTable)
           .where(and(eq(queueEntriesTable.flightId, entry.flightId), eq(queueEntriesTable.status, "waiting")));
-        return { ...entry, flight, totalInQueue: Number(totalInQueue) };
+
+        // Compute canConfirm for waiting entries at position 1
+        let canConfirm = false;
+        if (entry.status === "waiting" && entry.position === 1 && flight) {
+          const [{ value: confirmedPax }] = await db
+            .select({ value: sql<number>`coalesce(sum(${queueEntriesTable.passengers}), 0)` })
+            .from(queueEntriesTable)
+            .where(
+              and(
+                eq(queueEntriesTable.flightId, entry.flightId),
+                eq(queueEntriesTable.status, "confirmed"),
+              ),
+            );
+          canConfirm = entry.passengers <= (flight.seatsAvailable - Number(confirmedPax));
+        }
+
+        return { ...entry, flight, totalInQueue: Number(totalInQueue), canConfirm };
       })
     );
 
@@ -187,33 +217,69 @@ router.get("/status", authMiddleware, async (req, res) => {
 
 // DELETE /queue/:id (cancel)
 //
-// Cancels the entry and atomically renumbers every remaining waiting entry
-// for the same flight so positions stay contiguous (no gaps after removal).
+// Cancels a WAITING entry and atomically renumbers every remaining waiting
+// entry for the same flight so positions stay contiguous.
+//
+// Uses SERIALIZABLE isolation — the same level as /join — so that concurrent
+// transitions on different entries of the same flight (e.g. confirm #1 and
+// cancel #2 racing) cannot interleave their renumber steps and produce gaps or
+// duplicate positions.  Under SERIALIZABLE, Postgres detects the conflicting
+// read-write dependency on the flight's position set and aborts one transaction
+// with error 40001, which we surface as 409 so the caller can retry.
+//
+// Confirmed entries are intentionally blocked (UI only offers Leave Queue
+// while status==='waiting').
 router.delete("/:id", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
   const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
     const txDb = drizzle(client, { schema });
 
-    const [entry] = await txDb
-      .select()
-      .from(queueEntriesTable)
-      .where(and(eq(queueEntriesTable.id, String(req.params.id)), eq(queueEntriesTable.userId, userId)));
-
-    if (!entry) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ error: "Queue entry not found" });
-    }
-
-    // Mark the entry cancelled
-    await txDb
+    // Atomic test-and-set: only cancels when the entry is owned by this user
+    // AND is currently in 'waiting' status. Returns the full row so we can
+    // use its position and flightId for the gap-close renumber below.
+    const cancelled = await txDb
       .update(queueEntriesTable)
       .set({ status: "cancelled" })
-      .where(eq(queueEntriesTable.id, String(req.params.id)));
+      .where(
+        and(
+          eq(queueEntriesTable.id, String(req.params.id)),
+          eq(queueEntriesTable.userId, userId),
+          eq(queueEntriesTable.status, "waiting"),
+        ),
+      )
+      .returning();
 
-    // Close the gap: decrement position of every waiting entry ranked after
-    // the one we just removed, keeping positions contiguous.
+    if (cancelled.length === 0) {
+      // Distinguish 404 (not found / not owned) from already-terminal status.
+      const [existing] = await txDb
+        .select({ status: queueEntriesTable.status })
+        .from(queueEntriesTable)
+        .where(
+          and(
+            eq(queueEntriesTable.id, String(req.params.id)),
+            eq(queueEntriesTable.userId, userId),
+          ),
+        );
+
+      await client.query("ROLLBACK");
+      if (!existing) {
+        return res.status(404).json({ error: "Queue entry not found" });
+      }
+      if (existing.status === "confirmed") {
+        return res.status(409).json({
+          error: "Confirmed bookings cannot be cancelled here. Please contact support.",
+        });
+      }
+      // Already cancelled or another terminal state — treat as success (idempotent).
+      return res.json({ success: true });
+    }
+
+    const entry = cancelled[0];
+
+    // Close the gap: decrement position of every remaining waiting entry that
+    // ranked behind the one we just removed, keeping positions contiguous.
     await txDb
       .update(queueEntriesTable)
       .set({ position: sql`${queueEntriesTable.position} - 1` })
@@ -227,9 +293,176 @@ router.delete("/:id", authMiddleware, async (req, res) => {
 
     await client.query("COMMIT");
     return res.json({ success: true });
-  } catch (err) {
+  } catch (err: any) {
     await client.query("ROLLBACK").catch(() => {});
+    // Drizzle wraps pg DatabaseErrors: walk the cause chain to find 40001.
+    const pgCode = err?.code ?? err?.cause?.code;
+    if (pgCode === "40001") {
+      return res.status(409).json({ error: "Queue update conflict — please try again" });
+    }
     return res.status(500).json({ error: "Failed to cancel queue entry" });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /queue/:id/confirm
+//
+// Confirms a waiting entry for the authenticated user, subject to two
+// eligibility checks enforced server-side inside the SERIALIZABLE transaction:
+//
+//   1. Front-of-queue: the entry must be at position 1 for its flight.
+//      Any other position → 403 "not yet your turn".
+//   2. Seat capacity: the flight must have (seatsAvailable - confirmedPax)
+//      seats remaining for this entry's party size.
+//      Insufficient capacity → 403.
+//
+// After the eligibility checks, the status transition is a conditional
+// UPDATE … WHERE status='waiting', which acts as a concurrent safety net:
+// if another request wins a race and changes the row first, affected rows
+// will be 0 and we return 409 to prompt a retry.
+//
+// SERIALIZABLE isolation prevents two concurrent transitions on the same
+// flight from interleaving their renumber steps and corrupting positions.
+// Serialization failures (40001) are surfaced as 409 for the caller to retry.
+router.post("/:id/confirm", authMiddleware, async (req, res) => {
+  const userId = (req as any).userId;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+    const txDb = drizzle(client, { schema });
+
+    // ── Step 1: Read entry to verify ownership and current state ────────────
+    const [entryToCheck] = await txDb
+      .select()
+      .from(queueEntriesTable)
+      .where(
+        and(
+          eq(queueEntriesTable.id, String(req.params.id)),
+          eq(queueEntriesTable.userId, userId),
+        ),
+      );
+
+    if (!entryToCheck) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Queue entry not found" });
+    }
+
+    if (entryToCheck.status !== "waiting") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        error:
+          entryToCheck.status === "confirmed"
+            ? "This entry is already confirmed"
+            : "Only waiting entries can be confirmed",
+      });
+    }
+
+    // ── Step 2: Front-of-queue eligibility ──────────────────────────────────
+    if (entryToCheck.position !== 1) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({
+        error: `Not yet your turn — you're #${entryToCheck.position} in the queue`,
+      });
+    }
+
+    // ── Step 3: Seat capacity check ─────────────────────────────────────────
+    // Fetch flight (reused for notification + response below).
+    const [flight] = await txDb
+      .select()
+      .from(flightsTable)
+      .where(eq(flightsTable.id, entryToCheck.flightId));
+
+    const [{ value: confirmedPax }] = await txDb
+      .select({ value: sql<number>`coalesce(sum(${queueEntriesTable.passengers}), 0)` })
+      .from(queueEntriesTable)
+      .where(
+        and(
+          eq(queueEntriesTable.flightId, entryToCheck.flightId),
+          eq(queueEntriesTable.status, "confirmed"),
+        ),
+      );
+
+    const seatsAvailable = flight?.seatsAvailable ?? 0;
+    if (entryToCheck.passengers > seatsAvailable - Number(confirmedPax)) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({
+        error: "Not enough seats available for your party size",
+      });
+    }
+
+    // ── Step 4: Atomic test-and-set (concurrent safety net) ─────────────────
+    // Even though we checked status above, a concurrent request could have
+    // changed this row between the SELECT and this UPDATE.  SERIALIZABLE will
+    // detect the conflict and abort one transaction; the conditional WHERE
+    // gives a clear 0-rows path for any other race.
+    const updated = await txDb
+      .update(queueEntriesTable)
+      .set({ status: "confirmed" })
+      .where(
+        and(
+          eq(queueEntriesTable.id, String(req.params.id)),
+          eq(queueEntriesTable.userId, userId),
+          eq(queueEntriesTable.status, "waiting"),
+        ),
+      )
+      .returning();
+
+    if (updated.length === 0) {
+      // A concurrent transition already changed this entry's state.
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Queue update conflict — please try again" });
+    }
+
+    const entry = updated[0];
+
+    // ── Step 5: Close the gap — renumber remaining waiting entries ───────────
+    await txDb
+      .update(queueEntriesTable)
+      .set({ position: sql`${queueEntriesTable.position} - 1` })
+      .where(
+        and(
+          eq(queueEntriesTable.flightId, entry.flightId),
+          eq(queueEntriesTable.status, "waiting"),
+          sql`${queueEntriesTable.position} > ${entry.position}`,
+        ),
+      );
+
+    // ── Step 6: Create the upcoming trip ────────────────────────────────────
+    const tripId = makeId();
+    const [trip] = await txDb
+      .insert(tripsTable)
+      .values({
+        id: tripId,
+        userId,
+        flightId: entry.flightId,
+        status: "upcoming",
+      })
+      .returning();
+
+    // ── Step 7: Notify the member ────────────────────────────────────────────
+    if (flight) {
+      await txDb.insert(notificationsTable).values({
+        id: makeId(),
+        userId,
+        title: "Flight confirmed!",
+        body: `Your seat on ${flight.fromCity} → ${flight.toCity} is confirmed.`,
+        type: "flight_confirmed",
+      });
+    }
+
+    await client.query("COMMIT");
+
+    return res.json({ ...trip, flight: flight ?? null });
+  } catch (err: any) {
+    await client.query("ROLLBACK").catch(() => {});
+    // Drizzle wraps pg DatabaseErrors: the original PostgreSQL error code lives at
+    // err.cause.code (not err.code).  Walk the cause chain to find 40001.
+    const pgCode = err?.code ?? err?.cause?.code;
+    if (pgCode === "40001") {
+      return res.status(409).json({ error: "Queue update conflict — please try again" });
+    }
+    return res.status(500).json({ error: "Failed to confirm queue entry" });
   } finally {
     client.release();
   }

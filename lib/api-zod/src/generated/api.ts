@@ -134,6 +134,23 @@ export const GetFlightResponse = zod.object({
 
 
 /**
+ * @summary Get the authenticated user's relationship to a specific flight
+ */
+export const GetFlightMyStatusParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetFlightMyStatusResponse = zod.object({
+  "status": zod.enum(['none', 'waiting', 'confirmed']),
+  "queueEntryId": zod.string().optional(),
+  "queuePosition": zod.number().optional(),
+  "totalInQueue": zod.number().optional(),
+  "tripId": zod.string().optional(),
+  "canConfirm": zod.boolean().optional().describe('Present and true when status=waiting, position=1, and seats are available for the entry\'s party size. The client should show the \"Confirm your seat\" action only when this is true.\n')
+})
+
+
+/**
  * @summary Join queue for a flight
  */
 export const joinQueueBodyPassengersDefault = 1;
@@ -172,6 +189,7 @@ export const JoinQueueResponse = zod.object({
   "position": zod.number(),
   "totalInQueue": zod.number(),
   "status": zod.enum(['waiting', 'confirmed', 'cancelled', 'expired']),
+  "canConfirm": zod.boolean().optional().describe('Present on waiting entries. True when this entry is at position 1 and the flight has seats available for the party size.\n'),
   "createdAt": zod.string()
 })
 
@@ -204,6 +222,7 @@ export const GetQueueStatusResponseItem = zod.object({
   "position": zod.number(),
   "totalInQueue": zod.number(),
   "status": zod.enum(['waiting', 'confirmed', 'cancelled', 'expired']),
+  "canConfirm": zod.boolean().optional().describe('Present on waiting entries. True when this entry is at position 1 and the flight has seats available for the party size.\n'),
   "createdAt": zod.string()
 })
 export const GetQueueStatusResponse = zod.array(GetQueueStatusResponseItem)
@@ -218,6 +237,40 @@ export const CancelQueueEntryParams = zod.object({
 
 export const CancelQueueEntryResponse = zod.object({
   "success": zod.boolean()
+})
+
+
+/**
+ * @summary Confirm a waiting queue entry, creating an upcoming trip
+ */
+export const ConfirmQueueEntryParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ConfirmQueueEntryResponse = zod.object({
+  "id": zod.string(),
+  "flightId": zod.string(),
+  "flight": zod.object({
+  "id": zod.string(),
+  "fromAirport": zod.string(),
+  "fromCity": zod.string(),
+  "toAirport": zod.string(),
+  "toCity": zod.string(),
+  "aircraftType": zod.string(),
+  "aircraftCapacity": zod.number(),
+  "departureDate": zod.string(),
+  "departureTime": zod.string(),
+  "duration": zod.string(),
+  "seatsAvailable": zod.number(),
+  "priceUsd": zod.number().optional(),
+  "discountPct": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "status": zod.enum(['available', 'boarding', 'departed', 'cancelled']),
+  "imageUrl": zod.string().optional(),
+  "createdAt": zod.string()
+}).optional(),
+  "status": zod.enum(['upcoming', 'completed', 'cancelled']),
+  "bookedAt": zod.string()
 })
 
 

@@ -24,6 +24,7 @@ import type {
   CancelQueueResponse,
   ErrorResponse,
   Flight,
+  FlightUserStatus,
   HealthStatus,
   JoinQueueRequest,
   ListFlightsParams,
@@ -98,7 +99,7 @@ export const getHealthCheckQueryKey = () => {
     }
 
 
-export const getHealthCheckQueryOptions = <TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getHealthCheckQueryOptions = <TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -125,7 +126,7 @@ export type HealthCheckQueryError = ErrorType<unknown>
  */
 
 export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
@@ -317,7 +318,7 @@ export const getGetMeQueryKey = () => {
     }
 
 
-export const getGetMeQueryOptions = <TData = Awaited<ReturnType<typeof getMe>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetMeQueryOptions = <TData = Awaited<ReturnType<typeof getMe>>, TError = ErrorType<ErrorResponse>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -344,7 +345,7 @@ export type GetMeQueryError = ErrorType<ErrorResponse>
  */
 
 export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = ErrorType<ErrorResponse>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
@@ -401,7 +402,7 @@ export const getListFlightsQueryKey = (params?: ListFlightsParams,) => {
     }
 
 
-export const getListFlightsQueryOptions = <TData = Awaited<ReturnType<typeof listFlights>>, TError = ErrorType<unknown>>(params?: ListFlightsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFlights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListFlightsQueryOptions = <TData = Awaited<ReturnType<typeof listFlights>>, TError = ErrorType<unknown>>(params?: ListFlightsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFlights>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -428,7 +429,7 @@ export type ListFlightsQueryError = ErrorType<unknown>
  */
 
 export function useListFlights<TData = Awaited<ReturnType<typeof listFlights>>, TError = ErrorType<unknown>>(
- params?: ListFlightsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFlights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListFlightsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFlights>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
@@ -478,7 +479,7 @@ export const getGetFlightQueryKey = (id: string,) => {
     }
 
 
-export const getGetFlightQueryOptions = <TData = Awaited<ReturnType<typeof getFlight>>, TError = ErrorType<ErrorResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlight>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetFlightQueryOptions = <TData = Awaited<ReturnType<typeof getFlight>>, TError = ErrorType<ErrorResponse>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFlight>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -505,11 +506,88 @@ export type GetFlightQueryError = ErrorType<ErrorResponse>
  */
 
 export function useGetFlight<TData = Awaited<ReturnType<typeof getFlight>>, TError = ErrorType<ErrorResponse>>(
- id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlight>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFlight>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetFlightQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetFlightMyStatusUrl = (id: string,) => {
+
+
+
+
+  return `/api/flights/${id}/my-status`
+}
+
+/**
+ * @summary Get the authenticated user's relationship to a specific flight
+ */
+export const getFlightMyStatus = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<FlightUserStatus> => {
+
+  return customFetch<FlightUserStatus>(getGetFlightMyStatusUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFlightMyStatusQueryKey = (id: string,) => {
+    return [
+    `/api/flights/${id}/my-status`
+    ] as const;
+    }
+
+
+export const getGetFlightMyStatusQueryOptions = <TData = Awaited<ReturnType<typeof getFlightMyStatus>>, TError = ErrorType<ErrorResponse>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFlightMyStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFlightMyStatusQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFlightMyStatus>>> = ({ signal }) => getFlightMyStatus(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFlightMyStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFlightMyStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getFlightMyStatus>>>
+export type GetFlightMyStatusQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get the authenticated user's relationship to a specific flight
+ */
+
+export function useGetFlightMyStatus<TData = Awaited<ReturnType<typeof getFlightMyStatus>>, TError = ErrorType<ErrorResponse>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFlightMyStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFlightMyStatusQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -626,7 +704,7 @@ export const getGetQueueStatusQueryKey = () => {
     }
 
 
-export const getGetQueueStatusQueryOptions = <TData = Awaited<ReturnType<typeof getQueueStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getQueueStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetQueueStatusQueryOptions = <TData = Awaited<ReturnType<typeof getQueueStatus>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getQueueStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -653,7 +731,7 @@ export type GetQueueStatusQueryError = ErrorType<unknown>
  */
 
 export function useGetQueueStatus<TData = Awaited<ReturnType<typeof getQueueStatus>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getQueueStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getQueueStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
@@ -741,6 +819,77 @@ export const useCancelQueueEntry = <TError = ErrorType<ErrorResponse>,
       return useMutation(getCancelQueueEntryMutationOptions(options));
     }
 
+export const getConfirmQueueEntryUrl = (id: string,) => {
+
+
+
+
+  return `/api/queue/${id}/confirm`
+}
+
+/**
+ * @summary Confirm a waiting queue entry, creating an upcoming trip
+ */
+export const confirmQueueEntry = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<Trip> => {
+
+  return customFetch<Trip>(getConfirmQueueEntryUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getConfirmQueueEntryMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmQueueEntry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmQueueEntry>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['confirmQueueEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmQueueEntry>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  confirmQueueEntry(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmQueueEntryMutationResult = NonNullable<Awaited<ReturnType<typeof confirmQueueEntry>>>
+
+    export type ConfirmQueueEntryMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Confirm a waiting queue entry, creating an upcoming trip
+ */
+export const useConfirmQueueEntry = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmQueueEntry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmQueueEntry>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getConfirmQueueEntryMutationOptions(options));
+    }
+
 export const getListTripsUrl = () => {
 
 
@@ -774,7 +923,7 @@ export const getListTripsQueryKey = () => {
     }
 
 
-export const getListTripsQueryOptions = <TData = Awaited<ReturnType<typeof listTrips>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTrips>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListTripsQueryOptions = <TData = Awaited<ReturnType<typeof listTrips>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrips>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -801,7 +950,7 @@ export type ListTripsQueryError = ErrorType<unknown>
  */
 
 export function useListTrips<TData = Awaited<ReturnType<typeof listTrips>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTrips>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrips>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
@@ -851,7 +1000,7 @@ export const getGetMembershipQueryKey = () => {
     }
 
 
-export const getGetMembershipQueryOptions = <TData = Awaited<ReturnType<typeof getMembership>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMembership>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetMembershipQueryOptions = <TData = Awaited<ReturnType<typeof getMembership>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMembership>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -878,7 +1027,7 @@ export type GetMembershipQueryError = ErrorType<unknown>
  */
 
 export function useGetMembership<TData = Awaited<ReturnType<typeof getMembership>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMembership>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMembership>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
@@ -999,7 +1148,7 @@ export const getGetReferralQueryKey = () => {
     }
 
 
-export const getGetReferralQueryOptions = <TData = Awaited<ReturnType<typeof getReferral>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReferral>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetReferralQueryOptions = <TData = Awaited<ReturnType<typeof getReferral>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReferral>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -1026,7 +1175,7 @@ export type GetReferralQueryError = ErrorType<unknown>
  */
 
 export function useGetReferral<TData = Awaited<ReturnType<typeof getReferral>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReferral>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReferral>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
@@ -1076,7 +1225,7 @@ export const getListNotificationsQueryKey = () => {
     }
 
 
-export const getListNotificationsQueryOptions = <TData = Awaited<ReturnType<typeof listNotifications>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListNotificationsQueryOptions = <TData = Awaited<ReturnType<typeof listNotifications>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotifications>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -1103,7 +1252,7 @@ export type ListNotificationsQueryError = ErrorType<unknown>
  */
 
 export function useListNotifications<TData = Awaited<ReturnType<typeof listNotifications>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNotifications>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 

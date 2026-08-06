@@ -6,12 +6,13 @@ import {
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
-import { useGetQueueStatus, useCancelQueueEntry } from '@workspace/api-client-react';
 import type { QueueEntry } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import colors from '@/constants/colors';
+import { useGetQueueStatus, useCancelQueueEntry, useConfirmQueueEntry } from '@workspace/api-client-react';
 
 // Colours used in static StyleSheets (light surface — same as offWhite palette)
+import { useAuth } from '@/context/AuthContext';
 const BG      = colors.light.offWhite;       // '#FAFAF8'
 const DARK    = colors.light.backgroundMid;  // '#0A1128'
 const MUTED   = colors.light.mutedForegroundLight; // 'rgba(10,17,40,0.45)'
@@ -84,12 +85,23 @@ const ring = StyleSheet.create({
   label: { fontFamily: 'Inter_600SemiBold', fontSize: 11, color: MUTED, letterSpacing: 0.5, textTransform: 'uppercase' },
 });
 
-// ─── Queue entry card ─────────────────────────────────────────────────────────
-function QueueCard({ entry, onCancel }: { entry: QueueEntry; onCancel: () => void }) {
+// ─── Waiting queue entry card ─────────────────────────────────────────────────
+function QueueCard({
+  entry,
+  onCancel,
+  onConfirm,
+  isConfirming,
+}: {
+  entry: QueueEntry;
+  onCancel: () => void;
+  onConfirm?: () => void;
+  isConfirming?: boolean;
+}) {
   const flight    = entry.flight;
   const countdown = useCountdown(flight?.departureDate, flight?.departureTime);
   const joinedAgo = formatAgo(entry.createdAt);
   const flightLabel = flight ? `${flight.fromAirport} → ${flight.toAirport}` : '— → —';
+  const canConfirm = (entry as any).canConfirm === true;
 
   return (
     <View style={card.wrap}>
@@ -124,17 +136,34 @@ function QueueCard({ entry, onCancel }: { entry: QueueEntry; onCancel: () => voi
 
       <View style={card.disclaimer}>
         <Text style={card.disclaimerText}>
-          Flights may be modified or cancelled due to operational requirements.
+          {canConfirm
+            ? "You're first in line — confirm now to secure your seat before someone else takes your spot."
+            : 'Flights may be modified or cancelled due to operational requirements.'}
         </Text>
       </View>
 
-      <TouchableOpacity
-        style={card.primaryBtn}
-        onPress={() => router.push('/(tabs)/membership')}
-        activeOpacity={0.85}
-      >
-        <Text style={card.primaryBtnText}>Use Skip the Line Pass</Text>
-      </TouchableOpacity>
+      {/* Primary action: confirm if eligible, otherwise offer Skip the Line */}
+      {canConfirm && onConfirm ? (
+        <TouchableOpacity
+          style={[card.confirmBtn, isConfirming && { opacity: 0.6 }]}
+          onPress={onConfirm}
+          disabled={isConfirming}
+          activeOpacity={0.85}
+        >
+          {isConfirming
+            ? <ActivityIndicator color="#fff" size="small" />
+            : <Text style={card.confirmBtnText}>✓  Confirm your seat</Text>
+          }
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          style={card.primaryBtn}
+          onPress={() => router.push('/(tabs)/membership')}
+          activeOpacity={0.85}
+        >
+          <Text style={card.primaryBtnText}>Use Skip the Line Pass</Text>
+        </TouchableOpacity>
+      )}
 
       <TouchableOpacity style={card.ghostBtn} onPress={() => router.push('/concierge')} activeOpacity={0.7}>
         <Text style={card.ghostBtnText}>Ask AI Concierge</Text>
@@ -147,6 +176,53 @@ function QueueCard({ entry, onCancel }: { entry: QueueEntry; onCancel: () => voi
   );
 }
 
+function ConfirmedCard({ entry }: { entry: QueueEntry }) {
+  const flight = entry.flight;
+  const flightLabel = flight
+    ? `${flight.fromAirport} → ${flight.toAirport}`
+    : '— → —';
+
+  return (
+    <View style={[card.wrap, confirmed.wrap]}>
+      {/* Confirmed badge */}
+      <View style={confirmed.badge}>
+        <Text style={confirmed.badgeText}>✓  CONFIRMED</Text>
+      </View>
+
+      <Text style={card.route}>{flightLabel}</Text>
+
+      {flight && (
+        <View style={card.section}>
+          <View style={card.statusRow}>
+            <Text style={card.sectionTitle}>Flight Status</Text>
+            <View style={card.statusBadge}>
+              <View style={card.statusDot} />
+              <Text style={card.statusText}>
+                {flight.status === 'available' ? 'Open' : flight.status ?? 'Active'}
+              </Text>
+            </View>
+          </View>
+          <View style={card.logRow}>
+            <Text style={card.logText}>Departure</Text>
+            <Text style={card.logTime}>{flight.departureDate} · {flight.departureTime}</Text>
+          </View>
+          <View style={card.logRow}>
+            <Text style={card.logText}>Route</Text>
+            <Text style={card.logTime}>{flight.fromCity} → {flight.toCity}</Text>
+          </View>
+        </View>
+      )}
+
+      <TouchableOpacity
+        style={[card.primaryBtn, confirmed.tripsBtn]}
+        onPress={() => router.push('/(tabs)/trips')}
+        activeOpacity={0.85}
+      >
+        <Text style={card.primaryBtnText}>View in My Trips</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 function formatAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
@@ -156,6 +232,33 @@ function formatAgo(iso: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+const confirmed = StyleSheet.create({
+  wrap: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(30,158,92,0.30)',
+  },
+  badge: {
+    backgroundColor: 'rgba(30,158,92,0.12)',
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    alignSelf: 'center',
+  },
+  badgeText: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 13,
+    color: '#1E9E5C',
+    letterSpacing: 0.5,
+  },
+  tripsBtn: {
+    backgroundColor: '#0A1128',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 16,
+    shadowOpacity: 0.20,
+    elevation: 4,
+  },
+});
 const card = StyleSheet.create({
   wrap: {
     width: '100%',
@@ -219,6 +322,19 @@ const card = StyleSheet.create({
     elevation: 6,
   },
   primaryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: '#fff' },
+  confirmBtn: {
+    width: '100%',
+    backgroundColor: SUCCESS,
+    borderRadius: 999,
+    paddingVertical: 16,
+    alignItems: 'center',
+    shadowColor: SUCCESS,
+    shadowOffset: { width: 0, height: 14 },
+    shadowRadius: 26,
+    shadowOpacity: 0.32,
+    elevation: 6,
+  },
+  confirmBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: '#fff' },
   ghostBtn: { paddingVertical: 4 },
   ghostBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: MUTED, textAlign: 'center' },
   leaveBtn: {
@@ -239,8 +355,16 @@ export default function QueueStatusScreen() {
   const topPad    = Platform.OS === 'web' ? 60 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { data: queueEntries, isLoading } = useGetQueueStatus({});
-  const entries = ((queueEntries as QueueEntry[]) ?? []).filter((e) => e.status === 'waiting');
+  const { user } = useAuth();
+
+  // API now returns waiting + confirmed; we render each group separately
+  const { data: queueEntries, isLoading } = useGetQueueStatus({
+    query: { enabled: !!user },
+  });
+  const allEntries = (queueEntries as QueueEntry[]) ?? [];
+  const waitingEntries = allEntries.filter((e) => e.status === 'waiting');
+  const confirmedEntries = allEntries.filter((e) => e.status === 'confirmed');
+  const hasAny = allEntries.length > 0;
 
   const cancelMutation = useCancelQueueEntry({
     mutation: {
@@ -251,10 +375,38 @@ export default function QueueStatusScreen() {
     },
   });
 
+  const confirmMutation = useConfirmQueueEntry({
+    mutation: {
+      onError: (err: any) => {
+        Alert.alert('Could not confirm', err?.data?.error || err?.message || 'Failed to confirm seat');
+      },
+    },
+  });
+
   const handleCancel = (entryId: string) => {
     Alert.alert('Leave Queue?', 'You will lose your position in the queue.', [
       { text: 'Keep Spot', style: 'cancel' },
       { text: 'Leave Queue', style: 'destructive', onPress: () => cancelMutation.mutate({ id: entryId }) },
+    ]);
+  };
+
+  const handleConfirm = (entryId: string, flightId: string) => {
+    Alert.alert('Confirm your seat?', 'This will reserve your spot on this flight.', [
+      { text: 'Not yet', style: 'cancel' },
+      {
+        text: 'Confirm', style: 'default',
+        onPress: () =>
+          confirmMutation.mutate(
+            { id: entryId },
+            {
+              onSuccess: () => {
+                queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
+                queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+                queryClient.invalidateQueries({ queryKey: [`/api/flights/${flightId}/my-status`] });
+              },
+            },
+          ),
+      },
     ]);
   };
 
@@ -270,7 +422,7 @@ export default function QueueStatusScreen() {
         <View style={styles.centered}>
           <ActivityIndicator color={BLUE} size="large" />
         </View>
-      ) : entries.length === 0 ? (
+      ) : !hasAny ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No active queues</Text>
           <Text style={styles.emptyBody}>
@@ -290,8 +442,19 @@ export default function QueueStatusScreen() {
           contentContainerStyle={[styles.scrollContent, { paddingTop: topPad + 80, paddingBottom: bottomPad + 24 }]}
           showsVerticalScrollIndicator={false}
         >
-          {entries.map((entry) => (
-            <QueueCard key={entry.id} entry={entry} onCancel={() => handleCancel(entry.id)} />
+          {/* Confirmed entries appear first — most actionable */}
+          {confirmedEntries.map((entry) => (
+            <ConfirmedCard key={entry.id} entry={entry} />
+          ))}
+          {/* Waiting entries */}
+          {waitingEntries.map((entry) => (
+            <QueueCard
+              key={entry.id}
+              entry={entry}
+              onCancel={() => handleCancel(entry.id)}
+              onConfirm={() => handleConfirm(entry.id, entry.flightId)}
+              isConfirming={confirmMutation.isPending}
+            />
           ))}
         </ScrollView>
       )}

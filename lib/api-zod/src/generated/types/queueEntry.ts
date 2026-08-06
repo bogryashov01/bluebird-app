@@ -15,5 +15,7 @@ export interface QueueEntry {
   position: number;
   totalInQueue: number;
   status: QueueEntryStatus;
+  /** Present on waiting entries. True when this entry is at position 1 and the flight has seats available for the party size. */
+  canConfirm?: boolean;
   createdAt: string;
 }
