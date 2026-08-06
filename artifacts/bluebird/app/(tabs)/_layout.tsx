@@ -12,19 +12,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 function NativeTabLayout() {
   return (
     <NativeTabs>
-      <NativeTabs.Trigger name="discover">
+      <NativeTabs.Trigger name="index" hidden />
+      <NativeTabs.Trigger name="discover/index">
         <Icon sf={{ default: 'paperplane', selected: 'paperplane.fill' }} />
         <Label>Discover</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="trips">
+      <NativeTabs.Trigger name="trips/index">
         <Icon sf={{ default: 'briefcase', selected: 'briefcase.fill' }} />
         <Label>Trips</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="membership">
+      <NativeTabs.Trigger name="membership/index">
         <Icon sf={{ default: 'star', selected: 'star.fill' }} />
         <Label>Membership</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile">
+      <NativeTabs.Trigger name="profile/index">
         <Icon sf={{ default: 'person', selected: 'person.fill' }} />
         <Label>Profile</Label>
       </NativeTabs.Trigger>
@@ -34,8 +35,6 @@ function NativeTabLayout() {
 
 function ClassicTabLayout() {
   const colors = useColors();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
   const isIOS = Platform.OS === 'ios';
   const isWeb = Platform.OS === 'web';
   const insets = useSafeAreaInsets();
@@ -71,8 +70,9 @@ function ClassicTabLayout() {
         },
       }}
     >
+      <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen
-        name="discover"
+        name="discover/index"
         options={{
           title: 'Discover',
           tabBarIcon: ({ color }) =>
@@ -84,7 +84,7 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="trips"
+        name="trips/index"
         options={{
           title: 'Trips',
           tabBarIcon: ({ color }) =>
@@ -96,7 +96,7 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="membership"
+        name="membership/index"
         options={{
           title: 'Membership',
           tabBarIcon: ({ color }) =>
@@ -108,7 +108,7 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="profile/index"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) =>
