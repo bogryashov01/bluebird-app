@@ -24,6 +24,9 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
   setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
 }
 
+
+
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

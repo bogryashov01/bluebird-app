@@ -9,6 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useListFlights, type Flight } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
+import FlightMapView from '@/components/FlightMap';
 
 const FILTERS = ['All', 'This Week', 'Under 4 hrs', 'Heavy Jet', 'Near Me'];
 
@@ -234,10 +235,7 @@ export default function DiscoverScreen() {
               </View>
 
               {view === 'map' && (
-                <View style={styles.mapPlaceholder}>
-                  <Feather name="map" size={28} color="rgba(255,255,255,0.35)" />
-                  <Text style={[styles.emptyText, { fontFamily: 'Inter_400Regular' }]}>Map view coming soon</Text>
-                </View>
+                <FlightMapView flights={all} />
               )}
 
               {view === 'list' && filteredFlights.length === 0 && (
