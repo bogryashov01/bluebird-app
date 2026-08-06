@@ -9,6 +9,14 @@ import Svg, { Circle } from 'react-native-svg';
 import { useGetQueueStatus, useCancelQueueEntry } from '@workspace/api-client-react';
 import type { QueueEntry } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
+import colors from '@/constants/colors';
+
+// Colours used in static StyleSheets (light surface — same as offWhite palette)
+const BG      = colors.light.offWhite;       // '#FAFAF8'
+const DARK    = colors.light.backgroundMid;  // '#0A1128'
+const MUTED   = colors.light.mutedForegroundLight; // 'rgba(10,17,40,0.45)'
+const BLUE    = colors.light.primary;        // '#1259F2'
+const SUCCESS = colors.light.success;        // '#1E9E5C'
 
 // ─── Countdown hook ───────────────────────────────────────────────────────────
 function useCountdown(departureDate?: string, departureTime?: string): string {
@@ -16,16 +24,12 @@ function useCountdown(departureDate?: string, departureTime?: string): string {
 
   useEffect(() => {
     if (!departureDate || !departureTime) return;
-
     const compute = () => {
       const [h, m] = departureTime.split(':').map(Number);
       const [y, mo, d] = departureDate.split('-').map(Number);
       const target = new Date(y, mo - 1, d, h, m, 0).getTime();
       const diff = target - Date.now();
-      if (diff <= 0) {
-        setRemaining('Imminent');
-        return;
-      }
+      if (diff <= 0) { setRemaining('Imminent'); return; }
       const hours = Math.floor(diff / 3600000);
       const mins  = Math.floor((diff % 3600000) / 60000);
       const secs  = Math.floor((diff % 60000) / 1000);
@@ -33,7 +37,6 @@ function useCountdown(departureDate?: string, departureTime?: string): string {
         `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
       );
     };
-
     compute();
     const id = setInterval(compute, 1000);
     return () => clearInterval(id);
@@ -42,24 +45,20 @@ function useCountdown(departureDate?: string, departureTime?: string): string {
   return remaining;
 }
 
-// ─── SVG ring constants ───────────────────────────────────────────────────────
-const CIRC = 251; // 2π × 40, the circumference used in the prototype
+// ─── SVG ring ─────────────────────────────────────────────────────────────────
+const CIRC = 251;
 
 function RingProgress({ position, total }: { position: number; total: number }) {
-  // How far you are toward the front: position 1/N = almost full ring
-  const progress = total > 1 ? (total - position) / (total - 1) : 1;
+  const progress   = total > 1 ? (total - position) / (total - 1) : 1;
   const dashoffset = CIRC * (1 - progress);
-
   return (
     <View style={ring.wrap}>
       <Svg width={170} height={170} viewBox="0 0 90 90">
-        {/* Track */}
         <Circle cx="45" cy="45" r="40" fill="none" stroke="rgba(10,17,40,0.08)" strokeWidth="8" />
-        {/* Fill */}
         <Circle
           cx="45" cy="45" r="40"
           fill="none"
-          stroke="#1259F2"
+          stroke={BLUE}
           strokeWidth="8"
           strokeLinecap="round"
           strokeDasharray={CIRC}
@@ -69,8 +68,7 @@ function RingProgress({ position, total }: { position: number; total: number }) 
       </Svg>
       <View style={ring.inner}>
         <Text style={ring.num}>
-          {position}
-          <Text style={ring.total}>/{total}</Text>
+          {position}<Text style={ring.total}>/{total}</Text>
         </Text>
         <Text style={ring.label}>POSITION</Text>
       </View>
@@ -79,37 +77,27 @@ function RingProgress({ position, total }: { position: number; total: number }) 
 }
 
 const ring = StyleSheet.create({
-  wrap: { width: 170, height: 170, position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  wrap:  { width: 170, height: 170, position: 'relative', alignItems: 'center', justifyContent: 'center' },
   inner: { position: 'absolute', alignItems: 'center' },
-  num: { fontFamily: 'Inter_700Bold', fontSize: 34, color: '#0A1128', lineHeight: 40 },
-  total: { fontFamily: 'Inter_400Regular', fontSize: 18, color: 'rgba(10,17,40,0.4)' },
-  label: { fontFamily: 'Inter_600SemiBold', fontSize: 11, color: 'rgba(10,17,40,0.45)', letterSpacing: 0.4 },
+  num:   { fontFamily: 'Inter_700Bold', fontSize: 34, color: DARK, lineHeight: 40 },
+  total: { fontFamily: 'Inter_400Regular', fontSize: 18, color: MUTED },
+  label: { fontFamily: 'Inter_600SemiBold', fontSize: 11, color: MUTED, letterSpacing: 0.5, textTransform: 'uppercase' },
 });
 
-// ─── Single queue entry card ──────────────────────────────────────────────────
+// ─── Queue entry card ─────────────────────────────────────────────────────────
 function QueueCard({ entry, onCancel }: { entry: QueueEntry; onCancel: () => void }) {
-  const flight = entry.flight;
+  const flight    = entry.flight;
   const countdown = useCountdown(flight?.departureDate, flight?.departureTime);
   const joinedAgo = formatAgo(entry.createdAt);
-
-  const flightLabel = flight
-    ? `${flight.fromAirport} → ${flight.toAirport}`
-    : '— → —';
+  const flightLabel = flight ? `${flight.fromAirport} → ${flight.toAirport}` : '— → —';
 
   return (
     <View style={card.wrap}>
-      {/* Route */}
       <Text style={card.route}>{flightLabel}</Text>
-
-      {/* Ring */}
       <RingProgress position={entry.position} total={entry.totalInQueue} />
 
-      {/* Countdown */}
-      {flight && (
-        <Text style={card.countdown}>Decision in {countdown}</Text>
-      )}
+      {flight && <Text style={card.countdown}>Decision in {countdown}</Text>}
 
-      {/* Queue movement log */}
       <View style={card.section}>
         <Text style={card.sectionTitle}>Queue Activity</Text>
         <View style={card.logRow}>
@@ -122,7 +110,6 @@ function QueueCard({ entry, onCancel }: { entry: QueueEntry; onCancel: () => voi
         </View>
       </View>
 
-      {/* Flight status */}
       <View style={card.section}>
         <View style={card.statusRow}>
           <Text style={card.sectionTitle}>Flight Status</Text>
@@ -135,14 +122,12 @@ function QueueCard({ entry, onCancel }: { entry: QueueEntry; onCancel: () => voi
         </View>
       </View>
 
-      {/* Disclaimer */}
       <View style={card.disclaimer}>
         <Text style={card.disclaimerText}>
           Flights may be modified or cancelled due to operational requirements.
         </Text>
       </View>
 
-      {/* CTAs */}
       <TouchableOpacity
         style={card.primaryBtn}
         onPress={() => router.push('/(tabs)/membership')}
@@ -151,19 +136,11 @@ function QueueCard({ entry, onCancel }: { entry: QueueEntry; onCancel: () => voi
         <Text style={card.primaryBtnText}>Use Skip the Line Pass</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={card.ghostBtn}
-        onPress={() => router.push('/concierge')}
-        activeOpacity={0.7}
-      >
+      <TouchableOpacity style={card.ghostBtn} onPress={() => router.push('/concierge')} activeOpacity={0.7}>
         <Text style={card.ghostBtnText}>Ask AI Concierge</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={card.leaveBtn}
-        onPress={onCancel}
-        activeOpacity={0.7}
-      >
+      <TouchableOpacity style={card.leaveBtn} onPress={onCancel} activeOpacity={0.7}>
         <Text style={card.leaveBtnText}>Leave queue</Text>
       </TouchableOpacity>
     </View>
@@ -183,7 +160,7 @@ const card = StyleSheet.create({
   wrap: {
     width: '100%',
     backgroundColor: '#fff',
-    borderRadius: 22,
+    borderRadius: 24,
     padding: 22,
     alignItems: 'center',
     gap: 16,
@@ -197,15 +174,11 @@ const card = StyleSheet.create({
   route: {
     fontFamily: 'Inter_700Bold',
     fontSize: 22,
-    color: '#0A1128',
+    color: DARK,
     letterSpacing: -0.4,
     alignSelf: 'center',
   },
-  countdown: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 15,
-    color: '#1259F2',
-  },
+  countdown: { fontFamily: 'Inter_700Bold', fontSize: 15, color: BLUE },
   section: {
     width: '100%',
     backgroundColor: '#fff',
@@ -213,107 +186,57 @@ const card = StyleSheet.create({
     padding: 16,
     gap: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 24,
-    shadowOpacity: 0.06,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 16,
+    shadowOpacity: 0.05,
+    elevation: 2,
   },
-  sectionTitle: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 13,
-    color: '#0A1128',
-  },
-  logRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  logText: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 13,
-    color: 'rgba(10,17,40,0.55)',
-  },
-  logTime: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 13,
-    color: 'rgba(10,17,40,0.4)',
-  },
-  statusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  statusDot: {
-    width: 7, height: 7, borderRadius: 3.5,
-    backgroundColor: '#1E9E5C',
-  },
-  statusText: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 13,
-    color: '#1E9E5C',
-  },
+  sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 13, color: DARK },
+  logRow:  { flexDirection: 'row', justifyContent: 'space-between' },
+  logText: { fontFamily: 'Inter_400Regular', fontSize: 13, color: 'rgba(10,17,40,0.55)' },
+  logTime: { fontFamily: 'Inter_400Regular', fontSize: 13, color: MUTED },
+  statusRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statusDot:   { width: 7, height: 7, borderRadius: 3.5, backgroundColor: SUCCESS },
+  statusText:  { fontFamily: 'Inter_700Bold', fontSize: 13, color: SUCCESS },
   disclaimer: {
     width: '100%',
-    backgroundColor: 'rgba(18,89,242,0.06)',
-    borderRadius: 16,
+    backgroundColor: `${BLUE}0D`,
+    borderRadius: 14,
     padding: 14,
   },
-  disclaimerText: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 13,
-    lineHeight: 19,
-    color: '#0A1128',
-  },
+  disclaimerText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, color: DARK },
   primaryBtn: {
     width: '100%',
-    backgroundColor: '#1259F2',
+    backgroundColor: BLUE,
     borderRadius: 999,
     paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: '#1259F2',
+    shadowColor: BLUE,
     shadowOffset: { width: 0, height: 14 },
     shadowRadius: 26,
     shadowOpacity: 0.32,
     elevation: 6,
   },
-  primaryBtnText: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 16,
-    color: '#fff',
-  },
-  ghostBtn: {
-    paddingVertical: 4,
-  },
-  ghostBtnText: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 14,
-    color: 'rgba(10,17,40,0.55)',
-    textAlign: 'center',
-  },
+  primaryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: '#fff' },
+  ghostBtn: { paddingVertical: 4 },
+  ghostBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: MUTED, textAlign: 'center' },
   leaveBtn: {
     borderWidth: 1,
     borderColor: 'rgba(10,17,40,0.15)',
-    borderRadius: 12,
+    borderRadius: 999,
     width: '100%',
-    paddingVertical: 12,
+    paddingVertical: 13,
     alignItems: 'center',
   },
-  leaveBtnText: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 14,
-    color: 'rgba(10,17,40,0.5)',
-  },
+  leaveBtnText: { fontFamily: 'Inter_400Regular', fontSize: 14, color: MUTED },
 });
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 export default function QueueStatusScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const topPad = Platform.OS === 'web' ? 60 : insets.top;
+  const topPad    = Platform.OS === 'web' ? 60 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { data: queueEntries, isLoading } = useGetQueueStatus({});
@@ -321,12 +244,9 @@ export default function QueueStatusScreen() {
 
   const cancelMutation = useCancelQueueEntry({
     mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
-      },
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] }),
       onError: (err: any) => {
-        const msg = err?.data?.error || err?.message || 'Failed to leave queue';
-        Alert.alert('Error', msg);
+        Alert.alert('Error', err?.data?.error || err?.message || 'Failed to leave queue');
       },
     },
   });
@@ -334,30 +254,21 @@ export default function QueueStatusScreen() {
   const handleCancel = (entryId: string) => {
     Alert.alert('Leave Queue?', 'You will lose your position in the queue.', [
       { text: 'Keep Spot', style: 'cancel' },
-      {
-        text: 'Leave Queue', style: 'destructive',
-        onPress: () => cancelMutation.mutate({ id: entryId }),
-      },
+      { text: 'Leave Queue', style: 'destructive', onPress: () => cancelMutation.mutate({ id: entryId }) },
     ]);
   };
 
-  // Back button sits below the status bar; absolute so it floats over content
   const backTop = topPad + 14;
 
   return (
     <View style={styles.container}>
-      {/* Back button */}
-      <TouchableOpacity
-        style={[styles.backBtn, { top: backTop }]}
-        onPress={() => router.back()}
-        activeOpacity={0.7}
-      >
+      <TouchableOpacity style={[styles.backBtn, { top: backTop }]} onPress={() => router.back()} activeOpacity={0.7}>
         <Text style={styles.backChevron}>‹</Text>
       </TouchableOpacity>
 
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator color="#1259F2" size="large" />
+          <ActivityIndicator color={BLUE} size="large" />
         </View>
       ) : entries.length === 0 ? (
         <View style={styles.empty}>
@@ -376,10 +287,7 @@ export default function QueueStatusScreen() {
       ) : (
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingTop: topPad + 80, paddingBottom: bottomPad + 24 },
-          ]}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: topPad + 80, paddingBottom: bottomPad + 24 }]}
           showsVerticalScrollIndicator={false}
         >
           {entries.map((entry) => (
@@ -392,51 +300,23 @@ export default function QueueStatusScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  container: { flex: 1, backgroundColor: BG },
   backBtn: {
-    position: 'absolute',
-    zIndex: 10,
-    left: 18,
+    position: 'absolute', zIndex: 10, left: 18,
     width: 38, height: 38, borderRadius: 19,
     backgroundColor: 'rgba(10,17,40,0.06)',
     alignItems: 'center', justifyContent: 'center',
   },
-  backChevron: {
-    fontSize: 24,
-    color: '#0A1128',
-    lineHeight: 28,
-    marginLeft: -2,
-  },
-  scrollContent: {
-    paddingTop: 100,
-    paddingHorizontal: 22,
-    alignItems: 'center',
-  },
+  backChevron: { fontSize: 24, color: DARK, lineHeight: 28, marginLeft: -2 },
+  scrollContent: { paddingHorizontal: 22, alignItems: 'center' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  empty: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 32, gap: 12,
-  },
-  emptyTitle: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 20,
-    color: '#0A1128',
-  },
-  emptyBody: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 14,
-    lineHeight: 22,
-    color: 'rgba(10,17,40,0.55)',
-    textAlign: 'center',
-  },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 12 },
+  emptyTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 20, color: DARK },
+  emptyBody:  { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 22, color: MUTED, textAlign: 'center' },
   browseBtn: {
     marginTop: 6,
-    backgroundColor: '#1259F2',
-    paddingHorizontal: 24, paddingVertical: 14, borderRadius: 12,
+    backgroundColor: BLUE,
+    paddingHorizontal: 24, paddingVertical: 14, borderRadius: 999,
   },
-  browseBtnText: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 15,
-    color: '#fff',
-  },
+  browseBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#fff' },
 });

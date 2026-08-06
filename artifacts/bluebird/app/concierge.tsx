@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   messageList: { padding: 16, gap: 12 },
   suggestionsRow: { flexWrap: 'wrap', flexDirection: 'row', gap: 8, marginBottom: 16 },
-  suggestion: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
+  suggestion: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
   suggestionText: { fontSize: 12 },
   messageRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-end' },
   messageRowUser: { flexDirection: 'row-reverse' },

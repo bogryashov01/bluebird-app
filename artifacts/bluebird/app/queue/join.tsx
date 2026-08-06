@@ -140,7 +140,7 @@ export default function JoinQueueScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { flex: 1, padding: 20, gap: 16 },
-  flightCard: { borderRadius: 16, borderWidth: 1, padding: 20 },
+  flightCard: { borderRadius: 18, borderWidth: 1, padding: 20 },
   routeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   airportBlock: { flex: 1 },
   airportCode: { fontSize: 28 },
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   passAlertText: { fontSize: 13 },
   footer: { padding: 16, gap: 10, borderTopWidth: 1 },
   confirmBtn: {
-    height: 56, borderRadius: 14,
+    height: 56, borderRadius: 999,
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
   },
   confirmBtnText: { color: '#fff', fontSize: 16 },

@@ -16,6 +16,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { setBaseUrl } from '@workspace/api-client-react';
 import { AuthProvider } from '@/context/AuthContext';
 import { Platform } from 'react-native';
+import colors from '@/constants/colors';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -23,7 +24,6 @@ SplashScreen.preventAutoHideAsync();
 if (process.env.EXPO_PUBLIC_DOMAIN) {
   setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
 }
-
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,7 +35,7 @@ const queryClient = new QueryClient({
 });
 
 const HEADER_STYLE = {
-  backgroundColor: '#0A1128',
+  backgroundColor: colors.light.backgroundMid,
 } as const;
 
 function RootLayoutNav() {

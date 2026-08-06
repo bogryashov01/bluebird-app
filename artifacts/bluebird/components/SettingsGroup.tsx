@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useColors } from '@/hooks/useColors';
 
 export interface SettingsRow {
   label: string;
@@ -15,12 +16,13 @@ interface SettingsGroupProps {
 }
 
 export function SettingsGroup({ title, rows }: SettingsGroupProps) {
+  const colors = useColors();
   return (
     <View style={styles.wrap}>
       {title ? (
-        <Text style={styles.title}>{title}</Text>
+        <Text style={[styles.title, { color: colors.mutedForegroundLight }]}>{title}</Text>
       ) : null}
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: '#fff' }]}>
         {rows.map((row, i) => (
           <React.Fragment key={row.label}>
             {i > 0 && <View style={styles.sep} />}
@@ -30,10 +32,10 @@ export function SettingsGroup({ title, rows }: SettingsGroupProps) {
               activeOpacity={row.onPress ? 0.6 : 1}
               disabled={!row.onPress}
             >
-              <Text style={styles.label}>{row.label}</Text>
-              {row.hint ? <Text style={styles.hint}>{row.hint}</Text> : null}
+              <Text style={[styles.label, { color: colors.backgroundMid }]}>{row.label}</Text>
+              {row.hint ? <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>{row.hint}</Text> : null}
               {row.right !== undefined ? row.right : (
-                row.onPress ? <Text style={styles.chevron}>›</Text> : null
+                row.onPress ? <Text style={[styles.chevron, { color: colors.mutedForegroundLight }]}>›</Text> : null
               )}
             </TouchableOpacity>
           </React.Fragment>
@@ -48,14 +50,12 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: 'Inter_700Bold',
     fontSize: 11,
-    color: 'rgba(10,17,40,0.4)',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
     paddingHorizontal: 4,
   },
   card: {
-    backgroundColor: '#fff',
     borderRadius: 18,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
@@ -79,17 +79,14 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: 'Inter_500Medium',
     fontSize: 15,
-    color: '#0A1128',
   },
   hint: {
     fontFamily: 'Inter_400Regular',
     fontSize: 12.5,
-    color: 'rgba(10,17,40,0.35)',
     marginRight: 6,
   },
   chevron: {
     fontSize: 20,
-    color: 'rgba(10,17,40,0.3)',
     lineHeight: 22,
   },
 });

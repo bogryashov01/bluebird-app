@@ -29,18 +29,26 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
 }
 
-function statusColor(status: string, primary: string, success: string, muted: string): string {
+function statusColor(status: string, primary: string, success: string, destructive: string, muted: string): string {
   switch (status) {
     case 'available': return success;
-    case 'boarding': return primary;
-    case 'departed': return muted;
-    case 'cancelled': return '#EF4444';
-    default: return muted;
+    case 'boarding':  return primary;
+    case 'departed':  return muted;
+    case 'cancelled': return destructive;
+    default:          return muted;
   }
 }
 
 export default function FlightCard({ flight, onPress }: FlightCardProps) {
   const colors = useColors();
+
+  const sColor = statusColor(
+    flight.status,
+    colors.primary,
+    colors.success,
+    colors.destructive,
+    colors.mutedForeground,
+  );
 
   return (
     <TouchableOpacity
@@ -102,9 +110,9 @@ export default function FlightCard({ flight, onPress }: FlightCardProps) {
         <Text style={[styles.aircraftType, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
           {flight.aircraftType}
         </Text>
-        <View style={[styles.statusBadge, { backgroundColor: statusColor(flight.status, colors.primary, colors.success, colors.mutedForeground) + '20' }]}>
-          <View style={[styles.statusDot, { backgroundColor: statusColor(flight.status, colors.primary, colors.success, colors.mutedForeground) }]} />
-          <Text style={[styles.statusText, { color: statusColor(flight.status, colors.primary, colors.success, colors.mutedForeground), fontFamily: 'Inter_500Medium' }]}>
+        <View style={[styles.statusBadge, { backgroundColor: sColor + '20' }]}>
+          <View style={[styles.statusDot, { backgroundColor: sColor }]} />
+          <Text style={[styles.statusText, { color: sColor, fontFamily: 'Inter_500Medium' }]}>
             {flight.status.charAt(0).toUpperCase() + flight.status.slice(1)}
           </Text>
         </View>
@@ -115,7 +123,7 @@ export default function FlightCard({ flight, onPress }: FlightCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     marginHorizontal: 16,
     marginBottom: 12,
@@ -128,20 +136,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 14,
   },
-  airportBlock: {
-    flex: 1,
-  },
-  rightBlock: {
-    alignItems: 'flex-end',
-  },
-  airportCode: {
-    fontSize: 22,
-    letterSpacing: 1,
-  },
-  cityName: {
-    fontSize: 12,
-    marginTop: 2,
-  },
+  airportBlock: { flex: 1 },
+  rightBlock: { alignItems: 'flex-end' },
+  airportCode: { fontSize: 22, letterSpacing: 1 },
+  cityName: { fontSize: 12, marginTop: 2 },
   routeMiddle: {
     flex: 1,
     flexDirection: 'row',
@@ -149,16 +147,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 8,
   },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-    marginHorizontal: 4,
-  },
+  dot:  { width: 6, height: 6, borderRadius: 3 },
+  line: { flex: 1, height: 1, marginHorizontal: 4 },
   detailsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -167,37 +157,23 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     gap: 4,
   },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  detailText: {
-    fontSize: 11,
-  },
-  bottomRow: {
+  detailItem:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  detailText:  { fontSize: 11 },
+  bottomRow:   {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingBottom: 14,
   },
-  aircraftType: {
-    fontSize: 12,
-  },
+  aircraftType: { fontSize: 12 },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 20,
+    borderRadius: 999,
   },
-  statusDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-  },
-  statusText: {
-    fontSize: 11,
-  },
+  statusDot:  { width: 5, height: 5, borderRadius: 3 },
+  statusText: { fontSize: 11 },
 });

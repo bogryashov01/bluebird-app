@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
   },
   nextButton: {
     backgroundColor: '#1259F2',
-    borderRadius: 14,
+    borderRadius: 999,
     height: 56,
     flexDirection: 'row',
     justifyContent: 'center',

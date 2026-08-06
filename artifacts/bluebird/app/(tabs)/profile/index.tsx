@@ -19,18 +19,19 @@ function fmtDate(iso: string): string {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
   const { user, signOut } = useAuth();
 
-  const topPad = Platform.OS === 'web' ? 67 : insets.top;
+  const topPad    = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { data: notifications } = useListNotifications({});
   const recentActivity = ((notifications as Notification[]) ?? []).slice(0, 5);
 
-  const initials = user?.name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) ?? '?';
-  const tierLabel = {
-    base: 'Base Member',
-    plus: 'Plus Member',
+  const initials    = user?.name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) ?? '?';
+  const tierLabel   = {
+    base:      'Base Member',
+    plus:      'Plus Member',
     concierge: 'Concierge Member',
   }[user?.membershipTier ?? 'base'] ?? 'Base Member';
   const memberSince = user?.createdAt
@@ -38,7 +39,7 @@ export default function ProfileScreen() {
     : new Date().getFullYear();
 
   return (
-    <View style={[styles.container]}>
+    <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -46,18 +47,20 @@ export default function ProfileScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Avatar + name ───────────────────────────────────── */}
+        {/* ── Avatar + name ── */}
         <View style={styles.avatarRow}>
-          <View style={styles.avatar}>
+          <View style={[styles.avatar, { backgroundColor: colors.backgroundMid }]}>
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
           <View>
-            <Text style={styles.name}>{user?.name ?? 'Member'}</Text>
-            <Text style={styles.memberSince}>{tierLabel} since {memberSince}</Text>
+            <Text style={[styles.name, { color: colors.backgroundMid }]}>{user?.name ?? 'Member'}</Text>
+            <Text style={[styles.memberSince, { color: colors.mutedForegroundLight }]}>
+              {tierLabel} since {memberSince}
+            </Text>
           </View>
         </View>
 
-        {/* ── Account ─────────────────────────────────────────── */}
+        {/* ── Account ── */}
         <SettingsGroup
           title="Account"
           rows={[
@@ -77,7 +80,7 @@ export default function ProfileScreen() {
           ]}
         />
 
-        {/* ── Preferences ─────────────────────────────────────── */}
+        {/* ── Preferences ── */}
         <SettingsGroup
           title="Preferences"
           rows={[
@@ -93,30 +96,18 @@ export default function ProfileScreen() {
           ]}
         />
 
-        {/* ── Support ─────────────────────────────────────────── */}
+        {/* ── Support ── */}
         <SettingsGroup
           title="Support"
           rows={[
-            {
-              label: 'AI Concierge',
-              onPress: () => router.push('/concierge'),
-            },
-            {
-              label: 'Help Center',
-              onPress: () => Alert.alert('Help Center', 'Email us at support@bluebird.com'),
-            },
-            {
-              label: 'Referral',
-              onPress: () => router.push('/referral'),
-            },
-            {
-              label: 'Legal',
-              onPress: () => Alert.alert('Legal', 'Terms of service and privacy policy.'),
-            },
+            { label: 'AI Concierge', onPress: () => router.push('/concierge') },
+            { label: 'Help Center',  onPress: () => Alert.alert('Help Center', 'Email us at support@bluebird.com') },
+            { label: 'Referral',     onPress: () => router.push('/referral') },
+            { label: 'Legal',        onPress: () => Alert.alert('Legal', 'Terms of service and privacy policy.') },
           ]}
         />
 
-        {/* ── Sign out ─────────────────────────────────────────── */}
+        {/* ── Sign out ── */}
         <SettingsGroup
           rows={[
             {
@@ -126,15 +117,15 @@ export default function ProfileScreen() {
                   { text: 'Cancel', style: 'cancel' },
                   { text: 'Sign out', style: 'destructive', onPress: signOut },
                 ]),
-              right: <Text style={styles.signOutChevron}>›</Text>,
+              right: <Text style={[styles.signOutChevron, { color: colors.mutedForegroundLight }]}>›</Text>,
             },
           ]}
         />
 
-        {/* ── Recent Activity ──────────────────────────────────── */}
+        {/* ── Recent Activity ── */}
         {recentActivity.length > 0 && (
           <View style={styles.activitySection}>
-            <Text style={styles.activityTitle}>Recent Activity</Text>
+            <Text style={[styles.activityTitle, { color: colors.mutedForegroundLight }]}>Recent Activity</Text>
             <View style={styles.activityList}>
               {recentActivity.map((item, i) => (
                 <View
@@ -144,10 +135,15 @@ export default function ProfileScreen() {
                     i < recentActivity.length - 1 && styles.activityRowBorder,
                   ]}
                 >
-                  <View style={[styles.activityDot, !item.read && styles.activityDotBlue]} />
+                  <View style={[
+                    styles.activityDot,
+                    { backgroundColor: item.read ? colors.mutedForegroundLight : colors.primary },
+                  ]} />
                   <View style={styles.activityContent}>
-                    <Text style={styles.activityLabel}>{item.title}</Text>
-                    <Text style={styles.activityDate}>{fmtDate(item.createdAt)}</Text>
+                    <Text style={[styles.activityLabel, { color: colors.backgroundMid }]}>{item.title}</Text>
+                    <Text style={[styles.activityDate, { color: colors.mutedForegroundLight }]}>
+                      {fmtDate(item.createdAt)}
+                    </Text>
                   </View>
                 </View>
               ))}
@@ -160,95 +156,44 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  container: { flex: 1 },
   scroll: { paddingHorizontal: 20, gap: 18 },
 
-  // ── Avatar row
   avatarRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingBottom: 4,
+    flexDirection: 'row', alignItems: 'center',
+    gap: 14, paddingBottom: 4,
   },
   avatar: {
     width: 58, height: 58, borderRadius: 29,
-    backgroundColor: '#0A1128',
     alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
   },
-  avatarText: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 20,
-    color: '#fff',
-  },
-  name: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 20,
-    color: '#0A1128',
-    letterSpacing: -0.4,
-  },
-  memberSince: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 13,
-    color: 'rgba(10,17,40,0.5)',
-    marginTop: 2,
-  },
+  avatarText: { fontFamily: 'Inter_700Bold', fontSize: 20, color: '#fff' },
+  name: { fontFamily: 'Inter_700Bold', fontSize: 20, letterSpacing: -0.4 },
+  memberSince: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 2 },
 
-  // ── Sign-out danger style
-  signOutChevron: {
-    fontSize: 20,
-    color: 'rgba(10,17,40,0.3)',
-    lineHeight: 22,
-  },
+  signOutChevron: { fontSize: 20, lineHeight: 22 },
 
-  // ── Activity log
   activitySection: { gap: 10 },
   activityTitle: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 11,
-    color: 'rgba(10,17,40,0.4)',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontFamily: 'Inter_700Bold', fontSize: 11,
+    textTransform: 'uppercase', letterSpacing: 0.5,
     paddingHorizontal: 4,
   },
   activityList: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 20,
-    shadowOpacity: 0.05,
-    elevation: 3,
-    overflow: 'hidden',
-    paddingHorizontal: 4,
-    paddingVertical: 4,
+    backgroundColor: '#fff', borderRadius: 18,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 20, shadowOpacity: 0.05, elevation: 3,
+    overflow: 'hidden', paddingHorizontal: 4, paddingVertical: 4,
   },
   activityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 13,
+    flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13,
   },
   activityRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(10,17,40,0.06)',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(10,17,40,0.06)',
   },
-  activityDot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: 'rgba(10,17,40,0.25)',
-    flexShrink: 0,
-  },
-  activityDotBlue: { backgroundColor: '#1259F2' },
+  activityDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
   activityContent: { flex: 1 },
-  activityLabel: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 14,
-    color: '#0A1128',
-  },
-  activityDate: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 12,
-    color: 'rgba(10,17,40,0.45)',
-    marginTop: 1,
-  },
+  activityLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  activityDate:  { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 1 },
 });

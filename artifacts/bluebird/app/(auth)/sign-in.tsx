@@ -212,17 +212,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
   },
   inputError: {
-    borderColor: '#EF4444',
+    borderColor: '#FF3B30',
   },
   errorText: {
-    color: '#EF4444',
+    color: '#FF3B30',
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
   },
   submitBtn: {
     backgroundColor: '#1259F2',
     height: 56,
-    borderRadius: 14,
+    borderRadius: 999,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,

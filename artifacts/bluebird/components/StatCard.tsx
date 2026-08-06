@@ -1,16 +1,28 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useColors } from '@/hooks/useColors';
 
 interface StatCardProps {
   label: string;
   value: string | number;
+  /** 'light' (default) — white card on #FAFAF8 surface; 'dark' — card token on navy surface */
+  variant?: 'light' | 'dark';
 }
 
-export function StatCard({ label, value }: StatCardProps) {
+export function StatCard({ label, value, variant = 'light' }: StatCardProps) {
+  const colors = useColors();
+  const isLight = variant === 'light';
   return (
-    <View style={styles.card}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
+    <View style={[
+      styles.card,
+      { backgroundColor: isLight ? '#fff' : colors.card },
+    ]}>
+      <Text style={[styles.label, { color: isLight ? colors.mutedForegroundLight : colors.mutedForeground }]}>
+        {label}
+      </Text>
+      <Text style={[styles.value, { color: isLight ? colors.backgroundMid : colors.foreground }]}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -18,8 +30,7 @@ export function StatCard({ label, value }: StatCardProps) {
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
@@ -30,7 +41,6 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 11,
-    color: 'rgba(10,17,40,0.45)',
     textTransform: 'uppercase',
     letterSpacing: 0.4,
     marginBottom: 4,
@@ -38,7 +48,6 @@ const styles = StyleSheet.create({
   value: {
     fontFamily: 'Inter_700Bold',
     fontSize: 22,
-    color: '#0A1128',
     marginTop: 2,
   },
 });

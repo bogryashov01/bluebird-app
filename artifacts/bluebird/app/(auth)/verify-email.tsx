@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     textAlign: 'center', lineHeight: 22,
   },
   primaryBtn: {
-    backgroundColor: '#1259F2', height: 56, borderRadius: 14,
+    backgroundColor: '#1259F2', height: 56, borderRadius: 999,
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
     marginTop: 8,
   },

@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
   content: { padding: 20, gap: 20 },
   introCard: {
     flexDirection: 'row', gap: 12, padding: 16,
-    borderRadius: 12, borderWidth: 1, alignItems: 'flex-start',
+    borderRadius: 14, borderWidth: 1, alignItems: 'flex-start',
   },
   introText: { flex: 1, fontSize: 14, lineHeight: 20 },
   section: { gap: 8 },

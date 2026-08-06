@@ -95,21 +95,21 @@ export default function DiscoverScreen() {
 
   const renderCard = ({ item }: { item: FlightData }) => (
     <TouchableOpacity
-      style={styles.card}
+      style={[styles.card, { backgroundColor: colors.card }]}
       activeOpacity={0.8}
       onPress={() => router.push(`/flight/${item.id}`)}
     >
       <Image source={aircraftImage(item.aircraftType)} style={styles.cardThumb} />
       <View style={styles.cardBody}>
-        <Text style={[styles.cardRoute, { fontFamily: 'Inter_700Bold' }]}>
+        <Text style={[styles.cardRoute, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
           {item.fromAirport} → {item.toAirport}
         </Text>
-        <Text style={[styles.cardMeta, { fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
+        <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
           {item.aircraftType} · {formatDateTime(item)}
         </Text>
       </View>
       {item.priceUsd ? (
-        <Text style={[styles.cardPrice, { fontFamily: 'Inter_700Bold' }]}>
+        <Text style={[styles.cardPrice, { color: colors.paleBlue, fontFamily: 'Inter_700Bold' }]}>
           ${item.priceUsd.toLocaleString()}
         </Text>
       ) : null}
@@ -117,15 +117,20 @@ export default function DiscoverScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: '#060B1F' }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {isLoading ? (
         <View style={styles.centered}><ActivityIndicator color={colors.primary} size="large" /></View>
       ) : isError ? (
         <View style={styles.centered}>
-          <Feather name="wifi-off" size={32} color="rgba(255,255,255,0.5)" />
-          <Text style={[styles.emptyText, { fontFamily: 'Inter_400Regular' }]}>Could not load flights</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
-            <Text style={[styles.retryText, { fontFamily: 'Inter_500Medium' }]}>Try again</Text>
+          <Feather name="wifi-off" size={32} color={colors.mutedForeground} />
+          <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+            Could not load flights
+          </Text>
+          <TouchableOpacity
+            style={[styles.retryBtn, { borderColor: colors.border }]}
+            onPress={() => refetch()}
+          >
+            <Text style={[styles.retryText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>Try again</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -144,18 +149,23 @@ export default function DiscoverScreen() {
               <View style={[styles.topBar, { paddingTop: topPad + 24 }]}>
                 <View style={styles.logoRow}>
                   <Image source={require('@/assets/images/icon.png')} style={styles.logoImg} />
-                  <Text style={[styles.logoText, { fontFamily: 'Inter_700Bold' }]}>Bluebird</Text>
+                  <Text style={[styles.logoText, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+                    Bluebird
+                  </Text>
                 </View>
-                <TouchableOpacity style={styles.conciergeBtn} onPress={() => router.push('/concierge')}>
-                  <Feather name="message-circle" size={18} color="#fff" />
+                <TouchableOpacity
+                  style={[styles.conciergeBtn, { backgroundColor: 'rgba(255,255,255,0.10)' }]}
+                  onPress={() => router.push('/concierge')}
+                >
+                  <Feather name="message-circle" size={18} color={colors.foreground} />
                 </TouchableOpacity>
               </View>
 
               {/* Greeting */}
-              <Text style={[styles.greeting, { fontFamily: 'Inter_700Bold' }]}>
+              <Text style={[styles.greeting, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
                 {greeting()}{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
               </Text>
-              <Text style={[styles.subGreeting, { fontFamily: 'Inter_400Regular' }]}>
+              <Text style={[styles.subGreeting, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
                 {all.length > 0 ? `${Math.min(all.length, 3)} empty legs added near you today` : 'Empty legs near you'}
               </Text>
 
@@ -168,19 +178,21 @@ export default function DiscoverScreen() {
                 >
                   <ImageBackground source={HERO} style={styles.featuredImage} imageStyle={{ borderRadius: 24 }}>
                     <View style={styles.featuredOverlay} />
-                    <View style={styles.featuredBadge}>
-                      <Text style={[styles.featuredBadgeText, { fontFamily: 'Inter_700Bold' }]}>FEATURED EMPTY LEG</Text>
+                    <View style={[styles.featuredBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={[styles.featuredBadgeText, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+                        FEATURED EMPTY LEG
+                      </Text>
                     </View>
                     <View style={styles.featuredBottom}>
-                      <Text style={[styles.featuredRoute, { fontFamily: 'Inter_700Bold' }]}>
+                      <Text style={[styles.featuredRoute, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
                         {featured.fromCity} → {featured.toCity}
                       </Text>
                       <View style={styles.featuredMetaRow}>
-                        <Text style={[styles.featuredMeta, { fontFamily: 'Inter_400Regular' }]}>
+                        <Text style={[styles.featuredMeta, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_400Regular' }]}>
                           {featured.aircraftType} · {formatDateTime(featured)}
                         </Text>
                         {featured.discountPct ? (
-                          <Text style={[styles.featuredDiscount, { fontFamily: 'Inter_700Bold' }]}>
+                          <Text style={[styles.featuredDiscount, { color: colors.paleBlue, fontFamily: 'Inter_700Bold' }]}>
                             {featured.discountPct}% off
                           </Text>
                         ) : null}
@@ -191,12 +203,12 @@ export default function DiscoverScreen() {
               )}
 
               {/* Search */}
-              <View style={styles.searchWrap}>
-                <Feather name="search" size={16} color="rgba(255,255,255,0.5)" />
+              <View style={[styles.searchWrap, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
+                <Feather name="search" size={16} color={colors.mutedForeground} />
                 <TextInput
-                  style={[styles.searchInput, { fontFamily: 'Inter_400Regular' }]}
+                  style={[styles.searchInput, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
                   placeholder="Search routes, airports, aircraft"
-                  placeholderTextColor="rgba(255,255,255,0.45)"
+                  placeholderTextColor={colors.mutedForeground}
                   value={search}
                   onChangeText={setSearch}
                 />
@@ -207,11 +219,18 @@ export default function DiscoverScreen() {
                 {FILTERS.map((f) => (
                   <TouchableOpacity
                     key={f}
-                    style={[styles.filterChip, f === activeFilter && styles.filterChipActive]}
+                    style={[
+                      styles.filterChip,
+                      { backgroundColor: f === activeFilter ? colors.primary : 'rgba(255,255,255,0.08)' },
+                    ]}
                     onPress={() => setActiveFilter(f)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.filterChipText, { fontFamily: 'Inter_600SemiBold' }, f === activeFilter && styles.filterChipTextActive]}>
+                    <Text style={[
+                      styles.filterChipText,
+                      { fontFamily: 'Inter_600SemiBold' },
+                      { color: f === activeFilter ? colors.foreground : colors.mutedForeground },
+                    ]}>
                       {f}
                     </Text>
                   </TouchableOpacity>
@@ -221,16 +240,24 @@ export default function DiscoverScreen() {
               {/* List / Map toggle */}
               <View style={styles.toggleRow}>
                 <TouchableOpacity
-                  style={[styles.toggleBtn, view === 'list' && styles.toggleBtnActive]}
+                  style={[styles.toggleBtn, view === 'list' && { backgroundColor: 'rgba(255,255,255,0.10)' }]}
                   onPress={() => setView('list')}
                 >
-                  <Text style={[styles.toggleText, { fontFamily: 'Inter_600SemiBold' }, view === 'list' && styles.toggleTextActive]}>List</Text>
+                  <Text style={[
+                    styles.toggleText,
+                    { fontFamily: 'Inter_600SemiBold' },
+                    { color: view === 'list' ? colors.foreground : colors.mutedForeground },
+                  ]}>List</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.toggleBtn, view === 'map' && styles.toggleBtnActive]}
+                  style={[styles.toggleBtn, view === 'map' && { backgroundColor: 'rgba(255,255,255,0.10)' }]}
                   onPress={() => setView('map')}
                 >
-                  <Text style={[styles.toggleText, { fontFamily: 'Inter_600SemiBold' }, view === 'map' && styles.toggleTextActive]}>Map</Text>
+                  <Text style={[
+                    styles.toggleText,
+                    { fontFamily: 'Inter_600SemiBold' },
+                    { color: view === 'map' ? colors.foreground : colors.mutedForeground },
+                  ]}>Map</Text>
                 </TouchableOpacity>
               </View>
 
@@ -240,8 +267,10 @@ export default function DiscoverScreen() {
 
               {view === 'list' && filteredFlights.length === 0 && (
                 <View style={styles.mapPlaceholder}>
-                  <Feather name="send" size={28} color="rgba(255,255,255,0.35)" style={{ transform: [{ rotate: '-45deg' }] }} />
-                  <Text style={[styles.emptyText, { fontFamily: 'Inter_400Regular' }]}>No flights match</Text>
+                  <Feather name="send" size={28} color={colors.mutedForeground} style={{ transform: [{ rotate: '-45deg' }] }} />
+                  <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                    No flights match
+                  </Text>
                 </View>
               )}
             </View>
@@ -260,14 +289,15 @@ const styles = StyleSheet.create({
   },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   logoImg: { width: 26, height: 26, borderRadius: 6 },
-  logoText: { color: '#fff', fontSize: 17, letterSpacing: -0.3 },
+  logoText: { fontSize: 17, letterSpacing: -0.3 },
   conciergeBtn: {
     width: 38, height: 38, borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center', justifyContent: 'center',
   },
-  greeting: { color: '#fff', fontSize: 26, letterSpacing: -0.6, paddingHorizontal: 20, paddingBottom: 4 },
-  subGreeting: { color: 'rgba(255,255,255,0.5)', fontSize: 15, paddingHorizontal: 20, paddingBottom: 18 },
+  greeting: { fontSize: 26, letterSpacing: -0.6, paddingHorizontal: 20, paddingBottom: 4 },
+  subGreeting: { fontSize: 15, paddingHorizontal: 20, paddingBottom: 18 },
+
+  // Featured card
   featuredWrap: { marginHorizontal: 20, marginBottom: 20, borderRadius: 24, overflow: 'hidden' },
   featuredImage: { height: 190, width: '100%', justifyContent: 'flex-end' },
   featuredOverlay: {
@@ -276,47 +306,53 @@ const styles = StyleSheet.create({
   },
   featuredBadge: {
     position: 'absolute', top: 14, left: 14,
-    backgroundColor: '#1259F2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
   },
-  featuredBadgeText: { color: '#fff', fontSize: 12 },
+  featuredBadgeText: { fontSize: 11, letterSpacing: 0.4 },
   featuredBottom: { padding: 16, gap: 4 },
-  featuredRoute: { color: '#fff', fontSize: 20, letterSpacing: -0.4 },
+  featuredRoute: { fontSize: 20, letterSpacing: -0.4 },
   featuredMetaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  featuredMeta: { color: 'rgba(255,255,255,0.65)', fontSize: 13 },
-  featuredDiscount: { color: '#7FA8FA', fontSize: 17 },
+  featuredMeta: { fontSize: 13 },
+  featuredDiscount: { fontSize: 17 },
+
+  // Search
   searchWrap: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 999,
+    borderRadius: 999,
     paddingHorizontal: 16, paddingVertical: Platform.OS === 'web' ? 13 : 10,
     marginHorizontal: 20, marginBottom: 16,
   },
-  searchInput: { flex: 1, color: '#fff', fontSize: 15, padding: 0 },
+  searchInput: { flex: 1, fontSize: 15, padding: 0 },
+
+  // Filter chips
   filterRow: { gap: 8, paddingHorizontal: 20, paddingBottom: 18 },
-  filterChip: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 15, paddingVertical: 9, borderRadius: 999,
-  },
-  filterChipActive: { backgroundColor: '#1259F2' },
-  filterChipText: { color: 'rgba(255,255,255,0.75)', fontSize: 13 },
-  filterChipTextActive: { color: '#fff' },
+  filterChip: { paddingHorizontal: 15, paddingVertical: 9, borderRadius: 999 },
+  filterChipText: { fontSize: 13 },
+
+  // List/Map toggle
   toggleRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 20, paddingBottom: 16 },
   toggleBtn: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 10 },
-  toggleBtnActive: { backgroundColor: 'rgba(255,255,255,0.1)' },
-  toggleText: { color: 'rgba(255,255,255,0.5)', fontSize: 13 },
-  toggleTextActive: { color: '#fff' },
+  toggleText: { fontSize: 13 },
+
+  // Flight row card
   card: {
     flexDirection: 'row', gap: 12, alignItems: 'center',
-    backgroundColor: '#0D1636', borderRadius: 18, padding: 12,
+    borderRadius: 18, padding: 12,
     marginHorizontal: 20, marginBottom: 12,
   },
   cardThumb: { width: 74, height: 60, borderRadius: 12 },
   cardBody: { flex: 1, minWidth: 0 },
-  cardRoute: { color: '#fff', fontSize: 15 },
-  cardMeta: { color: 'rgba(255,255,255,0.5)', fontSize: 12.5, marginTop: 2 },
-  cardPrice: { color: '#7FA8FA', fontSize: 15 },
+  cardRoute: { fontSize: 15 },
+  cardMeta: { fontSize: 12.5, marginTop: 2 },
+  cardPrice: { fontSize: 15 },
+
+  // States
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   mapPlaceholder: { alignItems: 'center', gap: 10, paddingVertical: 40 },
-  emptyText: { fontSize: 15, color: 'rgba(255,255,255,0.5)' },
-  retryBtn: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 10, paddingHorizontal: 20, paddingVertical: 10 },
-  retryText: { fontSize: 14, color: '#fff' },
+  emptyText: { fontSize: 15 },
+  retryBtn: {
+    borderWidth: 1, borderRadius: 999,
+    paddingHorizontal: 20, paddingVertical: 10,
+  },
+  retryText: { fontSize: 14 },
 });

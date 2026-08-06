@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useColors } from '@/hooks/useColors';
 import { useListTrips, useGetQueueStatus } from '@workspace/api-client-react';
 import type { Trip, QueueEntry } from '@workspace/api-client-react';
 
@@ -15,7 +16,6 @@ const AIRCRAFT_IMAGES: { match: RegExp; source: any }[] = [
   { match: /phenom|xls|latitude/i,               source: require('@/assets/images/aircraft-midsize.jpg') },
 ];
 const LIGHT_JET = require('@/assets/images/aircraft-light.jpg');
-const HERO = require('@/assets/images/hero-aircraft.jpg');
 
 function aircraftImage(type: string) {
   return AIRCRAFT_IMAGES.find((a) => a.match.test(type))?.source ?? LIGHT_JET;
@@ -33,23 +33,33 @@ function fmtDate(dateStr: string, timeStr: string): string {
 type ActiveTab = 'upcoming' | 'pending' | 'past';
 
 // ─── Trip Card ────────────────────────────────────────────────────────────────
-function TripCard({ flight, badge, badgeBlue, onPress }: {
+function TripCard({ flight, badge, badgeBlue, onPress, colors }: {
   flight: { fromCity: string; toCity: string; aircraftType: string; departureDate: string; departureTime: string };
   badge: string;
   badgeBlue: boolean;
   onPress?: () => void;
+  colors: ReturnType<typeof useColors>;
 }) {
   return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={onPress}>
+    <TouchableOpacity
+      style={[styles.card, { backgroundColor: colors.card }]}
+      activeOpacity={0.85}
+      onPress={onPress}
+    >
       <Image source={aircraftImage(flight.aircraftType)} style={styles.cardImage} resizeMode="cover" />
       <View style={styles.cardBadgeWrap}>
-        <View style={[styles.cardBadge, badgeBlue ? styles.cardBadgeBlue : styles.cardBadgeFrost]}>
-          <Text style={styles.cardBadgeText}>{badge}</Text>
+        <View style={[
+          styles.cardBadge,
+          { backgroundColor: badgeBlue ? colors.primary : 'rgba(255,255,255,0.15)' },
+        ]}>
+          <Text style={[styles.cardBadgeText, { color: colors.foreground }]}>{badge}</Text>
         </View>
       </View>
       <View style={styles.cardBody}>
-        <Text style={styles.cardRoute}>{flight.fromCity} → {flight.toCity}</Text>
-        <Text style={styles.cardMeta} numberOfLines={1}>
+        <Text style={[styles.cardRoute, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+          {flight.fromCity} → {flight.toCity}
+        </Text>
+        <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
           {flight.aircraftType} · {fmtDate(flight.departureDate, flight.departureTime)}
         </Text>
       </View>
@@ -59,6 +69,7 @@ function TripCard({ flight, badge, badgeBlue, onPress }: {
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 export default function TripsScreen() {
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<ActiveTab>('upcoming');
 
@@ -92,7 +103,7 @@ export default function TripsScreen() {
     if (isLoading) {
       return (
         <View style={styles.centered}>
-          <ActivityIndicator color="#1259F2" size="large" />
+          <ActivityIndicator color={colors.primary} size="large" />
         </View>
       );
     }
@@ -101,10 +112,15 @@ export default function TripsScreen() {
       if (upcomingTrips.length === 0) {
         return (
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>No upcoming trips</Text>
-            <Text style={styles.emptyBody}>Browse empty legs and join a queue to book your first flight.</Text>
-            <TouchableOpacity style={styles.discoverBtn} onPress={() => router.replace('/(tabs)/discover')}>
-              <Text style={styles.discoverBtnText}>Browse Flights</Text>
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No upcoming trips</Text>
+            <Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>
+              Browse empty legs and join a queue to book your first flight.
+            </Text>
+            <TouchableOpacity
+              style={[styles.discoverBtn, { backgroundColor: colors.primary }]}
+              onPress={() => router.replace('/(tabs)/discover')}
+            >
+              <Text style={[styles.discoverBtnText, { color: colors.foreground }]}>Browse Flights</Text>
             </TouchableOpacity>
           </View>
         );
@@ -118,6 +134,7 @@ export default function TripsScreen() {
           {upcomingTrips.map((trip) => (
             <TripCard
               key={trip.id}
+              colors={colors}
               flight={trip.flight ?? emptyFlight}
               badge="CONFIRMED"
               badgeBlue
@@ -132,10 +149,15 @@ export default function TripsScreen() {
       if (pendingEntries.length === 0) {
         return (
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>No pending queues</Text>
-            <Text style={styles.emptyBody}>Join a flight queue and it will appear here while you wait for confirmation.</Text>
-            <TouchableOpacity style={styles.discoverBtn} onPress={() => router.replace('/(tabs)/discover')}>
-              <Text style={styles.discoverBtnText}>Browse Flights</Text>
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No pending queues</Text>
+            <Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>
+              Join a flight queue and it will appear here while you wait for confirmation.
+            </Text>
+            <TouchableOpacity
+              style={[styles.discoverBtn, { backgroundColor: colors.primary }]}
+              onPress={() => router.replace('/(tabs)/discover')}
+            >
+              <Text style={[styles.discoverBtnText, { color: colors.foreground }]}>Browse Flights</Text>
             </TouchableOpacity>
           </View>
         );
@@ -149,6 +171,7 @@ export default function TripsScreen() {
           {pendingEntries.map((entry) => (
             <TripCard
               key={entry.id}
+              colors={colors}
               flight={entry.flight ?? emptyFlight}
               badge={`IN QUEUE · #${entry.position}`}
               badgeBlue={false}
@@ -163,8 +186,10 @@ export default function TripsScreen() {
     if (pastTrips.length === 0) {
       return (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No past trips</Text>
-          <Text style={styles.emptyBody}>Completed flights will appear here.</Text>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No past trips</Text>
+          <Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>
+            Completed flights will appear here.
+          </Text>
         </View>
       );
     }
@@ -177,6 +202,7 @@ export default function TripsScreen() {
         {pastTrips.map((trip) => (
           <TripCard
             key={trip.id}
+            colors={colors}
             flight={trip.flight ?? emptyFlight}
             badge={trip.status === 'cancelled' ? 'CANCELLED' : 'COMPLETED'}
             badgeBlue={false}
@@ -188,21 +214,27 @@ export default function TripsScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: topPad + 24 }]}>
-        <Text style={styles.headerTitle}>Trips</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Trips</Text>
 
         {/* 3-tab pill selector */}
-        <View style={styles.tabRow}>
+        <View style={[styles.tabRow, { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 14 }]}>
           {TABS.map((tab) => (
             <TouchableOpacity
               key={tab.id}
-              style={[styles.tabBtn, activeTab === tab.id && styles.tabBtnActive]}
+              style={[
+                styles.tabBtn,
+                activeTab === tab.id && { backgroundColor: colors.primary },
+              ]}
               onPress={() => setActiveTab(tab.id)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.tabLabel, activeTab === tab.id && styles.tabLabelActive]}>
+              <Text style={[
+                styles.tabLabel,
+                { color: activeTab === tab.id ? colors.foreground : colors.mutedForeground },
+              ]}>
                 {tab.label}
               </Text>
             </TouchableOpacity>
@@ -210,9 +242,15 @@ export default function TripsScreen() {
         </View>
 
         {/* AI Concierge banner */}
-        <TouchableOpacity style={styles.concierge} onPress={() => router.push('/concierge')} activeOpacity={0.85}>
-          <Text style={styles.conciergeText}>Questions about a trip? Ask the AI Concierge</Text>
-          <Text style={styles.conciergeArrow}>›</Text>
+        <TouchableOpacity
+          style={[styles.concierge, { backgroundColor: `${colors.primary}20` }]}
+          onPress={() => router.push('/concierge')}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.conciergeText, { color: colors.foreground }]}>
+            Questions about a trip? Ask the AI Concierge
+          </Text>
+          <Text style={[styles.conciergeArrow, { color: colors.paleBlue }]}>›</Text>
         </TouchableOpacity>
       </View>
 
@@ -228,57 +266,49 @@ const emptyFlight = {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#060B1F' },
+  container: { flex: 1 },
 
   header: { paddingHorizontal: 20 },
   headerTitle: {
     fontFamily: 'Inter_700Bold',
     fontSize: 30,
-    color: '#fff',
     letterSpacing: -0.7,
     marginBottom: 14,
   },
 
   // ── Tabs
-  tabRow: { flexDirection: 'row', gap: 6, marginBottom: 16 },
+  tabRow: { flexDirection: 'row', gap: 4, marginBottom: 16, padding: 4 },
   tabBtn: {
     flex: 1, alignItems: 'center', paddingVertical: 9,
-    borderRadius: 10,
+    borderRadius: 999,
   },
-  tabBtnActive: { backgroundColor: '#1259F2' },
   tabLabel: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 13,
-    color: 'rgba(255,255,255,0.5)',
   },
-  tabLabelActive: { color: '#fff' },
 
   // ── Concierge banner
   concierge: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: 'rgba(18,89,242,0.18)',
-    borderRadius: 16, paddingVertical: 13, paddingHorizontal: 16,
+    borderRadius: 18, paddingVertical: 13, paddingHorizontal: 16,
     marginBottom: 16,
   },
   conciergeText: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 13.5,
-    color: '#fff',
     flex: 1,
   },
   conciergeArrow: {
     fontFamily: 'Inter_700Bold',
     fontSize: 18,
-    color: '#7FA8FA',
     marginLeft: 8,
   },
 
   // ── Cards list
   list: { gap: 14, paddingHorizontal: 20 },
   card: {
-    borderRadius: 22,
+    borderRadius: 24,
     overflow: 'hidden',
-    backgroundColor: '#0D1636',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 16 },
     shadowRadius: 32,
@@ -290,25 +320,18 @@ const styles = StyleSheet.create({
   cardBadge: {
     paddingHorizontal: 11, paddingVertical: 5, borderRadius: 999,
   },
-  cardBadgeBlue: { backgroundColor: '#1259F2' },
-  cardBadgeFrost: { backgroundColor: 'rgba(255,255,255,0.15)' },
   cardBadgeText: {
     fontFamily: 'Inter_700Bold',
     fontSize: 11,
-    color: '#fff',
     letterSpacing: 0.3,
   },
   cardBody: { paddingVertical: 14, paddingHorizontal: 16 },
   cardRoute: {
-    fontFamily: 'Inter_700Bold',
     fontSize: 17,
-    color: '#fff',
     marginBottom: 2,
   },
   cardMeta: {
-    fontFamily: 'Inter_400Regular',
     fontSize: 13,
-    color: 'rgba(255,255,255,0.5)',
   },
 
   // ── Empty states
@@ -320,24 +343,20 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 18,
-    color: '#fff',
     textAlign: 'center',
   },
   emptyBody: {
     fontFamily: 'Inter_400Regular',
     fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
     textAlign: 'center',
     lineHeight: 21,
   },
   discoverBtn: {
     marginTop: 6,
-    backgroundColor: '#1259F2',
     paddingHorizontal: 24, paddingVertical: 13, borderRadius: 999,
   },
   discoverBtnText: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 15,
-    color: '#fff',
   },
 });
