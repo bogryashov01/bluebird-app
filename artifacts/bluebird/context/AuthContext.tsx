@@ -50,8 +50,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           AsyncStorage.getItem(USER_KEY),
         ]);
         if (storedToken && storedUser) {
-          setToken(storedToken);
-          setUser(JSON.parse(storedUser));
+          // Validate the stored token against the server; stale/invalid tokens
+          // (e.g. after a server secret change) are cleared so the user is
+          // sent back to sign-in instead of seeing endless 401 errors.
+          const baseUrl = process.env.EXPO_PUBLIC_DOMAIN
+            ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+            : '';
+          try {
+            const resp = await fetch(`${baseUrl}/api/auth/me`, {
+              headers: { Authorization: `Bearer ${storedToken}` },
+            });
+            if (resp.ok) {
+              const freshUser = await resp.json();
+              setToken(storedToken);
+              setUser(freshUser);
+              AsyncStorage.setItem(USER_KEY, JSON.stringify(freshUser)).catch(() => {});
+            } else if (resp.status === 401) {
+              // Token no longer valid — clear the stale session
+              await Promise.all([
+                AsyncStorage.removeItem(TOKEN_KEY),
+                AsyncStorage.removeItem(USER_KEY),
+              ]);
+            } else {
+              // Server error — keep cached session, fail open
+              setToken(storedToken);
+              setUser(JSON.parse(storedUser));
+            }
+          } catch {
+            // Network error — keep cached session so offline use still works
+            setToken(storedToken);
+            setUser(JSON.parse(storedUser));
+          }
         }
       } catch {
         // ignore read errors

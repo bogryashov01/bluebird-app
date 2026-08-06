@@ -2,12 +2,11 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { flightsTable } from "@workspace/db/schema";
 import { eq, ilike, and } from "drizzle-orm";
-import { authMiddleware } from "../middlewares/auth";
 
 const router = Router();
 
-// GET /flights
-router.get("/", authMiddleware, async (req, res) => {
+// GET /flights (public — members can browse before signing in)
+router.get("/", async (req, res) => {
   try {
     const { from, to } = req.query;
     let query = db.select().from(flightsTable).$dynamic();
@@ -24,8 +23,8 @@ router.get("/", authMiddleware, async (req, res) => {
   }
 });
 
-// GET /flights/:id
-router.get("/:id", authMiddleware, async (req, res) => {
+// GET /flights/:id (public)
+router.get("/:id", async (req, res) => {
   try {
     const [flight] = await db.select().from(flightsTable).where(eq(flightsTable.id, String(req.params.id)));
     if (!flight) {
