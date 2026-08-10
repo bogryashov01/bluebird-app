@@ -103,7 +103,7 @@ export default function PaymentMethodsScreen() {
               </TouchableOpacity>
             )}
             <TouchableOpacity onPress={() => removeCard(card)} activeOpacity={0.7} style={styles.removeBtn}>
-              <Text style={styles.removeText}>✕</Text>
+              <Text style={[styles.removeText, { color: colors.destructive }]}>✕</Text>
             </TouchableOpacity>
           </View>
         ))}
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   defaultBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
   actionText: { fontFamily: 'Inter_600SemiBold', fontSize: 12.5 },
   removeBtn: { paddingLeft: 4, paddingVertical: 4 },
-  removeText: { fontSize: 14, color: '#DC2626' },
+  removeText: { fontSize: 14 },
   addBtn: {
     borderRadius: 999, borderWidth: 1.5, borderStyle: 'dashed',
     paddingVertical: 14, alignItems: 'center', marginTop: 8,

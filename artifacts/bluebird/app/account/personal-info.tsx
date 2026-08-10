@@ -87,7 +87,7 @@ export default function PersonalInfoScreen() {
           keyboardType="phone-pad"
         />
 
-        {errorMsg && <Text style={styles.errorText}>{errorMsg}</Text>}
+        {errorMsg && <Text style={[styles.errorText, { color: colors.destructive }]}>{errorMsg}</Text>}
         {saved && <Text style={[styles.savedText, { color: colors.primary }]}>✓ Changes saved</Text>}
 
         <TouchableOpacity
@@ -100,8 +100,8 @@ export default function PersonalInfoScreen() {
           onPress={handleSave}
         >
           {updateMutation.isPending
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.saveBtnText}>Save changes</Text>}
+            ? <ActivityIndicator color={colors.primaryForeground} />
+            : <Text style={[styles.saveBtnText, { color: colors.primaryForeground }]}>Save changes</Text>}
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -122,8 +122,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium', fontSize: 15,
     marginBottom: 18,
   },
-  errorText: { fontFamily: 'Inter_500Medium', fontSize: 13, color: '#DC2626', marginBottom: 12 },
+  errorText: { fontFamily: 'Inter_500Medium', fontSize: 13, marginBottom: 12 },
   savedText: { fontFamily: 'Inter_500Medium', fontSize: 13, marginBottom: 12 },
   saveBtn: { borderRadius: 999, paddingVertical: 16, alignItems: 'center', marginTop: 6 },
-  saveBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#fff' },
+  saveBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
 });

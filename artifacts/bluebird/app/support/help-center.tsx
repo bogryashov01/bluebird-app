@@ -116,7 +116,7 @@ export default function HelpCenterScreen() {
             activeOpacity={0.85}
             onPress={() => router.push('/concierge')}
           >
-            <Text style={styles.contactBtnText}>Chat with AI Concierge</Text>
+            <Text style={[styles.contactBtnText, { color: colors.primaryForeground }]}>Chat with AI Concierge</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -149,5 +149,5 @@ const styles = StyleSheet.create({
   contactTitle: { fontFamily: 'Inter_700Bold', fontSize: 16, marginBottom: 6 },
   contactBody: { fontFamily: 'Inter_400Regular', fontSize: 13.5, lineHeight: 19, marginBottom: 14 },
   contactBtn: { borderRadius: 999, paddingVertical: 13, alignItems: 'center' },
-  contactBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#fff' },
+  contactBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
 });

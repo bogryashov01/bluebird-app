@@ -4,6 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { AppHeader } from '@/components/AppHeader';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -37,11 +38,10 @@ const queryClient = new QueryClient({
 
 function RootLayoutNav() {
   const colors = useColors();
-  const HEADER_STYLE = { backgroundColor: colors.headerBackground } as const;
+  // Custom inset-aware header: the default native-stack header rendered
+  // behind the iPhone notch/Dynamic Island on these routes.
   const headerOptions = {
-    headerStyle: HEADER_STYLE,
-    headerTintColor: colors.headerForeground,
-    headerTitleStyle: { fontFamily: 'Inter_600SemiBold' },
+    header: (props: React.ComponentProps<typeof AppHeader>) => <AppHeader {...props} />,
   } as const;
   return (
     <>

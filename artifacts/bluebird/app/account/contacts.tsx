@@ -44,7 +44,7 @@ export default function ConnectContactsScreen() {
         style={[styles.row, i < list.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.separator }]}
       >
         <View style={[styles.avatar, { backgroundColor: colors.backgroundMid }]}>
-          <Text style={styles.avatarText}>{initials}</Text>
+          <Text style={[styles.avatarText, { color: colors.primaryForeground }]}>{initials}</Text>
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[styles.name, { color: colors.textOnSurface }]} numberOfLines={1}>{c.name}</Text>
@@ -61,7 +61,7 @@ export default function ConnectContactsScreen() {
             onPress={() => invite(c.id)}
             activeOpacity={0.8}
           >
-            <Text style={styles.inviteBtnText}>Invite</Text>
+            <Text style={[styles.inviteBtnText, { color: colors.primaryForeground }]}>Invite</Text>
           </TouchableOpacity>
         )}
         {c.status === 'invited' && (
@@ -120,13 +120,13 @@ const styles = StyleSheet.create({
     width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  avatarText: { fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' },
+  avatarText: { fontFamily: 'Inter_700Bold', fontSize: 14 },
   name: { fontFamily: 'Inter_600SemiBold', fontSize: 14.5 },
   detail: { fontFamily: 'Inter_400Regular', fontSize: 12.5, marginTop: 1 },
   memberBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   memberBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 11.5 },
   inviteBtn: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
-  inviteBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 12.5, color: '#fff' },
+  inviteBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 12.5 },
   invitedText: { fontFamily: 'Inter_500Medium', fontSize: 12.5 },
   demoNote: { fontFamily: 'Inter_400Regular', fontSize: 12, textAlign: 'center' },
 });

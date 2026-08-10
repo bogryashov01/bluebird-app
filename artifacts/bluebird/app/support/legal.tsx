@@ -74,7 +74,7 @@ export default function LegalScreen() {
               >
                 <Text style={[
                   styles.tabText,
-                  { color: active ? '#fff' : colors.mutedForegroundLight },
+                  { color: active ? colors.primaryForeground : colors.mutedForegroundLight },
                 ]}>
                   {t === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
                 </Text>

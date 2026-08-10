@@ -1,4 +1,5 @@
 - [API contract & schema sync](api-contract-sync.md) — new endpoints/fields go through openapi.yaml + codegen; new columns need ensureSchema() too, not just a live-DB ALTER.
+- [Bluebird stack headers](bluebird-app-header.md) — default native-stack header hides behind the notch over NativeTabs; use the shared custom AppHeader.
 - [Bluebird theming](bluebird-theming.md) — all colors via useColors() tokens (no literals); semantic tokens & native-tabs caveat inside.
 - [Orval codegen post-patch](orval-codegen-patch.md) — generated hooks need the Partial<UseQueryOptions> patch step in the codegen command; never hand-edit generated api.ts.
 - [Seat capacity model](seat-capacity-model.md) — flights.seatsAvailable is a baseline, never mutated; remaining seats derived from confirmed queue entries.
