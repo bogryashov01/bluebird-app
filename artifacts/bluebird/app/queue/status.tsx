@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Platform, Alert,
+  ActivityIndicator, Platform, Alert, useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,11 +50,14 @@ function useCountdown(departureDate?: string, departureTime?: string): string {
 const CIRC = 251;
 
 function RingProgress({ position, total }: { position: number; total: number }) {
+  const { width: windowWidth } = useWindowDimensions();
+  // Card padding (22*2) + screen padding (22*2) leaves ~windowWidth-88; cap at 170
+  const ringSize = Math.round(Math.min(170, Math.max(120, windowWidth - 200)));
   const progress   = total > 1 ? (total - position) / (total - 1) : 1;
   const dashoffset = CIRC * (1 - progress);
   return (
-    <View style={ring.wrap}>
-      <Svg width={170} height={170} viewBox="0 0 90 90">
+    <View style={[ring.wrap, { width: ringSize, height: ringSize }]}>
+      <Svg width={ringSize} height={ringSize} viewBox="0 0 90 90">
         <Circle cx="45" cy="45" r="40" fill="none" stroke="rgba(10,17,40,0.08)" strokeWidth="8" />
         <Circle
           cx="45" cy="45" r="40"
@@ -78,7 +81,7 @@ function RingProgress({ position, total }: { position: number; total: number }) 
 }
 
 const ring = StyleSheet.create({
-  wrap:  { width: 170, height: 170, position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  wrap:  { position: 'relative', alignItems: 'center', justifyContent: 'center' },
   inner: { position: 'absolute', alignItems: 'center' },
   num:   { fontFamily: 'Inter_700Bold', fontSize: 34, color: DARK, lineHeight: 40 },
   total: { fontFamily: 'Inter_400Regular', fontSize: 18, color: MUTED },

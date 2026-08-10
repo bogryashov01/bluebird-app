@@ -12,6 +12,7 @@ import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import type { Flight } from '@workspace/api-client-react';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 
 /** Coordinates for all seeded airports (origins and destinations) */
 const AIRPORT_COORDS: Record<string, { latitude: number; longitude: number; label: string }> = {
@@ -88,7 +89,7 @@ function bearing(p1: LatLng, p2: LatLng): number {
 }
 
 export default function FlightMap({ flights }: Props) {
-  const screenHeight = Dimensions.get('window').height;
+  const { height: screenHeight } = useWindowDimensions();
   const mapHeight = Math.round(screenHeight * 0.55);
 
   const routes = React.useMemo(

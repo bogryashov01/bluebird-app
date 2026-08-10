@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
-  TouchableOpacity, Platform, KeyboardAvoidingView,
+  TouchableOpacity, Platform,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
@@ -81,12 +82,19 @@ export default function ConciergeScreen() {
   const SUGGESTIONS = ['What are empty legs?', 'How does the queue work?', 'Tell me about membership', 'How do referrals work?'];
 
   return (
-    <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      behavior="padding"
+      // Opaque native-stack header: offset = status bar / notch inset + standard 44pt header height
+      keyboardVerticalOffset={Platform.OS === 'web' ? 0 : insets.top + 44}
+    >
       <FlatList
         ref={flatListRef}
         data={messages}
         keyExtractor={(m) => m.id}
         contentContainerStyle={[styles.messageList, { paddingBottom: 16 }]}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         ListHeaderComponent={
           <View style={styles.suggestionsRow}>

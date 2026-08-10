@@ -114,12 +114,12 @@ export default function MembershipScreen() {
       >
         {/* ── Header ── */}
         <View style={styles.headerRow}>
-          <View>
-            <Text style={[styles.headerName, { color: colors.backgroundMid }]}>{user?.name ?? 'Member'}</Text>
+          <View style={styles.headerLeft}>
+            <Text style={[styles.headerName, { color: colors.backgroundMid }]} numberOfLines={1}>{user?.name ?? 'Member'}</Text>
             <Text style={[styles.headerSub, { color: colors.mutedForegroundLight }]}>Member since {memberSince}</Text>
           </View>
           <View style={[styles.tierPill, { backgroundColor: (TIERS.find(t => t.id === currentTier)?.color ?? colors.primary) + '18' }]}>
-            <Text style={[styles.tierPillText, { color: TIERS.find(t => t.id === currentTier)?.color ?? colors.backgroundMid }]}>
+            <Text style={[styles.tierPillText, { color: TIERS.find(t => t.id === currentTier)?.color ?? colors.backgroundMid }]} numberOfLines={1}>
               {tierLabel}
             </Text>
           </View>
@@ -182,9 +182,9 @@ export default function MembershipScreen() {
               ]}
             >
               <View style={styles.tierCardHeader}>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={styles.tierNameRow}>
-                    <Text style={[styles.tierName, { color: tier.color }]}>{tier.label}</Text>
+                    <Text style={[styles.tierName, { color: tier.color }]} numberOfLines={1}>{tier.label}</Text>
                     {isCurrent && (
                       <View style={[styles.currentBadge, { backgroundColor: tier.color + '20' }]}>
                         <Text style={[styles.currentBadgeText, { color: tier.color }]}>Current</Text>
@@ -225,10 +225,11 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scroll:   { paddingHorizontal: 16 },
 
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 12 },
+  headerLeft: { flex: 1, minWidth: 0 },
   headerName: { fontFamily: 'Inter_700Bold', fontSize: 27 },
   headerSub:  { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 2 },
-  tierPill:   { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
+  tierPill:   { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5, flexShrink: 0, alignSelf: 'center' },
   tierPillText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
 
   sectionLabel: {
@@ -259,12 +260,12 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
   },
   tierCardHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
-  tierNameRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
+  tierNameRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' },
   tierName:       { fontFamily: 'Inter_700Bold', fontSize: 17 },
   tierPrice:      { fontFamily: 'Inter_400Regular', fontSize: 13 },
   currentBadge:   { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
   currentBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
-  upgradeSmallBtn: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+  upgradeSmallBtn: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, flexShrink: 0 },
   upgradeSmallBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#fff' },
   featureRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Platform, ScrollView, Alert,
+  ActivityIndicator, Platform, Alert,
 } from 'react-native';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -53,7 +54,7 @@ export default function SignInScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: topPad }]}>
-      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 24 }]} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollViewCompat contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 24 }]} bottomOffset={24} keyboardShouldPersistTaps="handled">
         {/* Header */}
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Feather name="arrow-left" size={20} color="#8896B3" />
@@ -127,7 +128,7 @@ export default function SignInScreen() {
           <Text style={styles.altActionText}>Create a new account</Text>
           <Feather name="arrow-right" size={14} color="#1259F2" />
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollViewCompat>
     </View>
   );
 }

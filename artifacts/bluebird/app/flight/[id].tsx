@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Platform, Alert, ImageBackground,
+  ActivityIndicator, Platform, Alert, ImageBackground, useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -65,6 +65,9 @@ function amenities(f: any) {
 export default function FlightDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  // Scale hero with screen height so small iPhones keep content above the fold
+  const heroHeight = Math.round(Math.min(300, Math.max(200, windowHeight * 0.32)));
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [passengers, setPassengers] = useState(1);
@@ -308,7 +311,7 @@ export default function FlightDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Hero image with gradient ── */}
-        <ImageBackground source={imgSource} style={styles.hero}>
+        <ImageBackground source={imgSource} style={[styles.hero, { height: heroHeight }]}>
           {/* Top-to-middle dark fade so back button is visible */}
           <LinearGradient
             colors={['rgba(6,11,31,0.50)', 'rgba(6,11,31,0.0)']}
@@ -432,7 +435,7 @@ const styles = StyleSheet.create({
   backChevron: { fontFamily: 'Inter_500Medium', fontSize: 22, color: DARK, marginTop: -2 },
 
   // Hero
-  hero: { width: '100%', height: 280, justifyContent: 'flex-end' },
+  hero: { width: '100%', justifyContent: 'flex-end' },
   routePill: {
     marginBottom: 18, alignSelf: 'center',
     backgroundColor: 'rgba(255,255,255,0.18)',

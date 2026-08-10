@@ -1,10 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Platform, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const SLIDES = [
   {
@@ -42,11 +40,12 @@ const SLIDES = [
 
 interface SlideProps {
   item: typeof SLIDES[number];
+  width: number;
 }
 
-function Slide({ item }: SlideProps) {
+function Slide({ item, width }: SlideProps) {
   return (
-    <View style={[styles.slide, { width: SCREEN_WIDTH }]}>
+    <View style={[styles.slide, { width }]}>
       <View style={[styles.iconRing, { borderColor: item.accent + '40' }]}>
         <View style={[styles.iconBg, { backgroundColor: item.accent }]}>
           <Feather name={item.icon} size={32} color="#fff" style={item.icon === 'send' ? { transform: [{ rotate: '-45deg' }] } : undefined} />
@@ -91,6 +90,7 @@ function Slide({ item }: SlideProps) {
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
@@ -121,13 +121,15 @@ export default function OnboardingScreen() {
       <FlatList
         ref={flatListRef}
         data={SLIDES}
-        renderItem={({ item }) => <Slide item={item} />}
+        renderItem={({ item }) => <Slide item={item} width={screenWidth} />}
         keyExtractor={(item) => item.id}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         scrollEnabled={false}
         style={styles.flatList}
+        extraData={screenWidth}
+        getItemLayout={(_, index) => ({ length: screenWidth, offset: screenWidth * index, index })}
       />
 
       <View style={styles.footer}>
