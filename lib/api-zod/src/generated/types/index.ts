@@ -29,6 +29,7 @@ export * from './referralInfo';
 export * from './registerRequest';
 export * from './trip';
 export * from './tripStatus';
+export * from './updateMeRequest';
 export * from './upgradeMembershipRequest';
 export * from './upgradeMembershipRequestTier';
 export * from './user';

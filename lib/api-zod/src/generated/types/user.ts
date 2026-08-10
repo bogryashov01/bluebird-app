@@ -14,5 +14,6 @@ export interface User {
   membershipTier: UserMembershipTier;
   emailVerified: boolean;
   linePassCount: number;
+  phone?: string;
   createdAt: string;
 }

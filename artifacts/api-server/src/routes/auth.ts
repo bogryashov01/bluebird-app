@@ -117,4 +117,52 @@ router.get("/me", authMiddleware, async (req, res) => {
   }
 });
 
+// PATCH /auth/me — update profile (name, email, phone)
+router.patch("/me", authMiddleware, async (req, res) => {
+  const userId = (req as any).userId;
+  const { name, email, phone } = req.body ?? {};
+
+  const updates: Record<string, string | null> = {};
+  if (name !== undefined) {
+    if (typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ error: "Name cannot be empty" });
+    }
+    updates.name = name.trim();
+  }
+  if (email !== undefined) {
+    if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email)) {
+      return res.status(400).json({ error: "Enter a valid email address" });
+    }
+    updates.email = email.trim().toLowerCase();
+  }
+  if (phone !== undefined) {
+    if (typeof phone !== "string") {
+      return res.status(400).json({ error: "Invalid phone number" });
+    }
+    updates.phone = phone.trim() || null;
+  }
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: "Nothing to update" });
+  }
+
+  try {
+    if (updates.email) {
+      const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, updates.email));
+      if (existing && existing.id !== userId) {
+        return res.status(400).json({ error: "An account with this email already exists" });
+      }
+    }
+    const [updated] = await db
+      .update(usersTable)
+      .set(updates)
+      .where(eq(usersTable.id, userId))
+      .returning();
+    if (!updated) return res.status(401).json({ error: "User not found" });
+    const { passwordHash: _, ...safeUser } = updated;
+    return res.json(safeUser);
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to update profile" });
+  }
+});
+
 export default router;

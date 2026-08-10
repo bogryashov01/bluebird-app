@@ -1,11 +1,11 @@
 import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Platform, Alert,
+  ActivityIndicator, Platform,
 } from 'react-native';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useGetMembership, useUpgradeMembership, useListTrips } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useGetMembership, useListTrips } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { StatCard } from '@/components/StatCard';
@@ -54,25 +54,13 @@ function tierDisplayName(t: string) {
 export default function MembershipScreen() {
   const insets      = useSafeAreaInsets();
   const colors      = useColors();
-  const { user, updateUser } = useAuth();
-  const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { data: membership, isLoading: memLoading } = useGetMembership({});
   const { data: tripsRaw,   isLoading: tripsLoading } = useListTrips({});
-
-  const upgradeMutation = useUpgradeMembership({
-    mutation: {
-      onSuccess: (data: any) => {
-        queryClient.invalidateQueries({ queryKey: ['getMembership'] });
-        if (user) updateUser({ ...user, membershipTier: data.tier, linePassCount: data.linePassCount });
-        Alert.alert('Membership Upgraded! ✨', `Welcome to ${tierDisplayName(data.tier)} membership!`);
-      },
-      onError: (err: any) => Alert.alert('Error', err?.response?.data?.error ?? 'Upgrade failed'),
-    },
-  });
 
   const mem         = membership as any;
   const trips       = (tripsRaw as any[]) ?? [];
@@ -85,15 +73,8 @@ export default function MembershipScreen() {
   const tierLabel    = tierDisplayName(currentTier);
 
   const handleUpgrade = (tierId: string) => {
-    if (tierId === currentTier || TIER_IDX[tierId] < currentIdx) return;
-    Alert.alert(
-      `Upgrade to ${tierDisplayName(tierId)}?`,
-      "You'll receive bonus Skip the Line passes immediately.",
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Upgrade', onPress: () => upgradeMutation.mutate({ data: { tier: tierId as 'plus' | 'concierge' } }) },
-      ],
-    );
+    if (tierId === currentTier || TIER_IDX[tierId] <= currentIdx) return;
+    router.push(`/upgrade/${tierId}` as any);
   };
 
   if (memLoading || tripsLoading) {

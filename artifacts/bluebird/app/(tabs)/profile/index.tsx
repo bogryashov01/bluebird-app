@@ -56,6 +56,16 @@ function AppearanceSheet({ visible, onClose }: { visible: boolean; onClose: () =
   );
 }
 
+function activityRoute(item: Notification): string {
+  switch (item.type) {
+    case 'queue_update':     return '/queue/status';
+    case 'flight_confirmed': return '/(tabs)/trips';
+    case 'membership':       return '/(tabs)/membership';
+    case 'referral':         return '/referral';
+    default:                 return '/notifications';
+  }
+}
+
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
@@ -113,16 +123,16 @@ export default function ProfileScreen() {
           rows={[
             {
               label: 'Personal Information',
-              onPress: () => Alert.alert('Personal Information', 'Edit your profile details.'),
+              onPress: () => router.push('/account/personal-info' as any),
             },
             {
               label: 'Connect Contacts',
               hint: 'find & invite members',
-              onPress: () => Alert.alert('Connect Contacts', 'Find friends who are members.'),
+              onPress: () => router.push('/account/contacts' as any),
             },
             {
               label: 'Payment Methods',
-              onPress: () => Alert.alert('Payment Methods', 'Manage your saved payment methods.'),
+              onPress: () => router.push('/account/payment-methods' as any),
             },
           ]}
         />
@@ -153,9 +163,9 @@ export default function ProfileScreen() {
           title="Support"
           rows={[
             { label: 'AI Concierge', onPress: () => router.push('/concierge') },
-            { label: 'Help Center',  onPress: () => Alert.alert('Help Center', 'Email us at support@bluebird.com') },
+            { label: 'Help Center',  onPress: () => router.push('/support/help-center' as any) },
             { label: 'Referral',     onPress: () => router.push('/referral') },
-            { label: 'Legal',        onPress: () => Alert.alert('Legal', 'Terms of service and privacy policy.') },
+            { label: 'Legal',        onPress: () => router.push('/support/legal' as any) },
           ]}
         />
 
@@ -180,8 +190,10 @@ export default function ProfileScreen() {
             <Text style={[styles.activityTitle, { color: colors.mutedForegroundLight }]}>Recent Activity</Text>
             <View style={[styles.activityList, { backgroundColor: colors.surface }]}>
               {recentActivity.map((item, i) => (
-                <View
+                <TouchableOpacity
                   key={item.id}
+                  activeOpacity={0.6}
+                  onPress={() => router.push(activityRoute(item) as any)}
                   style={[
                     styles.activityRow,
                     i < recentActivity.length - 1 && [styles.activityRowBorder, { borderBottomColor: colors.separator }],
@@ -197,7 +209,8 @@ export default function ProfileScreen() {
                       {fmtDate(item.createdAt)}
                     </Text>
                   </View>
-                </View>
+                  <Text style={[styles.signOutChevron, { color: colors.mutedForegroundLight }]}>›</Text>
+                </TouchableOpacity>
               ))}
             </View>
           </View>

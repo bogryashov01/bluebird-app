@@ -20,6 +20,8 @@ export async function ensureSchema(): Promise<void> {
       created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+
     CREATE TABLE IF NOT EXISTS flights (
       id               TEXT        PRIMARY KEY,
       from_airport     TEXT        NOT NULL,

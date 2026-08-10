@@ -90,6 +90,30 @@ function RootLayoutNav() {
         name="community"
         options={{ headerShown: true, title: 'Community', ...headerOptions }}
       />
+      <Stack.Screen
+        name="upgrade/[tier]"
+        options={{ headerShown: true, title: 'Upgrade Membership', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="account/personal-info"
+        options={{ headerShown: true, title: 'Personal Information', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="account/payment-methods"
+        options={{ headerShown: true, title: 'Payment Methods', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="account/contacts"
+        options={{ headerShown: true, title: 'Connect Contacts', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="support/help-center"
+        options={{ headerShown: true, title: 'Help Center', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="support/legal"
+        options={{ headerShown: true, title: 'Legal', ...headerOptions }}
+      />
     </Stack>
     </>
   );

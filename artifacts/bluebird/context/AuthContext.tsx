@@ -13,6 +13,7 @@ export interface AuthUser {
   membershipTier: 'base' | 'plus' | 'concierge';
   emailVerified: boolean;
   linePassCount: number;
+  phone?: string | null;
   referralCode: string;
   createdAt: string;
 }

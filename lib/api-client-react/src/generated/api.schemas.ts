@@ -40,12 +40,19 @@ export interface User {
   membershipTier: UserMembershipTier;
   emailVerified: boolean;
   linePassCount: number;
+  phone?: string;
   createdAt: string;
 }
 
 export interface AuthResponse {
   token: string;
   user: User;
+}
+
+export interface UpdateMeRequest {
+  name?: string;
+  email?: string;
+  phone?: string;
 }
 
 export type FlightStatus = typeof FlightStatus[keyof typeof FlightStatus];

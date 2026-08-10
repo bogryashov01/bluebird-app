@@ -34,6 +34,7 @@ export const RegisterResponse = zod.object({
   "membershipTier": zod.enum(['base', 'plus', 'concierge']),
   "emailVerified": zod.boolean(),
   "linePassCount": zod.number(),
+  "phone": zod.string().optional(),
   "createdAt": zod.string()
 })
 })
@@ -56,6 +57,7 @@ export const LoginResponse = zod.object({
   "membershipTier": zod.enum(['base', 'plus', 'concierge']),
   "emailVerified": zod.boolean(),
   "linePassCount": zod.number(),
+  "phone": zod.string().optional(),
   "createdAt": zod.string()
 })
 })
@@ -71,6 +73,28 @@ export const GetMeResponse = zod.object({
   "membershipTier": zod.enum(['base', 'plus', 'concierge']),
   "emailVerified": zod.boolean(),
   "linePassCount": zod.number(),
+  "phone": zod.string().optional(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Update current user's profile
+ */
+export const UpdateMeBody = zod.object({
+  "name": zod.string().optional(),
+  "email": zod.string().optional(),
+  "phone": zod.string().optional()
+})
+
+export const UpdateMeResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "membershipTier": zod.enum(['base', 'plus', 'concierge']),
+  "emailVerified": zod.boolean(),
+  "linePassCount": zod.number(),
+  "phone": zod.string().optional(),
   "createdAt": zod.string()
 })
 
