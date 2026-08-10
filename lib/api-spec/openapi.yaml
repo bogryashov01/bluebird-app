@@ -683,11 +683,28 @@ components:
           type: number
         pendingPasses:
           type: number
+        invited:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvitedFriend"
       required:
         - code
         - totalReferrals
         - earnedPasses
         - pendingPasses
+        - invited
+
+    InvitedFriend:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [joined, pending]
+      required:
+        - name
+        - status
 
     Notification:
       type: object

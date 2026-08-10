@@ -14,6 +14,8 @@ export * from './flightStatus';
 export * from './flightUserStatus';
 export * from './flightUserStatusStatus';
 export * from './healthStatus';
+export * from './invitedFriend';
+export * from './invitedFriendStatus';
 export * from './joinQueueRequest';
 export * from './listFlightsParams';
 export * from './loginRequest';

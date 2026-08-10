@@ -5,10 +5,12 @@
  * Bluebird private aviation API
  * OpenAPI spec version: 0.1.0
  */
+import type { InvitedFriend } from './invitedFriend';
 
 export interface ReferralInfo {
   code: string;
   totalReferrals: number;
   earnedPasses: number;
   pendingPasses: number;
+  invited: InvitedFriend[];
 }

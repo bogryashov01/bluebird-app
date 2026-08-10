@@ -338,7 +338,11 @@ export const GetReferralResponse = zod.object({
   "code": zod.string(),
   "totalReferrals": zod.number(),
   "earnedPasses": zod.number(),
-  "pendingPasses": zod.number()
+  "pendingPasses": zod.number(),
+  "invited": zod.array(zod.object({
+  "name": zod.string(),
+  "status": zod.enum(['joined', 'pending'])
+}))
 })
 
 

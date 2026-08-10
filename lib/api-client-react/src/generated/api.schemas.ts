@@ -178,11 +178,25 @@ export interface UpgradeMembershipRequest {
   tier: UpgradeMembershipRequestTier;
 }
 
+export type InvitedFriendStatus = typeof InvitedFriendStatus[keyof typeof InvitedFriendStatus];
+
+
+export const InvitedFriendStatus = {
+  joined: 'joined',
+  pending: 'pending',
+} as const;
+
+export interface InvitedFriend {
+  name: string;
+  status: InvitedFriendStatus;
+}
+
 export interface ReferralInfo {
   code: string;
   totalReferrals: number;
   earnedPasses: number;
   pendingPasses: number;
+  invited: InvitedFriend[];
 }
 
 export type NotificationType = typeof NotificationType[keyof typeof NotificationType];

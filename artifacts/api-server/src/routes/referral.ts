@@ -16,14 +16,21 @@ router.get("/", authMiddleware, async (req, res) => {
     // Count referred users
     const referred = await db.select().from(usersTable).where(eq(usersTable.referredBy, user.referralCode));
     const totalReferrals = referred.length;
-    const earnedPasses = Math.floor(totalReferrals / 1); // 1 pass per referral
-    const pendingPasses = totalReferrals % 1;
+    const earnedPasses = totalReferrals; // 1 pass per referral
+
+    const invited = referred
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((r) => ({
+        name: r.name,
+        status: r.emailVerified ? "joined" : "pending",
+      }));
 
     return res.json({
       code: user.referralCode,
       totalReferrals,
       earnedPasses,
       pendingPasses: 0,
+      invited,
     });
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch referral info" });
