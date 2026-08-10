@@ -58,6 +58,7 @@ export async function ensureSchema(): Promise<void> {
     );
 
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS passengers INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS front_notified_at TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS trips (
       id         TEXT        PRIMARY KEY,

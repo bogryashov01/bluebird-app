@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { flightsTable, tripsTable, queueEntriesTable, notificationsTable, usersTable } from "@workspace/db/schema";
 import { eq, and, count, sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { ensureSimUsers, SIM_USER_PREFIX } from "./simulation";
 
 function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
@@ -168,12 +169,49 @@ export async function seedDemoDataForUser(userId: string): Promise<void> {
       ])
       .onConflictDoNothing();
 
-    // An active queue entry (skip if already queued for that flight)
+    // An active queue entry (skip if already queued for that flight).
+    // Seed the user a few positions back, behind simulated members, so the
+    // queue simulation visibly advances them toward the front — showcasing
+    // the playable loop rather than a static fixture.
     const [alreadyQueued] = await db
       .select()
       .from(queueEntriesTable)
       .where(and(eq(queueEntriesTable.userId, userId), eq(queueEntriesTable.flightId, queuedFlight.id)));
     if (!alreadyQueued) {
+      await ensureSimUsers();
+
+      // Ensure at least 2 simulated members are waiting ahead in this queue.
+      const [{ value: simWaiting }] = await db
+        .select({ value: count() })
+        .from(queueEntriesTable)
+        .where(
+          and(
+            eq(queueEntriesTable.flightId, queuedFlight.id),
+            eq(queueEntriesTable.status, "waiting"),
+            sql`${queueEntriesTable.userId} LIKE ${SIM_USER_PREFIX + "%"}`,
+          ),
+        );
+      const simsToAdd = Math.max(0, 2 - Number(simWaiting));
+      if (simsToAdd > 0) {
+        const [{ value: existingWaiting }] = await db
+          .select({ value: count() })
+          .from(queueEntriesTable)
+          .where(and(eq(queueEntriesTable.flightId, queuedFlight.id), eq(queueEntriesTable.status, "waiting")));
+        await db
+          .insert(queueEntriesTable)
+          .values(
+            Array.from({ length: simsToAdd }, (_, i) => ({
+              id: `demo-simq-${queuedFlight.id}-${Number(existingWaiting) + i + 1}`,
+              userId: `${SIM_USER_PREFIX}${i + 1}`,
+              flightId: queuedFlight.id,
+              position: Number(existingWaiting) + i + 1,
+              status: "waiting",
+              usedLinePass: false,
+            })),
+          )
+          .onConflictDoNothing();
+      }
+
       const [{ value: queueCount }] = await db
         .select({ value: count() })
         .from(queueEntriesTable)

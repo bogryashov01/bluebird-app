@@ -6,6 +6,31 @@ import { authMiddleware } from "../middlewares/auth";
 
 const router = Router();
 
+// flights.seatsAvailable in the DB is the capacity BASELINE for queue math
+// (join/confirm checks subtract confirmed passengers from it). For browsing,
+// we present the DERIVED remaining seats — baseline minus confirmed
+// passengers — so seats visibly shrink/free as (simulated) members confirm
+// or cancel, without ever mutating the flight row.
+async function confirmedPaxByFlight(): Promise<Map<string, number>> {
+  const rows = await db
+    .select({
+      flightId: queueEntriesTable.flightId,
+      pax: sql<number>`coalesce(sum(${queueEntriesTable.passengers}), 0)`,
+    })
+    .from(queueEntriesTable)
+    .where(eq(queueEntriesTable.status, "confirmed"))
+    .groupBy(queueEntriesTable.flightId);
+  return new Map(rows.map((r) => [r.flightId, Number(r.pax)]));
+}
+
+function withDerivedSeats<T extends { id: string; seatsAvailable: number }>(
+  flight: T,
+  paxMap: Map<string, number>,
+): T {
+  const remaining = Math.max(0, flight.seatsAvailable - (paxMap.get(flight.id) ?? 0));
+  return { ...flight, seatsAvailable: remaining };
+}
+
 // GET /flights (public — members can browse before signing in)
 router.get("/", async (req, res) => {
   try {
@@ -17,8 +42,11 @@ router.get("/", async (req, res) => {
     if (to) conditions.push(ilike(flightsTable.toCity, `%${to}%`));
     if (conditions.length > 0) query = query.where(and(...conditions));
 
-    const flights = await query.orderBy(flightsTable.departureDate);
-    return res.json(flights);
+    const [flights, paxMap] = await Promise.all([
+      query.orderBy(flightsTable.departureDate),
+      confirmedPaxByFlight(),
+    ]);
+    return res.json(flights.map((f) => withDerivedSeats(f, paxMap)));
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch flights" });
   }
@@ -27,11 +55,14 @@ router.get("/", async (req, res) => {
 // GET /flights/:id (public)
 router.get("/:id", async (req, res) => {
   try {
-    const [flight] = await db.select().from(flightsTable).where(eq(flightsTable.id, String(req.params.id)));
+    const [[flight], paxMap] = await Promise.all([
+      db.select().from(flightsTable).where(eq(flightsTable.id, String(req.params.id))),
+      confirmedPaxByFlight(),
+    ]);
     if (!flight) {
       return res.status(404).json({ error: "Flight not found" });
     }
-    return res.json(flight);
+    return res.json(withDerivedSeats(flight, paxMap));
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch flight" });
   }
@@ -89,7 +120,11 @@ router.get("/:id/my-status", authMiddleware, async (req, res) => {
               eq(queueEntriesTable.status, "confirmed"),
             ),
           );
-        canConfirm = entry.passengers <= (flight.seatsAvailable - Number(confirmedPax));
+        const windowExpired =
+          !!entry.frontNotifiedAt &&
+          Date.now() - new Date(entry.frontNotifiedAt).getTime() > 30 * 60 * 1000;
+        canConfirm =
+          !windowExpired && entry.passengers <= (flight.seatsAvailable - Number(confirmedPax));
       }
 
       return res.json({

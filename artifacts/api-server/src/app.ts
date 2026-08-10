@@ -4,6 +4,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { seedFlights } from "./lib/seed";
+import { ensureSimUsers, startQueueSimulation } from "./lib/simulation";
 import { ensureSchema } from "@workspace/db";
 
 const app: Express = express();
@@ -42,7 +43,11 @@ app.use("/api", router);
 // Ensure DB schema exists, then seed on startup
 ensureSchema()
   .then(() => seedFlights())
-  .then(() => logger.info("Schema ready and flights seeded"))
+  .then(() => ensureSimUsers())
+  .then(() => {
+    startQueueSimulation();
+    logger.info("Schema ready, flights seeded, queue simulation running");
+  })
   .catch((err) => logger.error({ err }, "Startup DB error"));
 
 export default app;

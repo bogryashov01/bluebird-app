@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ActivityIndicator, Switch, Platform, Alert,
@@ -7,7 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import { useJoinQueue } from '@workspace/api-client-react';
+import { useJoinQueue, useGetFlightMyStatus } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
@@ -27,6 +27,18 @@ export default function JoinQueueScreen() {
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { updateUser } = useAuth();
+
+  // Guard: a user already confirmed on this flight cannot join again.
+  // Redirect to the flight screen (which shows the confirmed badge) instead.
+  const { data: myStatus, isLoading: statusLoading } = useGetFlightMyStatus(flightId!, {
+    query: { enabled: !!user && !!flightId },
+  });
+  const isConfirmed = myStatus?.status === 'confirmed';
+  useEffect(() => {
+    if (isConfirmed && flightId) {
+      router.replace(`/flight/${flightId}`);
+    }
+  }, [isConfirmed, flightId]);
 
   const joinMutation = useJoinQueue({
     mutation: {
@@ -48,9 +60,11 @@ export default function JoinQueueScreen() {
   });
 
   const handleJoin = () => {
-    if (!flightId) return;
+    if (!flightId || isConfirmed) return;
     joinMutation.mutate({ data: { flightId, useLinePass, passengers } });
   };
+
+  const ctaDisabled = joinMutation.isPending || statusLoading || isConfirmed;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -114,12 +128,12 @@ export default function JoinQueueScreen() {
       {/* CTA */}
       <View style={[styles.footer, { borderTopColor: colors.border, paddingBottom: bottomPad + 12 }]}>
         <TouchableOpacity
-          style={[styles.confirmBtn, { backgroundColor: colors.primary }, joinMutation.isPending && { opacity: 0.7 }]}
+          style={[styles.confirmBtn, { backgroundColor: colors.primary }, ctaDisabled && { opacity: 0.7 }]}
           onPress={handleJoin}
-          disabled={joinMutation.isPending}
+          disabled={ctaDisabled}
           activeOpacity={0.8}
         >
-          {joinMutation.isPending ? (
+          {joinMutation.isPending || statusLoading || isConfirmed ? (
             <ActivityIndicator color={colors.primaryForeground} />
           ) : (
             <>

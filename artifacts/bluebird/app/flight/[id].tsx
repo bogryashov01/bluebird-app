@@ -177,7 +177,10 @@ export default function FlightDetailScreen() {
       );
     }
 
-    if (statusLoading) {
+    // Hold the CTA behind a spinner until we actually know the user's status —
+    // covers both the initial fetch and any state where data isn't available
+    // yet, so a confirmed user never sees a "Request to Join" flash.
+    if (statusLoading || !myStatus) {
       return (
         <View style={styles.statusLoadingRow}>
           <ActivityIndicator color={colors.primary} size="small" />
@@ -367,8 +370,10 @@ export default function FlightDetailScreen() {
           ))}
         </View>
 
-        {/* ── Passenger stepper — only shown when user can still join ── */}
-        {(!user || status === 'none') && (
+        {/* ── Passenger stepper — only shown when user can still join.
+             For signed-in users, wait until status is known so the stepper
+             never flashes for someone already queued or confirmed. ── */}
+        {(!user || (!!myStatus && status === 'none')) && (
           <View style={[styles.stepperCard, { backgroundColor: colors.surface }]}>
             <View style={styles.stepperLeft}>
               <Text style={[styles.stepperTitle, { color: colors.textOnSurface }]}>Passengers</Text>

@@ -44,6 +44,9 @@ export const queueEntriesTable = pgTable("queue_entries", {
   status: text("status").notNull().default("waiting"),
   usedLinePass: boolean("used_line_pass").notNull().default(false),
   passengers: integer("passengers").notNull().default(1),
+  // Set when this entry reaches the front of the queue and is notified that a
+  // seat is ready; starts the 30-minute acceptance window.
+  frontNotifiedAt: timestamp("front_notified_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

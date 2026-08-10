@@ -202,7 +202,11 @@ router.get("/status", authMiddleware, async (req, res) => {
                 eq(queueEntriesTable.status, "confirmed"),
               ),
             );
-          canConfirm = entry.passengers <= (flight.seatsAvailable - Number(confirmedPax));
+          const windowExpired =
+            !!entry.frontNotifiedAt &&
+            Date.now() - new Date(entry.frontNotifiedAt).getTime() > 30 * 60 * 1000;
+          canConfirm =
+            !windowExpired && entry.passengers <= (flight.seatsAvailable - Number(confirmedPax));
         }
 
         return { ...entry, flight, totalInQueue: Number(totalInQueue), canConfirm };
@@ -364,6 +368,60 @@ router.post("/:id/confirm", authMiddleware, async (req, res) => {
       return res.status(403).json({
         error: `Not yet your turn — you're #${entryToCheck.position} in the queue`,
       });
+    }
+
+    // ── Step 2b: 30-minute acceptance window (policy, enforced server-side) ─
+    // The window starts when the member is notified their seat is ready
+    // (frontNotifiedAt, set by the queue engine). If it has lapsed, expire the
+    // entry right here — the server is authoritative, independent of the
+    // periodic engine tick. If the member confirms before being notified
+    // (e.g. they joined an empty queue at #1), the window starts now: an
+    // immediate confirm is by definition within it.
+    const CONFIRM_WINDOW_MS = 30 * 60 * 1000;
+    if (
+      entryToCheck.frontNotifiedAt &&
+      Date.now() - new Date(entryToCheck.frontNotifiedAt).getTime() > CONFIRM_WINDOW_MS
+    ) {
+      const [expired] = await txDb
+        .update(queueEntriesTable)
+        .set({ status: "expired" })
+        .where(
+          and(
+            eq(queueEntriesTable.id, String(req.params.id)),
+            eq(queueEntriesTable.status, "waiting"),
+          ),
+        )
+        .returning();
+      if (expired) {
+        // Close the gap so the next member moves up.
+        await txDb
+          .update(queueEntriesTable)
+          .set({ position: sql`${queueEntriesTable.position} - 1` })
+          .where(
+            and(
+              eq(queueEntriesTable.flightId, expired.flightId),
+              eq(queueEntriesTable.status, "waiting"),
+              sql`${queueEntriesTable.position} > ${expired.position}`,
+            ),
+          );
+        await txDb.insert(notificationsTable).values({
+          id: makeId(),
+          userId,
+          title: "Acceptance window expired",
+          body: "Your 30-minute window to confirm passed, so your spot went to the next member in line.",
+          type: "queue_update",
+        });
+      }
+      await client.query("COMMIT");
+      return res.status(410).json({
+        error: "Your 30-minute acceptance window has expired — your spot went to the next member in line.",
+      });
+    }
+    if (!entryToCheck.frontNotifiedAt) {
+      await txDb
+        .update(queueEntriesTable)
+        .set({ frontNotifiedAt: new Date() })
+        .where(eq(queueEntriesTable.id, String(req.params.id)));
     }
 
     // ── Step 3: Seat capacity check ─────────────────────────────────────────

@@ -141,7 +141,7 @@ function QueueCard({
         </Text>
       </View>
 
-      {/* Primary action: confirm if eligible, otherwise offer Skip the Line */}
+      {/* Primary action: confirm if eligible, otherwise link to the flight */}
       {canConfirm && onConfirm ? (
         <TouchableOpacity
           style={[card.confirmBtn, { backgroundColor: colors.success, shadowColor: colors.success }, isConfirming && { opacity: 0.6 }]}
@@ -157,10 +157,10 @@ function QueueCard({
       ) : (
         <TouchableOpacity
           style={[card.primaryBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
-          onPress={() => router.push('/(tabs)/membership')}
+          onPress={() => router.push(`/flight/${entry.flightId}`)}
           activeOpacity={0.85}
         >
-          <Text style={[card.primaryBtnText, { color: colors.primaryForeground }]}>Use Skip the Line Pass</Text>
+          <Text style={[card.primaryBtnText, { color: colors.primaryForeground }]}>View Flight Details</Text>
         </TouchableOpacity>
       )}
 
