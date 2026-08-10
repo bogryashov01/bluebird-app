@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { usePersistedState } from '@/hooks/usePersistedState';
 
 interface MockCard {
   id: string;
@@ -34,8 +35,8 @@ const BRAND_COLORS: Record<string, string> = {
 export default function PaymentMethodsScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const [cards, setCards] = React.useState<MockCard[]>(INITIAL_CARDS);
-  const [addIdx, setAddIdx] = React.useState(0);
+  const [cards, setCards] = usePersistedState<MockCard[]>('bluebird.paymentMethods', INITIAL_CARDS);
+  const [addIdx, setAddIdx] = usePersistedState<number>('bluebird.paymentMethods.addIdx', 0);
 
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 

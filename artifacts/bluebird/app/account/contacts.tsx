@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { usePersistedState } from '@/hooks/usePersistedState';
 
 interface MockContact {
   id: string;
@@ -25,7 +26,7 @@ const INITIAL_CONTACTS: MockContact[] = [
 export default function ConnectContactsScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const [contacts, setContacts] = React.useState<MockContact[]>(INITIAL_CONTACTS);
+  const [contacts, setContacts] = usePersistedState<MockContact[]>('bluebird.contacts', INITIAL_CONTACTS);
 
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
