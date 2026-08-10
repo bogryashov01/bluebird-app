@@ -526,4 +526,123 @@ router.post("/:id/confirm", authMiddleware, async (req, res) => {
   }
 });
 
+// POST /queue/:id/use-pass
+//
+// Applies a Skip the Line pass to an EXISTING waiting entry: consumes one
+// line pass, moves the entry to position 1, and shifts the entries that were
+// ahead of it down by one. Mirrors the join-with-pass logic above and runs
+// under the same SERIALIZABLE isolation so concurrent queue transitions on
+// the same flight cannot corrupt positions.
+router.post("/:id/use-pass", authMiddleware, async (req, res) => {
+  const userId = (req as any).userId;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+    const txDb = drizzle(client, { schema });
+
+    // 1. Verify ownership and state
+    const [entry] = await txDb
+      .select()
+      .from(queueEntriesTable)
+      .where(
+        and(
+          eq(queueEntriesTable.id, String(req.params.id)),
+          eq(queueEntriesTable.userId, userId),
+        ),
+      );
+
+    if (!entry) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Queue entry not found" });
+    }
+    if (entry.status !== "waiting") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Only waiting entries can use a Skip the Line pass" });
+    }
+    if (entry.position === 1) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "You are already first in line" });
+    }
+
+    // 2. Consume a line pass (conditional update — fails if balance is 0)
+    const passResult = await txDb
+      .update(usersTable)
+      .set({ linePassCount: sql`${usersTable.linePassCount} - 1` })
+      .where(and(eq(usersTable.id, userId), sql`${usersTable.linePassCount} > 0`))
+      .returning({ linePassCount: usersTable.linePassCount });
+    if (passResult.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "You do not have any Skip the Line passes" });
+    }
+    const linePassCount = passResult[0].linePassCount;
+
+    // 3. Shift down every waiting entry that was ahead of this one
+    await txDb
+      .update(queueEntriesTable)
+      .set({ position: sql`${queueEntriesTable.position} + 1` })
+      .where(
+        and(
+          eq(queueEntriesTable.flightId, entry.flightId),
+          eq(queueEntriesTable.status, "waiting"),
+          sql`${queueEntriesTable.position} < ${entry.position}`,
+        ),
+      );
+
+    // 4. Move this entry to the front (conditional on still-waiting as a
+    //    concurrent safety net; SERIALIZABLE aborts true conflicts with 40001)
+    const updated = await txDb
+      .update(queueEntriesTable)
+      .set({ position: 1, usedLinePass: true })
+      .where(
+        and(
+          eq(queueEntriesTable.id, entry.id),
+          eq(queueEntriesTable.status, "waiting"),
+        ),
+      )
+      .returning();
+    if (updated.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Queue update conflict — please try again" });
+    }
+
+    // 5. Notify the member
+    const [flight] = await txDb
+      .select()
+      .from(flightsTable)
+      .where(eq(flightsTable.id, entry.flightId));
+    await txDb.insert(notificationsTable).values({
+      id: makeId(),
+      userId,
+      title: "Skip the Line pass used",
+      body: flight
+        ? `You're now #1 in the queue for ${flight.fromCity} → ${flight.toCity}`
+        : "You're now #1 in the queue",
+      type: "queue_update",
+    });
+
+    await client.query("COMMIT");
+
+    const [{ value: totalInQueue }] = await db
+      .select({ value: count() })
+      .from(queueEntriesTable)
+      .where(and(eq(queueEntriesTable.flightId, entry.flightId), eq(queueEntriesTable.status, "waiting")));
+
+    return res.json({
+      ...updated[0],
+      flight: flight ?? null,
+      totalInQueue: Number(totalInQueue),
+      linePassCount,
+    });
+  } catch (err: any) {
+    await client.query("ROLLBACK").catch(() => {});
+    const pgCode = err?.code ?? err?.cause?.code;
+    if (pgCode === "40001") {
+      return res.status(409).json({ error: "Queue update conflict — please try again" });
+    }
+    return res.status(500).json({ error: "Failed to use Skip the Line pass" });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;

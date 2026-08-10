@@ -299,6 +299,45 @@ export const ConfirmQueueEntryResponse = zod.object({
 
 
 /**
+ * @summary Apply a Skip the Line pass to an existing waiting queue entry, moving it to position 1
+ */
+export const UseLinePassOnQueueEntryParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UseLinePassOnQueueEntryResponse = zod.object({
+  "id": zod.string(),
+  "flightId": zod.string(),
+  "flight": zod.object({
+  "id": zod.string(),
+  "fromAirport": zod.string(),
+  "fromCity": zod.string(),
+  "toAirport": zod.string(),
+  "toCity": zod.string(),
+  "aircraftType": zod.string(),
+  "aircraftCapacity": zod.number(),
+  "departureDate": zod.string(),
+  "departureTime": zod.string(),
+  "duration": zod.string(),
+  "seatsAvailable": zod.number(),
+  "priceUsd": zod.number().optional(),
+  "discountPct": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "status": zod.enum(['available', 'boarding', 'departed', 'cancelled']),
+  "imageUrl": zod.string().optional(),
+  "createdAt": zod.string()
+}).optional(),
+  "position": zod.number(),
+  "totalInQueue": zod.number(),
+  "status": zod.enum(['waiting', 'confirmed', 'cancelled', 'expired']),
+  "canConfirm": zod.boolean().optional().describe('Present on waiting entries. True when this entry is at position 1 and the flight has seats available for the party size.\n'),
+  "createdAt": zod.string()
+}).and(zod.object({
+  "linePassCount": zod.number().describe('The user\'s remaining Skip the Line pass balance after use')
+}))
+
+
+/**
  * @summary Get user trips
  */
 export const ListTripsResponseItem = zod.object({

@@ -9,7 +9,7 @@ import Svg, { Circle } from 'react-native-svg';
 import type { QueueEntry } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
-import { useGetQueueStatus, useCancelQueueEntry, useConfirmQueueEntry } from '@workspace/api-client-react';
+import { useGetQueueStatus, useCancelQueueEntry, useConfirmQueueEntry, useUseLinePassOnQueueEntry } from '@workspace/api-client-react';
 
 import { useAuth } from '@/context/AuthContext';
 
@@ -89,11 +89,17 @@ function QueueCard({
   onCancel,
   onConfirm,
   isConfirming,
+  onUsePass,
+  isUsingPass,
+  passCount,
 }: {
   entry: QueueEntry;
   onCancel: () => void;
   onConfirm?: () => void;
   isConfirming?: boolean;
+  onUsePass?: () => void;
+  isUsingPass?: boolean;
+  passCount?: number;
 }) {
   const colors = useColors();
   const flight    = entry.flight;
@@ -161,6 +167,25 @@ function QueueCard({
           activeOpacity={0.85}
         >
           <Text style={[card.primaryBtnText, { color: colors.primaryForeground }]}>View Flight Details</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Skip the Line pass — offered when the member holds passes and is not already #1 */}
+      {onUsePass && (
+        <TouchableOpacity
+          style={[card.passBtn, { borderColor: colors.primary }, isUsingPass && { opacity: 0.6 }]}
+          onPress={onUsePass}
+          disabled={isUsingPass}
+          activeOpacity={0.85}
+        >
+          {isUsingPass
+            ? <ActivityIndicator color={colors.primary} size="small" />
+            : (
+              <Text style={[card.passBtnText, { color: colors.primary }]}>
+                ⚡ Use Skip the Line Pass ({passCount} left)
+              </Text>
+            )
+          }
         </TouchableOpacity>
       )}
 
@@ -323,6 +348,14 @@ const card = StyleSheet.create({
     elevation: 6,
   },
   confirmBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
+  passBtn: {
+    width: '100%',
+    borderWidth: 1.5,
+    borderRadius: 999,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  passBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
   ghostBtn: { paddingVertical: 4 },
   ghostBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, textAlign: 'center' },
   leaveBtn: {
@@ -343,7 +376,7 @@ export default function QueueStatusScreen() {
   const topPad    = Platform.OS === 'web' ? 60 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
 
   // API now returns waiting + confirmed; we render each group separately
   const { data: queueEntries, isLoading } = useGetQueueStatus({
@@ -370,6 +403,35 @@ export default function QueueStatusScreen() {
       },
     },
   });
+
+  const usePassMutation = useUseLinePassOnQueueEntry({
+    mutation: {
+      onSuccess: (data: any) => {
+        // Reflect the new pass balance immediately
+        if (user && typeof data?.linePassCount === 'number') {
+          updateUser({ ...user, linePassCount: data.linePassCount });
+        }
+        queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
+        if (data?.flightId) {
+          queryClient.invalidateQueries({ queryKey: [`/api/flights/${data.flightId}/my-status`] });
+        }
+      },
+      onError: (err: any) => {
+        Alert.alert('Could not use pass', err?.data?.error || err?.message || 'Failed to use Skip the Line pass');
+      },
+    },
+  });
+
+  const handleUsePass = (entryId: string) => {
+    Alert.alert(
+      'Use Skip the Line Pass?',
+      `This will use 1 of your ${user?.linePassCount ?? 0} passes and move you to the front of this queue.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Use Pass', style: 'default', onPress: () => usePassMutation.mutate({ id: entryId }) },
+      ],
+    );
+  };
 
   const handleCancel = (entryId: string) => {
     Alert.alert('Leave Queue?', 'You will lose your position in the queue.', [
@@ -442,6 +504,13 @@ export default function QueueStatusScreen() {
               onCancel={() => handleCancel(entry.id)}
               onConfirm={() => handleConfirm(entry.id, entry.flightId)}
               isConfirming={confirmMutation.isPending}
+              onUsePass={
+                user && user.linePassCount > 0 && entry.position !== 1
+                  ? () => handleUsePass(entry.id)
+                  : undefined
+              }
+              isUsingPass={usePassMutation.isPending}
+              passCount={user?.linePassCount ?? 0}
             />
           ))}
         </ScrollView>

@@ -40,6 +40,7 @@ import type {
   Trip,
   UpdateMeRequest,
   UpgradeMembershipRequest,
+  UseLinePassResponse,
   User
 } from './api.schemas';
 
@@ -963,6 +964,77 @@ export const useConfirmQueueEntry = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getConfirmQueueEntryMutationOptions(options));
+    }
+
+export const getUseLinePassOnQueueEntryUrl = (id: string,) => {
+
+
+
+
+  return `/api/queue/${id}/use-pass`
+}
+
+/**
+ * @summary Apply a Skip the Line pass to an existing waiting queue entry, moving it to position 1
+ */
+export const useLinePassOnQueueEntry = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<UseLinePassResponse> => {
+
+  return customFetch<UseLinePassResponse>(getUseLinePassOnQueueEntryUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getUseLinePassOnQueueEntryMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof useLinePassOnQueueEntry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof useLinePassOnQueueEntry>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['useLinePassOnQueueEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof useLinePassOnQueueEntry>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  useLinePassOnQueueEntry(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UseLinePassOnQueueEntryMutationResult = NonNullable<Awaited<ReturnType<typeof useLinePassOnQueueEntry>>>
+
+    export type UseLinePassOnQueueEntryMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Apply a Skip the Line pass to an existing waiting queue entry, moving it to position 1
+ */
+export const useUseLinePassOnQueueEntry = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof useLinePassOnQueueEntry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof useLinePassOnQueueEntry>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getUseLinePassOnQueueEntryMutationOptions(options));
     }
 
 export const getListTripsUrl = () => {

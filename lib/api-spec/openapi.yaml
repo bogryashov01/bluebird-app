@@ -335,6 +335,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /queue/{id}/use-pass:
+    post:
+      operationId: useLinePassOnQueueEntry
+      tags: [queue]
+      summary: Apply a Skip the Line pass to an existing waiting queue entry, moving it to position 1
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pass applied, entry moved to position 1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UseLinePassResponse"
+        "400":
+          description: Entry not waiting, already at position 1, or no passes available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Queue entry not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /trips:
     get:
       operationId: listTrips
@@ -732,6 +765,17 @@ components:
         - totalInQueue
         - status
         - createdAt
+
+    UseLinePassResponse:
+      allOf:
+        - $ref: "#/components/schemas/QueueEntry"
+        - type: object
+          properties:
+            linePassCount:
+              type: number
+              description: The user's remaining Skip the Line pass balance after use
+          required:
+            - linePassCount
 
     FlightUserStatus:
       type: object

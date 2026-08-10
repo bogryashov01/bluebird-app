@@ -150,6 +150,11 @@ export interface QueueEntry {
   createdAt: string;
 }
 
+export type UseLinePassResponse = QueueEntry & {
+  /** The user's remaining Skip the Line pass balance after use */
+  linePassCount: number;
+};
+
 export type FlightUserStatusStatus = typeof FlightUserStatusStatus[keyof typeof FlightUserStatusStatus];
 
 

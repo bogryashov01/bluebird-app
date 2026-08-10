@@ -40,5 +40,6 @@ export * from './tripStatus';
 export * from './updateMeRequest';
 export * from './upgradeMembershipRequest';
 export * from './upgradeMembershipRequestTier';
+export * from './useLinePassResponse';
 export * from './user';
 export * from './userMembershipTier';
