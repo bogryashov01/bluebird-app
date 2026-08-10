@@ -22,17 +22,17 @@ export function SettingsGroup({ title, rows }: SettingsGroupProps) {
       {title ? (
         <Text style={[styles.title, { color: colors.mutedForegroundLight }]}>{title}</Text>
       ) : null}
-      <View style={[styles.card, { backgroundColor: '#fff' }]}>
+      <View style={[styles.card, { backgroundColor: colors.surface }]}>
         {rows.map((row, i) => (
           <React.Fragment key={row.label}>
-            {i > 0 && <View style={styles.sep} />}
+            {i > 0 && <View style={[styles.sep, { backgroundColor: colors.separator }]} />}
             <TouchableOpacity
               style={styles.row}
               onPress={row.onPress}
               activeOpacity={row.onPress ? 0.6 : 1}
               disabled={!row.onPress}
             >
-              <Text style={[styles.label, { color: colors.backgroundMid }]}>{row.label}</Text>
+              <Text style={[styles.label, { color: colors.textOnSurface }]}>{row.label}</Text>
               {row.hint ? <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>{row.hint}</Text> : null}
               {row.right !== undefined ? row.right : (
                 row.onPress ? <Text style={[styles.chevron, { color: colors.mutedForegroundLight }]}>›</Text> : null
@@ -66,7 +66,6 @@ const styles = StyleSheet.create({
   },
   sep: {
     height: 1,
-    backgroundColor: 'rgba(10,17,40,0.06)',
     marginLeft: 16,
   },
   row: {

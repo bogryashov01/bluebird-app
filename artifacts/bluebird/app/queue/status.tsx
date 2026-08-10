@@ -8,16 +8,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import type { QueueEntry } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import colors from '@/constants/colors';
+import { useColors } from '@/hooks/useColors';
 import { useGetQueueStatus, useCancelQueueEntry, useConfirmQueueEntry } from '@workspace/api-client-react';
 
-// Colours used in static StyleSheets (light surface — same as offWhite palette)
 import { useAuth } from '@/context/AuthContext';
-const BG      = colors.light.offWhite;       // '#FAFAF8'
-const DARK    = colors.light.backgroundMid;  // '#0A1128'
-const MUTED   = colors.light.mutedForegroundLight; // 'rgba(10,17,40,0.45)'
-const BLUE    = colors.light.primary;        // '#1259F2'
-const SUCCESS = colors.light.success;        // '#1E9E5C'
 
 // ─── Countdown hook ───────────────────────────────────────────────────────────
 function useCountdown(departureDate?: string, departureTime?: string): string {
@@ -50,6 +44,7 @@ function useCountdown(departureDate?: string, departureTime?: string): string {
 const CIRC = 251;
 
 function RingProgress({ position, total }: { position: number; total: number }) {
+  const colors = useColors();
   const { width: windowWidth } = useWindowDimensions();
   // Card padding (22*2) + screen padding (22*2) leaves ~windowWidth-88; cap at 170
   const ringSize = Math.round(Math.min(170, Math.max(120, windowWidth - 200)));
@@ -58,11 +53,11 @@ function RingProgress({ position, total }: { position: number; total: number }) 
   return (
     <View style={[ring.wrap, { width: ringSize, height: ringSize }]}>
       <Svg width={ringSize} height={ringSize} viewBox="0 0 90 90">
-        <Circle cx="45" cy="45" r="40" fill="none" stroke="rgba(10,17,40,0.08)" strokeWidth="8" />
+        <Circle cx="45" cy="45" r="40" fill="none" stroke={colors.separator} strokeWidth="8" />
         <Circle
           cx="45" cy="45" r="40"
           fill="none"
-          stroke={BLUE}
+          stroke={colors.primary}
           strokeWidth="8"
           strokeLinecap="round"
           strokeDasharray={CIRC}
@@ -71,10 +66,10 @@ function RingProgress({ position, total }: { position: number; total: number }) 
         />
       </Svg>
       <View style={ring.inner}>
-        <Text style={ring.num}>
-          {position}<Text style={ring.total}>/{total}</Text>
+        <Text style={[ring.num, { color: colors.textOnSurface }]}>
+          {position}<Text style={[ring.total, { color: colors.mutedForegroundLight }]}>/{total}</Text>
         </Text>
-        <Text style={ring.label}>POSITION</Text>
+        <Text style={[ring.label, { color: colors.mutedForegroundLight }]}>POSITION</Text>
       </View>
     </View>
   );
@@ -83,9 +78,9 @@ function RingProgress({ position, total }: { position: number; total: number }) 
 const ring = StyleSheet.create({
   wrap:  { position: 'relative', alignItems: 'center', justifyContent: 'center' },
   inner: { position: 'absolute', alignItems: 'center' },
-  num:   { fontFamily: 'Inter_700Bold', fontSize: 34, color: DARK, lineHeight: 40 },
-  total: { fontFamily: 'Inter_400Regular', fontSize: 18, color: MUTED },
-  label: { fontFamily: 'Inter_600SemiBold', fontSize: 11, color: MUTED, letterSpacing: 0.5, textTransform: 'uppercase' },
+  num:   { fontFamily: 'Inter_700Bold', fontSize: 34, lineHeight: 40 },
+  total: { fontFamily: 'Inter_400Regular', fontSize: 18 },
+  label: { fontFamily: 'Inter_600SemiBold', fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' },
 });
 
 // ─── Waiting queue entry card ─────────────────────────────────────────────────
@@ -100,6 +95,7 @@ function QueueCard({
   onConfirm?: () => void;
   isConfirming?: boolean;
 }) {
+  const colors = useColors();
   const flight    = entry.flight;
   const countdown = useCountdown(flight?.departureDate, flight?.departureTime);
   const joinedAgo = formatAgo(entry.createdAt);
@@ -107,38 +103,38 @@ function QueueCard({
   const canConfirm = (entry as any).canConfirm === true;
 
   return (
-    <View style={card.wrap}>
-      <Text style={card.route}>{flightLabel}</Text>
+    <View style={[card.wrap, { backgroundColor: colors.surface }]}>
+      <Text style={[card.route, { color: colors.textOnSurface }]}>{flightLabel}</Text>
       <RingProgress position={entry.position} total={entry.totalInQueue} />
 
-      {flight && <Text style={card.countdown}>Decision in {countdown}</Text>}
+      {flight && <Text style={[card.countdown, { color: colors.primary }]}>Decision in {countdown}</Text>}
 
-      <View style={card.section}>
-        <Text style={card.sectionTitle}>Queue Activity</Text>
+      <View style={[card.section, { backgroundColor: colors.surface }]}>
+        <Text style={[card.sectionTitle, { color: colors.textOnSurface }]}>Queue Activity</Text>
         <View style={card.logRow}>
-          <Text style={card.logText}>Currently #{entry.position} of {entry.totalInQueue}</Text>
-          <Text style={card.logTime}>now</Text>
+          <Text style={[card.logText, { color: colors.mutedForegroundLight }]}>Currently #{entry.position} of {entry.totalInQueue}</Text>
+          <Text style={[card.logTime, { color: colors.mutedForegroundLight }]}>now</Text>
         </View>
         <View style={card.logRow}>
-          <Text style={card.logText}>Joined queue</Text>
-          <Text style={card.logTime}>{joinedAgo}</Text>
+          <Text style={[card.logText, { color: colors.mutedForegroundLight }]}>Joined queue</Text>
+          <Text style={[card.logTime, { color: colors.mutedForegroundLight }]}>{joinedAgo}</Text>
         </View>
       </View>
 
-      <View style={card.section}>
+      <View style={[card.section, { backgroundColor: colors.surface }]}>
         <View style={card.statusRow}>
-          <Text style={card.sectionTitle}>Flight Status</Text>
+          <Text style={[card.sectionTitle, { color: colors.textOnSurface }]}>Flight Status</Text>
           <View style={card.statusBadge}>
-            <View style={card.statusDot} />
-            <Text style={card.statusText}>
+            <View style={[card.statusDot, { backgroundColor: colors.success }]} />
+            <Text style={[card.statusText, { color: colors.success }]}>
               {flight?.status === 'available' ? 'Open' : flight?.status ?? 'Active'}
             </Text>
           </View>
         </View>
       </View>
 
-      <View style={card.disclaimer}>
-        <Text style={card.disclaimerText}>
+      <View style={[card.disclaimer, { backgroundColor: colors.primary + '0D' }]}>
+        <Text style={[card.disclaimerText, { color: colors.textOnSurface }]}>
           {canConfirm
             ? "You're first in line — confirm now to secure your seat before someone else takes your spot."
             : 'Flights may be modified or cancelled due to operational requirements.'}
@@ -148,80 +144,81 @@ function QueueCard({
       {/* Primary action: confirm if eligible, otherwise offer Skip the Line */}
       {canConfirm && onConfirm ? (
         <TouchableOpacity
-          style={[card.confirmBtn, isConfirming && { opacity: 0.6 }]}
+          style={[card.confirmBtn, { backgroundColor: colors.success, shadowColor: colors.success }, isConfirming && { opacity: 0.6 }]}
           onPress={onConfirm}
           disabled={isConfirming}
           activeOpacity={0.85}
         >
           {isConfirming
             ? <ActivityIndicator color="#fff" size="small" />
-            : <Text style={card.confirmBtnText}>✓  Confirm your seat</Text>
+            : <Text style={[card.confirmBtnText, { color: '#fff' }]}>✓  Confirm your seat</Text>
           }
         </TouchableOpacity>
       ) : (
         <TouchableOpacity
-          style={card.primaryBtn}
+          style={[card.primaryBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
           onPress={() => router.push('/(tabs)/membership')}
           activeOpacity={0.85}
         >
-          <Text style={card.primaryBtnText}>Use Skip the Line Pass</Text>
+          <Text style={[card.primaryBtnText, { color: colors.primaryForeground }]}>Use Skip the Line Pass</Text>
         </TouchableOpacity>
       )}
 
       <TouchableOpacity style={card.ghostBtn} onPress={() => router.push('/concierge')} activeOpacity={0.7}>
-        <Text style={card.ghostBtnText}>Ask AI Concierge</Text>
+        <Text style={[card.ghostBtnText, { color: colors.mutedForegroundLight }]}>Ask AI Concierge</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={card.leaveBtn} onPress={onCancel} activeOpacity={0.7}>
-        <Text style={card.leaveBtnText}>Leave queue</Text>
+      <TouchableOpacity style={[card.leaveBtn, { borderColor: colors.border }]} onPress={onCancel} activeOpacity={0.7}>
+        <Text style={[card.leaveBtnText, { color: colors.mutedForegroundLight }]}>Leave queue</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 function ConfirmedCard({ entry }: { entry: QueueEntry }) {
+  const colors = useColors();
   const flight = entry.flight;
   const flightLabel = flight
     ? `${flight.fromAirport} → ${flight.toAirport}`
     : '— → —';
 
   return (
-    <View style={[card.wrap, confirmed.wrap]}>
+    <View style={[card.wrap, confirmed.wrap, { backgroundColor: colors.surface, borderColor: colors.success + '4D' }]}>
       {/* Confirmed badge */}
-      <View style={confirmed.badge}>
-        <Text style={confirmed.badgeText}>✓  CONFIRMED</Text>
+      <View style={[confirmed.badge, { backgroundColor: colors.success + '1F' }]}>
+        <Text style={[confirmed.badgeText, { color: colors.success }]}>✓  CONFIRMED</Text>
       </View>
 
-      <Text style={card.route}>{flightLabel}</Text>
+      <Text style={[card.route, { color: colors.textOnSurface }]}>{flightLabel}</Text>
 
       {flight && (
-        <View style={card.section}>
+        <View style={[card.section, { backgroundColor: colors.surface }]}>
           <View style={card.statusRow}>
-            <Text style={card.sectionTitle}>Flight Status</Text>
+            <Text style={[card.sectionTitle, { color: colors.textOnSurface }]}>Flight Status</Text>
             <View style={card.statusBadge}>
-              <View style={card.statusDot} />
-              <Text style={card.statusText}>
+              <View style={[card.statusDot, { backgroundColor: colors.success }]} />
+              <Text style={[card.statusText, { color: colors.success }]}>
                 {flight.status === 'available' ? 'Open' : flight.status ?? 'Active'}
               </Text>
             </View>
           </View>
           <View style={card.logRow}>
-            <Text style={card.logText}>Departure</Text>
-            <Text style={card.logTime}>{flight.departureDate} · {flight.departureTime}</Text>
+            <Text style={[card.logText, { color: colors.mutedForegroundLight }]}>Departure</Text>
+            <Text style={[card.logTime, { color: colors.mutedForegroundLight }]}>{flight.departureDate} · {flight.departureTime}</Text>
           </View>
           <View style={card.logRow}>
-            <Text style={card.logText}>Route</Text>
-            <Text style={card.logTime}>{flight.fromCity} → {flight.toCity}</Text>
+            <Text style={[card.logText, { color: colors.mutedForegroundLight }]}>Route</Text>
+            <Text style={[card.logTime, { color: colors.mutedForegroundLight }]}>{flight.fromCity} → {flight.toCity}</Text>
           </View>
         </View>
       )}
 
       <TouchableOpacity
-        style={[card.primaryBtn, confirmed.tripsBtn]}
+        style={[card.primaryBtn, confirmed.tripsBtn, { backgroundColor: colors.backgroundMid }]}
         onPress={() => router.push('/(tabs)/trips')}
         activeOpacity={0.85}
       >
-        <Text style={card.primaryBtnText}>View in My Trips</Text>
+        <Text style={[card.primaryBtnText, { color: '#fff' }]}>View in My Trips</Text>
       </TouchableOpacity>
     </View>
   );
@@ -238,10 +235,8 @@ function formatAgo(iso: string): string {
 const confirmed = StyleSheet.create({
   wrap: {
     borderWidth: 1.5,
-    borderColor: 'rgba(30,158,92,0.30)',
   },
   badge: {
-    backgroundColor: 'rgba(30,158,92,0.12)',
     borderRadius: 999,
     paddingHorizontal: 16,
     paddingVertical: 6,
@@ -250,11 +245,9 @@ const confirmed = StyleSheet.create({
   badgeText: {
     fontFamily: 'Inter_700Bold',
     fontSize: 13,
-    color: '#1E9E5C',
     letterSpacing: 0.5,
   },
   tripsBtn: {
-    backgroundColor: '#0A1128',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowRadius: 16,
@@ -265,7 +258,6 @@ const confirmed = StyleSheet.create({
 const card = StyleSheet.create({
   wrap: {
     width: '100%',
-    backgroundColor: '#fff',
     borderRadius: 24,
     padding: 22,
     alignItems: 'center',
@@ -280,14 +272,12 @@ const card = StyleSheet.create({
   route: {
     fontFamily: 'Inter_700Bold',
     fontSize: 22,
-    color: DARK,
     letterSpacing: -0.4,
     alignSelf: 'center',
   },
-  countdown: { fontFamily: 'Inter_700Bold', fontSize: 15, color: BLUE },
+  countdown: { fontFamily: 'Inter_700Bold', fontSize: 15 },
   section: {
     width: '100%',
-    backgroundColor: '#fff',
     borderRadius: 18,
     padding: 16,
     gap: 10,
@@ -297,62 +287,57 @@ const card = StyleSheet.create({
     shadowOpacity: 0.05,
     elevation: 2,
   },
-  sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 13, color: DARK },
+  sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 13 },
   logRow:  { flexDirection: 'row', justifyContent: 'space-between' },
-  logText: { fontFamily: 'Inter_400Regular', fontSize: 13, color: 'rgba(10,17,40,0.55)' },
-  logTime: { fontFamily: 'Inter_400Regular', fontSize: 13, color: MUTED },
+  logText: { fontFamily: 'Inter_400Regular', fontSize: 13 },
+  logTime: { fontFamily: 'Inter_400Regular', fontSize: 13 },
   statusRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  statusDot:   { width: 7, height: 7, borderRadius: 3.5, backgroundColor: SUCCESS },
-  statusText:  { fontFamily: 'Inter_700Bold', fontSize: 13, color: SUCCESS },
+  statusDot:   { width: 7, height: 7, borderRadius: 3.5 },
+  statusText:  { fontFamily: 'Inter_700Bold', fontSize: 13 },
   disclaimer: {
     width: '100%',
-    backgroundColor: `${BLUE}0D`,
     borderRadius: 14,
     padding: 14,
   },
-  disclaimerText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, color: DARK },
+  disclaimerText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19 },
   primaryBtn: {
     width: '100%',
-    backgroundColor: BLUE,
     borderRadius: 999,
     paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: BLUE,
     shadowOffset: { width: 0, height: 14 },
     shadowRadius: 26,
     shadowOpacity: 0.32,
     elevation: 6,
   },
-  primaryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: '#fff' },
+  primaryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   confirmBtn: {
     width: '100%',
-    backgroundColor: SUCCESS,
     borderRadius: 999,
     paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: SUCCESS,
     shadowOffset: { width: 0, height: 14 },
     shadowRadius: 26,
     shadowOpacity: 0.32,
     elevation: 6,
   },
-  confirmBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: '#fff' },
+  confirmBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   ghostBtn: { paddingVertical: 4 },
-  ghostBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: MUTED, textAlign: 'center' },
+  ghostBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, textAlign: 'center' },
   leaveBtn: {
     borderWidth: 1,
-    borderColor: 'rgba(10,17,40,0.15)',
     borderRadius: 999,
     width: '100%',
     paddingVertical: 13,
     alignItems: 'center',
   },
-  leaveBtnText: { fontFamily: 'Inter_400Regular', fontSize: 14, color: MUTED },
+  leaveBtnText: { fontFamily: 'Inter_400Regular', fontSize: 14 },
 });
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 export default function QueueStatusScreen() {
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const topPad    = Platform.OS === 'web' ? 60 : insets.top;
@@ -416,27 +401,27 @@ export default function QueueStatusScreen() {
   const backTop = topPad + 14;
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity style={[styles.backBtn, { top: backTop }]} onPress={() => router.back()} activeOpacity={0.7}>
-        <Text style={styles.backChevron}>‹</Text>
+    <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
+      <TouchableOpacity style={[styles.backBtn, { top: backTop, backgroundColor: colors.muted }]} onPress={() => router.back()} activeOpacity={0.7}>
+        <Text style={[styles.backChevron, { color: colors.textOnSurface }]}>‹</Text>
       </TouchableOpacity>
 
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator color={BLUE} size="large" />
+          <ActivityIndicator color={colors.primary} size="large" />
         </View>
       ) : !hasAny ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No active queues</Text>
-          <Text style={styles.emptyBody}>
+          <Text style={[styles.emptyTitle, { color: colors.textOnSurface }]}>No active queues</Text>
+          <Text style={[styles.emptyBody, { color: colors.mutedForegroundLight }]}>
             Browse available flights and join a queue to see your status here.
           </Text>
           <TouchableOpacity
-            style={styles.browseBtn}
+            style={[styles.browseBtn, { backgroundColor: colors.primary }]}
             onPress={() => router.replace('/(tabs)/discover')}
             activeOpacity={0.8}
           >
-            <Text style={styles.browseBtnText}>Browse Flights</Text>
+            <Text style={[styles.browseBtnText, { color: colors.primaryForeground }]}>Browse Flights</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -466,23 +451,21 @@ export default function QueueStatusScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: BG },
+  container: { flex: 1 },
   backBtn: {
     position: 'absolute', zIndex: 10, left: 18,
     width: 38, height: 38, borderRadius: 19,
-    backgroundColor: 'rgba(10,17,40,0.06)',
     alignItems: 'center', justifyContent: 'center',
   },
-  backChevron: { fontSize: 24, color: DARK, lineHeight: 28, marginLeft: -2 },
+  backChevron: { fontSize: 24, lineHeight: 28, marginLeft: -2 },
   scrollContent: { paddingHorizontal: 22, alignItems: 'center' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 12 },
-  emptyTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 20, color: DARK },
-  emptyBody:  { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 22, color: MUTED, textAlign: 'center' },
+  emptyTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 20 },
+  emptyBody:  { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 22, textAlign: 'center' },
   browseBtn: {
     marginTop: 6,
-    backgroundColor: BLUE,
     paddingHorizontal: 24, paddingVertical: 14, borderRadius: 999,
   },
-  browseBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#fff' },
+  browseBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
 });

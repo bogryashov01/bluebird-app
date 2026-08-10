@@ -115,11 +115,11 @@ export default function MembershipScreen() {
         {/* ── Header ── */}
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
-            <Text style={[styles.headerName, { color: colors.backgroundMid }]} numberOfLines={1}>{user?.name ?? 'Member'}</Text>
+            <Text style={[styles.headerName, { color: colors.textOnSurface }]} numberOfLines={1}>{user?.name ?? 'Member'}</Text>
             <Text style={[styles.headerSub, { color: colors.mutedForegroundLight }]}>Member since {memberSince}</Text>
           </View>
           <View style={[styles.tierPill, { backgroundColor: (TIERS.find(t => t.id === currentTier)?.color ?? colors.primary) + '18' }]}>
-            <Text style={[styles.tierPillText, { color: TIERS.find(t => t.id === currentTier)?.color ?? colors.backgroundMid }]} numberOfLines={1}>
+            <Text style={[styles.tierPillText, { color: TIERS.find(t => t.id === currentTier)?.color ?? colors.textOnSurface }]} numberOfLines={1}>
               {tierLabel}
             </Text>
           </View>
@@ -178,6 +178,7 @@ export default function MembershipScreen() {
               key={tier.id}
               style={[
                 styles.tierCard,
+                { backgroundColor: colors.surface, borderColor: colors.border },
                 isCurrent && { borderColor: tier.color, borderWidth: 2 },
               ]}
             >
@@ -206,10 +207,10 @@ export default function MembershipScreen() {
               {tier.features.map((feat, i) => (
                 <View key={feat} style={[
                   styles.featureRow,
-                  i === 0 && { borderTopWidth: 1, borderTopColor: 'rgba(10,17,40,0.07)' },
+                  i === 0 && { borderTopWidth: 1, borderTopColor: colors.separator },
                 ]}>
                   <Text style={[styles.featureCheck, { color: colors.primary }]}>✓</Text>
-                  <Text style={[styles.featureText, { color: colors.backgroundMid }]}>{feat}</Text>
+                  <Text style={[styles.featureText, { color: colors.textOnSurface }]}>{feat}</Text>
                 </View>
               ))}
             </View>
@@ -255,8 +256,8 @@ const styles = StyleSheet.create({
   upgradeBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#fff' },
 
   tierCard: {
-    backgroundColor: '#fff', borderRadius: 18, borderWidth: 1,
-    borderColor: 'rgba(10,17,40,0.08)', marginBottom: 12, overflow: 'hidden',
+    borderRadius: 18, borderWidth: 1,
+    marginBottom: 12, overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
   },
   tierCardHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
@@ -270,7 +271,7 @@ const styles = StyleSheet.create({
   featureRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 16, paddingVertical: 9,
-    borderTopWidth: 0, borderTopColor: 'rgba(10,17,40,0.06)',
+    borderTopWidth: 0,
   },
   featureCheck: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   featureText:  { fontFamily: 'Inter_400Regular', fontSize: 13, flex: 1 },

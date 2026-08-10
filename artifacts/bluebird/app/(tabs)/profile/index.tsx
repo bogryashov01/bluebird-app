@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Platform, Alert,
+  Platform, Alert, Modal, Pressable,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,51 @@ import { useAuth } from '@/context/AuthContext';
 import { useListNotifications } from '@workspace/api-client-react';
 import type { Notification } from '@workspace/api-client-react';
 import { SettingsGroup } from '@/components/SettingsGroup';
+import { useTheme, type ThemePreference } from '@/context/ThemeContext';
+
+const THEME_OPTIONS: { value: ThemePreference; label: string; hint: string }[] = [
+  { value: 'light',  label: 'Light',  hint: 'Always use the light theme' },
+  { value: 'dark',   label: 'Dark',   hint: 'Always use the dark theme' },
+  { value: 'system', label: 'System', hint: 'Match your device setting' },
+];
+
+function AppearanceSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const colors = useColors();
+  const { preference, setPreference } = useTheme();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+        <Pressable style={[styles.sheet, { backgroundColor: colors.surface }]} onPress={() => {}}>
+          <Text style={[styles.sheetTitle, { color: colors.textOnSurface }]}>Appearance</Text>
+          {THEME_OPTIONS.map((opt, i) => {
+            const active = preference === opt.value;
+            return (
+              <React.Fragment key={opt.value}>
+                {i > 0 && <View style={[styles.sheetSep, { backgroundColor: colors.separator }]} />}
+                <TouchableOpacity
+                  style={styles.sheetRow}
+                  activeOpacity={0.6}
+                  onPress={() => { setPreference(opt.value); onClose(); }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.sheetRowLabel, { color: colors.textOnSurface }]}>{opt.label}</Text>
+                    <Text style={[styles.sheetRowHint, { color: colors.mutedForegroundLight }]}>{opt.hint}</Text>
+                  </View>
+                  <View style={[
+                    styles.radioOuter,
+                    { borderColor: active ? colors.primary : colors.border },
+                  ]}>
+                    {active && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
+                  </View>
+                </TouchableOpacity>
+              </React.Fragment>
+            );
+          })}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -21,6 +66,8 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { user, signOut } = useAuth();
+  const { preference } = useTheme();
+  const [appearanceOpen, setAppearanceOpen] = React.useState(false);
 
   const topPad    = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -53,7 +100,7 @@ export default function ProfileScreen() {
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
           <View>
-            <Text style={[styles.name, { color: colors.backgroundMid }]}>{user?.name ?? 'Member'}</Text>
+            <Text style={[styles.name, { color: colors.textOnSurface }]}>{user?.name ?? 'Member'}</Text>
             <Text style={[styles.memberSince, { color: colors.mutedForegroundLight }]}>
               {tierLabel} since {memberSince}
             </Text>
@@ -84,6 +131,11 @@ export default function ProfileScreen() {
         <SettingsGroup
           title="Preferences"
           rows={[
+            {
+              label: 'Appearance',
+              hint: THEME_OPTIONS.find((o) => o.value === preference)?.label,
+              onPress: () => setAppearanceOpen(true),
+            },
             {
               label: 'Notification Settings',
               hint: 'incl. travel preferences',
@@ -126,13 +178,13 @@ export default function ProfileScreen() {
         {recentActivity.length > 0 && (
           <View style={styles.activitySection}>
             <Text style={[styles.activityTitle, { color: colors.mutedForegroundLight }]}>Recent Activity</Text>
-            <View style={styles.activityList}>
+            <View style={[styles.activityList, { backgroundColor: colors.surface }]}>
               {recentActivity.map((item, i) => (
                 <View
                   key={item.id}
                   style={[
                     styles.activityRow,
-                    i < recentActivity.length - 1 && styles.activityRowBorder,
+                    i < recentActivity.length - 1 && [styles.activityRowBorder, { borderBottomColor: colors.separator }],
                   ]}
                 >
                   <View style={[
@@ -140,7 +192,7 @@ export default function ProfileScreen() {
                     { backgroundColor: item.read ? colors.mutedForegroundLight : colors.primary },
                   ]} />
                   <View style={styles.activityContent}>
-                    <Text style={[styles.activityLabel, { color: colors.backgroundMid }]}>{item.title}</Text>
+                    <Text style={[styles.activityLabel, { color: colors.textOnSurface }]}>{item.title}</Text>
                     <Text style={[styles.activityDate, { color: colors.mutedForegroundLight }]}>
                       {fmtDate(item.createdAt)}
                     </Text>
@@ -151,6 +203,7 @@ export default function ProfileScreen() {
           </View>
         )}
       </ScrollView>
+      <AppearanceSheet visible={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
     </View>
   );
 }
@@ -174,6 +227,40 @@ const styles = StyleSheet.create({
 
   signOutChevron: { fontSize: 20, lineHeight: 22 },
 
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
+  sheet: {
+    borderRadius: 18,
+    paddingVertical: 8,
+    overflow: 'hidden',
+  },
+  sheetTitle: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 16,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  sheetSep: { height: 1, marginLeft: 18 },
+  sheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    gap: 12,
+  },
+  sheetRowLabel: { fontFamily: 'Inter_500Medium', fontSize: 15 },
+  sheetRowHint:  { fontFamily: 'Inter_400Regular', fontSize: 12.5, marginTop: 1 },
+  radioOuter: {
+    width: 20, height: 20, borderRadius: 10, borderWidth: 2,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  radioInner: { width: 10, height: 10, borderRadius: 5 },
+
   activitySection: { gap: 10 },
   activityTitle: {
     fontFamily: 'Inter_700Bold', fontSize: 11,
@@ -181,7 +268,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   activityList: {
-    backgroundColor: '#fff', borderRadius: 18,
+    borderRadius: 18,
     shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
     shadowRadius: 20, shadowOpacity: 0.05, elevation: 3,
     overflow: 'hidden', paddingHorizontal: 4, paddingVertical: 4,
@@ -190,7 +277,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13,
   },
   activityRowBorder: {
-    borderBottomWidth: 1, borderBottomColor: 'rgba(10,17,40,0.06)',
+    borderBottomWidth: 1,
   },
   activityDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
   activityContent: { flex: 1 },

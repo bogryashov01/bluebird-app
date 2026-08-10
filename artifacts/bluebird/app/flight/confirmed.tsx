@@ -75,8 +75,8 @@ export default function FlightConfirmedScreen() {
           onPress={() => router.replace('/(tabs)/trips')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.primaryBtnText, { fontFamily: 'Inter_600SemiBold' }]}>View My Trips</Text>
-          <Feather name="briefcase" size={18} color="#fff" />
+          <Text style={[styles.primaryBtnText, { color: colors.primaryForeground, fontFamily: 'Inter_600SemiBold' }]}>View My Trips</Text>
+          <Feather name="briefcase" size={18} color={colors.primaryForeground} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.secondaryBtn, { borderColor: colors.border }]}

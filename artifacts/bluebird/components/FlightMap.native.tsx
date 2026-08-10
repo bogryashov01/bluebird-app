@@ -7,12 +7,12 @@
  * at the endpoints. Featured flights render in orange.
  */
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Platform, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import type { Flight } from '@workspace/api-client-react';
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import { useColors } from '@/hooks/useColors';
 
 /** Coordinates for all seeded airports (origins and destinations) */
 const AIRPORT_COORDS: Record<string, { latitude: number; longitude: number; label: string }> = {
@@ -32,6 +32,18 @@ const AIRPORT_COORDS: Record<string, { latitude: number; longitude: number; labe
 
 const NAVY = '#1B2A5B';
 const ORANGE = '#F5842E';
+
+/** Muted dark style — applies on Google-provider maps (Android). iOS Apple Maps uses userInterfaceStyle. */
+const DARK_MAP_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#0D1636' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8896B3' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0A1128' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#060B1F' }] },
+  { featureType: 'road', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'administrative.province', elementType: 'geometry.stroke', stylers: [{ color: '#1E2D4F' }] },
+];
 
 /** Muted light style — applies on Google-provider maps (Android). iOS Apple Maps uses mapType "mutedStandard". */
 const LIGHT_MAP_STYLE = [
@@ -89,8 +101,14 @@ function bearing(p1: LatLng, p2: LatLng): number {
 }
 
 export default function FlightMap({ flights }: Props) {
+  const colors = useColors();
   const { height: screenHeight } = useWindowDimensions();
   const mapHeight = Math.round(screenHeight * 0.55);
+
+  const isDark = colors.scheme === 'dark';
+  const routeColor = isDark ? '#7FA8FA' : NAVY;   // brand blue, lightened for dark tiles
+  const labelColor = isDark ? '#BFD3FB' : NAVY;
+  const halo       = isDark ? '#0A1128' : '#fff';
 
   const routes = React.useMemo(
     () =>
@@ -106,7 +124,7 @@ export default function FlightMap({ flights }: Props) {
             pts,
             mid: pts[midIdx],
             rot: bearing(pts[midIdx - 2], pts[midIdx + 2]),
-            color: f.featured ? ORANGE : NAVY,
+            featured: !!f.featured,
           };
         }),
     [flights],
@@ -124,8 +142,8 @@ export default function FlightMap({ flights }: Props) {
   if (routes.length === 0) {
     return (
       <View style={styles.placeholder}>
-        <Feather name="map" size={28} color="rgba(255,255,255,0.35)" />
-        <Text style={styles.emptyText}>No flights to display</Text>
+        <Feather name="map" size={28} color={colors.mutedForeground} />
+        <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No flights to display</Text>
       </View>
     );
   }
@@ -137,9 +155,9 @@ export default function FlightMap({ flights }: Props) {
       <MapView
         style={styles.map}
         provider={PROVIDER_DEFAULT}
-        customMapStyle={LIGHT_MAP_STYLE}
+        customMapStyle={isDark ? DARK_MAP_STYLE : LIGHT_MAP_STYLE}
         mapType={Platform.OS === 'ios' ? 'mutedStandard' : 'standard'}
-        userInterfaceStyle="light"
+        userInterfaceStyle={isDark ? 'dark' : 'light'}
         initialRegion={{
           latitude: 39.5,
           longitude: -98.35,
@@ -147,7 +165,9 @@ export default function FlightMap({ flights }: Props) {
           longitudeDelta: 55,
         }}
       >
-        {routes.map(({ flight, pts, mid, rot, color }) => (
+        {routes.map(({ flight, pts, mid, rot, featured }) => {
+          const color = featured ? ORANGE : routeColor;
+          return (
           <React.Fragment key={flight.id}>
             <Polyline
               coordinates={pts}
@@ -167,7 +187,8 @@ export default function FlightMap({ flights }: Props) {
               </View>
             </Marker>
           </React.Fragment>
-        ))}
+          );
+        })}
         {airports.map(([code, flight]) => {
           const c = AIRPORT_COORDS[code];
           return (
@@ -179,19 +200,19 @@ export default function FlightMap({ flights }: Props) {
               onPress={() => goTo(flight.id)}
             >
               <View style={styles.airportMarker}>
-                <View style={styles.airportDot} />
-                <Text style={styles.airportCode}>{code}</Text>
+                <View style={[styles.airportDot, { backgroundColor: routeColor, borderColor: halo }]} />
+                <Text style={[styles.airportCode, { color: labelColor, textShadowColor: halo }]}>{code}</Text>
               </View>
             </Marker>
           );
         })}
       </MapView>
       <View style={styles.legend}>
-        <View style={styles.legendPill}>
-          <View style={[styles.legendSwatch, { backgroundColor: NAVY }]} />
-          <Text style={styles.legendText}>Available</Text>
+        <View style={[styles.legendPill, { backgroundColor: isDark ? 'rgba(13,22,54,0.92)' : 'rgba(255,255,255,0.92)' }]}>
+          <View style={[styles.legendSwatch, { backgroundColor: routeColor }]} />
+          <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Available</Text>
           <View style={[styles.legendSwatch, { backgroundColor: ORANGE, marginLeft: 10 }]} />
-          <Text style={styles.legendText}>Featured</Text>
+          <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Featured</Text>
         </View>
       </View>
     </View>
@@ -202,16 +223,16 @@ const styles = StyleSheet.create({
   container: { marginHorizontal: 20, marginBottom: 20, borderRadius: 18, overflow: 'hidden' },
   map: { flex: 1 },
   placeholder: { alignItems: 'center', gap: 10, paddingVertical: 40 },
-  emptyText: { fontSize: 15, color: 'rgba(255,255,255,0.5)', fontFamily: 'Inter_400Regular' },
+  emptyText: { fontSize: 15, fontFamily: 'Inter_400Regular' },
   airportMarker: { alignItems: 'center' },
   airportDot: {
     width: 7, height: 7, borderRadius: 999,
-    backgroundColor: NAVY, borderWidth: 1.5, borderColor: '#fff',
+    borderWidth: 1.5,
   },
   airportCode: {
-    fontSize: 10, fontFamily: 'Inter_700Bold', color: NAVY,
+    fontSize: 10, fontFamily: 'Inter_700Bold',
     letterSpacing: 0.3, marginTop: 1,
-    textShadowColor: '#fff', textShadowRadius: 2,
+    textShadowRadius: 2,
   },
   legend: {
     position: 'absolute', bottom: 8, left: 0, right: 0,
@@ -219,12 +240,11 @@ const styles = StyleSheet.create({
   },
   legendPill: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.92)',
     paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999,
   },
   legendSwatch: { width: 14, height: 3, borderRadius: 2 },
   legendText: {
-    fontSize: 12, color: 'rgba(0,0,0,0.65)',
+    fontSize: 12,
     fontFamily: 'Inter_400Regular',
   },
 });

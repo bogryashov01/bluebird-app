@@ -51,9 +51,9 @@ function TripCard({ flight, badge, badgeBlue, onPress, colors }: {
       <View style={styles.cardBadgeWrap}>
         <View style={[
           styles.cardBadge,
-          { backgroundColor: badgeBlue ? colors.primary : 'rgba(255,255,255,0.15)' },
+          { backgroundColor: badgeBlue ? colors.primary : colors.secondary },
         ]}>
-          <Text style={[styles.cardBadgeText, { color: colors.foreground }]}>{badge}</Text>
+          <Text style={[styles.cardBadgeText, { color: badgeBlue ? colors.primaryForeground : colors.secondaryForeground }]}>{badge}</Text>
         </View>
       </View>
       <View style={styles.cardBody}>
@@ -126,7 +126,7 @@ export default function TripsScreen() {
               style={[styles.discoverBtn, { backgroundColor: colors.primary }]}
               onPress={() => router.replace('/(tabs)/discover')}
             >
-              <Text style={[styles.discoverBtnText, { color: colors.foreground }]}>Browse Flights</Text>
+              <Text style={[styles.discoverBtnText, { color: colors.primaryForeground }]}>Browse Flights</Text>
             </TouchableOpacity>
           </View>
         );
@@ -163,7 +163,7 @@ export default function TripsScreen() {
               style={[styles.discoverBtn, { backgroundColor: colors.primary }]}
               onPress={() => router.replace('/(tabs)/discover')}
             >
-              <Text style={[styles.discoverBtnText, { color: colors.foreground }]}>Browse Flights</Text>
+              <Text style={[styles.discoverBtnText, { color: colors.primaryForeground }]}>Browse Flights</Text>
             </TouchableOpacity>
           </View>
         );
@@ -226,7 +226,7 @@ export default function TripsScreen() {
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Trips</Text>
 
         {/* 3-tab pill selector */}
-        <View style={[styles.tabRow, { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 14 }]}>
+        <View style={[styles.tabRow, { backgroundColor: colors.card, borderRadius: 14 }]}>
           {TABS.map((tab) => (
             <TouchableOpacity
               key={tab.id}
@@ -239,7 +239,7 @@ export default function TripsScreen() {
             >
               <Text style={[
                 styles.tabLabel,
-                { color: activeTab === tab.id ? colors.foreground : colors.mutedForeground },
+                { color: activeTab === tab.id ? colors.primaryForeground : colors.mutedForeground },
               ]}>
                 {tab.label}
               </Text>

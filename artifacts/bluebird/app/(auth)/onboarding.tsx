@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList, Platform, useWindow
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useColors } from '@/hooks/useColors';
 
 const SLIDES = [
   {
@@ -90,6 +91,7 @@ function Slide({ item, width }: SlideProps) {
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
   const { width: screenWidth } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
@@ -107,7 +109,7 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: topPad, paddingBottom: bottomPad + 24 }]}>
+    <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad, paddingBottom: bottomPad + 24 }]}>
       <View style={styles.topRow}>
         <View style={styles.logoRow}>
           <Feather name="send" size={18} color="#1259F2" style={{ transform: [{ rotate: '-45deg' }] }} />
@@ -137,12 +139,12 @@ export default function OnboardingScreen() {
           {SLIDES.map((_, i) => (
             <View
               key={i}
-              style={[styles.dot, { backgroundColor: i === activeIndex ? '#1259F2' : '#1E2D4F', width: i === activeIndex ? 20 : 6 }]}
+              style={[styles.dot, { backgroundColor: i === activeIndex ? colors.primary : colors.border, width: i === activeIndex ? 20 : 6 }]}
             />
           ))}
         </View>
 
-        <TouchableOpacity style={styles.nextButton} onPress={goNext} activeOpacity={0.8}>
+        <TouchableOpacity style={[styles.nextButton, { backgroundColor: colors.primary }]} onPress={goNext} activeOpacity={0.8}>
           <Text style={styles.nextButtonText}>
             {activeIndex === SLIDES.length - 1 ? 'Get Started' : 'Next'}
           </Text>
@@ -162,7 +164,6 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A1128',
   },
   topRow: {
     flexDirection: 'row',
@@ -293,7 +294,6 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   nextButton: {
-    backgroundColor: '#1259F2',
     borderRadius: 999,
     height: 56,
     flexDirection: 'row',

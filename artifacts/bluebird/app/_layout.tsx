@@ -15,8 +15,9 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { setBaseUrl } from '@workspace/api-client-react';
 import { AuthProvider } from '@/context/AuthContext';
-import { Platform } from 'react-native';
-import colors from '@/constants/colors';
+import { ThemeProvider } from '@/context/ThemeContext';
+import { useColors } from '@/hooks/useColors';
+import { StatusBar } from 'expo-status-bar';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -34,13 +35,22 @@ const queryClient = new QueryClient({
   },
 });
 
-const HEADER_STYLE = {
-  backgroundColor: colors.light.backgroundMid,
-} as const;
-
 function RootLayoutNav() {
+  const colors = useColors();
+  const HEADER_STYLE = { backgroundColor: colors.headerBackground } as const;
+  const headerOptions = {
+    headerStyle: HEADER_STYLE,
+    headerTintColor: colors.headerForeground,
+    headerTitleStyle: { fontFamily: 'Inter_600SemiBold' },
+  } as const;
   return (
-    <Stack>
+    <>
+    <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
+    <Stack
+      screenOptions={{
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -50,7 +60,7 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="flight/policy"
-        options={{ headerShown: true, title: 'Flight Policy', headerStyle: HEADER_STYLE, headerTintColor: '#fff', headerTitleStyle: { fontFamily: 'Inter_600SemiBold' } }}
+        options={{ headerShown: true, title: 'Flight Policy', ...headerOptions }}
       />
       <Stack.Screen
         name="flight/confirmed"
@@ -58,7 +68,7 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="queue/join"
-        options={{ headerShown: true, title: 'Join Queue', headerStyle: HEADER_STYLE, headerTintColor: '#fff', headerTitleStyle: { fontFamily: 'Inter_600SemiBold' } }}
+        options={{ headerShown: true, title: 'Join Queue', ...headerOptions }}
       />
       <Stack.Screen
         name="queue/status"
@@ -66,11 +76,11 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="concierge"
-        options={{ headerShown: true, title: 'AI Concierge', headerStyle: HEADER_STYLE, headerTintColor: '#fff', headerTitleStyle: { fontFamily: 'Inter_600SemiBold' } }}
+        options={{ headerShown: true, title: 'AI Concierge', ...headerOptions }}
       />
       <Stack.Screen
         name="referral"
-        options={{ headerShown: true, title: 'Referral', headerStyle: HEADER_STYLE, headerTintColor: '#fff', headerTitleStyle: { fontFamily: 'Inter_600SemiBold' } }}
+        options={{ headerShown: true, title: 'Referral', ...headerOptions }}
       />
       <Stack.Screen
         name="notifications"
@@ -78,9 +88,10 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="community"
-        options={{ headerShown: true, title: 'Community', headerStyle: HEADER_STYLE, headerTintColor: '#fff', headerTitleStyle: { fontFamily: 'Inter_600SemiBold' } }}
+        options={{ headerShown: true, title: 'Community', ...headerOptions }}
       />
     </Stack>
+    </>
   );
 }
 
@@ -106,9 +117,11 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
-              <AuthProvider>
-                <RootLayoutNav />
-              </AuthProvider>
+              <ThemeProvider>
+                <AuthProvider>
+                  <RootLayoutNav />
+                </AuthProvider>
+              </ThemeProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>

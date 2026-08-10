@@ -114,7 +114,7 @@ export default function ConciergeScreen() {
           <View style={[styles.messageRow, item.role === 'user' && styles.messageRowUser]}>
             {item.role === 'assistant' && (
               <View style={[styles.avatarBadge, { backgroundColor: colors.primary }]}>
-                <Feather name="cpu" size={12} color="#fff" />
+                <Feather name="cpu" size={12} color={colors.primaryForeground} />
               </View>
             )}
             <View style={[
@@ -124,14 +124,14 @@ export default function ConciergeScreen() {
                 borderColor: item.role === 'user' ? 'transparent' : colors.border,
               }
             ]}>
-              <Text style={[styles.bubbleText, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}>{item.text}</Text>
+              <Text style={[styles.bubbleText, { color: item.role === 'user' ? colors.primaryForeground : colors.foreground, fontFamily: 'Inter_400Regular' }]}>{item.text}</Text>
             </View>
           </View>
         )}
         ListFooterComponent={isTyping ? (
           <View style={[styles.messageRow]}>
             <View style={[styles.avatarBadge, { backgroundColor: colors.primary }]}>
-              <Feather name="cpu" size={12} color="#fff" />
+              <Feather name="cpu" size={12} color={colors.primaryForeground} />
             </View>
             <View style={[styles.bubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Text style={[styles.typingText, { color: colors.mutedForeground }]}>...</Text>
@@ -158,7 +158,7 @@ export default function ConciergeScreen() {
           disabled={!input.trim()}
           activeOpacity={0.8}
         >
-          <Feather name="send" size={16} color={input.trim() ? '#fff' : colors.mutedForeground} />
+          <Feather name="send" size={16} color={input.trim() ? colors.primaryForeground : colors.mutedForeground} />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

@@ -15,12 +15,12 @@ export function StatCard({ label, value, variant = 'light' }: StatCardProps) {
   return (
     <View style={[
       styles.card,
-      { backgroundColor: isLight ? '#fff' : colors.card },
+      { backgroundColor: isLight ? colors.surface : colors.card },
     ]}>
       <Text style={[styles.label, { color: isLight ? colors.mutedForegroundLight : colors.mutedForeground }]}>
         {label}
       </Text>
-      <Text style={[styles.value, { color: isLight ? colors.backgroundMid : colors.foreground }]}>
+      <Text style={[styles.value, { color: isLight ? colors.textOnSurface : colors.foreground }]}>
         {value}
       </Text>
     </View>

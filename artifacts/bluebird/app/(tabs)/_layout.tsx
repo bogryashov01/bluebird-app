@@ -1,6 +1,7 @@
 import React from 'react';
 import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
+import { useTheme } from '@/context/ThemeContext';
 import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { isLiquidGlassAvailable } from 'expo-glass-effect';
@@ -58,7 +59,7 @@ function ClassicTabLayout() {
           isIOS ? (
             <BlurView
               intensity={80}
-              tint="dark"
+              tint={colors.scheme === 'dark' ? 'dark' : 'light'}
               style={StyleSheet.absoluteFill}
             />
           ) : isWeb ? (
@@ -124,7 +125,10 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
+  const { preference } = useTheme();
+  // Native tabs follow the OS appearance only — use them just when the user's
+  // theme preference is "System"; a forced Light/Dark needs the themed classic tabs.
+  if (isLiquidGlassAvailable() && preference === 'system') {
     return <NativeTabLayout />;
   }
   return <ClassicTabLayout />;

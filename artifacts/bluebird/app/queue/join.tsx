@@ -120,13 +120,13 @@ export default function JoinQueueScreen() {
           activeOpacity={0.8}
         >
           {joinMutation.isPending ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.primaryForeground} />
           ) : (
             <>
-              <Text style={[styles.confirmBtnText, { fontFamily: 'Inter_600SemiBold' }]}>
+              <Text style={[styles.confirmBtnText, { color: colors.primaryForeground, fontFamily: 'Inter_600SemiBold' }]}>
                 {useLinePass ? 'Skip the Line & Join' : 'Join the Queue'}
               </Text>
-              <Feather name="arrow-right" size={18} color="#fff" />
+              <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
             </>
           )}
         </TouchableOpacity>

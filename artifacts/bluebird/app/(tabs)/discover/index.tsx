@@ -154,7 +154,7 @@ export default function DiscoverScreen() {
                   </Text>
                 </View>
                 <TouchableOpacity
-                  style={[styles.conciergeBtn, { backgroundColor: 'rgba(255,255,255,0.10)' }]}
+                  style={[styles.conciergeBtn, { backgroundColor: colors.card }]}
                   onPress={() => router.push('/concierge')}
                 >
                   <Feather name="message-circle" size={18} color={colors.foreground} />
@@ -179,12 +179,12 @@ export default function DiscoverScreen() {
                   <ImageBackground source={HERO} style={styles.featuredImage} imageStyle={{ borderRadius: 24 }}>
                     <View style={styles.featuredOverlay} />
                     <View style={[styles.featuredBadge, { backgroundColor: colors.primary }]}>
-                      <Text style={[styles.featuredBadgeText, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+                      <Text style={[styles.featuredBadgeText, { color: colors.primaryForeground, fontFamily: 'Inter_700Bold' }]}>
                         FEATURED EMPTY LEG
                       </Text>
                     </View>
                     <View style={styles.featuredBottom}>
-                      <Text style={[styles.featuredRoute, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+                      <Text style={[styles.featuredRoute, { color: '#FFFFFF', fontFamily: 'Inter_700Bold' }]}>
                         {featured.fromCity} → {featured.toCity}
                       </Text>
                       <View style={styles.featuredMetaRow}>
@@ -203,7 +203,7 @@ export default function DiscoverScreen() {
               )}
 
               {/* Search */}
-              <View style={[styles.searchWrap, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
+              <View style={[styles.searchWrap, { backgroundColor: colors.card }]}>
                 <Feather name="search" size={16} color={colors.mutedForeground} />
                 <TextInput
                   style={[styles.searchInput, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
@@ -221,7 +221,7 @@ export default function DiscoverScreen() {
                     key={f}
                     style={[
                       styles.filterChip,
-                      { backgroundColor: f === activeFilter ? colors.primary : 'rgba(255,255,255,0.08)' },
+                      { backgroundColor: f === activeFilter ? colors.primary : colors.card },
                     ]}
                     onPress={() => setActiveFilter(f)}
                     activeOpacity={0.7}
@@ -229,7 +229,7 @@ export default function DiscoverScreen() {
                     <Text style={[
                       styles.filterChipText,
                       { fontFamily: 'Inter_600SemiBold' },
-                      { color: f === activeFilter ? colors.foreground : colors.mutedForeground },
+                      { color: f === activeFilter ? colors.primaryForeground : colors.mutedForeground },
                     ]}>
                       {f}
                     </Text>
@@ -240,7 +240,7 @@ export default function DiscoverScreen() {
               {/* List / Map toggle */}
               <View style={styles.toggleRow}>
                 <TouchableOpacity
-                  style={[styles.toggleBtn, view === 'list' && { backgroundColor: 'rgba(255,255,255,0.10)' }]}
+                  style={[styles.toggleBtn, view === 'list' && { backgroundColor: colors.card }]}
                   onPress={() => setView('list')}
                 >
                   <Text style={[
@@ -250,7 +250,7 @@ export default function DiscoverScreen() {
                   ]}>List</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.toggleBtn, view === 'map' && { backgroundColor: 'rgba(255,255,255,0.10)' }]}
+                  style={[styles.toggleBtn, view === 'map' && { backgroundColor: colors.card }]}
                   onPress={() => setView('map')}
                 >
                   <Text style={[

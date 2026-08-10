@@ -1,2 +1,3 @@
 - [API contract & schema sync](api-contract-sync.md) — new endpoints/fields go through openapi.yaml + codegen; new columns need ensureSchema() too, not just a live-DB ALTER.
+- [Bluebird theming](bluebird-theming.md) — all colors via useColors() tokens (no literals); semantic tokens & native-tabs caveat inside.
 - [Orval codegen post-patch](orval-codegen-patch.md) — generated hooks need the Partial<UseQueryOptions> patch step in the codegen command; never hand-edit generated api.ts.

@@ -11,14 +11,14 @@ import { useColors } from '@/hooks/useColors';
 import { SettingsGroup } from '@/components/SettingsGroup';
 
 // ── Toggle pill ───────────────────────────────────────────────────────────────
-function Toggle({ value, onToggle, activeColor }: { value: boolean; onToggle: () => void; activeColor: string }) {
+function Toggle({ value, onToggle, activeColor, trackOff, knobColor }: { value: boolean; onToggle: () => void; activeColor: string; trackOff: string; knobColor: string }) {
   return (
     <TouchableOpacity
-      style={[styles.toggle, { backgroundColor: value ? activeColor : 'rgba(10,17,40,0.12)' }]}
+      style={[styles.toggle, { backgroundColor: value ? activeColor : trackOff }]}
       onPress={onToggle}
       activeOpacity={0.8}
     >
-      <View style={[styles.toggleKnob, { transform: [{ translateX: value ? 18 : 2 }] }]} />
+      <View style={[styles.toggleKnob, { backgroundColor: knobColor, transform: [{ translateX: value ? 18 : 2 }] }]} />
     </TouchableOpacity>
   );
 }
@@ -65,12 +65,12 @@ export default function NotificationsScreen() {
       {/* Custom header */}
       <View style={[
         styles.header,
-        { paddingTop: topPad + 12, borderBottomColor: 'rgba(10,17,40,0.06)' },
+        { paddingTop: topPad + 12, borderBottomColor: colors.separator },
       ]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-          <Text style={[styles.backChevron, { color: colors.backgroundMid }]}>‹</Text>
+        <TouchableOpacity style={[styles.backBtn, { backgroundColor: colors.muted }]} onPress={() => router.back()} activeOpacity={0.7}>
+          <Text style={[styles.backChevron, { color: colors.textOnSurface }]}>‹</Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.backgroundMid }]}>Notifications</Text>
+        <Text style={[styles.headerTitle, { color: colors.textOnSurface }]}>Notifications</Text>
       </View>
 
       <ScrollView
@@ -91,23 +91,23 @@ export default function NotificationsScreen() {
         <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight, marginTop: 24 }]}>
           FLIGHT NOTIFICATIONS
         </Text>
-        <View style={styles.toggleCard}>
+        <View style={[styles.toggleCard, { backgroundColor: colors.surface }]}>
           {([
             ['flightFromHome', 'Flights from Home Airport'],
             ['allFlights',     'All New Flights'],
           ] as const).map(([key, label], i, arr) => (
             <View key={key}>
               <View style={styles.toggleRow}>
-                <Text style={[styles.toggleLabel, { color: colors.backgroundMid }]}>{label}</Text>
-                <Toggle value={toggles[key]} onToggle={() => flip(key)} activeColor={colors.primary} />
+                <Text style={[styles.toggleLabel, { color: colors.textOnSurface }]}>{label}</Text>
+                <Toggle value={toggles[key]} onToggle={() => flip(key)} activeColor={colors.primary} trackOff={colors.muted} knobColor={colors.primaryForeground} />
               </View>
-              {i < arr.length - 1 && <View style={styles.sep} />}
+              {i < arr.length - 1 && <View style={[styles.sep, { backgroundColor: colors.separator }]} />}
             </View>
           ))}
         </View>
 
         <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight, marginTop: 24 }]}>UPDATES</Text>
-        <View style={styles.toggleCard}>
+        <View style={[styles.toggleCard, { backgroundColor: colors.surface }]}>
           {([
             ['queueUpdates',  'Queue Position Updates'],
             ['seatConfirmed', 'Seat Confirmed'],
@@ -115,10 +115,10 @@ export default function NotificationsScreen() {
           ] as const).map(([key, label], i, arr) => (
             <View key={key}>
               <View style={styles.toggleRow}>
-                <Text style={[styles.toggleLabel, { color: colors.backgroundMid }]}>{label}</Text>
-                <Toggle value={toggles[key]} onToggle={() => flip(key)} activeColor={colors.primary} />
+                <Text style={[styles.toggleLabel, { color: colors.textOnSurface }]}>{label}</Text>
+                <Toggle value={toggles[key]} onToggle={() => flip(key)} activeColor={colors.primary} trackOff={colors.muted} knobColor={colors.primaryForeground} />
               </View>
-              {i < arr.length - 1 && <View style={styles.sep} />}
+              {i < arr.length - 1 && <View style={[styles.sep, { backgroundColor: colors.separator }]} />}
             </View>
           ))}
         </View>
@@ -135,7 +135,7 @@ export default function NotificationsScreen() {
             <Text style={[styles.emptyText, { color: colors.mutedForegroundLight }]}>No notifications yet</Text>
           </View>
         ) : (
-          <View style={styles.activityList}>
+          <View style={[styles.activityList, { backgroundColor: colors.surface }]}>
             {notifications.map((item: any, i: number) => (
               <React.Fragment key={item.id}>
                 <TouchableOpacity
@@ -150,7 +150,7 @@ export default function NotificationsScreen() {
                   <View style={styles.activityContent}>
                     <Text style={[
                       styles.activityTitle,
-                      { color: colors.backgroundMid, fontFamily: item.read ? 'Inter_400Regular' : 'Inter_600SemiBold' },
+                      { color: colors.textOnSurface, fontFamily: item.read ? 'Inter_400Regular' : 'Inter_600SemiBold' },
                     ]}>
                       {item.title}
                     </Text>
@@ -162,7 +162,7 @@ export default function NotificationsScreen() {
                     {timeAgo(item.createdAt)}
                   </Text>
                 </TouchableOpacity>
-                {i < notifications.length - 1 && <View style={styles.activitySep} />}
+                {i < notifications.length - 1 && <View style={[styles.activitySep, { backgroundColor: colors.separator }]} />}
               </React.Fragment>
             ))}
           </View>
@@ -182,7 +182,6 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(10,17,40,0.05)',
     alignItems: 'center', justifyContent: 'center',
   },
   backChevron:  { fontFamily: 'Inter_500Medium', fontSize: 22, marginTop: -2 },
@@ -196,7 +195,7 @@ const styles = StyleSheet.create({
   },
 
   toggleCard: {
-    backgroundColor: '#fff', borderRadius: 18,
+    borderRadius: 18,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
   },
   toggleRow: {
@@ -204,7 +203,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 14,
   },
   toggleLabel: { fontFamily: 'Inter_400Regular', fontSize: 15, flex: 1, marginRight: 12 },
-  sep: { height: 1, backgroundColor: 'rgba(10,17,40,0.06)', marginHorizontal: 16 },
+  sep: { height: 1, marginHorizontal: 16 },
 
   toggle: {
     width: 44, height: 26, borderRadius: 13,
@@ -212,12 +211,11 @@ const styles = StyleSheet.create({
   },
   toggleKnob: {
     width: 22, height: 22, borderRadius: 11,
-    backgroundColor: '#fff',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowRadius: 3, shadowOpacity: 0.15, elevation: 2,
   },
 
   activityList: {
-    backgroundColor: '#fff', borderRadius: 18,
+    borderRadius: 18,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
   },
   activityRow: {
@@ -229,7 +227,7 @@ const styles = StyleSheet.create({
   activityTitle:   { fontSize: 14, lineHeight: 20 },
   activityBody:    { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 16 },
   activityTime:    { fontFamily: 'Inter_400Regular', fontSize: 11 },
-  activitySep:     { height: 1, backgroundColor: 'rgba(10,17,40,0.06)', marginHorizontal: 16 },
+  activitySep:     { height: 1, marginHorizontal: 16 },
 
   emptyWrap: { paddingVertical: 32, alignItems: 'center' },
   emptyText: { fontFamily: 'Inter_400Regular', fontSize: 14 },

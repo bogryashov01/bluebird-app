@@ -11,6 +11,7 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useColors } from '@/hooks/useColors';
 import type { Flight } from '@workspace/api-client-react';
 import { MapContainer, TileLayer, Marker, Polyline, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
@@ -106,28 +107,37 @@ function planeIcon(rotationDeg: number, color: string) {
   });
 }
 
-function airportLabelIcon(code: string) {
+function airportLabelIcon(code: string, color: string, halo: string) {
   return L.divIcon({
     className: '',
     iconSize: [40, 16],
     iconAnchor: [20, -4],
     html: `<div style="display:flex; justify-content:center;">
-      <span style="font-family: Inter, sans-serif; font-size: 11px; font-weight: 700; color: ${NAVY}; letter-spacing: 0.3px; text-shadow: 0 0 3px #fff, 0 0 3px #fff; white-space: nowrap; cursor:pointer;">${code}</span>
+      <span style="font-family: Inter, sans-serif; font-size: 11px; font-weight: 700; color: ${color}; letter-spacing: 0.3px; text-shadow: 0 0 3px ${halo}, 0 0 3px ${halo}; white-space: nowrap; cursor:pointer;">${code}</span>
     </div>`,
   });
 }
 
-function airportDotIcon() {
+function airportDotIcon(fill: string, ring: string) {
   return L.divIcon({
     className: '',
     iconSize: [8, 8],
     iconAnchor: [4, 4],
-    html: `<div style="width:7px;height:7px;border-radius:999px;background:${NAVY};border:1.5px solid #fff;box-shadow:0 0 2px rgba(0,0,0,0.3);"></div>`,
+    html: `<div style="width:7px;height:7px;border-radius:999px;background:${fill};border:1.5px solid ${ring};box-shadow:0 0 2px rgba(0,0,0,0.3);"></div>`,
   });
 }
 
 export default function FlightMap({ flights }: Props) {
+  const colors = useColors();
   useLeafletCss();
+
+  const isDark = colors.scheme === 'dark';
+  const routeColor = isDark ? '#7FA8FA' : NAVY;   // brand blue, lightened for dark tiles
+  const labelColor = isDark ? '#BFD3FB' : NAVY;
+  const halo       = isDark ? '#0A1128' : '#fff';
+  const tileUrl = isDark
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 
   // Flights with coordinates for both endpoints
   const routes = React.useMemo(
@@ -140,7 +150,7 @@ export default function FlightMap({ flights }: Props) {
           const pts = arcPoints(from, to);
           const mid = pts[Math.floor(pts.length / 2)];
           const rot = bearing(pts[Math.floor(pts.length / 2) - 2], pts[Math.floor(pts.length / 2) + 2]);
-          return { flight: f, pts, mid, rot, color: f.featured ? ORANGE : NAVY };
+          return { flight: f, pts, mid, rot, featured: !!f.featured };
         }),
     [flights],
   );
@@ -158,8 +168,8 @@ export default function FlightMap({ flights }: Props) {
   if (routes.length === 0) {
     return (
       <View style={styles.placeholder}>
-        <Feather name="map" size={28} color="rgba(255,255,255,0.35)" />
-        <Text style={styles.emptyText}>No flights to display</Text>
+        <Feather name="map" size={28} color={colors.mutedForeground} />
+        <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No flights to display</Text>
       </View>
     );
   }
@@ -173,15 +183,18 @@ export default function FlightMap({ flights }: Props) {
         <MapContainer
           center={[39.5, -98.35]}
           zoom={4}
-          style={{ height: '100%', width: '100%', background: '#f6f7f9' }}
+          style={{ height: '100%', width: '100%', background: isDark ? '#0A1128' : '#f6f7f9' }}
           scrollWheelZoom={false}
         >
-          {/* Light minimal basemap (CARTO Positron) */}
+          {/* Minimal basemap (CARTO Positron / Dark Matter per theme) */}
           <TileLayer
+            key={colors.scheme}
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+            url={tileUrl}
           />
-          {routes.map(({ flight, pts, mid, rot, color }) => (
+          {routes.map(({ flight, pts, mid, rot, featured }) => {
+            const color = featured ? ORANGE : routeColor;
+            return (
             <React.Fragment key={flight.id}>
               <Polyline
                 positions={pts}
@@ -198,19 +211,20 @@ export default function FlightMap({ flights }: Props) {
                 </Tooltip>
               </Marker>
             </React.Fragment>
-          ))}
+            );
+          })}
           {airports.map(([code, flight]) => {
             const c = AIRPORT_COORDS[code];
             return (
               <React.Fragment key={code}>
                 <Marker
                   position={[c.lat, c.lng]}
-                  icon={airportDotIcon()}
+                  icon={airportDotIcon(routeColor, halo)}
                   eventHandlers={{ click: () => goTo(flight.id) }}
                 />
                 <Marker
                   position={[c.lat, c.lng]}
-                  icon={airportLabelIcon(code)}
+                  icon={airportLabelIcon(code, labelColor, halo)}
                   eventHandlers={{ click: () => goTo(flight.id) }}
                 />
               </React.Fragment>
@@ -219,11 +233,11 @@ export default function FlightMap({ flights }: Props) {
         </MapContainer>
       </div>
       <View style={styles.legend}>
-        <View style={styles.legendPill}>
-          <View style={[styles.legendSwatch, { backgroundColor: NAVY }]} />
-          <Text style={styles.legendText}>Available</Text>
+        <View style={[styles.legendPill, { backgroundColor: isDark ? 'rgba(13,22,54,0.92)' : 'rgba(255,255,255,0.92)' }]}>
+          <View style={[styles.legendSwatch, { backgroundColor: routeColor }]} />
+          <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Available</Text>
           <View style={[styles.legendSwatch, { backgroundColor: ORANGE, marginLeft: 10 }]} />
-          <Text style={styles.legendText}>Featured</Text>
+          <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Featured</Text>
         </View>
       </View>
     </View>
@@ -240,19 +254,18 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   placeholder: { alignItems: 'center', gap: 10, paddingVertical: 40 },
-  emptyText: { fontSize: 15, color: 'rgba(255,255,255,0.5)', fontFamily: 'Inter_400Regular' },
+  emptyText: { fontSize: 15, fontFamily: 'Inter_400Regular' },
   legend: {
     position: 'absolute', bottom: 8, left: 0, right: 0,
     alignItems: 'center', zIndex: 1000,
   },
   legendPill: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.92)',
     paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999,
   },
   legendSwatch: { width: 14, height: 3, borderRadius: 2 },
   legendText: {
-    fontSize: 12, color: 'rgba(0,0,0,0.65)',
+    fontSize: 12,
     fontFamily: 'Inter_400Regular',
   },
 });

@@ -10,9 +10,11 @@ import { Feather } from '@expo/vector-icons';
 import { useLogin } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
+import { useColors } from '@/hooks/useColors';
 
 export default function SignInScreen() {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
   const { signIn } = useAuth();
   const queryClient = useQueryClient();
   const [email, setEmail] = useState('');
@@ -53,7 +55,7 @@ export default function SignInScreen() {
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   return (
-    <View style={[styles.container, { paddingTop: topPad }]}>
+    <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad }]}>
       <KeyboardAwareScrollViewCompat contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 24 }]} bottomOffset={24} keyboardShouldPersistTaps="handled">
         {/* Header */}
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
@@ -61,7 +63,7 @@ export default function SignInScreen() {
         </TouchableOpacity>
 
         <View style={styles.logoRow}>
-          <Feather name="send" size={20} color="#1259F2" style={{ transform: [{ rotate: '-45deg' }] }} />
+          <Feather name="send" size={20} color={colors.primary} style={{ transform: [{ rotate: '-45deg' }] }} />
           <Text style={styles.logoText}>Bluebird</Text>
         </View>
 
@@ -73,7 +75,7 @@ export default function SignInScreen() {
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Email</Text>
             <TextInput
-              style={[styles.input, errors.email ? styles.inputError : null]}
+              style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.foreground }, errors.email ? [styles.inputError, { borderColor: colors.destructive }] : null]}
               placeholder="you@example.com"
               placeholderTextColor="#8896B3"
               value={email}
@@ -82,14 +84,14 @@ export default function SignInScreen() {
               autoCapitalize="none"
               autoCorrect={false}
             />
-            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+            {errors.email && <Text style={[styles.errorText, { color: colors.destructive }]}>{errors.email}</Text>}
           </View>
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Password</Text>
-            <View style={[styles.inputRow, errors.password ? styles.inputError : null]}>
+            <View style={[styles.inputRow, { backgroundColor: colors.input, borderColor: colors.border }, errors.password ? [styles.inputError, { borderColor: colors.destructive }] : null]}>
               <TextInput
-                style={styles.inputFlex}
+                style={[styles.inputFlex, { color: colors.foreground }]}
                 placeholder="••••••••"
                 placeholderTextColor="#8896B3"
                 value={password}
@@ -101,32 +103,32 @@ export default function SignInScreen() {
                 <Feather name={showPassword ? 'eye-off' : 'eye'} size={18} color="#8896B3" />
               </TouchableOpacity>
             </View>
-            {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+            {errors.password && <Text style={[styles.errorText, { color: colors.destructive }]}>{errors.password}</Text>}
           </View>
 
           <TouchableOpacity
-            style={[styles.submitBtn, loginMutation.isPending && styles.submitBtnDisabled]}
+            style={[styles.submitBtn, { backgroundColor: colors.primary }, loginMutation.isPending && styles.submitBtnDisabled]}
             onPress={handleSignIn}
             disabled={loginMutation.isPending}
             activeOpacity={0.8}
           >
             {loginMutation.isPending ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.primaryForeground} />
             ) : (
-              <Text style={styles.submitBtnText}>Sign in</Text>
+              <Text style={[styles.submitBtnText, { color: colors.primaryForeground }]}>Sign in</Text>
             )}
           </TouchableOpacity>
         </View>
 
         <View style={styles.divider}>
-          <View style={styles.dividerLine} />
+          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
           <Text style={styles.dividerText}>or</Text>
-          <View style={styles.dividerLine} />
+          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
         </View>
 
         <TouchableOpacity style={styles.altAction} onPress={() => router.push('/(auth)/create-account')}>
-          <Text style={styles.altActionText}>Create a new account</Text>
-          <Feather name="arrow-right" size={14} color="#1259F2" />
+          <Text style={[styles.altActionText, { color: colors.primary }]}>Create a new account</Text>
+          <Feather name="arrow-right" size={14} color={colors.primary} />
         </TouchableOpacity>
       </KeyboardAwareScrollViewCompat>
     </View>
@@ -136,7 +138,6 @@ export default function SignInScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A1128',
   },
   scrollContent: {
     paddingHorizontal: 24,
@@ -186,20 +187,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   input: {
-    backgroundColor: '#1A2744',
     borderWidth: 1,
-    borderColor: '#1E2D4F',
     borderRadius: 12,
     height: 52,
     paddingHorizontal: 16,
-    color: '#FFFFFF',
     fontSize: 15,
     fontFamily: 'Inter_400Regular',
   },
   inputRow: {
-    backgroundColor: '#1A2744',
     borderWidth: 1,
-    borderColor: '#1E2D4F',
     borderRadius: 12,
     height: 52,
     paddingHorizontal: 16,
@@ -208,20 +204,16 @@ const styles = StyleSheet.create({
   },
   inputFlex: {
     flex: 1,
-    color: '#FFFFFF',
     fontSize: 15,
     fontFamily: 'Inter_400Regular',
   },
   inputError: {
-    borderColor: '#FF3B30',
   },
   errorText: {
-    color: '#FF3B30',
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
   },
   submitBtn: {
-    backgroundColor: '#1259F2',
     height: 56,
     borderRadius: 999,
     justifyContent: 'center',
@@ -232,7 +224,6 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   submitBtnText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
   },
@@ -245,7 +236,6 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#1E2D4F',
   },
   dividerText: {
     color: '#8896B3',
@@ -260,7 +250,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   altActionText: {
-    color: '#1259F2',
     fontSize: 15,
     fontFamily: 'Inter_500Medium',
   },

@@ -3,9 +3,11 @@ import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useColors } from '@/hooks/useColors';
 
 export default function SplashScreen() {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(0.8)).current;
   const taglineOpacity = useRef(new Animated.Value(0)).current;
@@ -29,10 +31,10 @@ export default function SplashScreen() {
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   return (
-    <View style={[styles.container, { paddingTop: topPad, paddingBottom: bottomPad }]}>
+    <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad, paddingBottom: bottomPad }]}>
       <View style={styles.content}>
         <Animated.View style={[styles.logoContainer, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
-          <View style={styles.iconWrapper}>
+          <View style={[styles.iconWrapper, { backgroundColor: colors.primary }]}>
             <Feather name="send" size={40} color="#FFFFFF" style={{ transform: [{ rotate: '-45deg' }] }} />
           </View>
           <Text style={styles.logoText}>Bluebird</Text>
@@ -48,7 +50,14 @@ export default function SplashScreen() {
 
       <View style={styles.dotsContainer}>
         {[0, 1, 2].map((i) => (
-          <View key={i} style={[styles.dot, i === 0 && styles.dotActive]} />
+          <View
+            key={i}
+            style={[
+              styles.dot,
+              { backgroundColor: colors.border },
+              i === 0 && [styles.dotActive, { backgroundColor: colors.primary }],
+            ]}
+          />
         ))}
       </View>
     </View>
@@ -58,7 +67,6 @@ export default function SplashScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A1128',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -76,7 +84,6 @@ const styles = StyleSheet.create({
   iconWrapper: {
     width: 60,
     height: 60,
-    backgroundColor: '#1259F2',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
@@ -111,10 +118,8 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#1E2D4F',
   },
   dotActive: {
-    backgroundColor: '#1259F2',
     width: 20,
   },
 });
