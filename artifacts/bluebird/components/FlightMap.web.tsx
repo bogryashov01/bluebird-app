@@ -15,6 +15,7 @@ import { useColors } from '@/hooks/useColors';
 import type { Flight } from '@workspace/api-client-react';
 import { MapContainer, TileLayer, Marker, Polyline, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
+import { AIRPORT_COORDS, arcPoints, bearing } from '@/lib/flightGeo';
 
 // Leaflet CSS is required — inject it once into the document head.
 function useLeafletCss() {
@@ -29,22 +30,6 @@ function useLeafletCss() {
   }, []);
 }
 
-/** Coordinates for all seeded airports (origins and destinations) */
-const AIRPORT_COORDS: Record<string, { lat: number; lng: number; label: string }> = {
-  LAX: { lat: 33.9425, lng: -118.4081, label: 'Los Angeles' },
-  SFO: { lat: 37.6213, lng: -122.3790, label: 'San Francisco' },
-  JFK: { lat: 40.6413, lng:  -73.7781, label: 'New York JFK' },
-  MIA: { lat: 25.7959, lng:  -80.2870, label: 'Miami' },
-  ORD: { lat: 41.9742, lng:  -87.9073, label: 'Chicago' },
-  DAL: { lat: 32.8481, lng:  -96.8518, label: 'Dallas' },
-  LAS: { lat: 36.0840, lng: -115.1537, label: 'Las Vegas' },
-  BOS: { lat: 42.3656, lng:  -71.0096, label: 'Boston' },
-  SEA: { lat: 47.4502, lng: -122.3088, label: 'Seattle' },
-  DEN: { lat: 39.8561, lng: -104.6737, label: 'Denver' },
-  ASP: { lat: 39.2232, lng: -106.8690, label: 'Aspen' },
-  TEB: { lat: 40.8501, lng:  -74.0608, label: 'Teterboro' },
-};
-
 const NAVY = '#1B2A5B';
 const ORANGE = '#F5842E';
 
@@ -52,46 +37,6 @@ type FlightData = Flight;
 
 interface Props {
   flights: FlightData[];
-}
-
-/** Quadratic-bezier arc between two lat/lng points, bowed perpendicular to the route. */
-function arcPoints(
-  from: { lat: number; lng: number },
-  to: { lat: number; lng: number },
-  segments = 48,
-): [number, number][] {
-  const mx = (from.lat + to.lat) / 2;
-  const my = (from.lng + to.lng) / 2;
-  // Perpendicular offset scaled to route length, corrected for longitude compression
-  const cosLat = Math.cos((mx * Math.PI) / 180);
-  const dx = (to.lng - from.lng) * cosLat;
-  const dy = to.lat - from.lat;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  const k = 0.18;
-  const ctrl = {
-    lat: mx + (-dx / (dist || 1)) * dist * k,
-    lng: my + ((dy / (dist || 1)) * dist * k) / (cosLat || 1),
-  };
-  const pts: [number, number][] = [];
-  for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
-    const a = (1 - t) * (1 - t);
-    const b = 2 * (1 - t) * t;
-    const c = t * t;
-    pts.push([
-      a * from.lat + b * ctrl.lat + c * to.lat,
-      a * from.lng + b * ctrl.lng + c * to.lng,
-    ]);
-  }
-  return pts;
-}
-
-/** Bearing (degrees, 0 = north, clockwise) between two lat/lng points, in screen space. */
-function bearing(p1: [number, number], p2: [number, number]): number {
-  const cosLat = Math.cos((((p1[0] + p2[0]) / 2) * Math.PI) / 180);
-  const dx = (p2[1] - p1[1]) * cosLat;
-  const dy = p2[0] - p1[0];
-  return (Math.atan2(dx, dy) * 180) / Math.PI;
 }
 
 function planeIcon(rotationDeg: number, color: string) {
@@ -147,10 +92,11 @@ export default function FlightMap({ flights }: Props) {
         .map((f) => {
           const from = AIRPORT_COORDS[f.fromAirport];
           const to = AIRPORT_COORDS[f.toAirport];
-          const pts = arcPoints(from, to);
-          const mid = pts[Math.floor(pts.length / 2)];
-          const rot = bearing(pts[Math.floor(pts.length / 2) - 2], pts[Math.floor(pts.length / 2) + 2]);
-          return { flight: f, pts, mid, rot, featured: !!f.featured };
+          const arc = arcPoints(from, to);
+          const midIdx = Math.floor(arc.length / 2);
+          const rot = bearing(arc[midIdx - 2], arc[midIdx + 2]);
+          const pts: [number, number][] = arc.map((p) => [p.latitude, p.longitude]);
+          return { flight: f, pts, mid: pts[midIdx], rot, featured: !!f.featured };
         }),
     [flights],
   );
@@ -218,12 +164,12 @@ export default function FlightMap({ flights }: Props) {
             return (
               <React.Fragment key={code}>
                 <Marker
-                  position={[c.lat, c.lng]}
+                  position={[c.latitude, c.longitude]}
                   icon={airportDotIcon(routeColor, halo)}
                   eventHandlers={{ click: () => goTo(flight.id) }}
                 />
                 <Marker
-                  position={[c.lat, c.lng]}
+                  position={[c.latitude, c.longitude]}
                   icon={airportLabelIcon(code, labelColor, halo)}
                   eventHandlers={{ click: () => goTo(flight.id) }}
                 />
