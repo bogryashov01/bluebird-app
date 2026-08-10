@@ -9,6 +9,35 @@ export interface HealthStatus {
   status: string;
 }
 
+export type ConciergeChatMessageRole = typeof ConciergeChatMessageRole[keyof typeof ConciergeChatMessageRole];
+
+
+export const ConciergeChatMessageRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export interface ConciergeChatMessage {
+  role: ConciergeChatMessageRole;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  content: string;
+}
+
+export interface ConciergeChatRequest {
+  /**
+     * @minItems 1
+     * @maxItems 40
+     */
+  messages: ConciergeChatMessage[];
+}
+
+export interface ConciergeReply {
+  reply: string;
+}
+
 export interface ErrorResponse {
   error: string;
 }

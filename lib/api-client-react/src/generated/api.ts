@@ -23,6 +23,8 @@ import type {
   AuthResponse,
   CancelQueueResponse,
   ChangeMembershipRequest,
+  ConciergeChatRequest,
+  ConciergeReply,
   ErrorResponse,
   Flight,
   FlightUserStatus,
@@ -1482,5 +1484,76 @@ export const useMarkNotificationRead = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getMarkNotificationReadMutationOptions(options));
+    }
+
+export const getConciergeChatUrl = () => {
+
+
+
+
+  return `/api/concierge/chat`
+}
+
+/**
+ * @summary Send a message to the AI concierge
+ */
+export const conciergeChat = async (conciergeChatRequest: ConciergeChatRequest, options?: Parameters<typeof customFetch>[1]): Promise<ConciergeReply> => {
+
+  return customFetch<ConciergeReply>(getConciergeChatUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(conciergeChatRequest)
+  }
+);}
+
+
+
+
+
+export const getConciergeChatMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof conciergeChat>>, TError,{data: BodyType<ConciergeChatRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof conciergeChat>>, TError,{data: BodyType<ConciergeChatRequest>}, TContext> => {
+
+const mutationKey = ['conciergeChat'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof conciergeChat>>, {data: BodyType<ConciergeChatRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  conciergeChat(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConciergeChatMutationResult = NonNullable<Awaited<ReturnType<typeof conciergeChat>>>
+    export type ConciergeChatMutationBody = BodyType<ConciergeChatRequest>
+    export type ConciergeChatMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Send a message to the AI concierge
+ */
+export const useConciergeChat = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof conciergeChat>>, TError,{data: BodyType<ConciergeChatRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof conciergeChat>>,
+        TError,
+        {data: BodyType<ConciergeChatRequest>},
+        TContext
+      > => {
+      return useMutation(getConciergeChatMutationOptions(options));
     }
 

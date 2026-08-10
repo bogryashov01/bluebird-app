@@ -420,3 +420,24 @@ export const MarkNotificationReadResponse = zod.object({
 })
 
 
+/**
+ * @summary Send a message to the AI concierge
+ */
+export const conciergeChatBodyMessagesItemContentMax = 4000;
+
+export const conciergeChatBodyMessagesMax = 40;
+
+
+
+export const ConciergeChatBody = zod.object({
+  "messages": zod.array(zod.object({
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string().min(1).max(conciergeChatBodyMessagesItemContentMax)
+})).min(1).max(conciergeChatBodyMessagesMax)
+})
+
+export const ConciergeChatResponse = zod.object({
+  "reply": zod.string()
+})
+
+

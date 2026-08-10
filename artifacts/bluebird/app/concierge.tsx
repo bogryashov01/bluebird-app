@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
+import { useConciergeChat } from '@workspace/api-client-react';
 import * as Haptics from 'expo-haptics';
 
 interface Message {
@@ -15,30 +16,11 @@ interface Message {
   role: 'user' | 'assistant';
   text: string;
   timestamp: Date;
+  isError?: boolean;
 }
 
-const CONCIERGE_RESPONSES: Record<string, string> = {
-  'default': "I'm here to help with your Bluebird experience. Ask me about flights, membership, or anything else!",
-  'flight': "Empty leg flights are repositioning trips available to Bluebird members at no cost. Browse the Discover tab to see current available flights and join a queue.",
-  'membership': "Bluebird offers Base, Plus, and Concierge tiers. Plus members get 2 Skip the Line passes per month, while Concierge members enjoy unlimited passes and 24/7 AI support.",
-  'queue': "The queue system lets you request a seat on any available empty leg flight. Skip the Line passes move you to the front of the queue instantly.",
-  'pass': "Skip the Line passes are earned through Plus/Concierge membership and referrals. Each pass guarantees you the next available seat on your chosen flight.",
-  'referral': "Earn 1 Skip the Line pass for every friend who joins Bluebird using your referral code. Find your code in the Referral section of your profile.",
-  'international': "International empty leg flights require a valid passport. Bluebird currently operates domestic US routes, with international access available on Plus membership.",
-  'luggage': "Luggage allowances vary by aircraft type. Generally expect 1-2 bags per seat. Specific allowances are communicated upon flight confirmation.",
-  'cancel': "Cancellations: You can leave a queue at any time without penalty. Skip the Line passes are not refunded if a flight is cancelled by the operator.",
-  'help': "I can help with: flight information, queue system, membership perks, referrals, luggage policies, and general aviation questions. What would you like to know?",
-};
-
-function getResponse(text: string): string {
-  const lower = text.toLowerCase();
-  for (const [key, response] of Object.entries(CONCIERGE_RESPONSES)) {
-    if (key !== 'default' && lower.includes(key)) {
-      return response;
-    }
-  }
-  return CONCIERGE_RESPONSES.default;
-}
+// How many prior messages to send as conversation context (API allows 40).
+const HISTORY_LIMIT = 20;
 
 function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -59,13 +41,15 @@ export default function ConciergeScreen() {
     },
   ]);
   const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
 
+  const chatMutation = useConciergeChat();
+  const isTyping = chatMutation.isPending;
+
   const handleSend = async () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || chatMutation.isPending) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setInput('');
     // Keep the keyboard up so the user can send another message right away
@@ -73,13 +57,27 @@ export default function ConciergeScreen() {
 
     const userMsg: Message = { id: makeId(), role: 'user', text, timestamp: new Date() };
     setMessages(prev => [...prev, userMsg]);
-    setIsTyping(true);
 
-    await new Promise(r => setTimeout(r, 800 + Math.random() * 400));
-    const reply = getResponse(text);
-    const assistantMsg: Message = { id: makeId(), role: 'assistant', text: reply, timestamp: new Date() };
-    setMessages(prev => [...prev, assistantMsg]);
-    setIsTyping(false);
+    // Send recent conversation history (excluding error bubbles) for context.
+    const history = [...messages, userMsg]
+      .filter(m => !m.isError && m.id !== 'welcome')
+      .slice(-HISTORY_LIMIT)
+      .map(m => ({ role: m.role, content: m.text }));
+
+    try {
+      const result = await chatMutation.mutateAsync({ data: { messages: history } });
+      const assistantMsg: Message = { id: makeId(), role: 'assistant', text: result.reply, timestamp: new Date() };
+      setMessages(prev => [...prev, assistantMsg]);
+    } catch {
+      const errorMsg: Message = {
+        id: makeId(),
+        role: 'assistant',
+        text: "Sorry, I couldn't reach the concierge just now. Please try again in a moment.",
+        timestamp: new Date(),
+        isError: true,
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    }
   };
 
   const SUGGESTIONS = ['What are empty legs?', 'How does the queue work?', 'Tell me about membership', 'How do referrals work?'];

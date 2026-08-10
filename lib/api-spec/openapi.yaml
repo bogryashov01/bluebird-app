@@ -24,6 +24,8 @@ tags:
     description: Referral program
   - name: notifications
     description: User notifications
+  - name: concierge
+    description: AI concierge chat
 
 paths:
   /healthz:
@@ -466,6 +468,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/Notification"
 
+  /concierge/chat:
+    post:
+      operationId: conciergeChat
+      tags: [concierge]
+      summary: Send a message to the AI concierge
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConciergeChatRequest"
+      responses:
+        "200":
+          description: Concierge reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConciergeReply"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: AI service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -481,6 +516,33 @@ components:
       required:
         - status
 
+    ConciergeChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+          minLength: 1
+          maxLength: 4000
+    ConciergeChatRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          minItems: 1
+          maxItems: 40
+          items:
+            $ref: "#/components/schemas/ConciergeChatMessage"
+    ConciergeReply:
+      type: object
+      required: [reply]
+      properties:
+        reply:
+          type: string
     ErrorResponse:
       type: object
       properties:
