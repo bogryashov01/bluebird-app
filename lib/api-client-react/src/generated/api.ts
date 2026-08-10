@@ -22,6 +22,7 @@ import type {
 import type {
   AuthResponse,
   CancelQueueResponse,
+  ChangeMembershipRequest,
   ErrorResponse,
   Flight,
   FlightUserStatus,
@@ -1185,6 +1186,77 @@ export const useUpgradeMembership = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpgradeMembershipMutationOptions(options));
+    }
+
+export const getChangeMembershipUrl = () => {
+
+
+
+
+  return `/api/membership/change`
+}
+
+/**
+ * @summary Schedule a downgrade or cancellation at next renewal, or revert a pending change
+ */
+export const changeMembership = async (changeMembershipRequest: ChangeMembershipRequest, options?: Parameters<typeof customFetch>[1]): Promise<Membership> => {
+
+  return customFetch<Membership>(getChangeMembershipUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(changeMembershipRequest)
+  }
+);}
+
+
+
+
+
+export const getChangeMembershipMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeMembership>>, TError,{data: BodyType<ChangeMembershipRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof changeMembership>>, TError,{data: BodyType<ChangeMembershipRequest>}, TContext> => {
+
+const mutationKey = ['changeMembership'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changeMembership>>, {data: BodyType<ChangeMembershipRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  changeMembership(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChangeMembershipMutationResult = NonNullable<Awaited<ReturnType<typeof changeMembership>>>
+    export type ChangeMembershipMutationBody = BodyType<ChangeMembershipRequest>
+    export type ChangeMembershipMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Schedule a downgrade or cancellation at next renewal, or revert a pending change
+ */
+export const useChangeMembership = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeMembership>>, TError,{data: BodyType<ChangeMembershipRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof changeMembership>>,
+        TError,
+        {data: BodyType<ChangeMembershipRequest>},
+        TContext
+      > => {
+      return useMutation(getChangeMembershipMutationOptions(options));
     }
 
 export const getGetReferralUrl = () => {

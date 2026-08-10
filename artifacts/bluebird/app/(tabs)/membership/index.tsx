@@ -117,6 +117,24 @@ export default function MembershipScreen() {
           <StatCard label="Membership"   value={tierLabel} />
         </View>
 
+        {/* ── Pending change banner ── */}
+        {mem?.pendingTier && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => router.push('/membership/manage' as any)}
+            style={[styles.pendingBanner, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 24 }]}
+          >
+            <Text style={[styles.pendingBannerTitle, { color: colors.textOnSurface }]}>
+              {mem.pendingTier === 'cancelled'
+                ? `Membership cancels on ${mem.renewalDate}`
+                : `Changes to ${tierDisplayName(mem.pendingTier)} on ${mem.renewalDate}`}
+            </Text>
+            <Text style={[styles.pendingBannerSub, { color: colors.mutedForegroundLight }]}>
+              You keep your {tierLabel} benefits until then. Tap to review or keep your plan.
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* ── Upgrade card ── */}
         {nextTier && (
           <>
@@ -184,6 +202,15 @@ export default function MembershipScreen() {
                     <Text style={styles.upgradeSmallBtnText}>Upgrade</Text>
                   </TouchableOpacity>
                 )}
+                {isCurrent && (
+                  <TouchableOpacity
+                    style={[styles.manageBtn, { borderColor: colors.border }]}
+                    onPress={() => router.push('/membership/manage' as any)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.manageBtnText, { color: colors.textOnSurface }]}>Manage plan</Text>
+                  </TouchableOpacity>
+                )}
               </View>
               {tier.features.map((feat, i) => (
                 <View key={feat} style={[
@@ -249,6 +276,11 @@ const styles = StyleSheet.create({
   currentBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
   upgradeSmallBtn: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, flexShrink: 0 },
   upgradeSmallBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#fff' },
+  manageBtn: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, flexShrink: 0, borderWidth: 1 },
+  manageBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  pendingBanner: { borderRadius: 18, borderWidth: 1, padding: 16 },
+  pendingBannerTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14.5, marginBottom: 4 },
+  pendingBannerSub: { fontFamily: 'Inter_400Regular', fontSize: 12.5, lineHeight: 18 },
   featureRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 16, paddingVertical: 9,

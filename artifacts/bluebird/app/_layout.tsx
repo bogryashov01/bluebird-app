@@ -95,6 +95,10 @@ function RootLayoutNav() {
         options={{ headerShown: true, title: 'Upgrade Membership', ...headerOptions }}
       />
       <Stack.Screen
+        name="membership/manage"
+        options={{ headerShown: true, title: 'Manage Plan', ...headerOptions }}
+      />
+      <Stack.Screen
         name="account/personal-info"
         options={{ headerShown: true, title: 'Personal Information', ...headerOptions }}
       />

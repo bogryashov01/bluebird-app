@@ -34,6 +34,23 @@ function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 }
 
+const TIER_ORDER: Record<string, number> = { base: 0, plus: 1, concierge: 2 };
+
+function renewalDate(): string {
+  return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function membershipPayload(user: { membershipTier: string; linePassCount: number; pendingTier: string | null }) {
+  const tier = user.membershipTier as "base" | "plus" | "concierge";
+  return {
+    tier,
+    linePassCount: user.linePassCount,
+    features: MEMBERSHIP_FEATURES[tier] ?? MEMBERSHIP_FEATURES.base,
+    renewalDate: renewalDate(),
+    ...(user.pendingTier ? { pendingTier: user.pendingTier } : {}),
+  };
+}
+
 // GET /membership
 router.get("/", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
@@ -41,13 +58,7 @@ router.get("/", authMiddleware, async (req, res) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const tier = user.membershipTier as "base" | "plus" | "concierge";
-    return res.json({
-      tier,
-      linePassCount: user.linePassCount,
-      features: MEMBERSHIP_FEATURES[tier] ?? MEMBERSHIP_FEATURES.base,
-      renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    });
+    return res.json(membershipPayload(user));
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch membership" });
   }
@@ -79,6 +90,7 @@ router.post("/upgrade", authMiddleware, async (req, res) => {
       .set({
         membershipTier: tier,
         linePassCount: user.linePassCount + bonusPasses,
+        pendingTier: null, // an upgrade supersedes any scheduled downgrade/cancellation
       })
       .where(eq(usersTable.id, userId))
       .returning();
@@ -92,15 +104,73 @@ router.post("/upgrade", authMiddleware, async (req, res) => {
       type: "membership",
     });
 
-    const newTier = updated.membershipTier as "base" | "plus" | "concierge";
-    return res.json({
-      tier: newTier,
-      linePassCount: updated.linePassCount,
-      features: MEMBERSHIP_FEATURES[newTier] ?? MEMBERSHIP_FEATURES.base,
-      renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    });
+    return res.json(membershipPayload(updated));
   } catch (err) {
     return res.status(500).json({ error: "Failed to upgrade membership" });
+  }
+});
+
+// POST /membership/change
+// Schedules a downgrade or cancellation effective at the next renewal date,
+// or reverts a pending change. Mirrors the demo-only upgrade endpoint.
+router.post("/change", authMiddleware, async (req, res) => {
+  const userId = (req as any).userId;
+  const { action, tier } = req.body ?? {};
+
+  if (!["downgrade", "cancel", "revert"].includes(action)) {
+    return res.status(400).json({ error: "Invalid action. Choose 'downgrade', 'cancel', or 'revert'" });
+  }
+
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const effective = renewalDate();
+    let pendingTier: string | null;
+    let title: string;
+    let body: string;
+
+    if (action === "downgrade") {
+      if (!tier || !["base", "plus"].includes(tier)) {
+        return res.status(400).json({ error: "Invalid tier. Choose 'base' or 'plus'" });
+      }
+      if (TIER_ORDER[tier] >= TIER_ORDER[user.membershipTier]) {
+        return res.status(400).json({ error: "You can only downgrade to a lower tier than your current plan" });
+      }
+      pendingTier = tier;
+      const label = tier.charAt(0).toUpperCase() + tier.slice(1);
+      title = `Downgrade scheduled`;
+      body = `Your membership will change to ${label} on ${effective}. You keep your current benefits until then.`;
+    } else if (action === "cancel") {
+      pendingTier = "cancelled";
+      title = `Cancellation scheduled`;
+      body = `Your membership will end on ${effective}. You keep your benefits until then.`;
+    } else {
+      if (!user.pendingTier) {
+        return res.status(400).json({ error: "No pending plan change to revert" });
+      }
+      pendingTier = null;
+      title = `Plan change reverted`;
+      body = `Your ${user.membershipTier} membership will continue as usual.`;
+    }
+
+    const [updated] = await db
+      .update(usersTable)
+      .set({ pendingTier })
+      .where(eq(usersTable.id, userId))
+      .returning();
+
+    await db.insert(notificationsTable).values({
+      id: makeId(),
+      userId,
+      title,
+      body,
+      type: "membership",
+    });
+
+    return res.json(membershipPayload(updated));
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to update membership" });
   }
 });
 

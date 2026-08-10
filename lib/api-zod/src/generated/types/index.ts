@@ -8,6 +8,9 @@
 
 export * from './authResponse';
 export * from './cancelQueueResponse';
+export * from './changeMembershipRequest';
+export * from './changeMembershipRequestAction';
+export * from './changeMembershipRequestTier';
 export * from './errorResponse';
 export * from './flight';
 export * from './flightStatus';
@@ -20,6 +23,7 @@ export * from './joinQueueRequest';
 export * from './listFlightsParams';
 export * from './loginRequest';
 export * from './membership';
+export * from './membershipPendingTier';
 export * from './membershipTier';
 export * from './notification';
 export * from './notificationType';

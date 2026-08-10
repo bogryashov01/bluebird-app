@@ -166,10 +166,24 @@ export const MembershipTier = {
   concierge: 'concierge',
 } as const;
 
+/**
+ * Scheduled plan change taking effect at renewalDate. "cancelled" means the membership ends at renewal. Absent when no change is pending.
+ */
+export type MembershipPendingTier = typeof MembershipPendingTier[keyof typeof MembershipPendingTier];
+
+
+export const MembershipPendingTier = {
+  base: 'base',
+  plus: 'plus',
+  cancelled: 'cancelled',
+} as const;
+
 export interface Membership {
   tier: MembershipTier;
   linePassCount: number;
   renewalDate?: string;
+  /** Scheduled plan change taking effect at renewalDate. "cancelled" means the membership ends at renewal. Absent when no change is pending. */
+  pendingTier?: MembershipPendingTier;
   features: string[];
 }
 
@@ -183,6 +197,32 @@ export const UpgradeMembershipRequestTier = {
 
 export interface UpgradeMembershipRequest {
   tier: UpgradeMembershipRequestTier;
+}
+
+export type ChangeMembershipRequestAction = typeof ChangeMembershipRequestAction[keyof typeof ChangeMembershipRequestAction];
+
+
+export const ChangeMembershipRequestAction = {
+  downgrade: 'downgrade',
+  cancel: 'cancel',
+  revert: 'revert',
+} as const;
+
+/**
+ * Target tier — required when action is "downgrade"
+ */
+export type ChangeMembershipRequestTier = typeof ChangeMembershipRequestTier[keyof typeof ChangeMembershipRequestTier];
+
+
+export const ChangeMembershipRequestTier = {
+  base: 'base',
+  plus: 'plus',
+} as const;
+
+export interface ChangeMembershipRequest {
+  action: ChangeMembershipRequestAction;
+  /** Target tier — required when action is "downgrade" */
+  tier?: ChangeMembershipRequestTier;
 }
 
 export type InvitedFriendStatus = typeof InvitedFriendStatus[keyof typeof InvitedFriendStatus];

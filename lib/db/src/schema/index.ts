@@ -8,6 +8,7 @@ export const usersTable = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   membershipTier: text("membership_tier").notNull().default("base"),
+  pendingTier: text("pending_tier"),
   emailVerified: boolean("email_verified").notNull().default(false),
   linePassCount: integer("line_pass_count").notNull().default(0),
   phone: text("phone"),

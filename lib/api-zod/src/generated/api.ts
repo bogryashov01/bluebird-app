@@ -336,6 +336,7 @@ export const GetMembershipResponse = zod.object({
   "tier": zod.enum(['base', 'plus', 'concierge']),
   "linePassCount": zod.number(),
   "renewalDate": zod.string().optional(),
+  "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),
   "features": zod.array(zod.string())
 })
 
@@ -351,6 +352,24 @@ export const UpgradeMembershipResponse = zod.object({
   "tier": zod.enum(['base', 'plus', 'concierge']),
   "linePassCount": zod.number(),
   "renewalDate": zod.string().optional(),
+  "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),
+  "features": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Schedule a downgrade or cancellation at next renewal, or revert a pending change
+ */
+export const ChangeMembershipBody = zod.object({
+  "action": zod.enum(['downgrade', 'cancel', 'revert']),
+  "tier": zod.enum(['base', 'plus']).optional().describe('Target tier — required when action is \"downgrade\"')
+})
+
+export const ChangeMembershipResponse = zod.object({
+  "tier": zod.enum(['base', 'plus', 'concierge']),
+  "linePassCount": zod.number(),
+  "renewalDate": zod.string().optional(),
+  "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),
   "features": zod.array(zod.string())
 })
 

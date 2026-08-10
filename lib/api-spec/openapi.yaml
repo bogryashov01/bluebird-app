@@ -386,6 +386,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/Membership"
 
+  /membership/change:
+    post:
+      operationId: changeMembership
+      tags: [membership]
+      summary: Schedule a downgrade or cancellation at next renewal, or revert a pending change
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeMembershipRequest"
+      responses:
+        "200":
+          description: Membership change scheduled (or reverted)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membership"
+        "400":
+          description: Invalid change request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /referral:
     get:
       operationId: getReferral
@@ -697,6 +724,12 @@ components:
           type: number
         renewalDate:
           type: string
+        pendingTier:
+          type: string
+          enum: [base, plus, cancelled]
+          description: >
+            Scheduled plan change taking effect at renewalDate. "cancelled"
+            means the membership ends at renewal. Absent when no change is pending.
         features:
           type: array
           items:
@@ -714,6 +747,19 @@ components:
           enum: [plus, concierge]
       required:
         - tier
+
+    ChangeMembershipRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [downgrade, cancel, revert]
+        tier:
+          type: string
+          enum: [base, plus]
+          description: Target tier — required when action is "downgrade"
+      required:
+        - action
 
     ReferralInfo:
       type: object

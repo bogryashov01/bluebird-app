@@ -5,11 +5,14 @@
  * Bluebird private aviation API
  * OpenAPI spec version: 0.1.0
  */
+import type { MembershipPendingTier } from './membershipPendingTier';
 import type { MembershipTier } from './membershipTier';
 
 export interface Membership {
   tier: MembershipTier;
   linePassCount: number;
   renewalDate?: string;
+  /** Scheduled plan change taking effect at renewalDate. "cancelled" means the membership ends at renewal. Absent when no change is pending. */
+  pendingTier?: MembershipPendingTier;
   features: string[];
 }
