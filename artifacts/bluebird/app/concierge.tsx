@@ -61,12 +61,15 @@ export default function ConciergeScreen() {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const inputRef = useRef<TextInput>(null);
 
   const handleSend = async () => {
     const text = input.trim();
     if (!text) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setInput('');
+    // Keep the keyboard up so the user can send another message right away
+    inputRef.current?.focus();
 
     const userMsg: Message = { id: makeId(), role: 'user', text, timestamp: new Date() };
     setMessages(prev => [...prev, userMsg]);
@@ -143,6 +146,7 @@ export default function ConciergeScreen() {
       {/* Input bar */}
       <View style={[styles.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: bottomPad + 8 }]}>
         <TextInput
+          ref={inputRef}
           style={[styles.inputField, { backgroundColor: colors.secondary, color: colors.foreground, fontFamily: 'Inter_400Regular', borderColor: colors.border }]}
           placeholder="Ask your concierge..."
           placeholderTextColor={colors.mutedForeground}
@@ -150,6 +154,7 @@ export default function ConciergeScreen() {
           onChangeText={setInput}
           onSubmitEditing={handleSend}
           returnKeyType="send"
+          submitBehavior="submit"
           multiline={false}
         />
         <TouchableOpacity

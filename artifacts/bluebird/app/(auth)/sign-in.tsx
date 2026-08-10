@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, Platform, Alert,
@@ -21,6 +21,7 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const passwordRef = useRef<TextInput>(null);
 
   const loginMutation = useLogin({
     mutation: {
@@ -83,6 +84,11 @@ export default function SignInScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => passwordRef.current?.focus()}
             />
             {errors.email && <Text style={[styles.errorText, { color: colors.destructive }]}>{errors.email}</Text>}
           </View>
@@ -91,6 +97,7 @@ export default function SignInScreen() {
             <Text style={styles.label}>Password</Text>
             <View style={[styles.inputRow, { backgroundColor: colors.input, borderColor: colors.border }, errors.password ? [styles.inputError, { borderColor: colors.destructive }] : null]}>
               <TextInput
+                ref={passwordRef}
                 style={[styles.inputFlex, { color: colors.foreground }]}
                 placeholder="••••••••"
                 placeholderTextColor="#8896B3"
@@ -98,6 +105,10 @@ export default function SignInScreen() {
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
+                autoComplete="current-password"
+                textContentType="password"
+                returnKeyType="go"
+                onSubmitEditing={handleSignIn}
               />
               <TouchableOpacity onPress={() => setShowPassword((v) => !v)}>
                 <Feather name={showPassword ? 'eye-off' : 'eye'} size={18} color="#8896B3" />

@@ -49,6 +49,236 @@ function durationHours(f: FlightData): number {
   return parseInt(h, 10) || 0;
 }
 
+function matchesQuery(f: FlightData, q: string): boolean {
+  return [f.fromAirport, f.toAirport, f.fromCity, f.toCity, f.aircraftType]
+    .some((s) => s.toLowerCase().includes(q));
+}
+
+function applyChipFilter(list: FlightData[], activeFilter: string): FlightData[] {
+  switch (activeFilter) {
+    case 'This Week': {
+      const now = new Date();
+      const weekOut = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      return list.filter((f) => {
+        const d = new Date(f.departureDate);
+        return d >= new Date(now.toDateString()) && d <= weekOut;
+      });
+    }
+    case 'Under 4 hrs':
+      return list.filter((f) => durationHours(f) < 4);
+    case 'Heavy Jet':
+      return list.filter((f) => /gulfstream|g280|challenger|falcon|global/i.test(f.aircraftType));
+    case 'Near Me':
+      return list.filter((f) => ['LAX', 'SFO', 'LAS', 'SNA', 'VNY'].includes(f.fromAirport));
+    default:
+      return list;
+  }
+}
+
+interface HeaderProps {
+  colors: ReturnType<typeof useColors>;
+  topPad: number;
+  userName?: string;
+  allCount: number;
+  featured?: FlightData;
+  search: string;
+  onSearchChange: (t: string) => void;
+  onClearSearch: () => void;
+  activeFilter: string;
+  onFilterChange: (f: string) => void;
+  view: 'list' | 'map';
+  onViewChange: (v: 'list' | 'map') => void;
+  mapFlights: FlightData[];
+  showEmpty: boolean;
+  hasActiveQueryOrFilter: boolean;
+  onResetAll: () => void;
+}
+
+/**
+ * Module-level header component with a stable type identity so the FlatList
+ * never remounts it (and its TextInput) between renders — this keeps the
+ * search input focused while typing.
+ */
+const DiscoverHeader = React.memo(function DiscoverHeader({
+  colors, topPad, userName, allCount, featured, search, onSearchChange, onClearSearch,
+  activeFilter, onFilterChange, view, onViewChange, mapFlights, showEmpty,
+  hasActiveQueryOrFilter, onResetAll,
+}: HeaderProps) {
+  return (
+    <View>
+      {/* Logo + concierge */}
+      <View style={[styles.topBar, { paddingTop: topPad + 24 }]}>
+        <View style={styles.logoRow}>
+          <Image source={require('@/assets/images/icon.png')} style={styles.logoImg} />
+          <Text style={[styles.logoText, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+            Bluebird
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.conciergeBtn, { backgroundColor: colors.card }]}
+          onPress={() => router.push('/concierge')}
+        >
+          <Feather name="message-circle" size={18} color={colors.foreground} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Greeting */}
+      <Text style={[styles.greeting, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+        {greeting()}{userName ? `, ${userName}` : ''}
+      </Text>
+      <Text style={[styles.subGreeting, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+        {allCount > 0 ? `${Math.min(allCount, 3)} empty legs added near you today` : 'Empty legs near you'}
+      </Text>
+
+      {/* Featured empty leg — hidden when it doesn't match an active search */}
+      {featured && (
+        <TouchableOpacity
+          style={styles.featuredWrap}
+          activeOpacity={0.85}
+          onPress={() => router.push(`/flight/${featured.id}`)}
+        >
+          <ImageBackground source={HERO} style={styles.featuredImage} imageStyle={{ borderRadius: 24 }}>
+            <View style={styles.featuredOverlay} />
+            <View style={[styles.featuredBadge, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.featuredBadgeText, { color: colors.primaryForeground, fontFamily: 'Inter_700Bold' }]}>
+                FEATURED EMPTY LEG
+              </Text>
+            </View>
+            <View style={styles.featuredBottom}>
+              <Text style={[styles.featuredRoute, { color: '#FFFFFF', fontFamily: 'Inter_700Bold' }]}>
+                {featured.fromCity} → {featured.toCity}
+              </Text>
+              <View style={styles.featuredMetaRow}>
+                <Text style={[styles.featuredMeta, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_400Regular' }]}>
+                  {featured.aircraftType} · {formatDateTime(featured)}
+                </Text>
+                {featured.discountPct ? (
+                  <Text style={[styles.featuredDiscount, { color: colors.paleBlue, fontFamily: 'Inter_700Bold' }]}>
+                    {featured.discountPct}% off
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </ImageBackground>
+        </TouchableOpacity>
+      )}
+
+      {/* Search */}
+      <View style={[styles.searchWrap, { backgroundColor: colors.card }]}>
+        <Feather name="search" size={16} color={colors.mutedForeground} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
+          placeholder="Search routes, airports, aircraft"
+          placeholderTextColor={colors.mutedForeground}
+          value={search}
+          onChangeText={onSearchChange}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          clearButtonMode="never"
+        />
+        {search.length > 0 && (
+          <TouchableOpacity
+            onPress={onClearSearch}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Clear search"
+          >
+            <Feather name="x" size={16} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Filter chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+        keyboardShouldPersistTaps="handled"
+      >
+        {FILTERS.map((f) => (
+          <TouchableOpacity
+            key={f}
+            style={[
+              styles.filterChip,
+              { backgroundColor: f === activeFilter ? colors.primary : colors.card },
+            ]}
+            onPress={() => onFilterChange(f)}
+            activeOpacity={0.7}
+          >
+            <Text style={[
+              styles.filterChipText,
+              { fontFamily: 'Inter_600SemiBold' },
+              { color: f === activeFilter ? colors.primaryForeground : colors.mutedForeground },
+            ]}>
+              {f}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* List / Map toggle */}
+      <View style={styles.toggleRow}>
+        <TouchableOpacity
+          style={[styles.toggleBtn, view === 'list' && { backgroundColor: colors.card }]}
+          onPress={() => onViewChange('list')}
+        >
+          <Text style={[
+            styles.toggleText,
+            { fontFamily: 'Inter_600SemiBold' },
+            { color: view === 'list' ? colors.foreground : colors.mutedForeground },
+          ]}>List</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleBtn, view === 'map' && { backgroundColor: colors.card }]}
+          onPress={() => onViewChange('map')}
+        >
+          <Text style={[
+            styles.toggleText,
+            { fontFamily: 'Inter_600SemiBold' },
+            { color: view === 'map' ? colors.foreground : colors.mutedForeground },
+          ]}>Map</Text>
+        </TouchableOpacity>
+      </View>
+
+      {view === 'map' && (
+        mapFlights.length > 0 ? (
+          <FlightMapView flights={mapFlights} />
+        ) : (
+          <View style={styles.mapPlaceholder}>
+            <Feather name="map" size={28} color={colors.mutedForeground} />
+            <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+              No flights match your search
+            </Text>
+            {hasActiveQueryOrFilter && (
+              <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={onResetAll}>
+                <Text style={[styles.retryText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
+                  Clear search & filters
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )
+      )}
+
+      {showEmpty && (
+        <View style={styles.mapPlaceholder}>
+          <Feather name="send" size={28} color={colors.mutedForeground} style={{ transform: [{ rotate: '-45deg' }] }} />
+          <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+            No flights match
+          </Text>
+          {hasActiveQueryOrFilter && (
+            <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={onResetAll}>
+              <Text style={[styles.retryText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
+                Clear search & filters
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+    </View>
+  );
+});
+
 export default function DiscoverScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -63,35 +293,26 @@ export default function DiscoverScreen() {
 
   const all: FlightData[] = flights ?? [];
   const featured = all.find((f) => f.featured);
+  const q = search.trim().toLowerCase();
+
+  // Featured card steps aside when it doesn't match an active search
+  const showFeatured = featured && (!q || matchesQuery(featured, q));
 
   const filteredFlights = React.useMemo(() => {
     let list = all.filter((f) => f.id !== featured?.id);
-    const q = search.trim().toLowerCase();
-    if (q) {
-      list = list.filter((f) =>
-        [f.fromAirport, f.toAirport, f.fromCity, f.toCity, f.aircraftType]
-          .some((s) => s.toLowerCase().includes(q)),
-      );
-    }
-    switch (activeFilter) {
-      case 'This Week': {
-        const now = new Date();
-        const weekOut = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-        return list.filter((f) => {
-          const d = new Date(f.departureDate);
-          return d >= new Date(now.toDateString()) && d <= weekOut;
-        });
-      }
-      case 'Under 4 hrs':
-        return list.filter((f) => durationHours(f) < 4);
-      case 'Heavy Jet':
-        return list.filter((f) => /gulfstream|g280|challenger|falcon|global/i.test(f.aircraftType));
-      case 'Near Me':
-        return list.filter((f) => ['LAX', 'SFO', 'LAS', 'SNA', 'VNY'].includes(f.fromAirport));
-      default:
-        return list;
-    }
-  }, [all, featured?.id, activeFilter, search]);
+    if (q) list = list.filter((f) => matchesQuery(f, q));
+    return applyChipFilter(list, activeFilter);
+  }, [all, featured?.id, activeFilter, q]);
+
+  // Map view respects search + filter too (featured included when it matches)
+  const mapFlights = React.useMemo(() => {
+    let list = all;
+    if (q) list = list.filter((f) => matchesQuery(f, q));
+    return applyChipFilter(list, activeFilter);
+  }, [all, activeFilter, q]);
+
+  const onClearSearch = React.useCallback(() => setSearch(''), []);
+  const onResetAll = React.useCallback(() => { setSearch(''); setActiveFilter('All'); }, []);
 
   const renderCard = ({ item }: { item: FlightData }) => (
     <TouchableOpacity
@@ -140,140 +361,30 @@ export default function DiscoverScreen() {
           renderItem={renderCard}
           contentContainerStyle={{ paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="none"
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
           }
           ListHeaderComponent={
-            <View>
-              {/* Logo + concierge */}
-              <View style={[styles.topBar, { paddingTop: topPad + 24 }]}>
-                <View style={styles.logoRow}>
-                  <Image source={require('@/assets/images/icon.png')} style={styles.logoImg} />
-                  <Text style={[styles.logoText, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
-                    Bluebird
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.conciergeBtn, { backgroundColor: colors.card }]}
-                  onPress={() => router.push('/concierge')}
-                >
-                  <Feather name="message-circle" size={18} color={colors.foreground} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Greeting */}
-              <Text style={[styles.greeting, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
-                {greeting()}{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
-              </Text>
-              <Text style={[styles.subGreeting, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                {all.length > 0 ? `${Math.min(all.length, 3)} empty legs added near you today` : 'Empty legs near you'}
-              </Text>
-
-              {/* Featured empty leg */}
-              {featured && (
-                <TouchableOpacity
-                  style={styles.featuredWrap}
-                  activeOpacity={0.85}
-                  onPress={() => router.push(`/flight/${featured.id}`)}
-                >
-                  <ImageBackground source={HERO} style={styles.featuredImage} imageStyle={{ borderRadius: 24 }}>
-                    <View style={styles.featuredOverlay} />
-                    <View style={[styles.featuredBadge, { backgroundColor: colors.primary }]}>
-                      <Text style={[styles.featuredBadgeText, { color: colors.primaryForeground, fontFamily: 'Inter_700Bold' }]}>
-                        FEATURED EMPTY LEG
-                      </Text>
-                    </View>
-                    <View style={styles.featuredBottom}>
-                      <Text style={[styles.featuredRoute, { color: '#FFFFFF', fontFamily: 'Inter_700Bold' }]}>
-                        {featured.fromCity} → {featured.toCity}
-                      </Text>
-                      <View style={styles.featuredMetaRow}>
-                        <Text style={[styles.featuredMeta, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_400Regular' }]}>
-                          {featured.aircraftType} · {formatDateTime(featured)}
-                        </Text>
-                        {featured.discountPct ? (
-                          <Text style={[styles.featuredDiscount, { color: colors.paleBlue, fontFamily: 'Inter_700Bold' }]}>
-                            {featured.discountPct}% off
-                          </Text>
-                        ) : null}
-                      </View>
-                    </View>
-                  </ImageBackground>
-                </TouchableOpacity>
-              )}
-
-              {/* Search */}
-              <View style={[styles.searchWrap, { backgroundColor: colors.card }]}>
-                <Feather name="search" size={16} color={colors.mutedForeground} />
-                <TextInput
-                  style={[styles.searchInput, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
-                  placeholder="Search routes, airports, aircraft"
-                  placeholderTextColor={colors.mutedForeground}
-                  value={search}
-                  onChangeText={setSearch}
-                />
-              </View>
-
-              {/* Filter chips */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-                {FILTERS.map((f) => (
-                  <TouchableOpacity
-                    key={f}
-                    style={[
-                      styles.filterChip,
-                      { backgroundColor: f === activeFilter ? colors.primary : colors.card },
-                    ]}
-                    onPress={() => setActiveFilter(f)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[
-                      styles.filterChipText,
-                      { fontFamily: 'Inter_600SemiBold' },
-                      { color: f === activeFilter ? colors.primaryForeground : colors.mutedForeground },
-                    ]}>
-                      {f}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              {/* List / Map toggle */}
-              <View style={styles.toggleRow}>
-                <TouchableOpacity
-                  style={[styles.toggleBtn, view === 'list' && { backgroundColor: colors.card }]}
-                  onPress={() => setView('list')}
-                >
-                  <Text style={[
-                    styles.toggleText,
-                    { fontFamily: 'Inter_600SemiBold' },
-                    { color: view === 'list' ? colors.foreground : colors.mutedForeground },
-                  ]}>List</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.toggleBtn, view === 'map' && { backgroundColor: colors.card }]}
-                  onPress={() => setView('map')}
-                >
-                  <Text style={[
-                    styles.toggleText,
-                    { fontFamily: 'Inter_600SemiBold' },
-                    { color: view === 'map' ? colors.foreground : colors.mutedForeground },
-                  ]}>Map</Text>
-                </TouchableOpacity>
-              </View>
-
-              {view === 'map' && (
-                <FlightMapView flights={all} />
-              )}
-
-              {view === 'list' && filteredFlights.length === 0 && (
-                <View style={styles.mapPlaceholder}>
-                  <Feather name="send" size={28} color={colors.mutedForeground} style={{ transform: [{ rotate: '-45deg' }] }} />
-                  <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                    No flights match
-                  </Text>
-                </View>
-              )}
-            </View>
+            <DiscoverHeader
+              colors={colors}
+              topPad={topPad}
+              userName={user?.name?.split(' ')[0]}
+              allCount={all.length}
+              featured={showFeatured ? featured : undefined}
+              search={search}
+              onSearchChange={setSearch}
+              onClearSearch={onClearSearch}
+              activeFilter={activeFilter}
+              onFilterChange={setActiveFilter}
+              view={view}
+              onViewChange={setView}
+              mapFlights={mapFlights}
+              showEmpty={view === 'list' && filteredFlights.length === 0}
+              hasActiveQueryOrFilter={q.length > 0 || activeFilter !== 'All'}
+              onResetAll={onResetAll}
+            />
           }
         />
       )}

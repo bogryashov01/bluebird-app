@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, Platform, Alert,
@@ -22,6 +22,8 @@ export default function CreateAccountScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
 
   const registerMutation = useRegister({
     mutation: {
@@ -85,6 +87,11 @@ export default function CreateAccountScreen() {
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
+              autoComplete="name"
+              textContentType="name"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => emailRef.current?.focus()}
             />
             {errors.name && <Text style={[styles.errorText, { color: colors.destructive }]}>{errors.name}</Text>}
           </View>
@@ -93,6 +100,7 @@ export default function CreateAccountScreen() {
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Email</Text>
             <TextInput
+              ref={emailRef}
               style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.foreground }, errors.email && [styles.inputError, { borderColor: colors.destructive }]]}
               placeholder="you@example.com"
               placeholderTextColor="#8896B3"
@@ -101,6 +109,11 @@ export default function CreateAccountScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => passwordRef.current?.focus()}
             />
             {errors.email && <Text style={[styles.errorText, { color: colors.destructive }]}>{errors.email}</Text>}
           </View>
@@ -110,6 +123,7 @@ export default function CreateAccountScreen() {
             <Text style={styles.label}>Password</Text>
             <View style={[styles.inputRow, { backgroundColor: colors.input, borderColor: colors.border }, errors.password && [styles.inputError, { borderColor: colors.destructive }]]}>
               <TextInput
+                ref={passwordRef}
                 style={[styles.inputFlex, { color: colors.foreground }]}
                 placeholder="Min. 6 characters"
                 placeholderTextColor="#8896B3"
@@ -117,6 +131,10 @@ export default function CreateAccountScreen() {
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
+                autoComplete="new-password"
+                textContentType="newPassword"
+                returnKeyType="go"
+                onSubmitEditing={handleCreate}
               />
               <TouchableOpacity onPress={() => setShowPassword((v) => !v)}>
                 <Feather name={showPassword ? 'eye-off' : 'eye'} size={18} color="#8896B3" />
