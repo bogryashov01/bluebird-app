@@ -9,6 +9,7 @@ import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
 import { useListNotifications } from '@workspace/api-client-react';
 import type { Notification } from '@workspace/api-client-react';
+import { notificationRoute } from '@/lib/notificationRoute';
 import { SettingsGroup } from '@/components/SettingsGroup';
 import { useTheme, type ThemePreference } from '@/context/ThemeContext';
 
@@ -54,16 +55,6 @@ function AppearanceSheet({ visible, onClose }: { visible: boolean; onClose: () =
       </Pressable>
     </Modal>
   );
-}
-
-function activityRoute(item: Notification): string {
-  switch (item.type) {
-    case 'queue_update':     return '/queue/status';
-    case 'flight_confirmed': return '/(tabs)/trips';
-    case 'membership':       return '/(tabs)/membership';
-    case 'referral':         return '/referral';
-    default:                 return '/notifications';
-  }
 }
 
 function fmtDate(iso: string): string {
@@ -193,7 +184,7 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   key={item.id}
                   activeOpacity={0.6}
-                  onPress={() => router.push(activityRoute(item) as any)}
+                  onPress={() => router.push((notificationRoute(item) ?? '/notifications') as any)}
                   style={[
                     styles.activityRow,
                     i < recentActivity.length - 1 && [styles.activityRowBorder, { borderBottomColor: colors.separator }],

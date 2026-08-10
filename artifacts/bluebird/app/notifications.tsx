@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Platform,
+  ActivityIndicator, Platform, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { useListNotifications, useMarkNotificationRead } from '@workspace/api-client-react';
+import { router, useFocusEffect } from 'expo-router';
+import {
+  useListNotifications, useMarkNotificationRead, getListNotificationsQueryKey,
+} from '@workspace/api-client-react';
+import type { Notification } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
 import { SettingsGroup } from '@/components/SettingsGroup';
+import { notificationRoute } from '@/lib/notificationRoute';
 
 // ── Toggle pill ───────────────────────────────────────────────────────────────
 function Toggle({ value, onToggle, activeColor, trackOff, knobColor }: { value: boolean; onToggle: () => void; activeColor: string; trackOff: string; knobColor: string }) {
@@ -51,14 +55,52 @@ export default function NotificationsScreen() {
   const flip = (key: keyof typeof TOGGLE_DEFAULTS) =>
     setToggles((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const { data: notifData, isLoading } = useListNotifications({});
-  const readMutation = useMarkNotificationRead({
-    mutation: {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['listNotifications'] }),
+  const notificationsKey = getListNotificationsQueryKey();
+  const { data: notifData, isLoading, refetch } = useListNotifications({
+    query: {
+      refetchInterval: 15000,
+      refetchIntervalInBackground: false,
     },
   });
 
-  const notifications = (notifData as any[]) ?? [];
+  // Refetch whenever the screen regains focus
+  useFocusEffect(
+    React.useCallback(() => {
+      refetch();
+    }, [refetch]),
+  );
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try { await refetch(); } finally { setRefreshing(false); }
+  };
+
+  const readMutation = useMarkNotificationRead({
+    mutation: {
+      // Optimistically flip the unread dot right away
+      onMutate: async ({ id }) => {
+        await queryClient.cancelQueries({ queryKey: notificationsKey });
+        const previous = queryClient.getQueryData<Notification[]>(notificationsKey);
+        queryClient.setQueryData<Notification[]>(notificationsKey, (old) =>
+          (old ?? []).map((n) => (n.id === id ? { ...n, read: true } : n)),
+        );
+        return { previous };
+      },
+      onError: (_err, _vars, context: any) => {
+        if (context?.previous) queryClient.setQueryData(notificationsKey, context.previous);
+      },
+      onSettled: () => queryClient.invalidateQueries({ queryKey: notificationsKey }),
+    },
+  });
+
+  const handleNotificationPress = (item: Notification) => {
+    if (!item.read) readMutation.mutate({ id: item.id });
+    const route = notificationRoute(item);
+    if (route) router.push(route as any);
+  };
+
+  const notifications = ((notifData as Notification[]) ?? []);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.offWhite }]}>
@@ -77,6 +119,9 @@ export default function NotificationsScreen() {
         style={{ flex: 1 }}
         contentContainerStyle={[styles.scroll, { paddingBottom: botPad + 40 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
       >
         {/* Travel Preferences */}
         <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>TRAVEL PREFERENCES</Text>
@@ -136,11 +181,11 @@ export default function NotificationsScreen() {
           </View>
         ) : (
           <View style={[styles.activityList, { backgroundColor: colors.surface }]}>
-            {notifications.map((item: any, i: number) => (
+            {notifications.map((item, i) => (
               <React.Fragment key={item.id}>
                 <TouchableOpacity
                   style={styles.activityRow}
-                  onPress={() => { if (!item.read) readMutation.mutate({ id: item.id }); }}
+                  onPress={() => handleNotificationPress(item)}
                   activeOpacity={0.7}
                 >
                   <View style={[
