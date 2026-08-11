@@ -5,15 +5,11 @@ import { z } from "zod/v4";
 export const usersTable = pgTable("users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
+  phone: text("phone").notNull().unique(),
+  email: text("email"),
   membershipTier: text("membership_tier").notNull().default("base"),
   pendingTier: text("pending_tier"),
-  emailVerified: boolean("email_verified").notNull().default(false),
-  verificationTokenHash: text("verification_token_hash"),
-  verificationTokenExpires: timestamp("verification_token_expires"),
   linePassCount: integer("line_pass_count").notNull().default(0),
-  phone: text("phone"),
   referralCode: text("referral_code").notNull(),
   referredBy: text("referred_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -83,6 +79,17 @@ export const conciergeMessagesTable = pgTable("concierge_messages", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Pending SMS sign-in codes, keyed by normalized phone number. Only the
+// SHA-256 hash of the 6-digit code is stored; codes expire, are single-use,
+// and are capped by an attempt counter.
+export const loginCodesTable = pgTable("login_codes", {
+  phone: text("phone").primaryKey(),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  lastSentAt: timestamp("last_sent_at").notNull().defaultNow(),
+});
+
 export const revokedTokensTable = pgTable("revoked_tokens", {
   tokenHash: text("token_hash").primaryKey(),
   userId: text("user_id").notNull(),
@@ -102,4 +109,5 @@ export type QueueEntry = typeof queueEntriesTable.$inferSelect;
 export type Trip = typeof tripsTable.$inferSelect;
 export type Notification = typeof notificationsTable.$inferSelect;
 export type RevokedToken = typeof revokedTokensTable.$inferSelect;
+export type LoginCode = typeof loginCodesTable.$inferSelect;
 export type ConciergeMessage = typeof conciergeMessagesTable.$inferSelect;

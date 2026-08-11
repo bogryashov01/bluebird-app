@@ -137,15 +137,12 @@ function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
 export default function TabLayout() {
   const { preference } = useTheme();
   const unreadCount = useUnreadNotificationsCount();
-  const { token, user, isLoading } = useAuth();
-  // Centralized guard: no session → auth flow; unverified email → must finish
-  // verification. Prevents deep links from bypassing the signup gate.
+  const { token, isLoading } = useAuth();
+  // Centralized guard: no session → auth flow. Prevents deep links from
+  // bypassing sign-in.
   if (!isLoading) {
     if (!token) {
       return <Redirect href="/(auth)/splash" />;
-    }
-    if (user && !user.emailVerified) {
-      return <Redirect href="/(auth)/verify-email" />;
     }
   }
   // Native tabs follow the OS appearance only — use them just when the user's

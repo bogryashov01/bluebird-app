@@ -10,6 +10,6 @@ import type { User } from './user';
 export interface AuthResponse {
   token: string;
   user: User;
-  /** Demo only — raw email-verification token, present after registration. */
-  demoVerificationToken?: string;
+  /** True when this verification created the account. */
+  isNewUser?: boolean;
 }

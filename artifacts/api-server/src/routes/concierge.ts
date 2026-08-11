@@ -5,7 +5,7 @@ import { db } from "@workspace/db";
 import { usersTable, conciergeMessagesTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { authMiddleware, requireVerifiedEmail } from "../middlewares/auth";
+import { authMiddleware } from "../middlewares/auth";
 
 const router = Router();
 
@@ -87,7 +87,7 @@ Guidelines:
 - Never invent specific flight schedules, prices, or availability; direct members to the Discover tab for live flights.`;
 
 // POST /concierge/chat
-router.post("/chat", authMiddleware, requireVerifiedEmail, async (req, res) => {
+router.post("/chat", authMiddleware, async (req, res) => {
   const parsed = ConciergeChatBody.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid request: provide 1-40 messages with role and content" });

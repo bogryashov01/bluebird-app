@@ -10,11 +10,10 @@ import type { UserMembershipTier } from './userMembershipTier';
 export interface User {
   id: string;
   name: string;
-  email: string;
+  phone: string;
+  email?: string | null;
   membershipTier: UserMembershipTier;
-  emailVerified: boolean;
   linePassCount: number;
-  phone?: string;
   referralCode: string;
   createdAt: string;
 }

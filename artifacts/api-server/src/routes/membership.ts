@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { usersTable, notificationsTable } from "@workspace/db/schema";
-import { authMiddleware, requireVerifiedEmail } from "../middlewares/auth";
+import { authMiddleware } from "../middlewares/auth";
 import { eq, sql } from "drizzle-orm";
 
 const router = Router();
@@ -67,7 +67,7 @@ router.get("/", authMiddleware, async (req, res) => {
 // POST /membership/upgrade
 // NOTE: This endpoint is demo-only — it upgrades membership without payment verification.
 // In production, gate this behind verified billing entitlements before enabling.
-router.post("/upgrade", authMiddleware, requireVerifiedEmail, async (req, res) => {
+router.post("/upgrade", authMiddleware, async (req, res) => {
   if (process.env.DEMO_MODE !== "true" && process.env.NODE_ENV !== "development") {
     return res.status(501).json({
       error: "Membership upgrades require a payment provider integration in production. Set DEMO_MODE=true to enable the demo upgrade flow.",
@@ -118,7 +118,7 @@ router.post("/upgrade", authMiddleware, requireVerifiedEmail, async (req, res) =
 // POST /membership/buy-pass
 // Demo-only checkout: adds one Skip the Line pass ($2,000, never billed).
 // Gated exactly like the demo upgrade above.
-router.post("/buy-pass", authMiddleware, requireVerifiedEmail, async (req, res) => {
+router.post("/buy-pass", authMiddleware, async (req, res) => {
   if (process.env.DEMO_MODE !== "true" && process.env.NODE_ENV !== "development") {
     return res.status(501).json({
       error: "Pass purchases require a payment provider integration in production. Set DEMO_MODE=true to enable the demo checkout.",
@@ -150,7 +150,7 @@ router.post("/buy-pass", authMiddleware, requireVerifiedEmail, async (req, res) 
 // POST /membership/change
 // Schedules a downgrade or cancellation effective at the next renewal date,
 // or reverts a pending change. Mirrors the demo-only upgrade endpoint.
-router.post("/change", authMiddleware, requireVerifiedEmail, async (req, res) => {
+router.post("/change", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
   const { action, tier } = req.body ?? {};
 

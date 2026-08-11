@@ -6,7 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface LoginRequest {
-  email: string;
-  password: string;
+export interface RequestCodeRequest {
+  /** Phone number in any common format; normalized server-side. */
+  phone: string;
 }

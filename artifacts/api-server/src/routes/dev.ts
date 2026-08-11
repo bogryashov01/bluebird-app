@@ -1,8 +1,9 @@
 /**
  * Dev-only test-harness routes (all disabled in production via 404).
  *
- * GET /api/dev/autologin?email=…&password=…&redirect=…
- *   Validates real credentials (bcrypt), issues a single-use opaque code
+ * GET /api/dev/autologin?phone=…&redirect=…
+ *   Looks up the member by normalized phone number (dev-only — no SMS code
+ *   round-trip needed for screenshots), issues a single-use opaque code
  *   (32 hex chars, 60 s TTL, stored in server memory), and redirects to
  *   the Expo dev domain at /dev-auth-tmp.html?code=CODE&redirect=DEST.
  *   The raw JWT *never* rides in a URL — only the short-lived opaque code
@@ -19,11 +20,11 @@
  */
 import { Router } from "express";
 import { randomBytes } from "crypto";
-import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { signToken } from "../middlewares/auth";
+import { normalizePhone } from "./auth";
 
 const router = Router();
 
@@ -70,28 +71,27 @@ const IS_PROD = () => process.env["NODE_ENV"] === "production";
 router.get("/dev/autologin", async (req, res) => {
   if (IS_PROD()) return res.status(404).json({ error: "Not found" });
 
-  const { email, password, redirect } = req.query as Record<string, string>;
-  if (!email || !password) {
-    return res.status(400).send("Required query params: email, password");
+  const { phone: rawPhone, redirect } = req.query as Record<string, string>;
+  const phone = normalizePhone(rawPhone);
+  if (!phone) {
+    return res.status(400).send("Required query param: phone");
   }
 
   try {
     const [user] = await db
       .select()
       .from(usersTable)
-      .where(eq(usersTable.email, email));
+      .where(eq(usersTable.phone, phone));
 
     if (!user) return res.status(401).send("User not found");
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).send("Invalid password");
 
     const token = signToken(user.id);
     const userJson = JSON.stringify({
       id: user.id,
       name: user.name,
+      phone: user.phone,
       email: user.email,
       membershipTier: user.membershipTier,
-      emailVerified: user.emailVerified,
       linePassCount: user.linePassCount,
       referralCode: user.referralCode ?? "",
       createdAt: user.createdAt,

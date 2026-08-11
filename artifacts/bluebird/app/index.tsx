@@ -16,11 +16,6 @@ export default function Index() {
   }
 
   if (token) {
-    // Unverified members must finish email verification before entering the
-    // app — relaunching mid-signup resumes on the verification screen.
-    if (user && !user.emailVerified) {
-      return <Redirect href="/(auth)/verify-email" />;
-    }
     return <Redirect href="/(tabs)/discover" />;
   }
 

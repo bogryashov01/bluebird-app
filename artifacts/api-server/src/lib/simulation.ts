@@ -54,8 +54,10 @@ export async function ensureSimUsers(): Promise<void> {
       SIM_MEMBERS.map((m, i) => ({
         id: m.id,
         name: m.name,
+        // Sim users can never sign in: their reserved placeholder phone
+        // numbers are non-dialable and no SMS code is ever issued for them.
+        phone: `+1000000${String(i + 1).padStart(4, "0")}`,
         email: `${m.id}@bluebird-demo.local`,
-        passwordHash: "!sim-user-no-login",
         referralCode: `SIM${i + 1}DEMO`,
       })),
     )

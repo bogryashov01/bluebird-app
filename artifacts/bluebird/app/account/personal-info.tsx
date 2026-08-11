@@ -15,14 +15,13 @@ export default function PersonalInfoScreen() {
 
   const [name, setName]   = React.useState(user?.name ?? '');
   const [email, setEmail] = React.useState(user?.email ?? '');
-  const [phone, setPhone] = React.useState(user?.phone ?? '');
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState(false);
 
   const updateMutation = useUpdateMe({
     mutation: {
       onSuccess: (data: any) => {
-        if (user) updateUser({ ...user, name: data.name, email: data.email, phone: data.phone ?? null });
+        if (user) updateUser({ ...user, name: data.name, email: data.email ?? null });
         setSaved(true);
         setTimeout(() => setSaved(false), 2500);
       },
@@ -33,14 +32,13 @@ export default function PersonalInfoScreen() {
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
   const dirty =
     name !== (user?.name ?? '') ||
-    email !== (user?.email ?? '') ||
-    (phone ?? '') !== (user?.phone ?? '');
+    email !== (user?.email ?? '');
 
   const handleSave = () => {
     setErrorMsg(null);
     if (!name.trim()) { setErrorMsg('Name cannot be empty'); return; }
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) { setErrorMsg('Enter a valid email address'); return; }
-    updateMutation.mutate({ data: { name: name.trim(), email: email.trim(), phone: phone.trim() } });
+    if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) { setErrorMsg('Enter a valid email address'); return; }
+    updateMutation.mutate({ data: { name: name.trim(), email: email.trim() } });
   };
 
   const fieldStyle = [
@@ -65,10 +63,10 @@ export default function PersonalInfoScreen() {
           autoCapitalize="words"
         />
 
-        <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Email</Text>
+        <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Email (optional)</Text>
         <TextInput
           style={fieldStyle}
-          value={email}
+          value={email ?? ''}
           onChangeText={setEmail}
           placeholder="you@example.com"
           placeholderTextColor={colors.mutedForegroundLight}
@@ -79,13 +77,13 @@ export default function PersonalInfoScreen() {
 
         <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Phone</Text>
         <TextInput
-          style={fieldStyle}
-          value={phone ?? ''}
-          onChangeText={setPhone}
-          placeholder="+1 (555) 000-0000"
-          placeholderTextColor={colors.mutedForegroundLight}
-          keyboardType="phone-pad"
+          style={[...fieldStyle, { opacity: 0.6 }]}
+          value={user?.phone ?? ''}
+          editable={false}
         />
+        <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]}>
+          Your phone number is how you sign in and can't be changed here.
+        </Text>
 
         {errorMsg && <Text style={[styles.errorText, { color: colors.destructive }]}>{errorMsg}</Text>}
         {saved && <Text style={[styles.savedText, { color: colors.primary }]}>✓ Changes saved</Text>}
@@ -122,6 +120,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium', fontSize: 15,
     marginBottom: 18,
   },
+  helperText: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: -10, marginBottom: 18, lineHeight: 17 },
   errorText: { fontFamily: 'Inter_500Medium', fontSize: 13, marginBottom: 12 },
   savedText: { fontFamily: 'Inter_500Medium', fontSize: 13, marginBottom: 12 },
   saveBtn: { borderRadius: 999, paddingVertical: 16, alignItems: 'center', marginTop: 6 },

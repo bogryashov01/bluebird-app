@@ -6,7 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface VerifyEmailRequest {
-  /** Single-use verification token from the (demo) email link. */
-  token: string;
+export interface VerifyCodeRequest {
+  phone: string;
+  /** The 6-digit SMS code. */
+  code: string;
 }

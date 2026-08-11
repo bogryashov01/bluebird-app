@@ -10,11 +10,10 @@ const USER_KEY = 'bluebird_user';
 export interface AuthUser {
   id: string;
   name: string;
-  email: string;
+  phone: string;
+  email?: string | null;
   membershipTier: 'base' | 'plus' | 'concierge';
-  emailVerified: boolean;
   linePassCount: number;
-  phone?: string | null;
   referralCode: string;
   createdAt: string;
 }

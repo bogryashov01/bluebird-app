@@ -9,5 +9,4 @@
 export interface UpdateMeRequest {
   name?: string;
   email?: string;
-  phone?: string;
 }

@@ -8,7 +8,9 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:verify-flow": "node scripts/verify-flow.integration.mjs",
+    "test:auth-flow": "node scripts/auth-flow.integration.mjs",
+    "test:migration-flow": "node scripts/migration-flow.integration.mjs",
+    "test:sms-provider": "node scripts/sms-provider.integration.mjs",
     "test:queue-flow": "node scripts/queue-flow.integration.mjs"
   },
   "dependencies": {

@@ -1,4 +1,5 @@
 - [Entitlement atomicity](entitlement-atomicity.md) — spend passes/credits and deliver their benefit in one server transaction; never split across client calls.
+- [Identifier migrations](identifier-migrations.md) — drop legacy unique constraints by catalog lookup, normalize/dedupe before enforcing a new unique identifier; prove with a scratch-schema fixture.
 - [Demo auth controls](demo-auth-controls.md) — verification/reset flows need real single-use hashed tokens + routing gates even in demo; only email *delivery* may be simulated.
 - [API contract & schema sync](api-contract-sync.md) — new endpoints/fields go through openapi.yaml + codegen; new columns need ensureSchema() too, not just a live-DB ALTER.
 - [Bluebird stack headers](bluebird-app-header.md) — default native-stack header hides behind the notch over NativeTabs; use the shared custom AppHeader.

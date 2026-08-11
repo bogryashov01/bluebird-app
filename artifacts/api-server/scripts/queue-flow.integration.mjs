@@ -25,16 +25,15 @@ async function api(method, path, { token, body } = {}) {
   return { status: res.status, json };
 }
 
+// Creates a fresh member through the phone + SMS PIN flow (dev only: the
+// demo code rides in the request-code response in lieu of a real SMS).
 async function makeVerifiedUser(tag) {
-  const email = `queue-test-${tag}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@test.local`;
-  const reg = await api("POST", "/auth/register", {
-    body: { name: `Queue Test ${tag}`, firstName: "Queue", lastName: tag, email, password: "password123" },
-  });
-  if (reg.status !== 201) throw new Error(`register failed: ${reg.status}`);
-  const token = reg.json.token;
-  const ver = await api("POST", "/auth/verify-email", { token, body: { token: reg.json.demoVerificationToken } });
-  if (ver.status !== 200) throw new Error(`verify-email failed: ${ver.status}`);
-  return { token, email };
+  const phone = `+1206${String(Math.floor(Math.random() * 10000000)).padStart(7, "0")}`;
+  const reqCode = await api("POST", "/auth/request-code", { body: { phone } });
+  if (reqCode.status !== 200 || !reqCode.json?.demoCode) throw new Error(`request-code failed: ${reqCode.status}`);
+  const ver = await api("POST", "/auth/verify-code", { body: { phone, code: reqCode.json.demoCode } });
+  if (ver.status !== 200) throw new Error(`verify-code failed: ${ver.status}`);
+  return { token: ver.json.token, phone };
 }
 
 const flights = (await api("GET", "/flights")).json;

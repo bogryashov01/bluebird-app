@@ -53,7 +53,7 @@ const TOPICS: FaqTopic[] = [
     items: [
       {
         q: 'How do I update my personal details?',
-        a: 'Go to Profile → Personal Information to edit your name, email, and phone number.',
+        a: 'Go to Profile → Personal Information to edit your name and email. Your phone number is your sign-in identity and cannot be changed in the app.',
       },
       {
         q: 'How do referrals work?',

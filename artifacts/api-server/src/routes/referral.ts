@@ -22,7 +22,7 @@ router.get("/", authMiddleware, async (req, res) => {
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .map((r) => ({
         name: r.name,
-        status: r.emailVerified ? "joined" : "pending",
+        status: "joined",
       }));
 
     return res.json({

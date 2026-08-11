@@ -1,4 +1,3 @@
-import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
 import { flightsTable, tripsTable, queueEntriesTable, notificationsTable, usersTable } from "@workspace/db/schema";
 import { eq, and, count, sql } from "drizzle-orm";
@@ -309,27 +308,33 @@ export async function seedDemoDataForUser(userId: string): Promise<void> {
 }
 
 /**
- * Seeds the demo member used by the mobile app's "Continue with Apple/Google"
- * buttons (demo mode — no real OAuth). The app signs in through the normal
- * /auth/login endpoint with these fixed credentials.
+ * Seeds the demo member reachable through the normal phone + SMS PIN flow.
+ * Testers enter DEMO_MEMBER_PHONE on the phone screen; the demo code comes
+ * back in the /auth/request-code response (and server log) in lieu of SMS.
  */
+export const DEMO_MEMBER_PHONE = "+15555550100";
 export const DEMO_MEMBER_EMAIL = "demo@bluebird.app";
-export const DEMO_MEMBER_PASSWORD = "bluebird-demo";
 
 export async function seedDemoMember(): Promise<void> {
   try {
-    const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, DEMO_MEMBER_EMAIL));
+    const [existing] = await db.select().from(usersTable).where(eq(usersTable.phone, DEMO_MEMBER_PHONE));
     if (existing) return;
-    const passwordHash = await bcrypt.hash(DEMO_MEMBER_PASSWORD, 10);
+    // Adopt the legacy email/password-era demo row (its phone was backfilled
+    // with a placeholder during migration) instead of inserting a duplicate.
+    const [legacy] = await db.select().from(usersTable).where(eq(usersTable.email, DEMO_MEMBER_EMAIL));
+    if (legacy) {
+      await db.update(usersTable).set({ phone: DEMO_MEMBER_PHONE }).where(eq(usersTable.id, legacy.id));
+      logger.info("Re-keyed legacy demo member to demo phone number");
+      return;
+    }
     const userId = makeId();
     await db.insert(usersTable).values({
       id: userId,
       name: "Demo Member",
+      phone: DEMO_MEMBER_PHONE,
       email: DEMO_MEMBER_EMAIL,
-      passwordHash,
       referralCode: "DEMO" + Math.random().toString(36).slice(2, 6).toUpperCase(),
       membershipTier: "base",
-      emailVerified: true,
       linePassCount: 0,
     });
     await seedDemoDataForUser(userId);

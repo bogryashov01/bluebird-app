@@ -61,32 +61,25 @@ export interface SignOutResponse {
   message: string;
 }
 
-/**
- * Either firstName+lastName or legacy name must be provided.
- */
-export interface RegisterRequest {
-  firstName?: string;
-  lastName?: string;
-  /** Legacy full-name field, still accepted. */
-  name?: string;
-  email: string;
-  password: string;
+export interface RequestCodeRequest {
+  /** Phone number in any common format; normalized server-side. */
+  phone: string;
 }
 
-export interface ResendEmailResult {
+export interface RequestCodeResponse {
   message: string;
-  /** Demo only — raw verification token in lieu of a delivered email. */
-  demoVerificationToken?: string;
+  /** The normalized phone number the code was issued for. */
+  phone: string;
+  /** Demo only — the raw 6-digit code in lieu of a delivered SMS. */
+  demoCode?: string;
+  expiresInSeconds?: number;
+  resendCooldownSeconds?: number;
 }
 
-export interface VerifyEmailRequest {
-  /** Single-use verification token from the (demo) email link. */
-  token: string;
-}
-
-export interface LoginRequest {
-  email: string;
-  password: string;
+export interface VerifyCodeRequest {
+  phone: string;
+  /** The 6-digit SMS code. */
+  code: string;
 }
 
 export type UserMembershipTier = typeof UserMembershipTier[keyof typeof UserMembershipTier];
@@ -101,11 +94,10 @@ export const UserMembershipTier = {
 export interface User {
   id: string;
   name: string;
-  email: string;
+  phone: string;
+  email?: string | null;
   membershipTier: UserMembershipTier;
-  emailVerified: boolean;
   linePassCount: number;
-  phone?: string;
   referralCode: string;
   createdAt: string;
 }
@@ -113,14 +105,13 @@ export interface User {
 export interface AuthResponse {
   token: string;
   user: User;
-  /** Demo only — raw email-verification token, present after registration. */
-  demoVerificationToken?: string;
+  /** True when this verification created the account. */
+  isNewUser?: boolean;
 }
 
 export interface UpdateMeRequest {
   name?: string;
   email?: string;
-  phone?: string;
 }
 
 export type FlightStatus = typeof FlightStatus[keyof typeof FlightStatus];

@@ -4,7 +4,7 @@ import { queueEntriesTable, flightsTable, usersTable, notificationsTable, tripsT
 import { eq, and, count, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@workspace/db/schema";
-import { authMiddleware, requireVerifiedEmail } from "../middlewares/auth";
+import { authMiddleware } from "../middlewares/auth";
 
 const router = Router();
 
@@ -19,7 +19,7 @@ function makeId(): string {
 // same queue count and inserting duplicate positions.  If two transactions
 // conflict Postgres will abort one with a serialization error, which the
 // client can safely retry.
-router.post("/join", authMiddleware, requireVerifiedEmail, async (req, res) => {
+router.post("/join", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
 
   const { flightId, useLinePass, passengers: passengersRaw, acceptIntlFee } = req.body;
@@ -279,7 +279,7 @@ router.get("/status", authMiddleware, async (req, res) => {
 //
 // Confirmed entries are intentionally blocked (UI only offers Leave Queue
 // while status==='waiting').
-router.delete("/:id", authMiddleware, requireVerifiedEmail, async (req, res) => {
+router.delete("/:id", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
 
   const client = await pool.connect();
@@ -364,7 +364,7 @@ router.delete("/:id", authMiddleware, requireVerifiedEmail, async (req, res) => 
 // confirmed, renumbers the remaining waiting entries, and creates the trip.
 // Runs under SERIALIZABLE isolation so concurrent queue transitions on the
 // same flight cannot corrupt positions.
-router.post("/:id/confirm", authMiddleware, requireVerifiedEmail, async (req, res) => {
+router.post("/:id/confirm", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
 
   const client = await pool.connect();
@@ -568,7 +568,7 @@ router.post("/:id/confirm", authMiddleware, requireVerifiedEmail, async (req, re
 // ahead of it down by one. Mirrors the join-with-pass logic above and runs
 // under the same SERIALIZABLE isolation so concurrent queue transitions on
 // the same flight cannot corrupt positions.
-router.post("/:id/use-pass", authMiddleware, requireVerifiedEmail, async (req, res) => {
+router.post("/:id/use-pass", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
 
   const client = await pool.connect();

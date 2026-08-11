@@ -1,11 +1,11 @@
 import { Router } from "express";
 import crypto from "crypto";
-import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
-import { usersTable, notificationsTable, revokedTokensTable } from "@workspace/db/schema";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { usersTable, notificationsTable, revokedTokensTable, loginCodesTable } from "@workspace/db/schema";
+import { and, eq, lt, sql } from "drizzle-orm";
+import { activeSmsProvider, sendSms } from "../lib/sms";
 import jwt from "jsonwebtoken";
-import { signToken, authMiddleware, hashToken, requireVerifiedEmail } from "../middlewares/auth";
+import { signToken, authMiddleware, hashToken } from "../middlewares/auth";
 import { seedDemoDataForUser } from "../lib/seed";
 
 const router = Router();
@@ -14,126 +14,197 @@ function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 }
 
-const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CODE_TTL_MS = 5 * 60 * 1000; // codes expire after 5 minutes
+const RESEND_COOLDOWN_MS = 30 * 1000; // 30s between sends per phone
+const MAX_ATTEMPTS = 5; // wrong guesses before the code is invalidated
 
 /**
- * Creates a fresh single-use verification token for a user, stores only its
- * hash + expiry, and logs the link a real email provider would send (demo
- * environment — no outbound email). Returns the raw token so the demo client
- * can complete verification in-app in place of clicking the emailed link.
+ * Normalizes a phone number to E.164-ish form: digits only with a leading +.
+ * Bare 10-digit numbers are assumed to be US and get a +1 prefix.
+ * Returns null when the input can't be a valid phone number.
  */
-async function issueVerificationToken(userId: string, email: string): Promise<string> {
-  const rawToken = crypto.randomBytes(32).toString("hex");
-  await db
-    .update(usersTable)
-    .set({
-      verificationTokenHash: hashToken(rawToken),
-      verificationTokenExpires: new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
-    })
-    .where(eq(usersTable.id, userId));
-  console.log(`[email-verification] Verification link for ${email}: https://bluebird.app/verify?token=${rawToken}`);
-  return rawToken;
+export function normalizePhone(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const digits = raw.replace(/[^\d]/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length >= 11 && digits.length <= 15) return `+${digits}`;
+  return null;
 }
 
 function makeReferralCode(name: string): string {
   return (name.replace(/\s+/g, "").toUpperCase().slice(0, 4) + Math.random().toString(36).slice(2, 6).toUpperCase());
 }
 
-// POST /auth/register
-router.post("/register", async (req, res) => {
-  const { firstName, lastName, name: legacyName, email, password } = req.body;
-  // Accept new firstName/lastName fields, falling back to the legacy single
-  // name field so older clients keep working. Stored as one full name.
-  const name =
-    typeof firstName === "string" && firstName.trim()
-      ? `${firstName.trim()}${typeof lastName === "string" && lastName.trim() ? ` ${lastName.trim()}` : ""}`
-      : typeof legacyName === "string"
-        ? legacyName.trim()
-        : "";
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: "Name, email, and password are required" });
+function sanitizeUser<T extends Record<string, unknown>>(user: T) {
+  const { ...safeUser } = user;
+  return safeUser;
+}
+
+// POST /auth/request-code — issue a 6-digit SMS sign-in code (demo: no real
+// SMS; the code is logged server-side and returned in the response).
+router.post("/request-code", async (req, res) => {
+  const phone = normalizePhone(req.body?.phone);
+  if (!phone) {
+    return res.status(400).json({ error: "Enter a valid phone number" });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ error: "Password must be at least 6 characters" });
+  const isProd = process.env.NODE_ENV === "production";
+  const provider = activeSmsProvider();
+  // Production requires a real delivery provider (Twilio env creds or an
+  // SMS webhook). Fail loudly instead of silently stranding users.
+  if (isProd && provider === "none") {
+    return res.status(503).json({ error: "SMS sign-in is not available yet. Delivery is not configured in this environment." });
   }
 
   try {
-    const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase()));
-    if (existing) {
-      return res.status(400).json({ error: "An account with this email already exists" });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-    const userId = makeId();
-    const referralCode = makeReferralCode(name);
-
-    const [user] = await db
-      .insert(usersTable)
-      .values({
-        id: userId,
-        name,
-        email: email.toLowerCase(),
-        passwordHash,
-        referralCode,
-        membershipTier: "base",
-        emailVerified: false,
-        linePassCount: 0,
+    // Cryptographically random 6-digit code; only its hash is stored.
+    const code = crypto.randomInt(0, 1000000).toString().padStart(6, "0");
+    const values = {
+      phone,
+      codeHash: hashToken(code),
+      expiresAt: new Date(Date.now() + CODE_TTL_MS),
+      attempts: 0,
+      lastSentAt: new Date(),
+    };
+    // Atomic issuance + cooldown: the conditional upsert only replaces an
+    // existing row once its cooldown has elapsed, so concurrent requests
+    // cannot each issue a code — exactly one wins, the rest get a 429.
+    const issued = await db
+      .insert(loginCodesTable)
+      .values(values)
+      .onConflictDoUpdate({
+        target: loginCodesTable.phone,
+        set: values,
+        setWhere: sql`${loginCodesTable.lastSentAt} <= ${new Date(Date.now() - RESEND_COOLDOWN_MS)}`,
       })
       .returning();
+    if (issued.length === 0) {
+      const [existing] = await db.select().from(loginCodesTable).where(eq(loginCodesTable.phone, phone));
+      const sinceMs = existing ? Date.now() - existing.lastSentAt.getTime() : 0;
+      const wait = Math.max(1, Math.ceil((RESEND_COOLDOWN_MS - sinceMs) / 1000));
+      return res.status(429).json({ error: `Please wait ${wait}s before requesting another code` });
+    }
 
-    // Welcome notification
-    await db.insert(notificationsTable).values({
-      id: makeId(),
-      userId,
-      title: "Welcome to Bluebird ✈️",
-      body: "Your account is ready. Browse available empty legs and join the queue to fly.",
-      type: "system",
+    // Opportunistic cleanup of expired codes
+    await db.delete(loginCodesTable).where(lt(loginCodesTable.expiresAt, new Date()));
+
+    // Deliver only after issuance won the atomic cooldown race.
+    if (provider !== "none") {
+      try {
+        await sendSms(phone, `Your Bluebird sign-in code is ${code}. It expires in ${CODE_TTL_MS / 60000} minutes.`);
+      } catch {
+        // Explicit failure — don't leave the user waiting for an SMS that
+        // never went out. The stored code stays valid for a retry.
+        return res.status(502).json({ error: "We couldn't send the SMS. Please try again." });
+      }
+    }
+    if (!isProd) {
+      // Demo delivery: the raw code is logged server-side and returned
+      // in-band in lieu of (or alongside) a real SMS. NEVER in production.
+      console.log(`[sms-code] Sign-in code for ${phone}: ${code}`);
+    }
+
+    return res.json({
+      message: `We sent a 6-digit code to ${phone}`,
+      phone,
+      ...(isProd ? {} : { demoCode: code }),
+      expiresInSeconds: CODE_TTL_MS / 1000,
+      resendCooldownSeconds: RESEND_COOLDOWN_MS / 1000,
     });
-
-    // Populate demo trips, queue entry, notifications, and welcome line passes
-    await seedDemoDataForUser(userId);
-
-    // Re-read so the response reflects seeded line passes
-    // Issue the email-verification token (link is logged in this demo env;
-    // the raw token is returned so the app can stand in for the email click).
-    const demoVerificationToken = await issueVerificationToken(userId, email.toLowerCase());
-
-    const [freshUser] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-    const token = signToken(userId);
-    const { passwordHash: _, verificationTokenHash: __, verificationTokenExpires: ___, ...safeUser } = freshUser ?? user;
-    return res.status(201).json({ token, user: safeUser, demoVerificationToken });
   } catch (err) {
-    return res.status(500).json({ error: "Registration failed" });
+    return res.status(500).json({ error: "Failed to send code" });
   }
 });
 
-// POST /auth/login
-router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and password are required" });
+// POST /auth/verify-code — verify phone + code; creates the account on first
+// successful sign-in and returns a JWT.
+router.post("/verify-code", async (req, res) => {
+  const phone = normalizePhone(req.body?.phone);
+  const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
+  if (!phone) {
+    return res.status(400).json({ error: "Enter a valid phone number" });
+  }
+  if (!/^\d{6}$/.test(code)) {
+    return res.status(400).json({ error: "Enter the 6-digit code" });
   }
 
   try {
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase()));
+    const [entry] = await db.select().from(loginCodesTable).where(eq(loginCodesTable.phone, phone));
+    if (!entry || entry.expiresAt.getTime() < Date.now()) {
+      if (entry) await db.delete(loginCodesTable).where(eq(loginCodesTable.phone, phone));
+      return res.status(401).json({ error: "Code expired. Request a new one." });
+    }
+    if (entry.attempts >= MAX_ATTEMPTS) {
+      await db.delete(loginCodesTable).where(eq(loginCodesTable.phone, phone));
+      return res.status(401).json({ error: "Too many attempts. Request a new code." });
+    }
+    if (entry.codeHash !== hashToken(code)) {
+      // Atomic conditional increment: only rows still under the cap are
+      // updated, so concurrent wrong guesses cannot race past MAX_ATTEMPTS.
+      const [updated] = await db
+        .update(loginCodesTable)
+        .set({ attempts: sql`${loginCodesTable.attempts} + 1` })
+        .where(and(eq(loginCodesTable.phone, phone), lt(loginCodesTable.attempts, MAX_ATTEMPTS)))
+        .returning();
+      if (!updated || updated.attempts >= MAX_ATTEMPTS) {
+        // Cap reached (by this or a concurrent request) — invalidate the code.
+        await db.delete(loginCodesTable).where(eq(loginCodesTable.phone, phone));
+        return res.status(401).json({ error: "Too many attempts. Request a new code." });
+      }
+      return res.status(401).json({ error: "That code isn't right. Check the SMS and try again." });
+    }
+
+    // Single-use: consume the code atomically, and only while still under the
+    // attempt cap (a concurrent burst of wrong guesses may have exhausted it).
+    // If a concurrent request already consumed it, the delete matches nothing
+    // and we reject the replay.
+    const deleted = await db
+      .delete(loginCodesTable)
+      .where(and(
+        eq(loginCodesTable.phone, phone),
+        eq(loginCodesTable.codeHash, entry.codeHash),
+        lt(loginCodesTable.attempts, MAX_ATTEMPTS),
+      ))
+      .returning();
+    if (deleted.length === 0) {
+      return res.status(401).json({ error: "Code already used or invalidated. Request a new one." });
+    }
+
+    // Find or create the member for this phone number.
+    let [user] = await db.select().from(usersTable).where(eq(usersTable.phone, phone));
+    let isNewUser = false;
     if (!user) {
-      return res.status(401).json({ error: "Invalid email or password" });
+      isNewUser = true;
+      const userId = makeId();
+      const name = "Bluebird Member";
+      [user] = await db
+        .insert(usersTable)
+        .values({
+          id: userId,
+          name,
+          phone,
+          membershipTier: "base",
+          referralCode: makeReferralCode(name),
+          linePassCount: 0,
+        })
+        .returning();
+
+      await db.insert(notificationsTable).values({
+        id: makeId(),
+        userId,
+        title: "Welcome to Bluebird ✈️",
+        body: "Your account is ready. Browse available empty legs and join the queue to fly.",
+        type: "system",
+      });
     }
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
-      return res.status(401).json({ error: "Invalid email or password" });
-    }
-
-    // Backfill demo data for accounts created before demo seeding existed
+    // Populate (or backfill) demo trips, queue entry, notifications, passes.
     await seedDemoDataForUser(user.id);
 
     const [freshUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
     const token = signToken(user.id);
-    const { passwordHash: _, verificationTokenHash: __, verificationTokenExpires: ___, ...safeUser } = freshUser ?? user;
-    return res.json({ token, user: safeUser });
+    return res.json({ token, user: sanitizeUser(freshUser ?? user), isNewUser });
   } catch (err) {
-    return res.status(500).json({ error: "Login failed" });
+    return res.status(500).json({ error: "Sign in failed" });
   }
 });
 
@@ -159,57 +230,6 @@ router.post("/logout", authMiddleware, async (req, res) => {
   }
 });
 
-// POST /auth/resend-verification — rotate the token and re-log the link (demo email)
-router.post("/resend-verification", authMiddleware, async (req, res) => {
-  const userId = (req as any).userId;
-  try {
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-    if (!user) {
-      return res.status(401).json({ error: "User not found" });
-    }
-    if (user.emailVerified) {
-      return res.json({ message: "Email already verified" });
-    }
-    const demoVerificationToken = await issueVerificationToken(user.id, user.email);
-    return res.json({ message: `Verification email sent to ${user.email}`, demoVerificationToken });
-  } catch (err) {
-    return res.status(500).json({ error: "Failed to resend verification email" });
-  }
-});
-
-// POST /auth/verify-email — consume a single-use, expiring verification token
-router.post("/verify-email", authMiddleware, async (req, res) => {
-  const userId = (req as any).userId;
-  const { token } = req.body ?? {};
-  if (typeof token !== "string" || !token) {
-    return res.status(400).json({ error: "Verification token is required" });
-  }
-  try {
-    // Atomic single-use consumption: the update only matches when the token
-    // hash is current, unexpired, and the account is still unverified — so
-    // replayed, expired, rotated-out, or concurrent duplicate tokens all fail.
-    const [updated] = await db
-      .update(usersTable)
-      .set({ emailVerified: true, verificationTokenHash: null, verificationTokenExpires: null })
-      .where(
-        and(
-          eq(usersTable.id, userId),
-          eq(usersTable.emailVerified, false),
-          eq(usersTable.verificationTokenHash, hashToken(token)),
-          gt(usersTable.verificationTokenExpires, new Date()),
-        ),
-      )
-      .returning();
-    if (!updated) {
-      return res.status(400).json({ error: "Invalid or expired verification link. Request a new one." });
-    }
-    const { passwordHash: _, verificationTokenHash: __, verificationTokenExpires: ___, ...safeUser } = updated;
-    return res.json(safeUser);
-  } catch (err) {
-    return res.status(500).json({ error: "Failed to verify email" });
-  }
-});
-
 // GET /auth/me
 router.get("/me", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
@@ -218,17 +238,17 @@ router.get("/me", authMiddleware, async (req, res) => {
     if (!user) {
       return res.status(401).json({ error: "User not found" });
     }
-    const { passwordHash: _, verificationTokenHash: __, verificationTokenExpires: ___, ...safeUser } = user;
-    return res.json(safeUser);
+    return res.json(sanitizeUser(user));
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch user" });
   }
 });
 
-// PATCH /auth/me — update profile (name, email, phone)
-router.patch("/me", authMiddleware, requireVerifiedEmail, async (req, res) => {
+// PATCH /auth/me — update profile (name, email). The phone number is the
+// account identifier and cannot be changed here.
+router.patch("/me", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
-  const { name, email, phone } = req.body ?? {};
+  const { name, email } = req.body ?? {};
 
   const updates: Record<string, string | null> = {};
   if (name !== undefined) {
@@ -238,36 +258,27 @@ router.patch("/me", authMiddleware, requireVerifiedEmail, async (req, res) => {
     updates.name = name.trim();
   }
   if (email !== undefined) {
-    if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email)) {
+    if (typeof email !== "string") {
+      return res.status(400).json({ error: "Invalid email" });
+    }
+    const trimmed = email.trim().toLowerCase();
+    if (trimmed && !/^\S+@\S+\.\S+$/.test(trimmed)) {
       return res.status(400).json({ error: "Enter a valid email address" });
     }
-    updates.email = email.trim().toLowerCase();
-  }
-  if (phone !== undefined) {
-    if (typeof phone !== "string") {
-      return res.status(400).json({ error: "Invalid phone number" });
-    }
-    updates.phone = phone.trim() || null;
+    updates.email = trimmed || null;
   }
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: "Nothing to update" });
   }
 
   try {
-    if (updates.email) {
-      const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, updates.email));
-      if (existing && existing.id !== userId) {
-        return res.status(400).json({ error: "An account with this email already exists" });
-      }
-    }
     const [updated] = await db
       .update(usersTable)
       .set(updates)
       .where(eq(usersTable.id, userId))
       .returning();
     if (!updated) return res.status(401).json({ error: "User not found" });
-    const { passwordHash: _, verificationTokenHash: __, verificationTokenExpires: ___, ...safeUser } = updated;
-    return res.json(safeUser);
+    return res.json(sanitizeUser(updated));
   } catch (err) {
     return res.status(500).json({ error: "Failed to update profile" });
   }

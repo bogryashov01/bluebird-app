@@ -31,7 +31,7 @@ const TERMS_SECTIONS = [
 const PRIVACY_SECTIONS = [
   {
     h: 'Information We Collect',
-    p: 'We collect the information you provide when creating an account — name, email, and optional phone number — along with your flight activity, queue history, and membership details, to operate the service.',
+    p: 'We collect the information you provide when creating an account — your phone number (used to sign in), plus your name and optional email — along with your flight activity, queue history, and membership details, to operate the service.',
   },
   {
     h: 'How We Use It',
