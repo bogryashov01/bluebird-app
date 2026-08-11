@@ -6,11 +6,12 @@ import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Tabs } from 'expo-router';
-import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
+import { Badge, Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
 import { SymbolView } from 'expo-symbols';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotifications';
 
-function NativeTabLayout() {
+function NativeTabLayout({ unreadCount }: { unreadCount: number }) {
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index" hidden />
@@ -29,12 +30,13 @@ function NativeTabLayout() {
       <NativeTabs.Trigger name="profile/index">
         <Icon sf={{ default: 'person', selected: 'person.fill' }} />
         <Label>Profile</Label>
+        <Badge hidden={unreadCount === 0}>{String(unreadCount)}</Badge>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
 
-function ClassicTabLayout() {
+function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
   const colors = useColors();
   const isIOS = Platform.OS === 'ios';
   const isWeb = Platform.OS === 'web';
@@ -112,6 +114,13 @@ function ClassicTabLayout() {
         name="profile/index"
         options={{
           title: 'Profile',
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: colors.primary,
+            color: colors.textOnBrand,
+            fontFamily: 'Inter_600SemiBold',
+            fontSize: 11,
+          },
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="person" tintColor={color} size={22} />
@@ -126,10 +135,11 @@ function ClassicTabLayout() {
 
 export default function TabLayout() {
   const { preference } = useTheme();
+  const unreadCount = useUnreadNotificationsCount();
   // Native tabs follow the OS appearance only — use them just when the user's
   // theme preference is "System"; a forced Light/Dark needs the themed classic tabs.
   if (isLiquidGlassAvailable() && preference === 'system') {
-    return <NativeTabLayout />;
+    return <NativeTabLayout unreadCount={unreadCount} />;
   }
-  return <ClassicTabLayout />;
+  return <ClassicTabLayout unreadCount={unreadCount} />;
 }

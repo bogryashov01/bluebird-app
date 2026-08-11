@@ -73,8 +73,15 @@ export default function ProfileScreen() {
   const topPad    = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { data: notifications } = useListNotifications({});
-  const recentActivity = ((notifications as Notification[]) ?? []).slice(0, 5);
+  const { data: notifications } = useListNotifications({
+    query: {
+      refetchInterval: 15000,
+      refetchIntervalInBackground: false,
+    },
+  });
+  const notifList = (notifications as Notification[]) ?? [];
+  const recentActivity = notifList.slice(0, 5);
+  const unreadCount = notifList.filter((n) => !n.read).length;
 
   const initials    = user?.name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) ?? '?';
   const tierLabel   = {
@@ -141,6 +148,18 @@ export default function ProfileScreen() {
               label: 'Notification Settings',
               hint: 'incl. travel preferences',
               onPress: () => router.push('/notifications'),
+              right: (
+                <View style={styles.rowRight}>
+                  {unreadCount > 0 && (
+                    <View style={[styles.unreadBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={[styles.unreadBadgeText, { color: colors.textOnBrand }]}>
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={[styles.signOutChevron, { color: colors.mutedForegroundLight }]}>›</Text>
+                </View>
+              ),
             },
             {
               label: 'Community',
@@ -230,6 +249,14 @@ const styles = StyleSheet.create({
   memberSince: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 2 },
 
   signOutChevron: { fontSize: 20, lineHeight: 22 },
+
+  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  unreadBadge: {
+    minWidth: 20, height: 20, borderRadius: 10,
+    paddingHorizontal: 6,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  unreadBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
 
   sheetBackdrop: {
     flex: 1,
