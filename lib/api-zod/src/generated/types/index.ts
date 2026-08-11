@@ -35,6 +35,7 @@ export * from './queueEntry';
 export * from './queueEntryStatus';
 export * from './referralInfo';
 export * from './registerRequest';
+export * from './signOutResponse';
 export * from './trip';
 export * from './tripStatus';
 export * from './updateMeRequest';

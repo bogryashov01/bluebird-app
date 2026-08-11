@@ -64,6 +64,14 @@ export const LoginResponse = zod.object({
 
 
 /**
+ * @summary Revoke the caller's current token
+ */
+export const LogoutResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
  * @summary Get current user
  */
 export const GetMeResponse = zod.object({

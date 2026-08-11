@@ -1,9 +1,10 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
-import { usersTable, notificationsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
-import { signToken, authMiddleware } from "../middlewares/auth";
+import { usersTable, notificationsTable, revokedTokensTable } from "@workspace/db/schema";
+import { eq, lt } from "drizzle-orm";
+import jwt from "jsonwebtoken";
+import { signToken, authMiddleware, hashToken } from "../middlewares/auth";
 import { seedDemoDataForUser } from "../lib/seed";
 
 const router = Router();
@@ -99,6 +100,28 @@ router.post("/login", async (req, res) => {
     return res.json({ token, user: safeUser });
   } catch (err) {
     return res.status(500).json({ error: "Login failed" });
+  }
+});
+
+// POST /auth/logout — revoke the caller's current token
+router.post("/logout", authMiddleware, async (req, res) => {
+  const userId = (req as any).userId;
+  const token = (req as any).token as string;
+  try {
+    // Denylist the token until its natural expiry
+    const decoded = jwt.decode(token) as { exp?: number } | null;
+    const expiresAt = decoded?.exp
+      ? new Date(decoded.exp * 1000)
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await db
+      .insert(revokedTokensTable)
+      .values({ tokenHash: hashToken(token), userId, expiresAt })
+      .onConflictDoNothing();
+    // Opportunistic cleanup of entries past their token expiry
+    await db.delete(revokedTokensTable).where(lt(revokedTokensTable.expiresAt, new Date()));
+    return res.json({ message: "Signed out" });
+  } catch (err) {
+    return res.status(500).json({ error: "Logout failed" });
   }
 });
 

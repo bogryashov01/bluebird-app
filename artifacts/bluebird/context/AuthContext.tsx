@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setAuthTokenGetter } from '@workspace/api-client-react';
+import { setAuthTokenGetter, logout } from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 
 const TOKEN_KEY = 'bluebird_token';
@@ -39,6 +40,7 @@ setAuthTokenGetter(async () => {
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -102,12 +104,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Best-effort server-side token revocation. Must happen before the token
+    // is cleared locally (the request needs it), but never blocks sign-out:
+    // offline or failed calls still complete the local sign-out.
+    try {
+      await logout();
+    } catch {
+      // ignore — token will still expire naturally server-side
+    }
     await Promise.all([
       AsyncStorage.removeItem(TOKEN_KEY),
       AsyncStorage.removeItem(USER_KEY),
     ]);
     setToken(null);
     setUser(null);
+    // Wipe all cached member data (flights, queues, notifications, profile)
+    // so a different account signing in on this device sees nothing stale.
+    queryClient.clear();
     router.replace('/(auth)/sign-in');
   };
 

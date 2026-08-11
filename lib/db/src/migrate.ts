@@ -68,6 +68,13 @@ export async function ensureSchema(): Promise<void> {
       booked_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS revoked_tokens (
+      token_hash TEXT        PRIMARY KEY,
+      user_id    TEXT        NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      revoked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS notifications (
       id         TEXT        PRIMARY KEY,
       user_id    TEXT        NOT NULL REFERENCES users(id),

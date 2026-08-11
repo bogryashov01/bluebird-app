@@ -68,6 +68,13 @@ export const notificationsTable = pgTable("notifications", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const revokedTokensTable = pgTable("revoked_tokens", {
+  tokenHash: text("token_hash").primaryKey(),
+  userId: text("user_id").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at").notNull().defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true });
 export const insertFlightSchema = createInsertSchema(flightsTable).omit({ id: true, createdAt: true });
 export const insertQueueEntrySchema = createInsertSchema(queueEntriesTable).omit({ id: true, createdAt: true });
@@ -79,3 +86,4 @@ export type Flight = typeof flightsTable.$inferSelect;
 export type QueueEntry = typeof queueEntriesTable.$inferSelect;
 export type Trip = typeof tripsTable.$inferSelect;
 export type Notification = typeof notificationsTable.$inferSelect;
+export type RevokedToken = typeof revokedTokensTable.$inferSelect;

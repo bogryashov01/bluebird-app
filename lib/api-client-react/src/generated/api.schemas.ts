@@ -42,6 +42,10 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface SignOutResponse {
+  message: string;
+}
+
 export interface RegisterRequest {
   name: string;
   email: string;
