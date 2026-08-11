@@ -44,6 +44,31 @@ check('response does not leak token hash', !('verificationTokenHash' in (reg.jso
 const jwt = reg.json?.token;
 const firstToken = reg.json?.demoVerificationToken;
 
+// 1b. Register with legacy single `name` field (older clients)
+const legacyEmail = `verify-flow.legacy.${Date.now()}@test.local`;
+const legacyReg = await req('/auth/register', {
+  method: 'POST',
+  body: { name: 'Legacy Name', email: legacyEmail, password: 'secret123' },
+});
+check('legacy name register succeeds', legacyReg.status === 201, JSON.stringify(legacyReg.json));
+check('legacy name stored as-is', legacyReg.json?.user?.name === 'Legacy Name');
+
+// 1c. Register with no name at all is rejected
+const noName = await req('/auth/register', {
+  method: 'POST',
+  body: { email: `verify-flow.noname.${Date.now()}@test.local`, password: 'secret123' },
+});
+check('missing name rejected with 400', noName.status === 400, JSON.stringify(noName.json));
+
+// 1d. firstName only (no lastName) is accepted and stored without trailing space
+const firstOnlyEmail = `verify-flow.first.${Date.now()}@test.local`;
+const firstOnly = await req('/auth/register', {
+  method: 'POST',
+  body: { firstName: 'Solo', email: firstOnlyEmail, password: 'secret123' },
+});
+check('firstName-only register succeeds', firstOnly.status === 201, JSON.stringify(firstOnly.json));
+check('firstName-only stored correctly', firstOnly.json?.user?.name === 'Solo');
+
 // 2. "Relaunch": a fresh session fetches /auth/me — must still be unverified,
 // so the app's root route redirects to the verify-email screen, not Discover.
 const me = await req('/auth/me', { token: jwt });
@@ -101,6 +126,12 @@ check('verified session passes the verification gate', ungated.status !== 403, `
 // 8. Unauthenticated calls are rejected
 const noAuth = await req('/auth/verify-email', { method: 'POST', body: { token: secondToken } });
 check('verify without auth rejected', noAuth.status === 401);
+const noAuthResend = await req('/auth/resend-verification', { method: 'POST' });
+check('resend-verification without auth rejected', noAuthResend.status === 401);
+
+// 9. Resend for an already-verified account is a no-op message, no new token
+const resendVerified = await req('/auth/resend-verification', { method: 'POST', token: jwt });
+check('resend after verification reports already verified', resendVerified.status === 200 && resendVerified.json?.demoVerificationToken === undefined, JSON.stringify(resendVerified.json));
 
 console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);
