@@ -68,6 +68,14 @@ export const notificationsTable = pgTable("notifications", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const conciergeMessagesTable = pgTable("concierge_messages", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => usersTable.id),
+  role: text("role").notNull(), // 'user' | 'assistant'
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const revokedTokensTable = pgTable("revoked_tokens", {
   tokenHash: text("token_hash").primaryKey(),
   userId: text("user_id").notNull(),
@@ -87,3 +95,4 @@ export type QueueEntry = typeof queueEntriesTable.$inferSelect;
 export type Trip = typeof tripsTable.$inferSelect;
 export type Notification = typeof notificationsTable.$inferSelect;
 export type RevokedToken = typeof revokedTokensTable.$inferSelect;
+export type ConciergeMessage = typeof conciergeMessagesTable.$inferSelect;

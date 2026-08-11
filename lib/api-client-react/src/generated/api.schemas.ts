@@ -34,6 +34,21 @@ export interface ConciergeChatRequest {
   messages: ConciergeChatMessage[];
 }
 
+export type ConciergeHistoryMessageRole = typeof ConciergeHistoryMessageRole[keyof typeof ConciergeHistoryMessageRole];
+
+
+export const ConciergeHistoryMessageRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export interface ConciergeHistoryMessage {
+  id: string;
+  role: ConciergeHistoryMessageRole;
+  content: string;
+  createdAt: string;
+}
+
 export interface ConciergeReply {
   reply: string;
 }
@@ -307,5 +322,13 @@ export interface Notification {
 export type ListFlightsParams = {
 from?: string;
 to?: string;
+};
+
+export type GetConciergeHistoryParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
 };
 

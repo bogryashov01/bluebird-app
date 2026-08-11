@@ -488,3 +488,24 @@ export const ConciergeChatResponse = zod.object({
 })
 
 
+/**
+ * @summary Load the caller's recent concierge conversation history
+ */
+export const getConciergeHistoryQueryLimitDefault = 50;
+export const getConciergeHistoryQueryLimitMax = 100;
+
+
+
+export const GetConciergeHistoryQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(getConciergeHistoryQueryLimitMax).default(getConciergeHistoryQueryLimitDefault)
+})
+
+export const GetConciergeHistoryResponseItem = zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.string()
+})
+export const GetConciergeHistoryResponse = zod.array(GetConciergeHistoryResponseItem)
+
+

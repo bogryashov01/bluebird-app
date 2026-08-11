@@ -1,14 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
-  TouchableOpacity, Platform,
+  TouchableOpacity, Platform, ActivityIndicator,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
-import { useConciergeChat } from '@workspace/api-client-react';
+import { useConciergeChat, useGetConciergeHistory } from '@workspace/api-client-react';
 import * as Haptics from 'expo-haptics';
 
 interface Message {
@@ -32,17 +32,38 @@ export default function ConciergeScreen() {
   const { user } = useAuth();
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      text: `Welcome, ${user?.name?.split(' ')[0] ?? 'there'}! I'm your Bluebird AI Concierge. How can I help you today? Ask me about flights, membership, queue system, or anything else.`,
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
+
+  // Load persisted conversation history once on mount. The welcome message is
+  // only shown when there is no prior history (fresh conversation).
+  const historyQuery = useGetConciergeHistory({ limit: 50 });
+  const historyLoaded = useRef(false);
+  useEffect(() => {
+    if (historyLoaded.current || !historyQuery.isSuccess) return;
+    historyLoaded.current = true;
+    const past: Message[] = (historyQuery.data ?? []).map((m) => ({
+      id: m.id,
+      role: m.role,
+      text: m.content,
+      timestamp: new Date(m.createdAt),
+    }));
+    if (past.length > 0) {
+      setMessages(prev => [...past, ...prev]);
+    } else {
+      setMessages(prev => [
+        {
+          id: 'welcome',
+          role: 'assistant' as const,
+          text: `Welcome, ${user?.name?.split(' ')[0] ?? 'there'}! I'm your Bluebird AI Concierge. How can I help you today? Ask me about flights, membership, queue system, or anything else.`,
+          timestamp: new Date(),
+        },
+        ...prev,
+      ]);
+    }
+  }, [historyQuery.isSuccess, historyQuery.data, user?.name]);
 
   const chatMutation = useConciergeChat();
   const isTyping = chatMutation.isPending;
@@ -89,6 +110,11 @@ export default function ConciergeScreen() {
       // Opaque native-stack header: offset = status bar / notch inset + standard 44pt header height
       keyboardVerticalOffset={Platform.OS === 'web' ? 0 : insets.top + 44}
     >
+      {historyQuery.isLoading && (
+        <View style={styles.historyLoading}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      )}
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -170,6 +196,7 @@ export default function ConciergeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  historyLoading: { paddingTop: 24, alignItems: 'center' },
   messageList: { padding: 16, gap: 12 },
   suggestionsRow: { flexWrap: 'wrap', flexDirection: 'row', gap: 8, marginBottom: 16 },
   suggestion: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },

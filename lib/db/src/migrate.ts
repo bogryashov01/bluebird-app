@@ -75,6 +75,14 @@ export async function ensureSchema(): Promise<void> {
       revoked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS concierge_messages (
+      id         TEXT        PRIMARY KEY,
+      user_id    TEXT        NOT NULL REFERENCES users(id),
+      role       TEXT        NOT NULL,
+      content    TEXT        NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS notifications (
       id         TEXT        PRIMARY KEY,
       user_id    TEXT        NOT NULL REFERENCES users(id),
