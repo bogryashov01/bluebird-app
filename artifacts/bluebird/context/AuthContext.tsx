@@ -121,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Wipe all cached member data (flights, queues, notifications, profile)
     // so a different account signing in on this device sees nothing stale.
     queryClient.clear();
-    router.replace('/(auth)/sign-in');
+    router.replace('/(auth)/welcome');
   };
 
   const updateUser = (updatedUser: AuthUser) => {

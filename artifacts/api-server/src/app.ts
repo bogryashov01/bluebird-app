@@ -3,7 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { seedFlights } from "./lib/seed";
+import { seedFlights, seedDemoMember } from "./lib/seed";
 import { ensureSimUsers, startQueueSimulation } from "./lib/simulation";
 import { ensureSchema } from "@workspace/db";
 
@@ -43,6 +43,7 @@ app.use("/api", router);
 // Ensure DB schema exists, then seed on startup
 ensureSchema()
   .then(() => seedFlights())
+  .then(() => seedDemoMember())
   .then(() => ensureSimUsers())
   .then(() => {
     startQueueSimulation();

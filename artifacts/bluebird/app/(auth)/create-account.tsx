@@ -31,7 +31,7 @@ export default function CreateAccountScreen() {
         // @ts-ignore
         await signIn(data.token, data.user);
         queryClient.clear();
-        router.replace('/(auth)/verify-email');
+        router.replace('/(auth)/onboarding');
       },
       onError: (err: any) => {
         const msg = err?.response?.data?.error || err?.message || 'Registration failed';

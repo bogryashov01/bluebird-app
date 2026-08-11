@@ -136,7 +136,7 @@ export default function OnboardingScreen() {
       flatListRef.current?.scrollToIndex({ index: activeIndex + 1, animated: true });
       setActiveIndex(activeIndex + 1);
     } else {
-      router.push('/(auth)/sign-in');
+      router.replace('/(tabs)/discover');
     }
   };
 
@@ -179,12 +179,6 @@ export default function OnboardingScreen() {
             />
           ))}
         </View>
-
-        {isDarkSlide && (
-          <TouchableOpacity onPress={() => router.push('/(auth)/sign-in')} style={styles.signInLink}>
-            <Text style={styles.signInLinkText}>Already a member? Sign in</Text>
-          </TouchableOpacity>
-        )}
       </View>
     </View>
   );
@@ -343,13 +337,5 @@ const styles = StyleSheet.create({
   dot: {
     height: 7,
     borderRadius: 4,
-  },
-  signInLink: {
-    alignItems: 'center',
-  },
-  signInLinkText: {
-    color: '#8896B3',
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
   },
 });

@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
 import { flightsTable, tripsTable, queueEntriesTable, notificationsTable, usersTable } from "@workspace/db/schema";
 import { eq, and, count, sql } from "drizzle-orm";
@@ -269,6 +270,37 @@ export async function seedDemoDataForUser(userId: string): Promise<void> {
     logger.info({ userId }, "Seeded demo data for user");
   } catch (err) {
     logger.error({ err, userId }, "Failed to seed demo data for user");
+  }
+}
+
+/**
+ * Seeds the demo member used by the mobile app's "Continue with Apple/Google"
+ * buttons (demo mode — no real OAuth). The app signs in through the normal
+ * /auth/login endpoint with these fixed credentials.
+ */
+export const DEMO_MEMBER_EMAIL = "demo@bluebird.app";
+export const DEMO_MEMBER_PASSWORD = "bluebird-demo";
+
+export async function seedDemoMember(): Promise<void> {
+  try {
+    const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, DEMO_MEMBER_EMAIL));
+    if (existing) return;
+    const passwordHash = await bcrypt.hash(DEMO_MEMBER_PASSWORD, 10);
+    const userId = makeId();
+    await db.insert(usersTable).values({
+      id: userId,
+      name: "Demo Member",
+      email: DEMO_MEMBER_EMAIL,
+      passwordHash,
+      referralCode: "DEMO" + Math.random().toString(36).slice(2, 6).toUpperCase(),
+      membershipTier: "base",
+      emailVerified: true,
+      linePassCount: 0,
+    });
+    await seedDemoDataForUser(userId);
+    logger.info("Seeded demo member account");
+  } catch (err) {
+    logger.error({ err }, "Failed to seed demo member");
   }
 }
 
