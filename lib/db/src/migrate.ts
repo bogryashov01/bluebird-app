@@ -40,6 +40,8 @@ export async function ensureSchema(): Promise<void> {
       price_usd        INTEGER     NOT NULL DEFAULT 0,
       discount_pct     INTEGER     NOT NULL DEFAULT 0,
       featured         BOOLEAN     NOT NULL DEFAULT false,
+      international    BOOLEAN     NOT NULL DEFAULT false,
+      international_fee_usd INTEGER NOT NULL DEFAULT 0,
       status           TEXT        NOT NULL DEFAULT 'available',
       created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -47,6 +49,8 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE flights ADD COLUMN IF NOT EXISTS price_usd    INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE flights ADD COLUMN IF NOT EXISTS discount_pct INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE flights ADD COLUMN IF NOT EXISTS featured     BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE flights ADD COLUMN IF NOT EXISTS international BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE flights ADD COLUMN IF NOT EXISTS international_fee_usd INTEGER NOT NULL DEFAULT 0;
 
     CREATE TABLE IF NOT EXISTS queue_entries (
       id             TEXT        PRIMARY KEY,
@@ -61,6 +65,7 @@ export async function ensureSchema(): Promise<void> {
 
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS passengers INTEGER NOT NULL DEFAULT 1;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS front_notified_at TIMESTAMPTZ;
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS intl_fee_accepted BOOLEAN NOT NULL DEFAULT false;
 
     CREATE TABLE IF NOT EXISTS trips (
       id         TEXT        PRIMARY KEY,

@@ -10,6 +10,7 @@ import { useGetFlight, useGetFlightMyStatus, useCancelQueueEntry, useConfirmQueu
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { confirmDialog } from '@/lib/confirmDialog';
 
 // ── Aircraft image matching ────────────────────────────────────────────────────
 const AIRCRAFT_IMAGES = [
@@ -99,6 +100,16 @@ export default function FlightDetailScreen() {
         queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
         queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
         queryClient.invalidateQueries({ queryKey: [`/api/flights/${id}/my-status`] });
+        const fl = flight as any;
+        router.push({
+          pathname: '/flight/confirmed',
+          params: fl ? {
+            from: fl.fromAirport, to: fl.toAirport,
+            fromCity: fl.fromCity, toCity: fl.toCity,
+            departureDate: fl.departureDate, departureTime: fl.departureTime,
+            duration: fl.duration, aircraftType: fl.aircraftType,
+          } : {},
+        });
       },
       onError: (err: any) => {
         const msg = err?.data?.error || err?.message || 'Failed to confirm seat';
@@ -107,26 +118,16 @@ export default function FlightDetailScreen() {
     },
   });
 
-  const handleLeaveQueue = () => {
+  const handleLeaveQueue = async () => {
     if (!myStatus?.queueEntryId) return;
-    Alert.alert('Leave Queue?', 'You will lose your position in the queue.', [
-      { text: 'Keep Spot', style: 'cancel' },
-      {
-        text: 'Leave Queue', style: 'destructive',
-        onPress: () => cancelMutation.mutate({ id: myStatus.queueEntryId! }),
-      },
-    ]);
+    const ok = await confirmDialog('Leave Queue?', 'You will lose your position in the queue.', 'Leave Queue', true);
+    if (ok) cancelMutation.mutate({ id: myStatus.queueEntryId! });
   };
 
-  const handleConfirmSeat = () => {
+  const handleConfirmSeat = async () => {
     if (!myStatus?.queueEntryId) return;
-    Alert.alert('Confirm your seat?', 'This will reserve your spot on this flight.', [
-      { text: 'Not yet', style: 'cancel' },
-      {
-        text: 'Confirm', style: 'default',
-        onPress: () => confirmMutation.mutate({ id: myStatus.queueEntryId! }),
-      },
-    ]);
+    const ok = await confirmDialog('Confirm your seat?', 'This will reserve your spot on this flight.');
+    if (ok) confirmMutation.mutate({ id: myStatus.queueEntryId! });
   };
 
   // ── Loading / Error — guards before any flight-property access ──
@@ -152,18 +153,31 @@ export default function FlightDetailScreen() {
 
   const status = myStatus?.status ?? 'none';
 
+  const joinFlowParams = (extra: Record<string, string> = {}) => ({
+    flightId:      f.id,
+    fromCity:      f.fromCity,
+    toCity:        f.toCity,
+    from:          f.fromAirport,
+    to:            f.toAirport,
+    passengers:    String(passengers),
+    departureDate: f.departureDate,
+    departureTime: f.departureTime,
+    duration:      f.duration,
+    aircraftType:  f.aircraftType,
+    flightStatus:  f.status,
+    international: f.international ? '1' : '',
+    feeUsd:        String(f.internationalFeeUsd ?? 0),
+    ...extra,
+  });
+
   const handleJoinQueue = () => {
-    router.push({
-      pathname: '/queue/join',
-      params: {
-        flightId:   f.id,
-        fromCity:   f.fromCity,
-        toCity:     f.toCity,
-        from:       f.fromAirport,
-        to:         f.toAirport,
-        passengers: String(passengers),
-      },
-    });
+    if (!user) {
+      // Not signed in — send to the auth flow instead of an API call that
+      // would fail with 401. They can come back to the flight afterward.
+      router.push('/(auth)/welcome');
+      return;
+    }
+    router.push({ pathname: '/queue/join', params: joinFlowParams() });
   };
 
   // ── CTA footer rendering — branched on my-status ─────────────────────────
@@ -263,14 +277,7 @@ export default function FlightDetailScreen() {
           <TouchableOpacity
             style={[styles.skipBtn, { borderColor: colors.primary }]}
             onPress={() =>
-              router.push({
-                pathname: '/queue/join',
-                params: {
-                  flightId: f.id, fromCity: f.fromCity, toCity: f.toCity,
-                  from: f.fromAirport, to: f.toAirport, useLinePass: '1',
-                  passengers: String(passengers),
-                },
-              })
+              router.push({ pathname: '/queue/join', params: joinFlowParams({ useLinePass: '1' }) })
             }
             activeOpacity={0.8}
           >

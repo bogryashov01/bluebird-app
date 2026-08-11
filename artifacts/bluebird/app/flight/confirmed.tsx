@@ -1,91 +1,153 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform } from 'react-native';
-import { router } from 'expo-router';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Platform, Alert, Share,
+} from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import * as Haptics from 'expo-haptics';
 
+function computeArrival(departureTime?: string, duration?: string): string {
+  if (!departureTime || !duration) return '';
+  const [depH, depM] = departureTime.split(':').map(Number);
+  const hours = duration.match(/(\d+)h/);
+  const mins = duration.match(/(\d+)m/);
+  const totalMins = depH * 60 + depM
+    + (hours ? parseInt(hours[1]) * 60 : 0)
+    + (mins ? parseInt(mins[1]) : 0);
+  const arrH = Math.floor(totalMins / 60) % 24;
+  const arrM = totalMins % 60;
+  return `${String(arrH).padStart(2, '0')}:${String(arrM).padStart(2, '0')}`;
+}
+
+const NEXT_STEPS = [
+  'Review your itinerary',
+  'Add flight to calendar',
+  'Arrive 30 minutes early',
+];
+
+// Dark "You're confirmed!" celebration screen — brand navy in both modes.
 export default function FlightConfirmedScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const scaleAnim   = useRef(new Animated.Value(0)).current;
+  const params = useLocalSearchParams<{
+    from?: string; to?: string; fromCity?: string; toCity?: string;
+    departureTime?: string; duration?: string; aircraftType?: string;
+    departureDate?: string;
+  }>();
+  const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
-  const topPad    = Platform.OS === 'web' ? 67 : insets.top;
+  const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   useEffect(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     Animated.parallel([
-      Animated.spring(scaleAnim,   { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 }),
+      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 }),
       Animated.timing(opacityAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
     ]).start();
   }, []);
 
+  const hasRoute = !!params.from && !!params.to;
+  const arrival = computeArrival(params.departureTime, params.duration);
+  const routeLine = [params.fromCity ?? params.from, params.toCity ?? params.to]
+    .filter(Boolean).join(' → ');
+  const subtitle = [routeLine, params.aircraftType].filter(Boolean).join(' · ');
+
+  const handleShare = () => {
+    Share.share({
+      message: hasRoute
+        ? `I'm confirmed on a Bluebird flight: ${params.from} → ${params.to}${params.departureDate ? ` on ${params.departureDate}` : ''}! ✈️`
+        : "I'm confirmed on a Bluebird flight! ✈️",
+    }).catch(() => {});
+  };
+
+  const demoAction = (title: string) =>
+    Alert.alert(title, 'Demo — this action is not wired to a real service yet.');
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: topPad, paddingBottom: bottomPad + 24 }]}>
-      <View style={styles.content}>
-        {/* Success icon ring */}
+    <View style={[styles.container, { backgroundColor: colors.backgroundMid }]}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingTop: topPad + 40, paddingBottom: bottomPad + 110 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Success mark */}
         <Animated.View style={[
           styles.iconRing,
-          { backgroundColor: colors.success + '18', opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
+          { backgroundColor: colors.primary + '26', opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
         ]}>
-          <View style={[styles.iconBg, { backgroundColor: colors.success }]}>
-            <Feather name="check" size={44} color={colors.successForeground} />
+          <View style={[styles.iconBg, { backgroundColor: colors.primary }]}>
+            <Feather name="check" size={30} color={colors.primaryForeground} />
           </View>
         </Animated.View>
 
-        <Animated.View style={{ opacity: opacityAnim, alignItems: 'center', gap: 10 }}>
-          <Text style={[styles.title, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
-            You're confirmed!
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            Your seat has been confirmed. Check your email for boarding details and next steps.
-          </Text>
+        <Animated.View style={{ opacity: opacityAnim, alignItems: 'center', gap: 6 }}>
+          <Text style={[styles.title, { color: colors.textOnBrand }]}>You're confirmed!</Text>
+          {!!subtitle && <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>{subtitle}</Text>}
         </Animated.View>
 
-        <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {[
-            { icon: 'check-circle', label: 'Status',    value: 'Confirmed',                color: colors.success },
-            { icon: 'bell',         label: 'Notifications', value: 'Check your app & email', color: colors.foreground },
-            { icon: 'briefcase',    label: 'Next step',  value: 'View your trip details',   color: colors.foreground },
-          ].map((row, i) => (
-            <React.Fragment key={row.label}>
-              {i > 0 && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
-              <View style={styles.detailRow}>
-                <View style={styles.detailLeft}>
-                  <Feather name={row.icon as any} size={16} color={row.color} />
-                  <Text style={[styles.detailLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                    {row.label}
-                  </Text>
-                </View>
-                <Text style={[styles.detailValue, { color: row.color, fontFamily: 'Inter_500Medium' }]}>
-                  {row.value}
-                </Text>
-              </View>
-            </React.Fragment>
+        {/* Route timeline */}
+        {hasRoute && (
+          <View style={styles.timeline}>
+            <View style={styles.timelineEnd}>
+              <Text style={[styles.timelineCode, { color: colors.textOnBrand }]}>{params.from}</Text>
+              {!!params.departureTime && (
+                <Text style={[styles.timelineTime, { color: colors.mutedOnBrand }]}>{params.departureTime}</Text>
+              )}
+            </View>
+            <View style={styles.timelineCenter}>
+              <View style={[styles.timelineDot, { backgroundColor: colors.primary }]} />
+              <View style={[styles.timelineLine, { backgroundColor: colors.textOnBrand + '33' }]} />
+              <Feather name="send" size={13} color={colors.mutedOnBrand} style={{ transform: [{ rotate: '45deg' }] }} />
+              <View style={[styles.timelineLine, { backgroundColor: colors.textOnBrand + '33' }]} />
+              <View style={[styles.timelineDot, { backgroundColor: colors.primary }]} />
+            </View>
+            <View style={[styles.timelineEnd, { alignItems: 'flex-end' }]}>
+              <Text style={[styles.timelineCode, { color: colors.textOnBrand }]}>{params.to}</Text>
+              {!!arrival && <Text style={[styles.timelineTime, { color: colors.mutedOnBrand }]}>{arrival}</Text>}
+            </View>
+          </View>
+        )}
+
+        {/* Next steps */}
+        <View style={styles.nextSteps}>
+          <Text style={[styles.nextStepsTitle, { color: colors.textOnBrand }]}>Next Steps</Text>
+          {NEXT_STEPS.map((step) => (
+            <View key={step} style={styles.stepRow}>
+              <Feather name="check" size={14} color={colors.primary} />
+              <Text style={[styles.stepText, { color: colors.mutedOnBrand }]}>{step}</Text>
+            </View>
           ))}
         </View>
-      </View>
 
-      <View style={styles.actions}>
+        {/* Actions */}
+        <View style={styles.actionRow}>
+          {[
+            { label: 'Add to\nCalendar', onPress: () => demoAction('Add to Calendar') },
+            { label: 'Itinerary', onPress: () => demoAction('Itinerary') },
+            { label: 'Share', onPress: handleShare },
+          ].map((a) => (
+            <TouchableOpacity
+              key={a.label}
+              style={[styles.actionBtn, { backgroundColor: colors.textOnBrand + '12' }]}
+              onPress={a.onPress}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.actionText, { color: colors.textOnBrand }]}>{a.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+
+      <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
         <TouchableOpacity
           style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-          onPress={() => router.replace('/(tabs)/trips')}
-          activeOpacity={0.8}
+          onPress={() => router.dismissTo('/(tabs)/trips')}
+          activeOpacity={0.85}
         >
-          <Text style={[styles.primaryBtnText, { color: colors.primaryForeground, fontFamily: 'Inter_600SemiBold' }]}>View My Trips</Text>
-          <Feather name="briefcase" size={18} color={colors.primaryForeground} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.secondaryBtn, { borderColor: colors.border }]}
-          onPress={() => router.replace('/(tabs)/discover')}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.secondaryBtnText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            Back to Discover
-          </Text>
+          <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>View My Trips</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -94,37 +156,38 @@ export default function FlightConfirmedScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24, gap: 28 },
+  scroll: { paddingHorizontal: 24, alignItems: 'center', gap: 26 },
   iconRing: {
-    width: 140, height: 140, borderRadius: 70,
+    width: 96, height: 96, borderRadius: 48,
     justifyContent: 'center', alignItems: 'center',
   },
   iconBg: {
-    width: 100, height: 100, borderRadius: 50,
+    width: 64, height: 64, borderRadius: 32,
     justifyContent: 'center', alignItems: 'center',
   },
-  title:    { fontSize: 28, textAlign: 'center' },
-  subtitle: { fontSize: 15, lineHeight: 24, textAlign: 'center' },
-  detailCard: {
-    width: '100%', borderRadius: 18, borderWidth: 1, overflow: 'hidden',
+  title: { fontFamily: 'Inter_700Bold', fontSize: 28, textAlign: 'center' },
+  subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, textAlign: 'center' },
+  timeline: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 12 },
+  timelineEnd: { alignItems: 'flex-start' },
+  timelineCode: { fontFamily: 'Inter_700Bold', fontSize: 22 },
+  timelineTime: { fontFamily: 'Inter_500Medium', fontSize: 13, marginTop: 2 },
+  timelineCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  timelineLine: { flex: 1, height: 1 },
+  timelineDot: { width: 6, height: 6, borderRadius: 3 },
+  nextSteps: { alignSelf: 'stretch', gap: 10 },
+  nextStepsTitle: { fontFamily: 'Inter_700Bold', fontSize: 15, marginBottom: 2 },
+  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepText: { fontFamily: 'Inter_400Regular', fontSize: 14 },
+  actionRow: { flexDirection: 'row', gap: 10, alignSelf: 'stretch' },
+  actionBtn: {
+    flex: 1, borderRadius: 12, paddingVertical: 14,
+    alignItems: 'center', justifyContent: 'center',
   },
-  detailRow:  {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 14, paddingHorizontal: 16,
+  actionText: { fontFamily: 'Inter_600SemiBold', fontSize: 12.5, textAlign: 'center', lineHeight: 17 },
+  footer: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    paddingHorizontal: 22, paddingTop: 12,
   },
-  detailLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  detailLabel: { fontSize: 14 },
-  detailValue: { fontSize: 14 },
-  separator:   { height: 1 },
-  actions: { paddingHorizontal: 24, gap: 12 },
-  primaryBtn: {
-    height: 56, borderRadius: 999,
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
-  },
-  primaryBtnText: { fontSize: 16 },
-  secondaryBtn: {
-    height: 50, borderRadius: 999, borderWidth: 1,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  secondaryBtnText: { fontSize: 15 },
+  primaryBtn: { borderRadius: 999, paddingVertical: 16, alignItems: 'center' },
+  primaryBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
 });

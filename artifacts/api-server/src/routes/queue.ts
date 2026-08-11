@@ -21,7 +21,8 @@ function makeId(): string {
 // client can safely retry.
 router.post("/join", authMiddleware, requireVerifiedEmail, async (req, res) => {
   const userId = (req as any).userId;
-  const { flightId, useLinePass, passengers: passengersRaw } = req.body;
+
+  const { flightId, useLinePass, passengers: passengersRaw, acceptIntlFee } = req.body;
   const passengers = Math.max(1, Math.min(10, parseInt(passengersRaw ?? "1", 10) || 1));
 
   if (!flightId) {
@@ -45,6 +46,21 @@ router.post("/join", authMiddleware, requireVerifiedEmail, async (req, res) => {
     if (flight.status !== "available") {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Flight is no longer available" });
+    }
+
+    // 1a. International-fee enforcement — Base members must explicitly accept
+    //     the fee to join an international flight (Plus/Concierge waive it).
+    const [member] = await txDb
+      .select({ membershipTier: usersTable.membershipTier })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId));
+    const feeApplies =
+      flight.international && flight.internationalFeeUsd > 0 && member?.membershipTier === "base";
+    if (feeApplies && !acceptIntlFee) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        error: `This international flight has a $${flight.internationalFeeUsd.toLocaleString()} fee for Base members — you must accept it to join (or upgrade to Plus to waive it).`,
+      });
     }
 
     // 1b. Aggregate seat capacity enforcement — sum passengers already reserved
@@ -72,12 +88,12 @@ router.post("/join", authMiddleware, requireVerifiedEmail, async (req, res) => {
     // 2. Guard against duplicate entry — blocks both waiting AND confirmed entries
     //    so a confirmed user cannot re-join the same flight.
     const [existing] = await txDb
-      .select()
+      .select({ status: queueEntriesTable.status })
       .from(queueEntriesTable)
       .where(
         and(
-          eq(queueEntriesTable.userId, userId),
           eq(queueEntriesTable.flightId, String(flightId)),
+          eq(queueEntriesTable.userId, userId),
           inArray(queueEntriesTable.status, ["waiting", "confirmed"]),
         ),
       );
@@ -101,17 +117,10 @@ router.post("/join", authMiddleware, requireVerifiedEmail, async (req, res) => {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "You do not have any Skip the Line passes" });
       }
-
-      // Shift every existing waiting entry down by one to make room at position 1
-      await txDb
-        .update(queueEntriesTable)
-        .set({ position: sql`${queueEntriesTable.position} + 1` })
-        .where(
-          and(
-            eq(queueEntriesTable.flightId, String(flightId)),
-            eq(queueEntriesTable.status, "waiting"),
-          ),
-        );
+      // Note: no position shift needed — a pass join confirms immediately
+      // below (atomically, in this same transaction), so the entry never
+      // occupies a waiting-queue slot. If any later step fails, the whole
+      // transaction rolls back and the pass balance is untouched.
     }
 
     // 4. Derive position after any shift (inside the same serializable snapshot)
@@ -126,7 +135,10 @@ router.post("/join", authMiddleware, requireVerifiedEmail, async (req, res) => {
       );
     const position = useLinePass ? 1 : Number(queueCount) + 1;
 
-    // 5. Insert the new entry
+    // 5. Insert the new entry. A Skip-the-Line join is an atomic instant win:
+    //    pass consumption, entry creation as CONFIRMED, and trip creation all
+    //    commit together — the pass can never be lost without a confirmed seat
+    //    (seat capacity was already enforced in step 1b within this snapshot).
     const [entry] = await txDb
       .insert(queueEntriesTable)
       .values({
@@ -134,25 +146,58 @@ router.post("/join", authMiddleware, requireVerifiedEmail, async (req, res) => {
         userId,
         flightId: String(flightId),
         position,
-        status: "waiting",
-        usedLinePass: Boolean(useLinePass),
+        status: useLinePass ? "confirmed" : "waiting",
         passengers,
+        usedLinePass: !!useLinePass,
+        intlFeeAccepted: feeApplies && !!acceptIntlFee,
       })
       .returning();
+
+    let trip: any = null;
+    if (useLinePass) {
+      [trip] = await txDb
+        .insert(tripsTable)
+        .values({ id: makeId(), userId, flightId: String(flightId), status: "upcoming" })
+        .returning();
+    }
 
     // 6. Notify the member
     await txDb.insert(notificationsTable).values({
       id: makeId(),
       userId,
-      title: "Added to queue",
-      body: `You're #${position} in the queue for ${flight.fromCity} → ${flight.toCity}`,
-      type: "queue_update",
+      title: useLinePass ? "Flight confirmed!" : "Added to queue",
+      body: useLinePass
+        ? `Skip the Line pass used — your seat on ${flight.fromCity} → ${flight.toCity} is confirmed.`
+        : `You're #${position} in the queue for ${flight.fromCity} → ${flight.toCity}`,
+      type: useLinePass ? "flight_confirmed" : "queue_update",
     });
+
+    // 6b. Demo charge note for an accepted international fee (never billed)
+    if (feeApplies && acceptIntlFee) {
+      await txDb.insert(notificationsTable).values({
+        id: makeId(),
+        userId,
+        title: "International fee accepted",
+        body: `A one-time $${flight.internationalFeeUsd.toLocaleString()} international fee applies to ${flight.fromCity} → ${flight.toCity} (demo — no real charge).`,
+        type: "queue_update",
+      });
+    }
+
+    // 7. Actual post-insert waiting count (unambiguous — counted after the
+    //    new entry exists, inside the same transaction snapshot).
+    const [{ value: totalAfterInsert }] = await txDb
+      .select({ value: count() })
+      .from(queueEntriesTable)
+      .where(
+        and(
+          eq(queueEntriesTable.flightId, String(flightId)),
+          eq(queueEntriesTable.status, "waiting"),
+        ),
+      );
 
     await client.query("COMMIT");
 
-    const totalInQueue = Number(queueCount) + 1;
-    return res.status(201).json({ ...entry, flight, totalInQueue });
+    return res.status(201).json({ ...entry, flight, totalInQueue: Number(totalAfterInsert), trip });
   } catch (err: any) {
     await client.query("ROLLBACK").catch(() => {});
     // Postgres serialization failure — client should retry
@@ -171,6 +216,7 @@ router.post("/join", authMiddleware, requireVerifiedEmail, async (req, res) => {
 // Each waiting entry includes canConfirm (position===1 AND seats available).
 router.get("/status", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
+
   try {
     const entries = await db
       .select()
@@ -235,6 +281,7 @@ router.get("/status", authMiddleware, async (req, res) => {
 // while status==='waiting').
 router.delete("/:id", authMiddleware, requireVerifiedEmail, async (req, res) => {
   const userId = (req as any).userId;
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
@@ -312,25 +359,14 @@ router.delete("/:id", authMiddleware, requireVerifiedEmail, async (req, res) => 
 
 // POST /queue/:id/confirm
 //
-// Confirms a waiting entry for the authenticated user, subject to two
-// eligibility checks enforced server-side inside the SERIALIZABLE transaction:
-//
-//   1. Front-of-queue: the entry must be at position 1 for its flight.
-//      Any other position → 403 "not yet your turn".
-//   2. Seat capacity: the flight must have (seatsAvailable - confirmedPax)
-//      seats remaining for this entry's party size.
-//      Insufficient capacity → 403.
-//
-// After the eligibility checks, the status transition is a conditional
-// UPDATE … WHERE status='waiting', which acts as a concurrent safety net:
-// if another request wins a race and changes the row first, affected rows
-// will be 0 and we return 409 to prompt a retry.
-//
-// SERIALIZABLE isolation prevents two concurrent transitions on the same
-// flight from interleaving their renumber steps and corrupting positions.
-// Serialization failures (40001) are surfaced as 409 for the caller to retry.
+// Confirms the member's seat when they are at the front of the queue: checks
+// the 30-minute acceptance window and seat capacity, marks the entry
+// confirmed, renumbers the remaining waiting entries, and creates the trip.
+// Runs under SERIALIZABLE isolation so concurrent queue transitions on the
+// same flight cannot corrupt positions.
 router.post("/:id/confirm", authMiddleware, requireVerifiedEmail, async (req, res) => {
   const userId = (req as any).userId;
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
@@ -459,8 +495,7 @@ router.post("/:id/confirm", authMiddleware, requireVerifiedEmail, async (req, re
       .set({ status: "confirmed" })
       .where(
         and(
-          eq(queueEntriesTable.id, String(req.params.id)),
-          eq(queueEntriesTable.userId, userId),
+          eq(queueEntriesTable.id, entryToCheck.id),
           eq(queueEntriesTable.status, "waiting"),
         ),
       )
@@ -535,6 +570,7 @@ router.post("/:id/confirm", authMiddleware, requireVerifiedEmail, async (req, re
 // the same flight cannot corrupt positions.
 router.post("/:id/use-pass", authMiddleware, requireVerifiedEmail, async (req, res) => {
   const userId = (req as any).userId;
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
@@ -564,7 +600,29 @@ router.post("/:id/use-pass", authMiddleware, requireVerifiedEmail, async (req, r
       return res.status(400).json({ error: "You are already first in line" });
     }
 
-    // 2. Consume a line pass (conditional update — fails if balance is 0)
+    // 2. Seat capacity check FIRST — the pass must never be consumed unless
+    //    the seat can actually be confirmed in this same transaction.
+    const [flight] = await txDb
+      .select()
+      .from(flightsTable)
+      .where(eq(flightsTable.id, entry.flightId));
+    const [{ value: confirmedPax }] = await txDb
+      .select({ value: sql<number>`coalesce(sum(${queueEntriesTable.passengers}), 0)` })
+      .from(queueEntriesTable)
+      .where(
+        and(
+          eq(queueEntriesTable.flightId, entry.flightId),
+          eq(queueEntriesTable.status, "confirmed"),
+        ),
+      );
+    if (entry.passengers > (flight?.seatsAvailable ?? 0) - Number(confirmedPax)) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({
+        error: "Not enough seats available for your party size — your pass was not used",
+      });
+    }
+
+    // 3. Consume a line pass (conditional update — fails if balance is 0)
     const passResult = await txDb
       .update(usersTable)
       .set({ linePassCount: sql`${usersTable.linePassCount} - 1` })
@@ -576,23 +634,13 @@ router.post("/:id/use-pass", authMiddleware, requireVerifiedEmail, async (req, r
     }
     const linePassCount = passResult[0].linePassCount;
 
-    // 3. Shift down every waiting entry that was ahead of this one
-    await txDb
-      .update(queueEntriesTable)
-      .set({ position: sql`${queueEntriesTable.position} + 1` })
-      .where(
-        and(
-          eq(queueEntriesTable.flightId, entry.flightId),
-          eq(queueEntriesTable.status, "waiting"),
-          sql`${queueEntriesTable.position} < ${entry.position}`,
-        ),
-      );
-
-    // 4. Move this entry to the front (conditional on still-waiting as a
-    //    concurrent safety net; SERIALIZABLE aborts true conflicts with 40001)
+    // 4. Instant win — confirm this entry atomically (conditional on
+    //    still-waiting as a concurrent safety net; SERIALIZABLE aborts true
+    //    conflicts with 40001). If this or any later step fails, the whole
+    //    transaction rolls back and the pass is refunded implicitly.
     const updated = await txDb
       .update(queueEntriesTable)
-      .set({ position: 1, usedLinePass: true })
+      .set({ status: "confirmed", usedLinePass: true })
       .where(
         and(
           eq(queueEntriesTable.id, entry.id),
@@ -605,19 +653,33 @@ router.post("/:id/use-pass", authMiddleware, requireVerifiedEmail, async (req, r
       return res.status(409).json({ error: "Queue update conflict — please try again" });
     }
 
-    // 5. Notify the member
-    const [flight] = await txDb
-      .select()
-      .from(flightsTable)
-      .where(eq(flightsTable.id, entry.flightId));
+    // 5. Close the gap for members who were behind this entry
+    await txDb
+      .update(queueEntriesTable)
+      .set({ position: sql`${queueEntriesTable.position} - 1` })
+      .where(
+        and(
+          eq(queueEntriesTable.flightId, entry.flightId),
+          eq(queueEntriesTable.status, "waiting"),
+          sql`${queueEntriesTable.position} > ${entry.position}`,
+        ),
+      );
+
+    // 6. Create the upcoming trip
+    const [trip] = await txDb
+      .insert(tripsTable)
+      .values({ id: makeId(), userId, flightId: entry.flightId, status: "upcoming" })
+      .returning();
+
+    // 7. Notify the member
     await txDb.insert(notificationsTable).values({
       id: makeId(),
       userId,
-      title: "Skip the Line pass used",
+      title: "Flight confirmed!",
       body: flight
-        ? `You're now #1 in the queue for ${flight.fromCity} → ${flight.toCity}`
-        : "You're now #1 in the queue",
-      type: "queue_update",
+        ? `Skip the Line pass used — your seat on ${flight.fromCity} → ${flight.toCity} is confirmed.`
+        : "Skip the Line pass used — your seat is confirmed.",
+      type: "flight_confirmed",
     });
 
     await client.query("COMMIT");
@@ -632,6 +694,7 @@ router.post("/:id/use-pass", authMiddleware, requireVerifiedEmail, async (req, r
       flight: flight ?? null,
       totalInQueue: Number(totalInQueue),
       linePassCount,
+      trip,
     });
   } catch (err: any) {
     await client.query("ROLLBACK").catch(() => {});

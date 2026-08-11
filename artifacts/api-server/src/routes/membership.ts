@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { usersTable, notificationsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
 import { authMiddleware, requireVerifiedEmail } from "../middlewares/auth";
+import { eq, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -15,7 +15,7 @@ const MEMBERSHIP_FEATURES: Record<string, string[]> = {
   ],
   plus: [
     "Everything in Base",
-    "2 Skip the Line passes / month",
+    "5 Skip the Line passes / month",
     "Priority customer support",
     "International flight access",
     "Guest pass for one",
@@ -84,29 +84,66 @@ router.post("/upgrade", authMiddleware, requireVerifiedEmail, async (req, res) =
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const bonusPasses = tier === "plus" ? 2 : 10;
+    if (TIER_ORDER[tier] <= TIER_ORDER[user.membershipTier]) {
+      return res.status(400).json({ error: "You can only upgrade to a higher tier than your current plan" });
+    }
+
+    const bonusPasses = tier === "plus" ? 5 : 10;
     const [updated] = await db
       .update(usersTable)
       .set({
         membershipTier: tier,
-        linePassCount: user.linePassCount + bonusPasses,
-        pendingTier: null, // an upgrade supersedes any scheduled downgrade/cancellation
+        linePassCount: sql`${usersTable.linePassCount} + ${bonusPasses}`,
+        pendingTier: null,
       })
       .where(eq(usersTable.id, userId))
       .returning();
+    if (!updated) return res.status(404).json({ error: "User not found" });
 
-    // Notification
+    const label = tier.charAt(0).toUpperCase() + tier.slice(1);
     await db.insert(notificationsTable).values({
       id: makeId(),
       userId,
-      title: `Upgraded to ${tier.charAt(0).toUpperCase() + tier.slice(1)} ✨`,
-      body: `Welcome to ${tier} membership! You've received ${bonusPasses} Skip the Line passes.`,
+      title: `Welcome to ${label}! ✨`,
+      body: `Your membership has been upgraded to ${label}. ${bonusPasses} Skip the Line passes added.`,
       type: "membership",
     });
 
     return res.json(membershipPayload(updated));
   } catch (err) {
     return res.status(500).json({ error: "Failed to upgrade membership" });
+  }
+});
+
+// POST /membership/buy-pass
+// Demo-only checkout: adds one Skip the Line pass ($2,000, never billed).
+// Gated exactly like the demo upgrade above.
+router.post("/buy-pass", authMiddleware, requireVerifiedEmail, async (req, res) => {
+  if (process.env.DEMO_MODE !== "true" && process.env.NODE_ENV !== "development") {
+    return res.status(501).json({
+      error: "Pass purchases require a payment provider integration in production. Set DEMO_MODE=true to enable the demo checkout.",
+    });
+  }
+  const userId = (req as any).userId;
+  try {
+    const [updated] = await db
+      .update(usersTable)
+      .set({ linePassCount: sql`${usersTable.linePassCount} + 1` })
+      .where(eq(usersTable.id, userId))
+      .returning({ linePassCount: usersTable.linePassCount });
+    if (!updated) return res.status(404).json({ error: "User not found" });
+
+    await db.insert(notificationsTable).values({
+      id: makeId(),
+      userId,
+      title: "Skip the Line pass purchased ⚡",
+      body: "1 Skip the Line pass has been added to your account ($2,000 demo checkout — no real charge).",
+      type: "membership",
+    });
+
+    return res.json({ linePassCount: updated.linePassCount });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to purchase pass" });
   }
 });
 

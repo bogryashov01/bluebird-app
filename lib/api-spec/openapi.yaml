@@ -496,6 +496,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/Membership"
 
+  /membership/buy-pass:
+    post:
+      operationId: buyLinePass
+      tags: [membership]
+      summary: Buy one Skip the Line pass (demo checkout — no real billing)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Pass purchased
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuyPassResponse"
+        "501":
+          description: Demo checkout disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /membership/change:
     post:
       operationId: changeMembership
@@ -848,6 +869,10 @@ components:
           type: number
         featured:
           type: boolean
+        international:
+          type: boolean
+        internationalFeeUsd:
+          type: number
         status:
           type: string
           enum: [available, boarding, departed, cancelled]
@@ -882,6 +907,11 @@ components:
           minimum: 1
           maximum: 10
           default: 1
+        acceptIntlFee:
+          type: boolean
+          description: >
+            Base member accepted the one-time international fee for this
+            flight (demo charge — recorded, never billed).
       required:
         - flightId
 
@@ -1002,6 +1032,14 @@ components:
         - tier
         - linePassCount
         - features
+
+    BuyPassResponse:
+      type: object
+      properties:
+        linePassCount:
+          type: number
+      required:
+        - linePassCount
 
     UpgradeMembershipRequest:
       type: object

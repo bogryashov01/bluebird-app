@@ -1,7 +1,9 @@
+- [Entitlement atomicity](entitlement-atomicity.md) — spend passes/credits and deliver their benefit in one server transaction; never split across client calls.
 - [Demo auth controls](demo-auth-controls.md) — verification/reset flows need real single-use hashed tokens + routing gates even in demo; only email *delivery* may be simulated.
 - [API contract & schema sync](api-contract-sync.md) — new endpoints/fields go through openapi.yaml + codegen; new columns need ensureSchema() too, not just a live-DB ALTER.
 - [Bluebird stack headers](bluebird-app-header.md) — default native-stack header hides behind the notch over NativeTabs; use the shared custom AppHeader.
 - [Bluebird theming](bluebird-theming.md) — all colors via useColors() tokens (no literals); semantic tokens & native-tabs caveat inside.
 - [Orval codegen post-patch](orval-codegen-patch.md) — generated hooks need the Partial<UseQueryOptions> patch step in the codegen command; never hand-edit generated api.ts.
+- [RN-web quirks](rn-web-quirks.md) — Alert.alert buttons are no-ops on web; Expo web lives at $REPLIT_EXPO_DEV_DOMAIN root; new routes need expo restart for typed routes.
 - [Seat capacity model](seat-capacity-model.md) — flights.seatsAvailable is a baseline, never mutated; remaining seats derived from confirmed queue entries.
 - [Stale composite TS builds](stale-ts-builds.md) — phantom missing-export/field type errors mean stale lib dist; run `tsc -b lib/*` before believing them.

@@ -22,6 +22,8 @@ export interface Flight {
   priceUsd?: number;
   discountPct?: number;
   featured?: boolean;
+  international?: boolean;
+  internationalFeeUsd?: number;
   status: FlightStatus;
   imageUrl?: string;
   createdAt: string;

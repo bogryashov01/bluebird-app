@@ -18,7 +18,12 @@ const FLIGHT_PRICING: Record<string, { priceUsd: number; discountPct: number; fe
   "SFO-SEA": { priceUsd: 3900, discountPct: 57 },
   "MIA-TEB": { priceUsd: 6400, discountPct: 60 },
   "DEN-ASP": { priceUsd: 2450, discountPct: 40 },
+  "MIA-NAS": { priceUsd: 4800, discountPct: 52 },
+  "TEB-YYZ": { priceUsd: 5600, discountPct: 47, featured: true },
 };
+
+// One-time fee applied to Base members on international routes (Plus/Concierge waive it)
+const INTL_FEE_USD = 1000;
 
 const SEED_FLIGHTS = [
   {
@@ -124,6 +129,36 @@ const SEED_FLIGHTS = [
     duration: "0h 40m",
     seatsAvailable: 4,
     status: "available",
+  },
+  {
+    fromAirport: "MIA",
+    fromCity: "Miami",
+    toAirport: "NAS",
+    toCity: "Nassau",
+    aircraftType: "Cessna Citation XLS",
+    aircraftCapacity: 8,
+    departureDate: "2026-08-16",
+    departureTime: "09:00",
+    duration: "1h 05m",
+    seatsAvailable: 6,
+    status: "available",
+    international: true,
+    internationalFeeUsd: INTL_FEE_USD,
+  },
+  {
+    fromAirport: "TEB",
+    fromCity: "New York (Teterboro)",
+    toAirport: "YYZ",
+    toCity: "Toronto",
+    aircraftType: "Phenom 300E",
+    aircraftCapacity: 8,
+    departureDate: "2026-08-16",
+    departureTime: "15:30",
+    duration: "1h 35m",
+    seatsAvailable: 5,
+    status: "available",
+    international: true,
+    internationalFeeUsd: INTL_FEE_USD,
   },
 ];
 
@@ -323,6 +358,24 @@ export async function seedFlights(): Promise<void> {
       }
       if (unpriced.length > 0) logger.info({ count: unpriced.length }, "Backfilled flight pricing");
       else logger.info("Flights already seeded, skipping.");
+
+      // Backfill: ensure the international demo routes exist for DBs seeded
+      // before international flights were introduced.
+      const [intlExisting] = await db
+        .select()
+        .from(flightsTable)
+        .where(eq(flightsTable.international, true))
+        .limit(1);
+      if (!intlExisting) {
+        const intlFlights = SEED_FLIGHTS.filter((f: any) => f.international).map((f) => {
+          const p = pricingFor(f.fromAirport, f.toAirport);
+          return { ...f, id: makeId(), priceUsd: p.priceUsd, discountPct: p.discountPct, featured: !!p.featured };
+        });
+        if (intlFlights.length > 0) {
+          await db.insert(flightsTable).values(intlFlights);
+          logger.info({ count: intlFlights.length }, "Backfilled international flights");
+        }
+      }
       return;
     }
     const toInsert = SEED_FLIGHTS.map((f) => {

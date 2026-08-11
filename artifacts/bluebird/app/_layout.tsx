@@ -68,7 +68,23 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="queue/join"
-        options={{ headerShown: true, title: 'Join Queue', ...headerOptions }}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="queue/intl-notice"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="queue/joined"
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
+      <Stack.Screen
+        name="queue/pass"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="queue/buy-pass"
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="queue/status"

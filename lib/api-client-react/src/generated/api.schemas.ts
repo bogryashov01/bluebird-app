@@ -148,6 +148,8 @@ export interface Flight {
   priceUsd?: number;
   discountPct?: number;
   featured?: boolean;
+  international?: boolean;
+  internationalFeeUsd?: number;
   status: FlightStatus;
   imageUrl?: string;
   createdAt: string;
@@ -161,6 +163,8 @@ export interface JoinQueueRequest {
      * @maximum 10
      */
   passengers?: number;
+  /** Base member accepted the one-time international fee for this flight (demo charge — recorded, never billed). */
+  acceptIntlFee?: boolean;
 }
 
 export interface CancelQueueResponse {
@@ -260,6 +264,9 @@ export interface Membership {
   features: string[];
 }
 
+export interface BuyPassResponse {
+  linePassCount: number;
+}
 export type UpgradeMembershipRequestTier = typeof UpgradeMembershipRequestTier[keyof typeof UpgradeMembershipRequestTier];
 
 
@@ -351,4 +358,3 @@ export type GetConciergeHistoryParams = {
  */
 limit?: number;
 };
-

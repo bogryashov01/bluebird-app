@@ -7,6 +7,7 @@
  */
 
 export * from './authResponse';
+export * from './buyPassResponse';
 export * from './cancelQueueResponse';
 export * from './changeMembershipRequest';
 export * from './changeMembershipRequestAction';

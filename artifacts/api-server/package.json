@@ -8,7 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:verify-flow": "node scripts/verify-flow.integration.mjs"
+    "test:verify-flow": "node scripts/verify-flow.integration.mjs",
+    "test:queue-flow": "node scripts/queue-flow.integration.mjs"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",

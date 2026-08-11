@@ -23,9 +23,9 @@ const TIERS = [
   {
     id: 'plus',
     label: 'Plus',
-    price: '$299 / mo',
+    price: '$995 / mo',
     tagline: 'More access, more freedom',
-    features: ['Everything in Base', '2 Skip the Line passes / mo', 'Priority support', 'International flights', 'Guest pass'],
+    features: ['Everything in Base', '5 Skip the Line passes / mo', 'Priority support', 'International flights', 'Guest pass'],
     color: '#1259F2',
   },
   {

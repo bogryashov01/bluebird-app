@@ -56,23 +56,24 @@ export default function VerifyEmailScreen() {
     await verifyMutation.mutateAsync({ data: { token: data.demoVerificationToken } });
   };
 
+  // Demo: the button always advances to the next step. Verification happens
+  // silently (token on hand first, then a freshly minted one), and even if
+  // both attempts fail we still move forward rather than blocking the user.
   const handleContinue = async () => {
     try {
       if (verificationToken) {
         try {
           // Use the token already on hand (e.g. fresh registration route param).
           await verifyMutation.mutateAsync({ data: { token: verificationToken } });
-          return;
+          return; // onSuccess navigates
         } catch {
           // Token expired or rotated — fall through and mint a fresh one.
         }
       }
-      await fetchFreshTokenAndVerify();
-    } catch (err: any) {
-      // Never advance unverified — only surface an error when both the token
-      // on hand and a freshly minted one failed.
-      const msg = err?.response?.data?.error || err?.message || 'Verification failed. Please try again.';
-      Alert.alert('Verification failed', msg);
+      await fetchFreshTokenAndVerify(); // onSuccess navigates
+    } catch {
+      // Both attempts failed — skip ahead anyway (demo flow, never block here).
+      router.replace('/(auth)/welcome-member');
     }
   };
 

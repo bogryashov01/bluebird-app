@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
-  ActivityIndicator, Switch, Platform, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  ActivityIndicator, Platform, Alert,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,45 +12,71 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
 
-export default function JoinQueueScreen() {
+const POLICY_ITEMS = [
+  'Flights may be cancelled or changed due to operational requirements.',
+  'Baggage restrictions apply based on aircraft type and available space.',
+  'Pet policies apply — please confirm your pet meets carrier requirements.',
+];
+
+// "Before you join the queue" — policy acknowledgment step of the join flow.
+export default function JoinQueueAcknowledgeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { flightId, fromCity, toCity, from, to, useLinePass: useLinePassParam, passengers: passengersParam } = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     flightId: string; fromCity: string; toCity: string;
     from: string; to: string; useLinePass?: string; passengers?: string;
+    departureDate?: string; departureTime?: string; duration?: string;
+    aircraftType?: string; international?: string; feeUsd?: string;
+    flightStatus?: string;
   }>();
-  const passengers = Math.max(1, parseInt(passengersParam ?? '1', 10) || 1);
-  const { user } = useAuth();
+  const { flightId, fromCity, toCity, from, to } = params;
+  const passengers = Math.max(1, parseInt(params.passengers ?? '1', 10) || 1);
+  const useLinePass = params.useLinePass === '1';
+  const isInternational = params.international === '1';
+  const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
-  const [useLinePass, setUseLinePass] = useState(useLinePassParam === '1');
+  const [checked, setChecked] = useState([false, false, false]);
 
+  const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { updateUser } = useAuth();
-
   // Guard: a user already confirmed on this flight cannot join again.
-  // Redirect to the flight screen (which shows the confirmed badge) instead.
   const { data: myStatus, isLoading: statusLoading } = useGetFlightMyStatus(flightId!, {
     query: { enabled: !!user && !!flightId },
   });
   const isConfirmed = myStatus?.status === 'confirmed';
   useEffect(() => {
-    if (isConfirmed && flightId) {
-      router.replace(`/flight/${flightId}`);
-    }
+    if (isConfirmed && flightId) router.replace(`/flight/${flightId}`);
   }, [isConfirmed, flightId]);
 
   const joinMutation = useJoinQueue({
     mutation: {
-      onSuccess: async () => {
+      onSuccess: async (entry: any) => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
-        queryClient.invalidateQueries({ queryKey: [`/api/flights/${flightId}/my-status`] });
-        // Sync line pass count in the cached auth user immediately so UI stays accurate
         if (useLinePass && user) {
           updateUser({ ...user, linePassCount: Math.max(0, (user.linePassCount ?? 0) - 1) });
         }
-        router.replace('/queue/status');
+        // Skip the Line: the server confirms the seat atomically with the
+        // pass — the join response comes back already confirmed.
+        if (entry?.status === 'confirmed') {
+          queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+          queryClient.invalidateQueries({ queryKey: [`/api/flights/${flightId}/my-status`] });
+          router.replace({ pathname: '/flight/confirmed', params });
+          return;
+        }
+        queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
+        queryClient.invalidateQueries({ queryKey: [`/api/flights/${flightId}/my-status`] });
+        router.replace({
+          pathname: '/queue/joined',
+          params: {
+            ...params,
+            entryId: entry?.id ?? '',
+            position: String(entry?.position ?? ''),
+            totalInQueue: String(entry?.totalInQueue ?? ''),
+            flightStatus: entry?.flight?.status ?? params.flightStatus ?? 'available',
+          },
+        });
       },
       onError: (err: any) => {
         const msg = err?.response?.data?.error || err?.data?.error || 'Failed to join queue';
@@ -59,93 +85,72 @@ export default function JoinQueueScreen() {
     },
   });
 
-  const handleJoin = () => {
-    if (!flightId || isConfirmed) return;
+  const allChecked = checked.every(Boolean);
+  const needsIntlNotice = isInternational && user?.membershipTier === 'base';
+
+  const handleContinue = () => {
+    if (!allChecked || !flightId || isConfirmed) return;
+    if (needsIntlNotice) {
+      router.push({ pathname: '/queue/intl-notice', params });
+      return;
+    }
     joinMutation.mutate({ data: { flightId, useLinePass, passengers } });
   };
 
-  const ctaDisabled = joinMutation.isPending || statusLoading || isConfirmed;
+  const ctaDisabled = !allChecked || joinMutation.isPending || statusLoading || isConfirmed;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.content}>
-        {/* Flight summary */}
-        <View style={[styles.flightCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.routeRow}>
-            <View style={styles.airportBlock}>
-              <Text style={[styles.airportCode, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{from}</Text>
-              <Text style={[styles.cityName, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{fromCity}</Text>
+    <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
+      <TouchableOpacity
+        style={[styles.backBtn, { top: topPad + 14, backgroundColor: colors.muted }]}
+        onPress={() => router.back()}
+        activeOpacity={0.75}
+      >
+        <Text style={[styles.backChevron, { color: colors.textOnSurface }]}>‹</Text>
+      </TouchableOpacity>
+
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: topPad + 72 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={[styles.title, { color: colors.textOnSurface }]}>Before you join{'\n'}the queue</Text>
+        <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
+          Please review and confirm the following for {fromCity ?? from} → {toCity ?? to}.
+        </Text>
+
+        {POLICY_ITEMS.map((item, i) => (
+          <TouchableOpacity
+            key={i}
+            style={[styles.checkRow, { backgroundColor: colors.surface }]}
+            onPress={() => setChecked((prev) => prev.map((c, j) => (j === i ? !c : c)))}
+            activeOpacity={0.8}
+          >
+            <View style={[
+              styles.checkbox,
+              { borderColor: checked[i] ? colors.primary : colors.border, backgroundColor: checked[i] ? colors.primary : 'transparent' },
+            ]}>
+              {checked[i] && <Feather name="check" size={14} color={colors.primaryForeground} />}
             </View>
-            <Feather name="send" size={20} color={colors.primary} style={{ transform: [{ rotate: '-45deg' }] }} />
-            <View style={[styles.airportBlock, { alignItems: 'flex-end' }]}>
-              <Text style={[styles.airportCode, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{to}</Text>
-              <Text style={[styles.cityName, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{toCity}</Text>
-            </View>
-          </View>
-        </View>
+            <Text style={[styles.checkText, { color: colors.textOnSurface }]}>{item}</Text>
+          </TouchableOpacity>
+        ))}
 
-        {/* Queue info */}
-        <View style={styles.infoBlock}>
-          <Feather name="info" size={16} color={colors.primary} />
-          <Text style={[styles.infoText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            You'll be notified when a seat becomes available. You have 30 minutes to accept.
-          </Text>
-        </View>
+        <Text style={[styles.legal, { color: colors.mutedForegroundLight }]}>
+          By continuing, you acknowledge and accept these terms for this flight.
+        </Text>
+      </ScrollView>
 
-        {/* Skip the line toggle */}
-        {user && user.linePassCount > 0 && (
-          <View style={[styles.skipToggleCard, { backgroundColor: colors.card, borderColor: colors.primary + '60' }]}>
-            <View style={styles.skipToggleLeft}>
-              <Feather name="zap" size={20} color={colors.primary} />
-              <View>
-                <Text style={[styles.skipToggleTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
-                  Skip the Line
-                </Text>
-                <Text style={[styles.skipToggleSub, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                  Use 1 pass ({user.linePassCount} remaining)
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={useLinePass}
-              onValueChange={setUseLinePass}
-              trackColor={{ true: colors.primary, false: colors.border }}
-              thumbColor={colors.primaryForeground}
-            />
-          </View>
-        )}
-
-        {useLinePass && (
-          <View style={[styles.passAlert, { backgroundColor: colors.success + '15', borderColor: colors.success + '40' }]}>
-            <Feather name="zap" size={14} color={colors.success} />
-            <Text style={[styles.passAlertText, { color: colors.success, fontFamily: 'Inter_500Medium' }]}>
-              You'll be placed at the front of the queue
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* CTA */}
-      <View style={[styles.footer, { borderTopColor: colors.border, paddingBottom: bottomPad + 12 }]}>
+      <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
         <TouchableOpacity
-          style={[styles.confirmBtn, { backgroundColor: colors.primary }, ctaDisabled && { opacity: 0.7 }]}
-          onPress={handleJoin}
+          style={[styles.cta, { backgroundColor: colors.primary }, ctaDisabled && { opacity: 0.45 }]}
+          onPress={handleContinue}
           disabled={ctaDisabled}
-          activeOpacity={0.8}
+          accessibilityState={{ disabled: ctaDisabled }}
+          activeOpacity={0.85}
         >
-          {joinMutation.isPending || statusLoading || isConfirmed ? (
-            <ActivityIndicator color={colors.primaryForeground} />
-          ) : (
-            <>
-              <Text style={[styles.confirmBtnText, { color: colors.primaryForeground, fontFamily: 'Inter_600SemiBold' }]}>
-                {useLinePass ? 'Skip the Line & Join' : 'Join the Queue'}
-              </Text>
-              <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
-            </>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
-          <Text style={[styles.cancelBtnText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>Cancel</Text>
+          {joinMutation.isPending
+            ? <ActivityIndicator color={colors.primaryForeground} />
+            : <Text style={[styles.ctaText, { color: colors.primaryForeground }]}>I Acknowledge — Continue</Text>}
         </TouchableOpacity>
       </View>
     </View>
@@ -154,32 +159,27 @@ export default function JoinQueueScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { flex: 1, padding: 20, gap: 16 },
-  flightCard: { borderRadius: 18, borderWidth: 1, padding: 20 },
-  routeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  airportBlock: { flex: 1 },
-  airportCode: { fontSize: 28 },
-  cityName: { fontSize: 13, marginTop: 2 },
-  infoBlock: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  infoText: { flex: 1, fontSize: 14, lineHeight: 20 },
-  skipToggleCard: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    padding: 16, borderRadius: 14, borderWidth: 1,
+  backBtn: {
+    position: 'absolute', zIndex: 20, left: 16,
+    width: 38, height: 38, borderRadius: 19,
+    alignItems: 'center', justifyContent: 'center',
   },
-  skipToggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  skipToggleTitle: { fontSize: 15 },
-  skipToggleSub: { fontSize: 12, marginTop: 2 },
-  passAlert: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    padding: 12, borderRadius: 10, borderWidth: 1,
+  backChevron: { fontFamily: 'Inter_500Medium', fontSize: 22, marginTop: -2 },
+  content: { paddingHorizontal: 22, paddingBottom: 24, gap: 12 },
+  title: { fontFamily: 'Inter_700Bold', fontSize: 26, lineHeight: 33, marginBottom: 2 },
+  subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20, marginBottom: 10 },
+  checkRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    borderRadius: 14, padding: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
   },
-  passAlertText: { fontSize: 13 },
-  footer: { padding: 16, gap: 10, borderTopWidth: 1 },
-  confirmBtn: {
-    height: 56, borderRadius: 999,
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
+  checkbox: {
+    width: 22, height: 22, borderRadius: 6, borderWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center',
   },
-  confirmBtnText: { fontSize: 16 },
-  cancelBtn: { height: 44, justifyContent: 'center', alignItems: 'center' },
-  cancelBtnText: { fontSize: 14 },
+  checkText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 13.5, lineHeight: 19 },
+  legal: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17, marginTop: 6 },
+  footer: { paddingHorizontal: 22, paddingTop: 12 },
+  cta: { borderRadius: 999, paddingVertical: 17, alignItems: 'center' },
+  ctaText: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
 });

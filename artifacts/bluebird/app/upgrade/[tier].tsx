@@ -16,12 +16,12 @@ const TIER_INFO: Record<string, {
 }> = {
   plus: {
     label: 'Plus',
-    price: '$299 / mo',
-    priceNum: '$299.00',
+    price: '$995 / mo',
+    priceNum: '$995.00',
     tagline: 'More access, more freedom',
     color: '#1259F2',
-    passes: 2,
-    features: ['Everything in Base', '2 Skip the Line passes / mo', 'Priority support', 'International flights', 'Guest pass'],
+    passes: 5,
+    features: ['Everything in Base', '5 Skip the Line passes / mo', 'Priority notifications & earlier access', 'International fees waived', 'Premium concierge & member events'],
   },
   concierge: {
     label: 'Concierge',

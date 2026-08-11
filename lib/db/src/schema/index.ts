@@ -34,6 +34,8 @@ export const flightsTable = pgTable("flights", {
   priceUsd: integer("price_usd").notNull().default(0),
   discountPct: integer("discount_pct").notNull().default(0),
   featured: boolean("featured").notNull().default(false),
+  international: boolean("international").notNull().default(false),
+  internationalFeeUsd: integer("international_fee_usd").notNull().default(0),
   status: text("status").notNull().default("available"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -46,6 +48,9 @@ export const queueEntriesTable = pgTable("queue_entries", {
   status: text("status").notNull().default("waiting"),
   usedLinePass: boolean("used_line_pass").notNull().default(false),
   passengers: integer("passengers").notNull().default(1),
+  // Base members joining an international flight accept a one-time fee
+  // (demo charge — recorded, never billed).
+  intlFeeAccepted: boolean("intl_fee_accepted").notNull().default(false),
   // Set when this entry reaches the front of the queue and is notified that a
   // seat is ready; starts the 30-minute acceptance window.
   frontNotifiedAt: timestamp("front_notified_at"),

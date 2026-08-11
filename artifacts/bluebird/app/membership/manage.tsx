@@ -11,7 +11,7 @@ import { useColors } from '@/hooks/useColors';
 
 const TIER_META: Record<string, { label: string; price: string; color: string }> = {
   base:      { label: 'Base',      price: '$99 / mo',  color: '#8896B3' },
-  plus:      { label: 'Plus',      price: '$299 / mo', color: '#1259F2' },
+  plus:      { label: 'Plus',      price: '$995 / mo', color: '#1259F2' },
   concierge: { label: 'Concierge', price: '$799 / mo', color: '#F59E0B' },
 };
 const TIER_IDX: Record<string, number> = { base: 0, plus: 1, concierge: 2 };

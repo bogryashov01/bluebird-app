@@ -14,4 +14,6 @@ export interface JoinQueueRequest {
      * @maximum 10
      */
   passengers?: number;
+  /** Base member accepted the one-time international fee for this flight (demo charge — recorded, never billed). */
+  acceptIntlFee?: boolean;
 }

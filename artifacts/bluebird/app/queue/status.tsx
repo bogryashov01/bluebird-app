@@ -9,7 +9,8 @@ import Svg, { Circle } from 'react-native-svg';
 import type { QueueEntry } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
-import { useGetQueueStatus, useCancelQueueEntry, useConfirmQueueEntry, useUseLinePassOnQueueEntry } from '@workspace/api-client-react';
+import { confirmDialog } from '@/lib/confirmDialog';
+import { useGetQueueStatus, useCancelQueueEntry, useConfirmQueueEntry } from '@workspace/api-client-react';
 
 import { useAuth } from '@/context/AuthContext';
 
@@ -116,7 +117,7 @@ function QueueCard({
       {flight && <Text style={[card.countdown, { color: colors.primary }]}>Decision in {countdown}</Text>}
 
       <View style={[card.section, { backgroundColor: colors.surface }]}>
-        <Text style={[card.sectionTitle, { color: colors.textOnSurface }]}>Queue Activity</Text>
+        <Text style={[card.sectionTitle, { color: colors.textOnSurface }]}>Queue Movement</Text>
         <View style={card.logRow}>
           <Text style={[card.logText, { color: colors.mutedForegroundLight }]}>Currently #{entry.position} of {entry.totalInQueue}</Text>
           <Text style={[card.logTime, { color: colors.mutedForegroundLight }]}>now</Text>
@@ -178,14 +179,9 @@ function QueueCard({
           disabled={isUsingPass}
           activeOpacity={0.85}
         >
-          {isUsingPass
-            ? <ActivityIndicator color={colors.primary} size="small" />
-            : (
-              <Text style={[card.passBtnText, { color: colors.primary }]}>
-                ⚡ Use Skip the Line Pass ({passCount} left)
-              </Text>
-            )
-          }
+          <Text style={[card.passBtnText, { color: colors.primary }]}>
+            ⚡ Use Skip the Line Pass{typeof passCount === 'number' ? ` (${passCount} left)` : ''}
+          </Text>
         </TouchableOpacity>
       )}
 
@@ -376,7 +372,7 @@ export default function QueueStatusScreen() {
   const topPad    = Platform.OS === 'web' ? 60 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { user, updateUser } = useAuth();
+  const { user } = useAuth();
 
   // API now returns waiting + confirmed; we render each group separately
   const { data: queueEntries, isLoading } = useGetQueueStatus({
@@ -404,60 +400,55 @@ export default function QueueStatusScreen() {
     },
   });
 
-  const usePassMutation = useUseLinePassOnQueueEntry({
-    mutation: {
-      onSuccess: (data: any) => {
-        // Reflect the new pass balance immediately
-        if (user && typeof data?.linePassCount === 'number') {
-          updateUser({ ...user, linePassCount: data.linePassCount });
-        }
-        queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
-        if (data?.flightId) {
-          queryClient.invalidateQueries({ queryKey: [`/api/flights/${data.flightId}/my-status`] });
-        }
+  // Routes to the Skip the Line Pass sheet, which confirms the seat immediately.
+  const handleUsePass = (entry: QueueEntry) => {
+    const flight = entry.flight;
+    router.push({
+      pathname: '/queue/pass',
+      params: {
+        entryId: entry.id,
+        position: String(entry.position),
+        flightId: entry.flightId,
+        from: flight?.fromAirport ?? '',
+        to: flight?.toAirport ?? '',
+        fromCity: flight?.fromCity ?? '',
+        toCity: flight?.toCity ?? '',
+        departureDate: flight?.departureDate ?? '',
+        departureTime: flight?.departureTime ?? '',
+        duration: flight?.duration ?? '',
+        aircraftType: flight?.aircraftType ?? '',
       },
-      onError: (err: any) => {
-        Alert.alert('Could not use pass', err?.data?.error || err?.message || 'Failed to use Skip the Line pass');
-      },
-    },
-  });
-
-  const handleUsePass = (entryId: string) => {
-    Alert.alert(
-      'Use Skip the Line Pass?',
-      `This will use 1 of your ${user?.linePassCount ?? 0} passes and move you to the front of this queue.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Use Pass', style: 'default', onPress: () => usePassMutation.mutate({ id: entryId }) },
-      ],
-    );
+    });
   };
 
-  const handleCancel = (entryId: string) => {
-    Alert.alert('Leave Queue?', 'You will lose your position in the queue.', [
-      { text: 'Keep Spot', style: 'cancel' },
-      { text: 'Leave Queue', style: 'destructive', onPress: () => cancelMutation.mutate({ id: entryId }) },
-    ]);
+  const handleCancel = async (entryId: string) => {
+    const ok = await confirmDialog('Leave Queue?', 'You will lose your position in the queue.', 'Leave Queue', true);
+    if (ok) cancelMutation.mutate({ id: entryId });
   };
 
-  const handleConfirm = (entryId: string, flightId: string) => {
-    Alert.alert('Confirm your seat?', 'This will reserve your spot on this flight.', [
-      { text: 'Not yet', style: 'cancel' },
+  const handleConfirm = async (entry: QueueEntry) => {
+    const flight = entry.flight;
+    const ok = await confirmDialog('Confirm your seat?', 'This will reserve your spot on this flight.');
+    if (!ok) return;
+    confirmMutation.mutate(
+      { id: entry.id },
       {
-        text: 'Confirm', style: 'default',
-        onPress: () =>
-          confirmMutation.mutate(
-            { id: entryId },
-            {
-              onSuccess: () => {
-                queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
-                queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
-                queryClient.invalidateQueries({ queryKey: [`/api/flights/${flightId}/my-status`] });
-              },
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+          queryClient.invalidateQueries({ queryKey: [`/api/flights/${entry.flightId}/my-status`] });
+          router.push({
+            pathname: '/flight/confirmed',
+            params: {
+              from: flight?.fromAirport ?? '', to: flight?.toAirport ?? '',
+              fromCity: flight?.fromCity ?? '', toCity: flight?.toCity ?? '',
+              departureDate: flight?.departureDate ?? '', departureTime: flight?.departureTime ?? '',
+              duration: flight?.duration ?? '', aircraftType: flight?.aircraftType ?? '',
             },
-          ),
+          });
+        },
       },
-    ]);
+    );
   };
 
   const backTop = topPad + 14;
@@ -502,14 +493,14 @@ export default function QueueStatusScreen() {
               key={entry.id}
               entry={entry}
               onCancel={() => handleCancel(entry.id)}
-              onConfirm={() => handleConfirm(entry.id, entry.flightId)}
+              onConfirm={() => handleConfirm(entry)}
               isConfirming={confirmMutation.isPending}
               onUsePass={
                 user && user.linePassCount > 0 && entry.position !== 1
-                  ? () => handleUsePass(entry.id)
+                  ? () => handleUsePass(entry)
                   : undefined
               }
-              isUsingPass={usePassMutation.isPending}
+              isUsingPass={false}
               passCount={user?.linePassCount ?? 0}
             />
           ))}
