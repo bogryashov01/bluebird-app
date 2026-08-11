@@ -110,7 +110,7 @@ export default function JoinQueueScreen() {
               value={useLinePass}
               onValueChange={setUseLinePass}
               trackColor={{ true: colors.primary, false: colors.border }}
-              thumbColor="#fff"
+              thumbColor={colors.primaryForeground}
             />
           </View>
         )}
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     height: 56, borderRadius: 999,
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
   },
-  confirmBtnText: { color: '#fff', fontSize: 16 },
+  confirmBtnText: { fontSize: 16 },
   cancelBtn: { height: 44, justifyContent: 'center', alignItems: 'center' },
   cancelBtnText: { fontSize: 14 },
 });

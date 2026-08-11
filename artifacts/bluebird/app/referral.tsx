@@ -90,7 +90,7 @@ export default function ReferralScreen() {
       {/* QR-style graphic */}
       <View style={[styles.qr, { backgroundColor: colors.backgroundMid }]}>
         {cells.map((on, i) => (
-          <View key={i} style={[styles.qrCell, on && { backgroundColor: '#fff' }]} />
+          <View key={i} style={[styles.qrCell, on && { backgroundColor: colors.primaryForeground }]} />
         ))}
       </View>
 

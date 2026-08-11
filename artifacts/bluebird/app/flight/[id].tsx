@@ -200,7 +200,7 @@ export default function FlightDetailScreen() {
             onPress={() => router.push('/(tabs)/trips')}
             activeOpacity={0.8}
           >
-            <Text style={[styles.viewTripBtnText, { color: '#fff' }]}>View in My Trips</Text>
+            <Text style={[styles.viewTripBtnText, { color: colors.primaryForeground }]}>View in My Trips</Text>
           </TouchableOpacity>
         </>
       );
@@ -229,8 +229,8 @@ export default function FlightDetailScreen() {
               activeOpacity={0.8}
             >
               {confirmMutation.isPending
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={[styles.confirmSeatBtnText, { color: '#fff' }]}>✓  Confirm your seat</Text>
+                ? <ActivityIndicator color={colors.successForeground} size="small" />
+                : <Text style={[styles.confirmSeatBtnText, { color: colors.successForeground }]}>✓  Confirm your seat</Text>
               }
             </TouchableOpacity>
           )}
@@ -295,7 +295,7 @@ export default function FlightDetailScreen() {
     <View style={[styles.root, { backgroundColor: colors.offWhite }]}>
       {/* ── Frosted back button (floats above hero) ── */}
       <TouchableOpacity
-        style={[styles.backBtn, { top: backTop }]}
+        style={[styles.backBtn, { top: backTop, backgroundColor: colors.surface + 'CC' }]}
         onPress={() => router.back()}
         activeOpacity={0.75}
       >
@@ -323,8 +323,8 @@ export default function FlightDetailScreen() {
           />
 
           {/* Route pill at bottom of hero */}
-          <View style={styles.routePill}>
-            <Text style={styles.routePillText}>
+          <View style={[styles.routePill, { backgroundColor: colors.primaryForeground + '2E', borderColor: colors.primaryForeground + '4D' }]}>
+            <Text style={[styles.routePillText, { color: colors.primaryForeground }]}>
               {f.fromAirport} → {f.toAirport}
             </Text>
           </View>
@@ -428,7 +428,6 @@ const styles = StyleSheet.create({
   backBtn: {
     position: 'absolute', zIndex: 20, left: 16,
     width: 38, height: 38, borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.80)',
     alignItems: 'center', justifyContent: 'center',
   },
   backChevron: { fontFamily: 'Inter_500Medium', fontSize: 22, marginTop: -2 },
@@ -437,11 +436,10 @@ const styles = StyleSheet.create({
   hero: { width: '100%', justifyContent: 'flex-end' },
   routePill: {
     marginBottom: 18, alignSelf: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
     borderRadius: 100, paddingHorizontal: 16, paddingVertical: 6,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.30)',
+    borderWidth: 1,
   },
-  routePillText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#fff', letterSpacing: 0.5 },
+  routePillText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, letterSpacing: 0.5 },
 
   // Title row
   titleRow: {

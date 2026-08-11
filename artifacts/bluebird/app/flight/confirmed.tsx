@@ -32,7 +32,7 @@ export default function FlightConfirmedScreen() {
           { backgroundColor: colors.success + '18', opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
         ]}>
           <View style={[styles.iconBg, { backgroundColor: colors.success }]}>
-            <Feather name="check" size={44} color="#fff" />
+            <Feather name="check" size={44} color={colors.successForeground} />
           </View>
         </Animated.View>
 
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     height: 56, borderRadius: 999,
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
   },
-  primaryBtnText: { color: '#fff', fontSize: 16 },
+  primaryBtnText: { fontSize: 16 },
   secondaryBtn: {
     height: 50, borderRadius: 999, borderWidth: 1,
     justifyContent: 'center', alignItems: 'center',

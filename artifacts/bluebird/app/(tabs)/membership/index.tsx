@@ -141,17 +141,17 @@ export default function MembershipScreen() {
             <Text style={[styles.sectionLabel, { marginTop: 28, color: colors.mutedForegroundLight }]}>Upgrade</Text>
             <TouchableOpacity activeOpacity={0.85} onPress={() => handleUpgrade(nextTier.id)}>
               <View style={[styles.upgradeCard, { backgroundColor: UPGRADE_BG[currentTier] }]}>
-                <Text style={styles.upgradeCardTitle}>Upgrade to {nextTier.label}</Text>
-                <Text style={styles.upgradeCardBody}>{nextTier.tagline}</Text>
+                <Text style={[styles.upgradeCardTitle, { color: colors.primaryForeground }]}>Upgrade to {nextTier.label}</Text>
+                <Text style={[styles.upgradeCardBody, { color: colors.primaryForeground + 'BF' }]}>{nextTier.tagline}</Text>
                 <View style={styles.upgradeChipRow}>
                   {nextTier.features.slice(1, 3).map((feat) => (
-                    <View key={feat} style={styles.upgradeChip}>
-                      <Text style={styles.upgradeChipText}>{feat}</Text>
+                    <View key={feat} style={[styles.upgradeChip, { backgroundColor: colors.primaryForeground + '26' }]}>
+                      <Text style={[styles.upgradeChipText, { color: colors.primaryForeground }]}>{feat}</Text>
                     </View>
                   ))}
                 </View>
-                <View style={styles.upgradeBtn}>
-                  <Text style={styles.upgradeBtnText}>See {nextTier.label} → {nextTier.price}</Text>
+                <View style={[styles.upgradeBtn, { backgroundColor: colors.primaryForeground + '33' }]}>
+                  <Text style={[styles.upgradeBtnText, { color: colors.primaryForeground }]}>See {nextTier.label} → {nextTier.price}</Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -160,9 +160,9 @@ export default function MembershipScreen() {
         {!nextTier && (
           <>
             <Text style={[styles.sectionLabel, { marginTop: 28, color: colors.mutedForegroundLight }]}>Status</Text>
-            <View style={[styles.upgradeCard, { backgroundColor: '#92400E' }]}>
-              <Text style={styles.upgradeCardTitle}>Concierge — Elite Status</Text>
-              <Text style={styles.upgradeCardBody}>You're on the highest tier. Enjoy unlimited access and dedicated support.</Text>
+            <View style={[styles.upgradeCard, { backgroundColor: UPGRADE_BG.concierge }]}>
+              <Text style={[styles.upgradeCardTitle, { color: colors.primaryForeground }]}>Concierge — Elite Status</Text>
+              <Text style={[styles.upgradeCardBody, { color: colors.primaryForeground + 'BF' }]}>You're on the highest tier. Enjoy unlimited access and dedicated support.</Text>
             </View>
           </>
         )}
@@ -199,7 +199,7 @@ export default function MembershipScreen() {
                     onPress={() => handleUpgrade(tier.id)}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.upgradeSmallBtnText}>Upgrade</Text>
+                    <Text style={[styles.upgradeSmallBtnText, { color: colors.primaryForeground }]}>Upgrade</Text>
                   </TouchableOpacity>
                 )}
                 {isCurrent && (
@@ -249,19 +249,19 @@ const styles = StyleSheet.create({
   statRow: { flexDirection: 'row', gap: 10 },
 
   upgradeCard: { borderRadius: 24, padding: 20, marginBottom: 4 },
-  upgradeCardTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, color: '#fff', marginBottom: 6 },
-  upgradeCardBody:  { fontFamily: 'Inter_400Regular', fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 18, marginBottom: 14 },
+  upgradeCardTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, marginBottom: 6 },
+  upgradeCardBody:  { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, marginBottom: 14 },
   upgradeChipRow:   { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 16 },
   upgradeChip: {
-    backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 999,
+    borderRadius: 999,
     paddingHorizontal: 10, paddingVertical: 4,
   },
-  upgradeChipText: { fontFamily: 'Inter_500Medium', fontSize: 12, color: '#fff' },
+  upgradeChipText: { fontFamily: 'Inter_500Medium', fontSize: 12 },
   upgradeBtn: {
-    backgroundColor: 'rgba(255,255,255,0.20)', borderRadius: 999,
+    borderRadius: 999,
     paddingVertical: 13, alignItems: 'center',
   },
-  upgradeBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#fff' },
+  upgradeBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
 
   tierCard: {
     borderRadius: 18, borderWidth: 1,
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   currentBadge:   { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
   currentBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
   upgradeSmallBtn: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, flexShrink: 0 },
-  upgradeSmallBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#fff' },
+  upgradeSmallBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   manageBtn: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, flexShrink: 0, borderWidth: 1 },
   manageBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   pendingBanner: { borderRadius: 18, borderWidth: 1, padding: 16 },

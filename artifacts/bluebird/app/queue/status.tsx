@@ -156,8 +156,8 @@ function QueueCard({
           activeOpacity={0.85}
         >
           {isConfirming
-            ? <ActivityIndicator color="#fff" size="small" />
-            : <Text style={[card.confirmBtnText, { color: '#fff' }]}>✓  Confirm your seat</Text>
+            ? <ActivityIndicator color={colors.successForeground} size="small" />
+            : <Text style={[card.confirmBtnText, { color: colors.successForeground }]}>✓  Confirm your seat</Text>
           }
         </TouchableOpacity>
       ) : (
@@ -243,7 +243,7 @@ function ConfirmedCard({ entry }: { entry: QueueEntry }) {
         onPress={() => router.push('/(tabs)/trips')}
         activeOpacity={0.85}
       >
-        <Text style={[card.primaryBtnText, { color: '#fff' }]}>View in My Trips</Text>
+        <Text style={[card.primaryBtnText, { color: colors.primaryForeground }]}>View in My Trips</Text>
       </TouchableOpacity>
     </View>
   );

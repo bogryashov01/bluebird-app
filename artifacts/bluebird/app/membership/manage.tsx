@@ -111,9 +111,9 @@ export default function ManagePlanScreen() {
       >
         {/* Current plan */}
         <View style={[styles.planCard, { backgroundColor: meta.color }]}>
-          <Text style={styles.planLabel}>Bluebird {meta.label}</Text>
-          <Text style={styles.planPrice}>{meta.price}</Text>
-          <Text style={styles.planSub}>Renews {renewal} · Month-to-month, cancel anytime</Text>
+          <Text style={[styles.planLabel, { color: colors.primaryForeground }]}>Bluebird {meta.label}</Text>
+          <Text style={[styles.planPrice, { color: colors.primaryForeground + 'E6' }]}>{meta.price}</Text>
+          <Text style={[styles.planSub, { color: colors.primaryForeground + 'BF' }]}>Renews {renewal} · Month-to-month, cancel anytime</Text>
         </View>
 
         {/* Pending change banner */}
@@ -126,12 +126,12 @@ export default function ManagePlanScreen() {
               activeOpacity={0.85}
               onPress={() => setConfirming({ action: 'revert' })}
             >
-              <Text style={styles.keepBtnText}>Keep my current plan</Text>
+              <Text style={[styles.keepBtnText, { color: colors.primaryForeground }]}>Keep my current plan</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {errorMsg && <Text style={styles.errorText}>{errorMsg}</Text>}
+        {errorMsg && <Text style={[styles.errorText, { color: colors.destructive }]}>{errorMsg}</Text>}
 
         {/* Downgrade options */}
         {!pendingTier && lowerTiers.length > 0 && (
@@ -170,7 +170,7 @@ export default function ManagePlanScreen() {
                 onPress={() => setConfirming({ action: 'cancel' })}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.optionTitle, { color: '#DC2626' }]}>Cancel membership</Text>
+                  <Text style={[styles.optionTitle, { color: colors.destructive }]}>Cancel membership</Text>
                   <Text style={[styles.optionSub, { color: colors.mutedForegroundLight }]}>Benefits continue until {renewal}</Text>
                 </View>
                 <Text style={[styles.chevron, { color: colors.mutedForegroundLight }]}>›</Text>
@@ -194,14 +194,14 @@ export default function ManagePlanScreen() {
                   <Text style={[styles.modalTitle, { color: colors.textOnSurface }]}>{c.title}</Text>
                   <Text style={[styles.modalBody, { color: colors.mutedForegroundLight }]}>{c.body}</Text>
                   <TouchableOpacity
-                    style={[styles.modalBtn, { backgroundColor: c.destructive ? '#DC2626' : colors.primary, opacity: changeMutation.isPending ? 0.7 : 1 }]}
+                    style={[styles.modalBtn, { backgroundColor: c.destructive ? colors.destructive : colors.primary, opacity: changeMutation.isPending ? 0.7 : 1 }]}
                     activeOpacity={0.85}
                     disabled={changeMutation.isPending}
                     onPress={() => submit(confirming)}
                   >
                     {changeMutation.isPending
-                      ? <ActivityIndicator color="#fff" />
-                      : <Text style={styles.modalBtnText}>{c.cta}</Text>}
+                      ? <ActivityIndicator color={c.destructive ? colors.destructiveForeground : colors.primaryForeground} />
+                      : <Text style={[styles.modalBtnText, { color: c.destructive ? colors.destructiveForeground : colors.primaryForeground }]}>{c.cta}</Text>}
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.modalCancelBtn}
@@ -227,15 +227,15 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16, paddingTop: 16 },
 
   planCard: { borderRadius: 24, padding: 22, marginBottom: 22 },
-  planLabel: { fontFamily: 'Inter_700Bold', fontSize: 22, color: '#fff' },
-  planPrice: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: 'rgba(255,255,255,0.9)', marginTop: 4 },
-  planSub: { fontFamily: 'Inter_400Regular', fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 8 },
+  planLabel: { fontFamily: 'Inter_700Bold', fontSize: 22 },
+  planPrice: { fontFamily: 'Inter_600SemiBold', fontSize: 16, marginTop: 4 },
+  planSub: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 8 },
 
   pendingCard: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 22 },
   pendingTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15, marginBottom: 6 },
   pendingBody: { fontFamily: 'Inter_400Regular', fontSize: 13.5, lineHeight: 20, marginBottom: 14 },
   keepBtn: { borderRadius: 999, paddingVertical: 12, alignItems: 'center' },
-  keepBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#fff' },
+  keepBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
 
   sectionLabel: {
     fontFamily: 'Inter_600SemiBold', fontSize: 12,
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
   chevron: { fontSize: 22, fontFamily: 'Inter_400Regular' },
 
   note: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: -6 },
-  errorText: { fontFamily: 'Inter_500Medium', fontSize: 13, color: '#DC2626', textAlign: 'center', marginBottom: 14 },
+  errorText: { fontFamily: 'Inter_500Medium', fontSize: 13, textAlign: 'center', marginBottom: 14 },
 
   modalBackdrop: {
     flex: 1, backgroundColor: 'rgba(10,17,40,0.55)',
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, marginBottom: 8 },
   modalBody: { fontFamily: 'Inter_400Regular', fontSize: 13.5, lineHeight: 20, marginBottom: 20 },
   modalBtn: { borderRadius: 999, paddingVertical: 14, alignItems: 'center' },
-  modalBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14.5, color: '#fff' },
+  modalBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14.5 },
   modalCancelBtn: { paddingVertical: 14, alignItems: 'center' },
   modalCancelText: { fontFamily: 'Inter_500Medium', fontSize: 14 },
 });

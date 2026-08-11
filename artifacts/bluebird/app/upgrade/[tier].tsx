@@ -82,7 +82,7 @@ export default function UpgradeScreen() {
           activeOpacity={0.85}
           onPress={() => router.dismissTo('/(tabs)/membership')}
         >
-          <Text style={styles.confirmBtnText}>Explore your benefits</Text>
+          <Text style={[styles.confirmBtnText, { color: colors.primaryForeground }]}>Explore your benefits</Text>
         </TouchableOpacity>
       </View>
     );
@@ -96,9 +96,9 @@ export default function UpgradeScreen() {
       >
         {/* Plan header */}
         <View style={[styles.planCard, { backgroundColor: info.color }]}>
-          <Text style={styles.planLabel}>Bluebird {info.label}</Text>
-          <Text style={styles.planPrice}>{info.price}</Text>
-          <Text style={styles.planTagline}>{info.tagline}</Text>
+          <Text style={[styles.planLabel, { color: colors.primaryForeground }]}>Bluebird {info.label}</Text>
+          <Text style={[styles.planPrice, { color: colors.primaryForeground + 'E6' }]}>{info.price}</Text>
+          <Text style={[styles.planTagline, { color: colors.primaryForeground + 'BF' }]}>{info.tagline}</Text>
         </View>
 
         {/* Benefits */}
@@ -133,7 +133,7 @@ export default function UpgradeScreen() {
         </Text>
 
         {errorMsg && (
-          <Text style={styles.errorText}>{errorMsg}</Text>
+          <Text style={[styles.errorText, { color: colors.destructive }]}>{errorMsg}</Text>
         )}
 
         <TouchableOpacity
@@ -146,8 +146,8 @@ export default function UpgradeScreen() {
           }}
         >
           {upgradeMutation.isPending
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.confirmBtnText}>Confirm upgrade — {info.priceNum}/mo</Text>}
+            ? <ActivityIndicator color={colors.primaryForeground} />
+            : <Text style={[styles.confirmBtnText, { color: colors.primaryForeground }]}>Confirm upgrade — {info.priceNum}/mo</Text>}
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -160,9 +160,9 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16, paddingTop: 16 },
 
   planCard: { borderRadius: 24, padding: 22, marginBottom: 22 },
-  planLabel: { fontFamily: 'Inter_700Bold', fontSize: 22, color: '#fff' },
-  planPrice: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: 'rgba(255,255,255,0.9)', marginTop: 4 },
-  planTagline: { fontFamily: 'Inter_400Regular', fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 8 },
+  planLabel: { fontFamily: 'Inter_700Bold', fontSize: 22 },
+  planPrice: { fontFamily: 'Inter_600SemiBold', fontSize: 16, marginTop: 4 },
+  planTagline: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 8 },
 
   sectionLabel: {
     fontFamily: 'Inter_600SemiBold', fontSize: 12,
@@ -185,10 +185,10 @@ const styles = StyleSheet.create({
   payTotal: { fontFamily: 'Inter_700Bold', fontSize: 15 },
   demoNote: { fontFamily: 'Inter_400Regular', fontSize: 12, textAlign: 'center', marginBottom: 18, marginTop: -10 },
 
-  errorText: { fontFamily: 'Inter_500Medium', fontSize: 13, color: '#DC2626', textAlign: 'center', marginBottom: 12 },
+  errorText: { fontFamily: 'Inter_500Medium', fontSize: 13, textAlign: 'center', marginBottom: 12 },
 
   confirmBtn: { borderRadius: 999, paddingVertical: 16, alignItems: 'center' },
-  confirmBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#fff' },
+  confirmBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
 
   successBadge: {
     width: 96, height: 96, borderRadius: 48,
