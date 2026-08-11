@@ -127,8 +127,7 @@ export default function NotificationsScreen() {
         <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>TRAVEL PREFERENCES</Text>
         <SettingsGroup
           rows={[
-            { label: 'Home Airport',       hint: 'TEB',       onPress: () => {} },
-            { label: 'Preferred Aircraft', hint: 'All types', onPress: () => {} },
+            { label: 'Home Airport', hint: 'TEB', onPress: () => {} },
           ]}
         />
 
