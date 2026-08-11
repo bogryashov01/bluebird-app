@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { db } from "@workspace/db";
-import { revokedTokensTable } from "@workspace/db/schema";
+import { revokedTokensTable, usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
 const rawSecret = process.env.JWT_SECRET;
@@ -45,5 +45,34 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     next();
   } catch {
     res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
+
+/**
+ * Requires the authenticated user's email to be verified. Applied after
+ * authMiddleware to every member-side mutation (queue join/cancel/confirm/
+ * use-pass, membership upgrade/change, profile update, notification read,
+ * concierge chat). Deliberate exceptions available while unverified:
+ * read-only GETs plus /auth/logout, /auth/resend-verification, and
+ * /auth/verify-email — the minimum needed to complete or abandon signup.
+ */
+export async function requireVerifiedEmail(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const userId = (req as any).userId as string;
+  try {
+    const [user] = await db
+      .select({ emailVerified: usersTable.emailVerified })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId));
+    if (!user) {
+      res.status(401).json({ error: "User not found" });
+      return;
+    }
+    if (!user.emailVerified) {
+      res.status(403).json({ error: "Email verification required" });
+      return;
+    }
+    next();
+  } catch {
+    res.status(500).json({ error: "Failed to check verification status" });
   }
 }

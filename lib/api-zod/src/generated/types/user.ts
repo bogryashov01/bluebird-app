@@ -15,5 +15,6 @@ export interface User {
   emailVerified: boolean;
   linePassCount: number;
   phone?: string;
+  referralCode: string;
   createdAt: string;
 }

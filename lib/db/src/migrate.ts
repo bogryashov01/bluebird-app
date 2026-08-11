@@ -22,6 +22,8 @@ export async function ensureSchema(): Promise<void> {
 
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_tier TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_hash TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS flights (
       id               TEXT        PRIMARY KEY,

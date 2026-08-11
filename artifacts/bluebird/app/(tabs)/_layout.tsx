@@ -5,7 +5,8 @@ import { useTheme } from '@/context/ThemeContext';
 import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { isLiquidGlassAvailable } from 'expo-glass-effect';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
+import { useAuth } from '@/context/AuthContext';
 import { Badge, Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
 import { SymbolView } from 'expo-symbols';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -136,6 +137,17 @@ function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
 export default function TabLayout() {
   const { preference } = useTheme();
   const unreadCount = useUnreadNotificationsCount();
+  const { token, user, isLoading } = useAuth();
+  // Centralized guard: no session → auth flow; unverified email → must finish
+  // verification. Prevents deep links from bypassing the signup gate.
+  if (!isLoading) {
+    if (!token) {
+      return <Redirect href="/(auth)/splash" />;
+    }
+    if (user && !user.emailVerified) {
+      return <Redirect href="/(auth)/verify-email" />;
+    }
+  }
   // Native tabs follow the OS appearance only — use them just when the user's
   // theme preference is "System"; a forced Light/Dark needs the themed classic tabs.
   if (isLiquidGlassAvailable() && preference === 'system') {

@@ -1,10 +1,11 @@
 import { Router } from "express";
+import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
 import { usersTable, notificationsTable, revokedTokensTable } from "@workspace/db/schema";
-import { eq, lt } from "drizzle-orm";
+import { and, eq, gt, lt } from "drizzle-orm";
 import jwt from "jsonwebtoken";
-import { signToken, authMiddleware, hashToken } from "../middlewares/auth";
+import { signToken, authMiddleware, hashToken, requireVerifiedEmail } from "../middlewares/auth";
 import { seedDemoDataForUser } from "../lib/seed";
 
 const router = Router();
@@ -13,13 +14,42 @@ function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 }
 
+const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Creates a fresh single-use verification token for a user, stores only its
+ * hash + expiry, and logs the link a real email provider would send (demo
+ * environment — no outbound email). Returns the raw token so the demo client
+ * can complete verification in-app in place of clicking the emailed link.
+ */
+async function issueVerificationToken(userId: string, email: string): Promise<string> {
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  await db
+    .update(usersTable)
+    .set({
+      verificationTokenHash: hashToken(rawToken),
+      verificationTokenExpires: new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
+    })
+    .where(eq(usersTable.id, userId));
+  console.log(`[email-verification] Verification link for ${email}: https://bluebird.app/verify?token=${rawToken}`);
+  return rawToken;
+}
+
 function makeReferralCode(name: string): string {
   return (name.replace(/\s+/g, "").toUpperCase().slice(0, 4) + Math.random().toString(36).slice(2, 6).toUpperCase());
 }
 
 // POST /auth/register
 router.post("/register", async (req, res) => {
-  const { name, email, password } = req.body;
+  const { firstName, lastName, name: legacyName, email, password } = req.body;
+  // Accept new firstName/lastName fields, falling back to the legacy single
+  // name field so older clients keep working. Stored as one full name.
+  const name =
+    typeof firstName === "string" && firstName.trim()
+      ? `${firstName.trim()}${typeof lastName === "string" && lastName.trim() ? ` ${lastName.trim()}` : ""}`
+      : typeof legacyName === "string"
+        ? legacyName.trim()
+        : "";
   if (!name || !email || !password) {
     return res.status(400).json({ error: "Name, email, and password are required" });
   }
@@ -64,10 +94,14 @@ router.post("/register", async (req, res) => {
     await seedDemoDataForUser(userId);
 
     // Re-read so the response reflects seeded line passes
+    // Issue the email-verification token (link is logged in this demo env;
+    // the raw token is returned so the app can stand in for the email click).
+    const demoVerificationToken = await issueVerificationToken(userId, email.toLowerCase());
+
     const [freshUser] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
     const token = signToken(userId);
-    const { passwordHash: _, ...safeUser } = freshUser ?? user;
-    return res.status(201).json({ token, user: safeUser });
+    const { passwordHash: _, verificationTokenHash: __, verificationTokenExpires: ___, ...safeUser } = freshUser ?? user;
+    return res.status(201).json({ token, user: safeUser, demoVerificationToken });
   } catch (err) {
     return res.status(500).json({ error: "Registration failed" });
   }
@@ -96,7 +130,7 @@ router.post("/login", async (req, res) => {
 
     const [freshUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
     const token = signToken(user.id);
-    const { passwordHash: _, ...safeUser } = freshUser ?? user;
+    const { passwordHash: _, verificationTokenHash: __, verificationTokenExpires: ___, ...safeUser } = freshUser ?? user;
     return res.json({ token, user: safeUser });
   } catch (err) {
     return res.status(500).json({ error: "Login failed" });
@@ -125,6 +159,57 @@ router.post("/logout", authMiddleware, async (req, res) => {
   }
 });
 
+// POST /auth/resend-verification — rotate the token and re-log the link (demo email)
+router.post("/resend-verification", authMiddleware, async (req, res) => {
+  const userId = (req as any).userId;
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!user) {
+      return res.status(401).json({ error: "User not found" });
+    }
+    if (user.emailVerified) {
+      return res.json({ message: "Email already verified" });
+    }
+    const demoVerificationToken = await issueVerificationToken(user.id, user.email);
+    return res.json({ message: `Verification email sent to ${user.email}`, demoVerificationToken });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to resend verification email" });
+  }
+});
+
+// POST /auth/verify-email — consume a single-use, expiring verification token
+router.post("/verify-email", authMiddleware, async (req, res) => {
+  const userId = (req as any).userId;
+  const { token } = req.body ?? {};
+  if (typeof token !== "string" || !token) {
+    return res.status(400).json({ error: "Verification token is required" });
+  }
+  try {
+    // Atomic single-use consumption: the update only matches when the token
+    // hash is current, unexpired, and the account is still unverified — so
+    // replayed, expired, rotated-out, or concurrent duplicate tokens all fail.
+    const [updated] = await db
+      .update(usersTable)
+      .set({ emailVerified: true, verificationTokenHash: null, verificationTokenExpires: null })
+      .where(
+        and(
+          eq(usersTable.id, userId),
+          eq(usersTable.emailVerified, false),
+          eq(usersTable.verificationTokenHash, hashToken(token)),
+          gt(usersTable.verificationTokenExpires, new Date()),
+        ),
+      )
+      .returning();
+    if (!updated) {
+      return res.status(400).json({ error: "Invalid or expired verification link. Request a new one." });
+    }
+    const { passwordHash: _, verificationTokenHash: __, verificationTokenExpires: ___, ...safeUser } = updated;
+    return res.json(safeUser);
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to verify email" });
+  }
+});
+
 // GET /auth/me
 router.get("/me", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
@@ -133,7 +218,7 @@ router.get("/me", authMiddleware, async (req, res) => {
     if (!user) {
       return res.status(401).json({ error: "User not found" });
     }
-    const { passwordHash: _, ...safeUser } = user;
+    const { passwordHash: _, verificationTokenHash: __, verificationTokenExpires: ___, ...safeUser } = user;
     return res.json(safeUser);
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch user" });
@@ -141,7 +226,7 @@ router.get("/me", authMiddleware, async (req, res) => {
 });
 
 // PATCH /auth/me — update profile (name, email, phone)
-router.patch("/me", authMiddleware, async (req, res) => {
+router.patch("/me", authMiddleware, requireVerifiedEmail, async (req, res) => {
   const userId = (req as any).userId;
   const { name, email, phone } = req.body ?? {};
 
@@ -181,7 +266,7 @@ router.patch("/me", authMiddleware, async (req, res) => {
       .where(eq(usersTable.id, userId))
       .returning();
     if (!updated) return res.status(401).json({ error: "User not found" });
-    const { passwordHash: _, ...safeUser } = updated;
+    const { passwordHash: _, verificationTokenHash: __, verificationTokenExpires: ___, ...safeUser } = updated;
     return res.json(safeUser);
   } catch (err) {
     return res.status(500).json({ error: "Failed to update profile" });

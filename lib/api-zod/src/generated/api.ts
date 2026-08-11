@@ -20,10 +20,12 @@ export const HealthCheckResponse = zod.object({
  * @summary Register new user
  */
 export const RegisterBody = zod.object({
-  "name": zod.string(),
+  "firstName": zod.string().optional(),
+  "lastName": zod.string().optional(),
+  "name": zod.string().optional().describe('Legacy full-name field, still accepted.'),
   "email": zod.string(),
   "password": zod.string()
-})
+}).describe('Either firstName+lastName or legacy name must be provided.')
 
 export const RegisterResponse = zod.object({
   "token": zod.string(),
@@ -35,8 +37,10 @@ export const RegisterResponse = zod.object({
   "emailVerified": zod.boolean(),
   "linePassCount": zod.number(),
   "phone": zod.string().optional(),
+  "referralCode": zod.string(),
   "createdAt": zod.string()
-})
+}),
+  "demoVerificationToken": zod.string().optional().describe('Demo only — raw email-verification token, present after registration.')
 })
 
 
@@ -58,8 +62,10 @@ export const LoginResponse = zod.object({
   "emailVerified": zod.boolean(),
   "linePassCount": zod.number(),
   "phone": zod.string().optional(),
+  "referralCode": zod.string(),
   "createdAt": zod.string()
-})
+}),
+  "demoVerificationToken": zod.string().optional().describe('Demo only — raw email-verification token, present after registration.')
 })
 
 
@@ -68,6 +74,35 @@ export const LoginResponse = zod.object({
  */
 export const LogoutResponse = zod.object({
   "message": zod.string()
+})
+
+
+/**
+ * @summary Re-send the email verification link (demo — logged server-side)
+ */
+export const ResendVerificationResponse = zod.object({
+  "message": zod.string(),
+  "demoVerificationToken": zod.string().optional().describe('Demo only — raw verification token in lieu of a delivered email.')
+})
+
+
+/**
+ * @summary Verify the caller's email using a single-use verification token
+ */
+export const VerifyEmailBody = zod.object({
+  "token": zod.string().describe('Single-use verification token from the (demo) email link.')
+})
+
+export const VerifyEmailResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "membershipTier": zod.enum(['base', 'plus', 'concierge']),
+  "emailVerified": zod.boolean(),
+  "linePassCount": zod.number(),
+  "phone": zod.string().optional(),
+  "referralCode": zod.string(),
+  "createdAt": zod.string()
 })
 
 
@@ -82,6 +117,7 @@ export const GetMeResponse = zod.object({
   "emailVerified": zod.boolean(),
   "linePassCount": zod.number(),
   "phone": zod.string().optional(),
+  "referralCode": zod.string(),
   "createdAt": zod.string()
 })
 
@@ -103,6 +139,7 @@ export const UpdateMeResponse = zod.object({
   "emailVerified": zod.boolean(),
   "linePassCount": zod.number(),
   "phone": zod.string().optional(),
+  "referralCode": zod.string(),
   "createdAt": zod.string()
 })
 

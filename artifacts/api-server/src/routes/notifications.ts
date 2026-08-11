@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { notificationsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
-import { authMiddleware } from "../middlewares/auth";
+import { authMiddleware, requireVerifiedEmail } from "../middlewares/auth";
 
 const router = Router();
 
@@ -22,7 +22,7 @@ router.get("/", authMiddleware, async (req, res) => {
 });
 
 // POST /notifications/:id/read
-router.post("/:id/read", authMiddleware, async (req, res) => {
+router.post("/:id/read", authMiddleware, requireVerifiedEmail, async (req, res) => {
   const userId = (req as any).userId;
   try {
     const [notification] = await db

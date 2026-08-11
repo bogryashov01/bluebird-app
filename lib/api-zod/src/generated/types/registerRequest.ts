@@ -6,8 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * Either firstName+lastName or legacy name must be provided.
+ */
 export interface RegisterRequest {
-  name: string;
+  firstName?: string;
+  lastName?: string;
+  /** Legacy full-name field, still accepted. */
+  name?: string;
   email: string;
   password: string;
 }

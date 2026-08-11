@@ -112,6 +112,60 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /auth/resend-verification:
+    post:
+      operationId: resendVerification
+      tags: [auth]
+      summary: Re-send the email verification link (demo — logged server-side)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Verification email re-sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendEmailResult"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/verify-email:
+    post:
+      operationId: verifyEmail
+      tags: [auth]
+      summary: Verify the caller's email using a single-use verification token
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRequest"
+      responses:
+        "200":
+          description: Email verified; returns the updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Missing, invalid, or expired verification token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /auth/me:
     get:
       operationId: getMe
@@ -659,17 +713,42 @@ components:
 
     RegisterRequest:
       type: object
+      description: Either firstName+lastName or legacy name must be provided.
       properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
         name:
           type: string
+          description: Legacy full-name field, still accepted.
         email:
           type: string
         password:
           type: string
       required:
-        - name
         - email
         - password
+
+    ResendEmailResult:
+      type: object
+      properties:
+        message:
+          type: string
+        demoVerificationToken:
+          type: string
+          description: Demo only — raw verification token in lieu of a delivered email.
+      required:
+        - message
+
+    VerifyEmailRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Single-use verification token from the (demo) email link.
+      required:
+        - token
 
     LoginRequest:
       type: object
@@ -689,6 +768,9 @@ components:
           type: string
         user:
           $ref: "#/components/schemas/User"
+        demoVerificationToken:
+          type: string
+          description: Demo only — raw email-verification token, present after registration.
       required:
         - token
         - user
@@ -721,6 +803,8 @@ components:
           type: number
         phone:
           type: string
+        referralCode:
+          type: string
         createdAt:
           type: string
       required:
@@ -730,6 +814,7 @@ components:
         - membershipTier
         - emailVerified
         - linePassCount
+        - referralCode
         - createdAt
 
     Flight:

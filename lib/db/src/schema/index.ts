@@ -10,6 +10,8 @@ export const usersTable = pgTable("users", {
   membershipTier: text("membership_tier").notNull().default("base"),
   pendingTier: text("pending_tier"),
   emailVerified: boolean("email_verified").notNull().default(false),
+  verificationTokenHash: text("verification_token_hash"),
+  verificationTokenExpires: timestamp("verification_token_expires"),
   linePassCount: integer("line_pass_count").notNull().default(0),
   phone: text("phone"),
   referralCode: text("referral_code").notNull(),

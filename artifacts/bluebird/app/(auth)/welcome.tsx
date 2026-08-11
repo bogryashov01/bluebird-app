@@ -24,10 +24,10 @@ export default function WelcomeScreen() {
   const demoLogin = useLogin({
     mutation: {
       onSuccess: async (data) => {
-        // @ts-ignore
         await signIn(data.token, data.user);
         queryClient.clear();
-        router.replace('/(tabs)/discover');
+        // Demo member is pre-verified; any unverified account must verify first.
+        router.replace(data.user.emailVerified ? '/(tabs)/discover' : '/(auth)/verify-email');
       },
       onError: (err: any) => {
         setPendingProvider(null);

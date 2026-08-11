@@ -26,10 +26,10 @@ export default function SignInScreen() {
   const loginMutation = useLogin({
     mutation: {
       onSuccess: async (data) => {
-        // @ts-ignore
         await signIn(data.token, data.user);
         queryClient.clear();
-        router.replace('/(tabs)/discover');
+        // Unverified accounts must complete email verification first.
+        router.replace(data.user.emailVerified ? '/(tabs)/discover' : '/(auth)/verify-email');
       },
       onError: (err: any) => {
         const msg = err?.response?.data?.error || err?.message || 'Login failed';

@@ -61,10 +61,27 @@ export interface SignOutResponse {
   message: string;
 }
 
+/**
+ * Either firstName+lastName or legacy name must be provided.
+ */
 export interface RegisterRequest {
-  name: string;
+  firstName?: string;
+  lastName?: string;
+  /** Legacy full-name field, still accepted. */
+  name?: string;
   email: string;
   password: string;
+}
+
+export interface ResendEmailResult {
+  message: string;
+  /** Demo only — raw verification token in lieu of a delivered email. */
+  demoVerificationToken?: string;
+}
+
+export interface VerifyEmailRequest {
+  /** Single-use verification token from the (demo) email link. */
+  token: string;
 }
 
 export interface LoginRequest {
@@ -89,12 +106,15 @@ export interface User {
   emailVerified: boolean;
   linePassCount: number;
   phone?: string;
+  referralCode: string;
   createdAt: string;
 }
 
 export interface AuthResponse {
   token: string;
   user: User;
+  /** Demo only — raw email-verification token, present after registration. */
+  demoVerificationToken?: string;
 }
 
 export interface UpdateMeRequest {
