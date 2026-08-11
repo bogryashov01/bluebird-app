@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderRadius: 16, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 13,
+    borderRadius: 18, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 13,
   },
   codeBadge: {
     width: 52, height: 40, borderRadius: 10,

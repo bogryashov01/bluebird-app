@@ -9,6 +9,8 @@ import Svg, { Circle } from 'react-native-svg';
 import type { QueueEntry } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
+import { FloatingBackButton } from '@/components/FloatingBackButton';
+import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { useGetQueueStatus, useCancelQueueEntry, useConfirmQueueEntry } from '@workspace/api-client-react';
 
@@ -150,25 +152,20 @@ function QueueCard({
 
       {/* Primary action: confirm if eligible, otherwise link to the flight */}
       {canConfirm && onConfirm ? (
-        <TouchableOpacity
-          style={[card.confirmBtn, { backgroundColor: colors.success, shadowColor: colors.success }, isConfirming && { opacity: 0.6 }]}
+        <PrimaryButton
+          label="✓  Confirm your seat"
           onPress={onConfirm}
-          disabled={isConfirming}
-          activeOpacity={0.85}
-        >
-          {isConfirming
-            ? <ActivityIndicator color={colors.successForeground} size="small" />
-            : <Text style={[card.confirmBtnText, { color: colors.successForeground }]}>✓  Confirm your seat</Text>
-          }
-        </TouchableOpacity>
+          loading={isConfirming}
+          backgroundColor={colors.success}
+          textColor={colors.successForeground}
+          style={card.fullWidth}
+        />
       ) : (
-        <TouchableOpacity
-          style={[card.primaryBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
+        <PrimaryButton
+          label="View Flight Details"
           onPress={() => router.push(`/flight/${entry.flightId}`)}
-          activeOpacity={0.85}
-        >
-          <Text style={[card.primaryBtnText, { color: colors.primaryForeground }]}>View Flight Details</Text>
-        </TouchableOpacity>
+          style={card.fullWidth}
+        />
       )}
 
       {/* Skip the Line pass — offered when the member holds passes and is not already #1 */}
@@ -234,13 +231,13 @@ function ConfirmedCard({ entry }: { entry: QueueEntry }) {
         </View>
       )}
 
-      <TouchableOpacity
-        style={[card.primaryBtn, confirmed.tripsBtn, { backgroundColor: colors.backgroundMid }]}
+      <PrimaryButton
+        label="View in My Trips"
         onPress={() => router.push('/(tabs)/trips')}
-        activeOpacity={0.85}
-      >
-        <Text style={[card.primaryBtnText, { color: colors.primaryForeground }]}>View in My Trips</Text>
-      </TouchableOpacity>
+        backgroundColor={colors.backgroundMid}
+        textColor={colors.primaryForeground}
+        style={card.fullWidth}
+      />
     </View>
   );
 }
@@ -267,13 +264,6 @@ const confirmed = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
     fontSize: 13,
     letterSpacing: 0.5,
-  },
-  tripsBtn: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 16,
-    shadowOpacity: 0.20,
-    elevation: 4,
   },
 });
 const card = StyleSheet.create({
@@ -322,33 +312,13 @@ const card = StyleSheet.create({
     padding: 14,
   },
   disclaimerText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19 },
-  primaryBtn: {
-    width: '100%',
-    borderRadius: 999,
-    paddingVertical: 16,
-    alignItems: 'center',
-    shadowOffset: { width: 0, height: 14 },
-    shadowRadius: 26,
-    shadowOpacity: 0.32,
-    elevation: 6,
-  },
-  primaryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
-  confirmBtn: {
-    width: '100%',
-    borderRadius: 999,
-    paddingVertical: 16,
-    alignItems: 'center',
-    shadowOffset: { width: 0, height: 14 },
-    shadowRadius: 26,
-    shadowOpacity: 0.32,
-    elevation: 6,
-  },
-  confirmBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
+  fullWidth: { width: '100%' },
   passBtn: {
     width: '100%',
     borderWidth: 1.5,
     borderRadius: 999,
-    paddingVertical: 14,
+    height: 48,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   passBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
@@ -358,10 +328,11 @@ const card = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 999,
     width: '100%',
-    paddingVertical: 13,
+    height: 48,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  leaveBtnText: { fontFamily: 'Inter_400Regular', fontSize: 14 },
+  leaveBtnText: { fontFamily: 'Inter_500Medium', fontSize: 14 },
 });
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
@@ -369,7 +340,7 @@ export default function QueueStatusScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const topPad    = Platform.OS === 'web' ? 60 : insets.top;
+  const topPad    = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { user } = useAuth();
@@ -451,13 +422,9 @@ export default function QueueStatusScreen() {
     );
   };
 
-  const backTop = topPad + 14;
-
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
-      <TouchableOpacity style={[styles.backBtn, { top: backTop, backgroundColor: colors.muted }]} onPress={() => router.back()} activeOpacity={0.7}>
-        <Text style={[styles.backChevron, { color: colors.textOnSurface }]}>‹</Text>
-      </TouchableOpacity>
+      <FloatingBackButton />
 
       {isLoading ? (
         <View style={styles.centered}>
@@ -469,13 +436,13 @@ export default function QueueStatusScreen() {
           <Text style={[styles.emptyBody, { color: colors.mutedForegroundLight }]}>
             Browse available flights and join a queue to see your status here.
           </Text>
-          <TouchableOpacity
-            style={[styles.browseBtn, { backgroundColor: colors.primary }]}
+          <SecondaryButton
+            label="Browse Flights"
             onPress={() => router.replace('/(tabs)/discover')}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.browseBtnText, { color: colors.primaryForeground }]}>Browse Flights</Text>
-          </TouchableOpacity>
+            backgroundColor={colors.primary}
+            textColor={colors.primaryForeground}
+            style={styles.browseBtn}
+          />
         </View>
       ) : (
         <ScrollView
@@ -512,20 +479,10 @@ export default function QueueStatusScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  backBtn: {
-    position: 'absolute', zIndex: 10, left: 18,
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  backChevron: { fontSize: 24, lineHeight: 28, marginLeft: -2 },
   scrollContent: { paddingHorizontal: 22, alignItems: 'center' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 12 },
   emptyTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 20 },
   emptyBody:  { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 22, textAlign: 'center' },
-  browseBtn: {
-    marginTop: 6,
-    paddingHorizontal: 24, paddingVertical: 14, borderRadius: 999,
-  },
-  browseBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
+  browseBtn: { marginTop: 6, paddingHorizontal: 24 },
 });

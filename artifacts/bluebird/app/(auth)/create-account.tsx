@@ -12,6 +12,7 @@ import { useRegister } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { PrimaryButton } from '@/components/PrimaryButton';
 
 export default function CreateAccountScreen() {
   const insets = useSafeAreaInsets();
@@ -195,18 +196,7 @@ export default function CreateAccountScreen() {
 
       {/* Bottom pinned action */}
       <View style={[styles.footer, { paddingBottom: bottomPad + 16 }]}>
-        <TouchableOpacity
-          style={[styles.submitBtn, { backgroundColor: colors.primary }, registerMutation.isPending && styles.submitBtnDisabled]}
-          onPress={handleCreate}
-          disabled={registerMutation.isPending}
-          activeOpacity={0.8}
-        >
-          {registerMutation.isPending ? (
-            <ActivityIndicator color={colors.primaryForeground} />
-          ) : (
-            <Text style={[styles.submitBtnText, { color: colors.primaryForeground }]}>Create Account</Text>
-          )}
-        </TouchableOpacity>
+        <PrimaryButton label="Create Account" onPress={handleCreate} loading={registerMutation.isPending} />
       </View>
     </View>
   );
@@ -239,7 +229,4 @@ const styles = StyleSheet.create({
   termsText: { fontSize: 12, fontFamily: 'Inter_400Regular', lineHeight: 18, marginTop: 2 },
   termsLink: { fontFamily: 'Inter_600SemiBold' },
   footer: { paddingHorizontal: 20, paddingTop: 8 },
-  submitBtn: { height: 54, borderRadius: 999, justifyContent: 'center', alignItems: 'center' },
-  submitBtnDisabled: { opacity: 0.7 },
-  submitBtnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
 });

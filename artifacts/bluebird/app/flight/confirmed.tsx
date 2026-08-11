@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import * as Haptics from 'expo-haptics';
 
 function computeArrival(departureTime?: string, duration?: string): string {
@@ -142,13 +143,7 @@ export default function FlightConfirmedScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
-        <TouchableOpacity
-          style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-          onPress={() => router.dismissTo('/(tabs)/trips')}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>View My Trips</Text>
-        </TouchableOpacity>
+        <PrimaryButton label="View My Trips" onPress={() => router.dismissTo('/(tabs)/trips')} />
       </View>
     </View>
   );
@@ -180,7 +175,7 @@ const styles = StyleSheet.create({
   stepText: { fontFamily: 'Inter_400Regular', fontSize: 14 },
   actionRow: { flexDirection: 'row', gap: 10, alignSelf: 'stretch' },
   actionBtn: {
-    flex: 1, borderRadius: 12, paddingVertical: 14,
+    flex: 1, borderRadius: 14, paddingVertical: 14,
     alignItems: 'center', justifyContent: 'center',
   },
   actionText: { fontFamily: 'Inter_600SemiBold', fontSize: 12.5, textAlign: 'center', lineHeight: 17 },
@@ -188,6 +183,4 @@ const styles = StyleSheet.create({
     position: 'absolute', left: 0, right: 0, bottom: 0,
     paddingHorizontal: 22, paddingTop: 12,
   },
-  primaryBtn: { borderRadius: 999, paddingVertical: 16, alignItems: 'center' },
-  primaryBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
 });

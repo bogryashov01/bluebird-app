@@ -6,6 +6,8 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { FloatingBackButton } from '@/components/FloatingBackButton';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import { useUseLinePassOnQueueEntry, useConfirmQueueEntry } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
@@ -90,13 +92,7 @@ export default function SkipLinePassScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad }]}>
-      <TouchableOpacity
-        style={[styles.backBtn, { top: topPad + 14, backgroundColor: colors.textOnBrand + '14' }]}
-        onPress={() => router.back()}
-        activeOpacity={0.75}
-      >
-        <Text style={[styles.backChevron, { color: colors.textOnBrand }]}>‹</Text>
-      </TouchableOpacity>
+      <FloatingBackButton variant="brand" />
 
       <View style={[styles.top, { paddingTop: 76 }]}>
         <Text style={[styles.title, { color: colors.mutedOnBrand }]}>
@@ -135,16 +131,13 @@ export default function SkipLinePassScreen() {
             You don't have any passes — tap Buy More above to get one.
           </Text>
         )}
-        <TouchableOpacity
-          style={[styles.confirmBtn, { backgroundColor: colors.primary }, (!canConfirm || isPending) && { opacity: 0.5 }]}
+        <PrimaryButton
+          label="Confirm — Use Skip the Line Pass"
           onPress={handleConfirm}
-          disabled={!canConfirm || isPending}
-          activeOpacity={0.85}
-        >
-          {isPending
-            ? <ActivityIndicator color={colors.primaryForeground} size="small" />
-            : <Text style={[styles.confirmBtnText, { color: colors.primaryForeground }]}>Confirm — Use Skip the Line Pass</Text>}
-        </TouchableOpacity>
+          loading={isPending}
+          disabled={!canConfirm}
+          style={{ marginTop: 4 }}
+        />
         <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()} activeOpacity={0.7}>
           <Text style={[styles.cancelBtnText, { color: colors.mutedOnBrand }]}>Cancel</Text>
         </TouchableOpacity>
@@ -155,12 +148,6 @@ export default function SkipLinePassScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  backBtn: {
-    position: 'absolute', zIndex: 20, left: 16,
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  backChevron: { fontFamily: 'Inter_500Medium', fontSize: 22, marginTop: -2 },
   top: { flex: 1, paddingHorizontal: 22, gap: 16 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 24, lineHeight: 31 },
   body: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21 },
@@ -179,8 +166,6 @@ const styles = StyleSheet.create({
   sheetTitle: { fontFamily: 'Inter_700Bold', fontSize: 17 },
   sheetBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19 },
   noPasses: { fontFamily: 'Inter_500Medium', fontSize: 13 },
-  confirmBtn: { borderRadius: 999, paddingVertical: 15, alignItems: 'center', marginTop: 4 },
-  confirmBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
   cancelBtn: { alignItems: 'center', paddingVertical: 8 },
   cancelBtnText: { fontFamily: 'Inter_400Regular', fontSize: 14 },
 });

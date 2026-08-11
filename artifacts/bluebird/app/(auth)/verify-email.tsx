@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { useResendVerification, useVerifyEmail } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { PrimaryButton } from '@/components/PrimaryButton';
 
 export default function VerifyEmailScreen() {
   const insets = useSafeAreaInsets();
@@ -116,18 +117,11 @@ export default function VerifyEmailScreen() {
       </View>
 
       <View style={[styles.footer, { paddingBottom: bottomPad + 16 }]}>
-        <TouchableOpacity
-          style={[styles.continueBtn, { backgroundColor: colors.primary }, (verifyMutation.isPending || resendMutation.isPending) && { opacity: 0.7 }]}
+        <PrimaryButton
+          label="Continue"
           onPress={handleContinue}
-          disabled={verifyMutation.isPending || resendMutation.isPending}
-          activeOpacity={0.8}
-        >
-          {verifyMutation.isPending || resendMutation.isPending ? (
-            <ActivityIndicator color={colors.primaryForeground} />
-          ) : (
-            <Text style={[styles.continueText, { color: colors.primaryForeground }]}>Continue</Text>
-          )}
-        </TouchableOpacity>
+          loading={verifyMutation.isPending || resendMutation.isPending}
+        />
       </View>
     </View>
   );
@@ -146,6 +140,4 @@ const styles = StyleSheet.create({
   resendBtn: { marginTop: 28, minHeight: 22, justifyContent: 'center' },
   resendText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
   footer: { paddingHorizontal: 20, paddingTop: 8 },
-  continueBtn: { height: 54, borderRadius: 999, justifyContent: 'center', alignItems: 'center' },
-  continueText: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
 });

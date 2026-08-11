@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { PrimaryButton } from '@/components/PrimaryButton';
 
 export default function WelcomeMemberScreen() {
   const insets = useSafeAreaInsets();
@@ -43,13 +44,7 @@ export default function WelcomeMemberScreen() {
       </View>
 
       <View style={[styles.footer, { paddingBottom: bottomPad + 16 }]}>
-        <TouchableOpacity
-          style={[styles.continueBtn, { backgroundColor: colors.primary }]}
-          onPress={() => router.replace('/(tabs)/discover')}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.continueText, { color: colors.primaryForeground }]}>Continue to Discover</Text>
-        </TouchableOpacity>
+        <PrimaryButton label="Continue to Discover" onPress={() => router.replace('/(tabs)/discover')} />
       </View>
     </View>
   );
@@ -67,6 +62,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   footer: { paddingHorizontal: 20, paddingTop: 8 },
-  continueBtn: { height: 54, borderRadius: 999, justifyContent: 'center', alignItems: 'center' },
-  continueText: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
 });

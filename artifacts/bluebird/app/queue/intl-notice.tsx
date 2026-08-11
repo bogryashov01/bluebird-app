@@ -1,12 +1,13 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Platform, Alert,
+  View, Text, StyleSheet, ScrollView, Platform, Alert,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { FloatingBackButton } from '@/components/FloatingBackButton';
+import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import { useJoinQueue } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
@@ -77,13 +78,7 @@ export default function InternationalNoticeScreen() {
   // Brand-navy surface in both modes — textOnBrand/mutedOnBrand tokens apply.
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundMid }]}>
-      <TouchableOpacity
-        style={[styles.backBtn, { top: topPad + 14, backgroundColor: colors.textOnBrand + '14' }]}
-        onPress={() => router.back()}
-        activeOpacity={0.75}
-      >
-        <Text style={[styles.backChevron, { color: colors.textOnBrand }]}>‹</Text>
-      </TouchableOpacity>
+      <FloatingBackButton variant="brand" />
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: topPad + 76 }]}
@@ -113,23 +108,14 @@ export default function InternationalNoticeScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
-        <TouchableOpacity
-          style={[styles.upgradeBtn, { backgroundColor: colors.primary }]}
-          onPress={() => router.push('/upgrade/plus')}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.upgradeBtnText, { color: colors.primaryForeground }]}>Upgrade to Plus</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.baseBtn, { backgroundColor: colors.textOnBrand + '14' }, joinMutation.isPending && { opacity: 0.6 }]}
+        <PrimaryButton label="Upgrade to Plus" onPress={() => router.push('/upgrade/plus')} />
+        <SecondaryButton
+          label={`Continue with Base ($${fee.toLocaleString()} fee)`}
           onPress={handleContinueBase}
-          disabled={joinMutation.isPending}
-          activeOpacity={0.85}
-        >
-          {joinMutation.isPending
-            ? <ActivityIndicator color={colors.textOnBrand} size="small" />
-            : <Text style={[styles.baseBtnText, { color: colors.textOnBrand }]}>Continue with Base (${fee.toLocaleString()} fee)</Text>}
-        </TouchableOpacity>
+          loading={joinMutation.isPending}
+          backgroundColor={colors.textOnBrand + '14'}
+          textColor={colors.textOnBrand}
+        />
       </View>
     </View>
   );
@@ -137,12 +123,6 @@ export default function InternationalNoticeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  backBtn: {
-    position: 'absolute', zIndex: 20, left: 16,
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  backChevron: { fontFamily: 'Inter_500Medium', fontSize: 22, marginTop: -2 },
   content: { paddingHorizontal: 22, paddingBottom: 24, gap: 16 },
   globeBadge: {
     width: 44, height: 44, borderRadius: 22,
@@ -160,8 +140,4 @@ const styles = StyleSheet.create({
   plusTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14.5 },
   plusBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19 },
   footer: { paddingHorizontal: 22, paddingTop: 12, gap: 10 },
-  upgradeBtn: { borderRadius: 999, paddingVertical: 16, alignItems: 'center' },
-  upgradeBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
-  baseBtn: { borderRadius: 999, paddingVertical: 15, alignItems: 'center' },
-  baseBtnText: { fontFamily: 'Inter_500Medium', fontSize: 14.5 },
 });

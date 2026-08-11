@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated, Platform,
+  View, Text, StyleSheet, Animated, Platform,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 
 function formatDate(d?: string) {
   if (!d) return '';
@@ -106,20 +107,11 @@ export default function QueueJoinedScreen() {
       </View>
 
       <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-          onPress={() => router.replace('/queue/status')}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>View Queue Status</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.secondaryBtn, { backgroundColor: colors.muted }]}
+        <PrimaryButton label="View Queue Status" onPress={() => router.replace('/queue/status')} />
+        <SecondaryButton
+          label="Use Skip the Line Pass Instead"
           onPress={() => router.push({ pathname: '/queue/pass', params })}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.secondaryBtnText, { color: colors.textOnSurface }]}>Use Skip the Line Pass Instead</Text>
-        </TouchableOpacity>
+        />
       </View>
     </View>
   );
@@ -140,7 +132,7 @@ const styles = StyleSheet.create({
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, textAlign: 'center' },
   chipRow: { flexDirection: 'row', gap: 12 },
   chip: {
-    borderRadius: 16, paddingVertical: 16, paddingHorizontal: 22,
+    borderRadius: 18, paddingVertical: 16, paddingHorizontal: 22,
     alignItems: 'center', gap: 4, minWidth: 130,
     shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowRadius: 16, shadowOpacity: 0.05, elevation: 2,
   },
@@ -148,8 +140,4 @@ const styles = StyleSheet.create({
   chipLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.6 },
   countdown: { fontFamily: 'Inter_500Medium', fontSize: 13 },
   footer: { paddingHorizontal: 22, gap: 10 },
-  primaryBtn: { borderRadius: 999, paddingVertical: 16, alignItems: 'center' },
-  primaryBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
-  secondaryBtn: { borderRadius: 999, paddingVertical: 15, alignItems: 'center' },
-  secondaryBtnText: { fontFamily: 'Inter_500Medium', fontSize: 14.5 },
 });

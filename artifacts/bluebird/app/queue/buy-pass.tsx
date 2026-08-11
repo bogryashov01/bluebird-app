@@ -7,6 +7,8 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { FloatingBackButton } from '@/components/FloatingBackButton';
+import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import { useBuyLinePass } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
@@ -63,13 +65,7 @@ export default function BuyPassScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
-      <TouchableOpacity
-        style={[styles.backBtn, { top: topPad + 14, backgroundColor: colors.muted }]}
-        onPress={() => router.back()}
-        activeOpacity={0.75}
-      >
-        <Text style={[styles.backChevron, { color: colors.textOnSurface }]}>‹</Text>
-      </TouchableOpacity>
+      <FloatingBackButton />
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: topPad + 72, paddingBottom: 24 }]}
@@ -87,14 +83,12 @@ export default function BuyPassScreen() {
             Guarantees your seat on this flight, instantly.
           </Text>
           <Text style={[styles.passPrice, { color: colors.textOnSurface }]}>$2,000</Text>
-          <TouchableOpacity
-            style={[styles.buyBtn, { backgroundColor: colors.muted }, buyMutation.isPending && { opacity: 0.6 }]}
+          <SecondaryButton
+            label="Buy 1 Pass"
             onPress={handleBuy}
             disabled={buyMutation.isPending}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.buyBtnText, { color: colors.textOnSurface }]}>Buy 1 Pass</Text>
-          </TouchableOpacity>
+            style={{ marginTop: 8 }}
+          />
         </View>
 
         {/* Recommended: Plus upgrade */}
@@ -112,13 +106,11 @@ export default function BuyPassScreen() {
               </View>
             ))}
           </View>
-          <TouchableOpacity
-            style={[styles.upgradeBtn, { backgroundColor: colors.primary }]}
+          <PrimaryButton
+            label="Upgrade to Plus"
             onPress={() => router.push('/upgrade/plus')}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.upgradeBtnText, { color: colors.primaryForeground }]}>Upgrade to Plus</Text>
-          </TouchableOpacity>
+            style={{ marginTop: 10 }}
+          />
         </View>
 
         <Text style={[styles.demoNote, { color: colors.mutedForegroundLight }]}>
@@ -149,12 +141,6 @@ export default function BuyPassScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  backBtn: {
-    position: 'absolute', zIndex: 20, left: 16,
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  backChevron: { fontFamily: 'Inter_500Medium', fontSize: 22, marginTop: -2 },
   content: { paddingHorizontal: 22, gap: 14 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 26 },
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, marginTop: -8, marginBottom: 4 },
@@ -165,8 +151,6 @@ const styles = StyleSheet.create({
   passTitle: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   passSub: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18 },
   passPrice: { fontFamily: 'Inter_700Bold', fontSize: 24, marginTop: 4 },
-  buyBtn: { borderRadius: 999, paddingVertical: 13, alignItems: 'center', marginTop: 8 },
-  buyBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14.5 },
   plusCard: {
     borderRadius: 18, borderWidth: 1.5, padding: 18, gap: 6,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
@@ -176,10 +160,9 @@ const styles = StyleSheet.create({
   bullets: { gap: 6, marginTop: 6 },
   bulletRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   bulletText: { fontFamily: 'Inter_500Medium', fontSize: 13.5 },
-  upgradeBtn: { borderRadius: 999, paddingVertical: 14, alignItems: 'center', marginTop: 10 },
-  upgradeBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
   demoNote: { fontFamily: 'Inter_400Regular', fontSize: 12, textAlign: 'center', marginTop: 2 },
   footer: { paddingHorizontal: 22, paddingTop: 12 },
-  applePayBtn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  // Apple Pay branding intentionally keeps platform black/white + its own geometry.
+  applePayBtn: { borderRadius: 14, height: 54, justifyContent: 'center', alignItems: 'center' },
   applePayText: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
 });

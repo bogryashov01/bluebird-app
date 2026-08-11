@@ -48,7 +48,7 @@ export default function WelcomeScreen() {
   const isDark = colors.scheme === 'dark';
 
   const outlinedBtn = {
-    backgroundColor: colors.scheme === 'dark' ? colors.card : '#FFFFFF',
+    backgroundColor: colors.card,
     borderColor: colors.border,
   };
   const appleBtn = {
@@ -169,12 +169,12 @@ const styles = StyleSheet.create({
   },
   buttons: { gap: 12 },
   pill: {
-    height: 52, borderRadius: 999,
+    height: 54, borderRadius: 999,
     justifyContent: 'center', alignItems: 'center',
   },
   pillOutlined: { borderWidth: 1 },
   pillInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  pillText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+  pillText: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
   divider: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     marginVertical: 22,

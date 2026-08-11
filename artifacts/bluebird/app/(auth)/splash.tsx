@@ -30,13 +30,14 @@ export default function SplashScreen() {
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   return (
-    <View style={[styles.container, { paddingTop: topPad, paddingBottom: bottomPad }]}>
+    // backgroundMid is brand navy in BOTH modes — the splash is intentionally dark-branded.
+    <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad, paddingBottom: bottomPad }]}>
       <View style={styles.content}>
         <Animated.View style={{ opacity: logoOpacity, transform: [{ scale: logoScale }] }}>
           <Image source={logoSource} style={styles.logo} resizeMode="contain" />
         </Animated.View>
 
-        <Animated.Text style={[styles.tagline, { opacity: taglineOpacity }]}>
+        <Animated.Text style={[styles.tagline, { color: colors.mutedOnBrand, opacity: taglineOpacity }]}>
           Private aviation, redefined.
         </Animated.Text>
       </View>
@@ -47,7 +48,7 @@ export default function SplashScreen() {
             key={i}
             style={[
               styles.dot,
-              { backgroundColor: 'rgba(255, 255, 255, 0.25)' },
+              { backgroundColor: colors.textOnBrand + '40' },
               i === 0 && [styles.dotActive, { backgroundColor: colors.primary }],
             ]}
           />
@@ -62,7 +63,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0A1128',
   },
   content: {
     flex: 1,
@@ -75,7 +75,6 @@ const styles = StyleSheet.create({
     height: 50,
   },
   tagline: {
-    color: '#8896B3',
     fontSize: 16,
     fontFamily: 'Inter_400Regular',
     letterSpacing: 0.3,

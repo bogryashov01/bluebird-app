@@ -7,6 +7,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { FloatingBackButton } from '@/components/FloatingBackButton';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import { useJoinQueue, useGetFlightMyStatus } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
@@ -101,13 +103,7 @@ export default function JoinQueueAcknowledgeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
-      <TouchableOpacity
-        style={[styles.backBtn, { top: topPad + 14, backgroundColor: colors.muted }]}
-        onPress={() => router.back()}
-        activeOpacity={0.75}
-      >
-        <Text style={[styles.backChevron, { color: colors.textOnSurface }]}>‹</Text>
-      </TouchableOpacity>
+      <FloatingBackButton />
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: topPad + 72 }]}
@@ -141,17 +137,12 @@ export default function JoinQueueAcknowledgeScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
-        <TouchableOpacity
-          style={[styles.cta, { backgroundColor: colors.primary }, ctaDisabled && { opacity: 0.45 }]}
+        <PrimaryButton
+          label="I Acknowledge — Continue"
           onPress={handleContinue}
+          loading={joinMutation.isPending}
           disabled={ctaDisabled}
-          accessibilityState={{ disabled: ctaDisabled }}
-          activeOpacity={0.85}
-        >
-          {joinMutation.isPending
-            ? <ActivityIndicator color={colors.primaryForeground} />
-            : <Text style={[styles.ctaText, { color: colors.primaryForeground }]}>I Acknowledge — Continue</Text>}
-        </TouchableOpacity>
+        />
       </View>
     </View>
   );
@@ -159,12 +150,6 @@ export default function JoinQueueAcknowledgeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  backBtn: {
-    position: 'absolute', zIndex: 20, left: 16,
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  backChevron: { fontFamily: 'Inter_500Medium', fontSize: 22, marginTop: -2 },
   content: { paddingHorizontal: 22, paddingBottom: 24, gap: 12 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 26, lineHeight: 33, marginBottom: 2 },
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20, marginBottom: 10 },
@@ -180,6 +165,4 @@ const styles = StyleSheet.create({
   checkText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 13.5, lineHeight: 19 },
   legal: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17, marginTop: 6 },
   footer: { paddingHorizontal: 22, paddingTop: 12 },
-  cta: { borderRadius: 999, paddingVertical: 17, alignItems: 'center' },
-  ctaText: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
 });
