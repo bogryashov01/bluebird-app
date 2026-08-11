@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Platform, Alert, Modal, Pressable,
+  Platform, Modal, Pressable,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { useListNotifications } from '@workspace/api-client-react';
 import type { Notification } from '@workspace/api-client-react';
 import { notificationRoute } from '@/lib/notificationRoute';
 import { SettingsGroup } from '@/components/SettingsGroup';
+import { confirmDialog } from '@/lib/confirmDialog';
 import { useTheme, type ThemePreference } from '@/context/ThemeContext';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; hint: string }[] = [
@@ -184,11 +185,15 @@ export default function ProfileScreen() {
           rows={[
             {
               label: 'Sign Out',
-              onPress: () =>
-                Alert.alert('Sign out?', 'Are you sure you want to sign out?', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Sign out', style: 'destructive', onPress: signOut },
-                ]),
+              onPress: async () => {
+                const ok = await confirmDialog(
+                  'Sign out?',
+                  'Are you sure you want to sign out?',
+                  'Sign out',
+                  true,
+                );
+                if (ok) signOut();
+              },
               right: <Text style={[styles.signOutChevron, { color: colors.mutedForegroundLight }]}>›</Text>,
             },
           ]}
