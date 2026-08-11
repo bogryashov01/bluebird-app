@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Platform, Alert,
+  Platform,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,12 +39,15 @@ export default function JoinQueueAcknowledgeScreen() {
   const queryClient = useQueryClient();
   const [checked, setChecked] = useState([false, false, false]);
   const [punctualityChecked, setPunctualityChecked] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   // Guard: a user already confirmed on this flight cannot join again.
-  const { data: myStatus, isLoading: statusLoading } = useGetFlightMyStatus(flightId!, {
+  // If this lookup fails, we do NOT lock the button — the server enforces the
+  // duplicate-entry guard authoritatively on join anyway.
+  const { data: myStatus, isLoading: statusLoading, isError: statusError } = useGetFlightMyStatus(flightId!, {
     query: { enabled: !!user && !!flightId },
   });
   const isConfirmed = myStatus?.status === 'confirmed';
@@ -85,8 +88,9 @@ export default function JoinQueueAcknowledgeScreen() {
         });
       },
       onError: (err: any) => {
-        const msg = err?.response?.data?.error || err?.data?.error || 'Failed to join queue';
-        Alert.alert('Error', msg);
+        const msg = err?.response?.data?.error || err?.data?.error || err?.message || 'Failed to join queue';
+        setJoinError(msg);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       },
     },
   });
@@ -95,7 +99,8 @@ export default function JoinQueueAcknowledgeScreen() {
   const needsIntlNotice = isInternational && user?.membershipTier === 'base';
 
   const handleContinue = () => {
-    if (!allChecked || !flightId || isConfirmed) return;
+    if (!allChecked || !flightId || isConfirmed || joinMutation.isPending) return;
+    setJoinError(null);
     if (needsIntlNotice) {
       router.push({ pathname: '/queue/intl-notice', params });
       return;
@@ -103,7 +108,9 @@ export default function JoinQueueAcknowledgeScreen() {
     joinMutation.mutate({ data: { flightId, useLinePass, passengers } });
   };
 
-  const ctaDisabled = !allChecked || joinMutation.isPending || statusLoading || isConfirmed;
+  // Note: a failed status lookup (statusError) does NOT disable the CTA — the
+  // server re-checks eligibility on join, so the member is never locked out.
+  const ctaDisabled = !allChecked || joinMutation.isPending || (statusLoading && !statusError) || isConfirmed;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
@@ -165,6 +172,22 @@ export default function JoinQueueAcknowledgeScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
+        {!!joinError && (
+          <View style={[styles.errorBox, { backgroundColor: colors.coral + '1A', borderColor: colors.coral + '55' }]}>
+            <Feather name="alert-circle" size={15} color={colors.coral} />
+            <Text style={[styles.errorText, { color: colors.coral }]}>{joinError}</Text>
+          </View>
+        )}
+        {!allChecked && !joinError && (
+          <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>
+            Check all items above to continue
+          </Text>
+        )}
+        {allChecked && statusLoading && !statusError && !joinError && (
+          <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>
+            Checking your booking status…
+          </Text>
+        )}
         <PrimaryButton
           label="I Acknowledge — Continue"
           onPress={handleContinue}
@@ -199,5 +222,11 @@ const styles = StyleSheet.create({
   punctualityTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   punctualityRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   legal: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17, marginTop: 6 },
-  footer: { paddingHorizontal: 22, paddingTop: 12 },
+  footer: { paddingHorizontal: 22, paddingTop: 12, gap: 10 },
+  hint: { fontFamily: 'Inter_500Medium', fontSize: 12.5, textAlign: 'center' },
+  errorBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 11,
+  },
+  errorText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 18 },
 });

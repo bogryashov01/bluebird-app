@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Platform, Alert,
+  View, Text, StyleSheet, ScrollView, Platform,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +29,7 @@ export default function InternationalNoticeScreen() {
   const fee = parseInt(params.feeUsd ?? '1000', 10) || 1000;
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -67,14 +68,16 @@ export default function InternationalNoticeScreen() {
         });
       },
       onError: (err: any) => {
-        const msg = err?.response?.data?.error || err?.data?.error || 'Failed to join queue';
-        Alert.alert('Error', msg);
+        const msg = err?.response?.data?.error || err?.data?.error || err?.message || 'Failed to join queue';
+        setJoinError(msg);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       },
     },
   });
 
   const handleContinueBase = () => {
     if (!flightId || joinMutation.isPending) return;
+    setJoinError(null);
     joinMutation.mutate({ data: { flightId, useLinePass, passengers, acceptIntlFee: true } });
   };
 
@@ -111,6 +114,12 @@ export default function InternationalNoticeScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
+        {!!joinError && (
+          <View style={[styles.errorBox, { backgroundColor: colors.coral + '26', borderColor: colors.coral + '66' }]}>
+            <Feather name="alert-circle" size={15} color={colors.coral} />
+            <Text style={[styles.errorText, { color: colors.coral }]}>{joinError}</Text>
+          </View>
+        )}
         <PrimaryButton label="Upgrade to Plus" onPress={() => router.push('/upgrade/plus')} />
         <SecondaryButton
           label={`Continue with Base ($${fee.toLocaleString()} fee)`}
@@ -143,4 +152,9 @@ const styles = StyleSheet.create({
   plusTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14.5 },
   plusBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19 },
   footer: { paddingHorizontal: 22, paddingTop: 12, gap: 10 },
+  errorBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 11,
+  },
+  errorText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 18 },
 });

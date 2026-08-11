@@ -1,7 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
-  ActivityIndicator, Platform, Alert,
+  View, Text, StyleSheet, TouchableOpacity, Platform,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +33,7 @@ export default function SkipLinePassScreen() {
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
   const passCount = user?.linePassCount ?? 0;
+  const [actionError, setActionError] = useState<string | null>(null);
   const position = parseInt(params.position ?? '0', 10) || 0;
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
@@ -56,7 +56,7 @@ export default function SkipLinePassScreen() {
     mutation: {
       onSuccess: () => goConfirmed(false),
       onError: (err: any) => {
-        Alert.alert('Could not confirm', err?.data?.error || err?.response?.data?.error || err?.message || 'Failed to confirm seat');
+        setActionError(err?.data?.error || err?.response?.data?.error || err?.message || 'Failed to confirm seat');
         queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
       },
     },
@@ -73,7 +73,7 @@ export default function SkipLinePassScreen() {
         goConfirmed(true);
       },
       onError: (err: any) => {
-        Alert.alert('Could not use pass', err?.data?.error || err?.response?.data?.error || err?.message || 'Failed to use Skip the Line pass');
+        setActionError(err?.data?.error || err?.response?.data?.error || err?.message || 'Failed to use Skip the Line pass');
       },
     },
   });
@@ -82,6 +82,7 @@ export default function SkipLinePassScreen() {
 
   const handleConfirm = () => {
     if (!params.entryId || isPending) return;
+    setActionError(null);
     if (position === 1) {
       // Already at the front — no pass needed to shift position; just confirm.
       confirmMutation.mutate({ id: params.entryId });
@@ -129,6 +130,9 @@ export default function SkipLinePassScreen() {
           This immediately confirms your seat on {routeLabel}
           {params.departureDate ? `, ${shortDate(params.departureDate)}` : ''}. This action can't be undone.
         </Text>
+        {!!actionError && (
+          <Text style={[styles.noPasses, { color: colors.coral }]}>{actionError}</Text>
+        )}
         {!canConfirm && (
           <Text style={[styles.noPasses, { color: colors.coral }]}>
             You don't have any passes — tap Buy More above to get one.
