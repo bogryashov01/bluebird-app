@@ -38,6 +38,7 @@ export default function JoinQueueAcknowledgeScreen() {
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
   const [checked, setChecked] = useState([false, false, false]);
+  const [punctualityChecked, setPunctualityChecked] = useState(false);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -90,7 +91,7 @@ export default function JoinQueueAcknowledgeScreen() {
     },
   });
 
-  const allChecked = checked.every(Boolean);
+  const allChecked = checked.every(Boolean) && punctualityChecked;
   const needsIntlNotice = isInternational && user?.membershipTier === 'base';
 
   const handleContinue = () => {
@@ -134,6 +135,30 @@ export default function JoinQueueAcknowledgeScreen() {
           </TouchableOpacity>
         ))}
 
+        <TouchableOpacity
+          style={[styles.punctualityCard, { backgroundColor: colors.surface, borderColor: punctualityChecked ? colors.primary : colors.border }]}
+          onPress={() => setPunctualityChecked((v) => !v)}
+          activeOpacity={0.8}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: punctualityChecked }}
+        >
+          <View style={styles.punctualityHeader}>
+            <Feather name="clock" size={16} color={colors.primary} />
+            <Text style={[styles.punctualityTitle, { color: colors.textOnSurface }]}>Punctuality</Text>
+          </View>
+          <View style={styles.punctualityRow}>
+            <View style={[
+              styles.checkbox,
+              { borderColor: punctualityChecked ? colors.primary : colors.border, backgroundColor: punctualityChecked ? colors.primary : 'transparent' },
+            ]}>
+              {punctualityChecked && <Feather name="check" size={14} color={colors.primaryForeground} />}
+            </View>
+            <Text style={[styles.checkText, { color: colors.textOnSurface }]}>
+              I understand the aircraft departs at the scheduled time. If I arrive late, the aircraft may leave without me and repeated late arrivals may affect my membership.
+            </Text>
+          </View>
+        </TouchableOpacity>
+
         <Text style={[styles.legal, { color: colors.mutedForegroundLight }]}>
           By continuing, you acknowledge and accept these terms for this flight.
         </Text>
@@ -166,6 +191,13 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   checkText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 13.5, lineHeight: 19 },
+  punctualityCard: {
+    borderRadius: 14, padding: 16, borderWidth: 1.5, gap: 12, marginTop: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
+  },
+  punctualityHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  punctualityTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  punctualityRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   legal: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17, marginTop: 6 },
   footer: { paddingHorizontal: 22, paddingTop: 12 },
 });
