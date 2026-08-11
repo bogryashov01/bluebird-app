@@ -1,8 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
+import { View, StyleSheet, Animated, Platform, Image } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 
 export default function SplashScreen() {
@@ -31,19 +30,13 @@ export default function SplashScreen() {
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad, paddingBottom: bottomPad }]}>
+    <View style={[styles.container, { paddingTop: topPad, paddingBottom: bottomPad }]}>
       <View style={styles.content}>
-        <Animated.View style={[styles.logoContainer, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
-          <View style={[styles.iconWrapper, { backgroundColor: colors.primary }]}>
-            <Feather name="send" size={40} color={colors.primaryForeground} style={{ transform: [{ rotate: '-45deg' }] }} />
-          </View>
-          <Text style={[styles.logoText, { color: colors.textOnBrand }]}>Bluebird</Text>
-          <View style={styles.trademark}>
-            <Text style={[styles.trademarkText, { color: colors.mutedOnBrand }]}>™</Text>
-          </View>
+        <Animated.View style={{ opacity: logoOpacity, transform: [{ scale: logoScale }] }}>
+          <Image source={logoSource} style={styles.logo} resizeMode="contain" />
         </Animated.View>
 
-        <Animated.Text style={[styles.tagline, { color: colors.mutedOnBrand, opacity: taglineOpacity }]}>
+        <Animated.Text style={[styles.tagline, { opacity: taglineOpacity }]}>
           Private aviation, redefined.
         </Animated.Text>
       </View>
@@ -54,7 +47,7 @@ export default function SplashScreen() {
             key={i}
             style={[
               styles.dot,
-              { backgroundColor: colors.border },
+              { backgroundColor: 'rgba(255, 255, 255, 0.25)' },
               i === 0 && [styles.dotActive, { backgroundColor: colors.primary }],
             ]}
           />
@@ -69,6 +62,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#0A1128',
   },
   content: {
     flex: 1,
@@ -76,32 +70,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  iconWrapper: {
-    width: 60,
-    height: 60,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoText: {
-    fontSize: 36,
-    fontFamily: 'Inter_700Bold',
-    letterSpacing: -0.5,
-  },
-  trademark: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  trademarkText: {
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
+  logo: {
+    width: 220,
+    height: 50,
   },
   tagline: {
+    color: '#8896B3',
     fontSize: 16,
     fontFamily: 'Inter_400Regular',
     letterSpacing: 0.3,
@@ -120,3 +94,5 @@ const styles = StyleSheet.create({
     width: 20,
   },
 });
+
+const logoSource = require('@/assets/images/bluebird-logo-white.png');
