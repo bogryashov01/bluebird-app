@@ -23,22 +23,22 @@ export default function VerifyEmailScreen() {
       <View style={styles.content}>
         <View style={[styles.iconRing, { borderColor: colors.primary + '40' }]}>
           <View style={[styles.iconBg, { backgroundColor: colors.primary }]}>
-            <Feather name="mail" size={36} color="#fff" />
+            <Feather name="mail" size={36} color={colors.primaryForeground} />
           </View>
         </View>
 
-        <Text style={styles.title}>Account created!</Text>
-        <Text style={styles.body}>
+        <Text style={[styles.title, { color: colors.textOnBrand }]}>Account created!</Text>
+        <Text style={[styles.body, { color: colors.mutedOnBrand }]}>
           Welcome aboard,{'\n'}
-          <Text style={styles.email}>{user?.name ?? 'new member'}</Text>
+          <Text style={[styles.email, { color: colors.textOnBrand }]}>{user?.name ?? 'new member'}</Text>
         </Text>
-        <Text style={styles.subBody}>
+        <Text style={[styles.subBody, { color: colors.mutedOnBrand }]}>
           You can start browsing empty-leg flights right away. Email verification is not required in the demo build.
         </Text>
 
         <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.primary }]} onPress={handleContinue} activeOpacity={0.8}>
-          <Text style={styles.primaryBtnText}>Browse Flights</Text>
-          <Feather name="arrow-right" size={18} color="#fff" />
+          <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>Browse Flights</Text>
+          <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
         </TouchableOpacity>
       </View>
     </View>
@@ -58,16 +58,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   title: {
-    color: '#FFFFFF', fontSize: 28, fontFamily: 'Inter_700Bold',
+    fontSize: 28, fontFamily: 'Inter_700Bold',
     textAlign: 'center', marginTop: 8,
   },
   body: {
-    color: '#8896B3', fontSize: 16, fontFamily: 'Inter_400Regular',
+    fontSize: 16, fontFamily: 'Inter_400Regular',
     textAlign: 'center', lineHeight: 24,
   },
-  email: { color: '#FFFFFF', fontFamily: 'Inter_500Medium' },
+  email: { fontFamily: 'Inter_500Medium' },
   subBody: {
-    color: '#8896B3', fontSize: 14, fontFamily: 'Inter_400Regular',
+    fontSize: 14, fontFamily: 'Inter_400Regular',
     textAlign: 'center', lineHeight: 22,
   },
   primaryBtn: {
@@ -75,5 +75,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
     marginTop: 8,
   },
-  primaryBtnText: { color: '#FFFFFF', fontSize: 16, fontFamily: 'Inter_600SemiBold' },
+  primaryBtnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
 });

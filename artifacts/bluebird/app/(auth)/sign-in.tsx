@@ -60,25 +60,25 @@ export default function SignInScreen() {
       <KeyboardAwareScrollViewCompat contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 24 }]} bottomOffset={24} keyboardShouldPersistTaps="handled">
         {/* Header */}
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={20} color="#8896B3" />
+          <Feather name="arrow-left" size={20} color={colors.mutedOnBrand} />
         </TouchableOpacity>
 
         <View style={styles.logoRow}>
           <Feather name="send" size={20} color={colors.primary} style={{ transform: [{ rotate: '-45deg' }] }} />
-          <Text style={styles.logoText}>Bluebird</Text>
+          <Text style={[styles.logoText, { color: colors.textOnBrand }]}>Bluebird</Text>
         </View>
 
-        <Text style={styles.title}>Welcome back.</Text>
-        <Text style={styles.subtitle}>Sign in to access your flights and membership.</Text>
+        <Text style={[styles.title, { color: colors.textOnBrand }]}>Welcome back.</Text>
+        <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>Sign in to access your flights and membership.</Text>
 
         {/* Form */}
         <View style={styles.form}>
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={[styles.label, { color: colors.mutedOnBrand }]}>Email</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.foreground }, errors.email ? [styles.inputError, { borderColor: colors.destructive }] : null]}
               placeholder="you@example.com"
-              placeholderTextColor="#8896B3"
+              placeholderTextColor={colors.mutedForeground}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -94,13 +94,13 @@ export default function SignInScreen() {
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={[styles.label, { color: colors.mutedOnBrand }]}>Password</Text>
             <View style={[styles.inputRow, { backgroundColor: colors.input, borderColor: colors.border }, errors.password ? [styles.inputError, { borderColor: colors.destructive }] : null]}>
               <TextInput
                 ref={passwordRef}
                 style={[styles.inputFlex, { color: colors.foreground }]}
                 placeholder="••••••••"
-                placeholderTextColor="#8896B3"
+                placeholderTextColor={colors.mutedForeground}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
@@ -111,7 +111,7 @@ export default function SignInScreen() {
                 onSubmitEditing={handleSignIn}
               />
               <TouchableOpacity onPress={() => setShowPassword((v) => !v)}>
-                <Feather name={showPassword ? 'eye-off' : 'eye'} size={18} color="#8896B3" />
+                <Feather name={showPassword ? 'eye-off' : 'eye'} size={18} color={colors.mutedForeground} />
               </TouchableOpacity>
             </View>
             {errors.password && <Text style={[styles.errorText, { color: colors.destructive }]}>{errors.password}</Text>}
@@ -133,7 +133,7 @@ export default function SignInScreen() {
 
         <View style={styles.divider}>
           <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-          <Text style={styles.dividerText}>or</Text>
+          <Text style={[styles.dividerText, { color: colors.mutedOnBrand }]}>or</Text>
           <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
         </View>
 
@@ -168,18 +168,15 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   logoText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
   },
   title: {
-    color: '#FFFFFF',
     fontSize: 28,
     fontFamily: 'Inter_700Bold',
     marginBottom: 8,
   },
   subtitle: {
-    color: '#8896B3',
     fontSize: 15,
     fontFamily: 'Inter_400Regular',
     marginBottom: 36,
@@ -192,7 +189,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    color: '#8896B3',
     fontSize: 13,
     fontFamily: 'Inter_500Medium',
     letterSpacing: 0.3,
@@ -249,7 +245,6 @@ const styles = StyleSheet.create({
     height: 1,
   },
   dividerText: {
-    color: '#8896B3',
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
   },

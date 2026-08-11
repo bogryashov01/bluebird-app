@@ -55,9 +55,9 @@ export default function FlightMap({ flights }: Props) {
   const mapHeight = Math.round(screenHeight * 0.55);
 
   const isDark = colors.scheme === 'dark';
-  const routeColor = isDark ? '#7FA8FA' : NAVY;   // brand blue, lightened for dark tiles
-  const labelColor = isDark ? '#BFD3FB' : NAVY;
-  const halo       = isDark ? '#0A1128' : '#fff';
+  const routeColor = isDark ? colors.paleBlue : NAVY;      // brand blue, lightened for dark tiles
+  const labelColor = isDark ? colors.paleBlueFaint : NAVY;
+  const halo       = isDark ? colors.backgroundMid : '#fff'; // halo matches map tiles, not theme surfaces
 
   const routes = React.useMemo(
     () =>

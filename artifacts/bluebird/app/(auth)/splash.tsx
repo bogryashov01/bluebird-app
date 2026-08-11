@@ -35,15 +35,15 @@ export default function SplashScreen() {
       <View style={styles.content}>
         <Animated.View style={[styles.logoContainer, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
           <View style={[styles.iconWrapper, { backgroundColor: colors.primary }]}>
-            <Feather name="send" size={40} color="#FFFFFF" style={{ transform: [{ rotate: '-45deg' }] }} />
+            <Feather name="send" size={40} color={colors.primaryForeground} style={{ transform: [{ rotate: '-45deg' }] }} />
           </View>
-          <Text style={styles.logoText}>Bluebird</Text>
+          <Text style={[styles.logoText, { color: colors.textOnBrand }]}>Bluebird</Text>
           <View style={styles.trademark}>
-            <Text style={styles.trademarkText}>™</Text>
+            <Text style={[styles.trademarkText, { color: colors.mutedOnBrand }]}>™</Text>
           </View>
         </Animated.View>
 
-        <Animated.Text style={[styles.tagline, { opacity: taglineOpacity }]}>
+        <Animated.Text style={[styles.tagline, { color: colors.mutedOnBrand, opacity: taglineOpacity }]}>
           Private aviation, redefined.
         </Animated.Text>
       </View>
@@ -89,7 +89,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoText: {
-    color: '#FFFFFF',
     fontSize: 36,
     fontFamily: 'Inter_700Bold',
     letterSpacing: -0.5,
@@ -99,12 +98,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   trademarkText: {
-    color: '#8896B3',
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
   },
   tagline: {
-    color: '#8896B3',
     fontSize: 16,
     fontFamily: 'Inter_400Regular',
     letterSpacing: 0.3,

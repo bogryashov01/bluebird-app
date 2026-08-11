@@ -48,6 +48,10 @@ const dark = {
   destructiveForeground: '#FFFFFF',
   coral:              '#FFB199',              // alert / warm accent
 
+  // ── Text on brand-navy surfaces (same in BOTH modes) ─────────
+  textOnBrand:  '#FFFFFF',   // strong text on `backgroundMid` branded surfaces
+  mutedOnBrand: '#8896B3',   // muted text on `backgroundMid` branded surfaces
+
   // ── Borders & inputs ──────────────────────────────────────────
   border: '#1E2D4F',
   input:  '#1A2744',
@@ -96,6 +100,10 @@ const light: typeof dark = {
   destructive:        '#FF3B30',
   destructiveForeground: '#FFFFFF',
   coral:              '#E8663C',
+
+  // Text on brand-navy surfaces (backgroundMid stays navy in light mode too)
+  textOnBrand:  '#FFFFFF',
+  mutedOnBrand: '#8896B3',
 
   border: '#DFE6F3',
   input:  '#E8EEFB',

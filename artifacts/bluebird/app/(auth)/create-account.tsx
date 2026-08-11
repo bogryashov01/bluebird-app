@@ -65,25 +65,25 @@ export default function CreateAccountScreen() {
     <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad }]}>
       <KeyboardAwareScrollViewCompat contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 24 }]} bottomOffset={24} keyboardShouldPersistTaps="handled">
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={20} color="#8896B3" />
+          <Feather name="arrow-left" size={20} color={colors.mutedOnBrand} />
         </TouchableOpacity>
 
         <View style={styles.logoRow}>
           <Feather name="send" size={20} color={colors.primary} style={{ transform: [{ rotate: '-45deg' }] }} />
-          <Text style={styles.logoText}>Bluebird</Text>
+          <Text style={[styles.logoText, { color: colors.textOnBrand }]}>Bluebird</Text>
         </View>
 
-        <Text style={styles.title}>Create your account.</Text>
-        <Text style={styles.subtitle}>Join thousands of members flying on empty legs.</Text>
+        <Text style={[styles.title, { color: colors.textOnBrand }]}>Create your account.</Text>
+        <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>Join thousands of members flying on empty legs.</Text>
 
         <View style={styles.form}>
           {/* Name */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Full name</Text>
+            <Text style={[styles.label, { color: colors.mutedOnBrand }]}>Full name</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.foreground }, errors.name && [styles.inputError, { borderColor: colors.destructive }]]}
               placeholder="Alex Johnson"
-              placeholderTextColor="#8896B3"
+              placeholderTextColor={colors.mutedForeground}
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
@@ -98,12 +98,12 @@ export default function CreateAccountScreen() {
 
           {/* Email */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={[styles.label, { color: colors.mutedOnBrand }]}>Email</Text>
             <TextInput
               ref={emailRef}
               style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.foreground }, errors.email && [styles.inputError, { borderColor: colors.destructive }]]}
               placeholder="you@example.com"
-              placeholderTextColor="#8896B3"
+              placeholderTextColor={colors.mutedForeground}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -120,13 +120,13 @@ export default function CreateAccountScreen() {
 
           {/* Password */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={[styles.label, { color: colors.mutedOnBrand }]}>Password</Text>
             <View style={[styles.inputRow, { backgroundColor: colors.input, borderColor: colors.border }, errors.password && [styles.inputError, { borderColor: colors.destructive }]]}>
               <TextInput
                 ref={passwordRef}
                 style={[styles.inputFlex, { color: colors.foreground }]}
                 placeholder="Min. 6 characters"
-                placeholderTextColor="#8896B3"
+                placeholderTextColor={colors.mutedForeground}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
@@ -137,7 +137,7 @@ export default function CreateAccountScreen() {
                 onSubmitEditing={handleCreate}
               />
               <TouchableOpacity onPress={() => setShowPassword((v) => !v)}>
-                <Feather name={showPassword ? 'eye-off' : 'eye'} size={18} color="#8896B3" />
+                <Feather name={showPassword ? 'eye-off' : 'eye'} size={18} color={colors.mutedForeground} />
               </TouchableOpacity>
             </View>
             {errors.password && <Text style={[styles.errorText, { color: colors.destructive }]}>{errors.password}</Text>}
@@ -158,7 +158,7 @@ export default function CreateAccountScreen() {
         </View>
 
         <View style={styles.signInRow}>
-          <Text style={styles.signInPrefix}>Already a member? </Text>
+          <Text style={[styles.signInPrefix, { color: colors.mutedOnBrand }]}>Already a member? </Text>
           <TouchableOpacity onPress={() => router.push('/(auth)/sign-in')}>
             <Text style={[styles.signInLink, { color: colors.primary }]}>Sign in</Text>
           </TouchableOpacity>
@@ -173,12 +173,12 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 24 },
   backBtn: { marginTop: 8, marginBottom: 24, width: 36, height: 36, justifyContent: 'center' },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 32 },
-  logoText: { color: '#FFFFFF', fontSize: 16, fontFamily: 'Inter_600SemiBold' },
-  title: { color: '#FFFFFF', fontSize: 28, fontFamily: 'Inter_700Bold', marginBottom: 8 },
-  subtitle: { color: '#8896B3', fontSize: 15, fontFamily: 'Inter_400Regular', marginBottom: 36, lineHeight: 22 },
+  logoText: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
+  title: { fontSize: 28, fontFamily: 'Inter_700Bold', marginBottom: 8 },
+  subtitle: { fontSize: 15, fontFamily: 'Inter_400Regular', marginBottom: 36, lineHeight: 22 },
   form: { gap: 20 },
   fieldGroup: { gap: 6 },
-  label: { color: '#8896B3', fontSize: 13, fontFamily: 'Inter_500Medium', letterSpacing: 0.3 },
+  label: { fontSize: 13, fontFamily: 'Inter_500Medium', letterSpacing: 0.3 },
   input: {
     borderWidth: 1,
     borderRadius: 12, height: 52, paddingHorizontal: 16,
@@ -196,6 +196,6 @@ const styles = StyleSheet.create({
   submitBtnDisabled: { opacity: 0.7 },
   submitBtnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
   signInRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 28 },
-  signInPrefix: { color: '#8896B3', fontSize: 14, fontFamily: 'Inter_400Regular' },
+  signInPrefix: { fontSize: 14, fontFamily: 'Inter_400Regular' },
   signInLink: { fontSize: 14, fontFamily: 'Inter_500Medium' },
 });

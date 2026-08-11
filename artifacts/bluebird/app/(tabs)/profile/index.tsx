@@ -98,7 +98,7 @@ export default function ProfileScreen() {
         {/* ── Avatar + name ── */}
         <View style={styles.avatarRow}>
           <View style={[styles.avatar, { backgroundColor: colors.backgroundMid }]}>
-            <Text style={styles.avatarText}>{initials}</Text>
+            <Text style={[styles.avatarText, { color: colors.textOnBrand }]}>{initials}</Text>
           </View>
           <View>
             <Text style={[styles.name, { color: colors.textOnSurface }]}>{user?.name ?? 'Member'}</Text>
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
   },
-  avatarText: { fontFamily: 'Inter_700Bold', fontSize: 20, color: '#fff' },
+  avatarText: { fontFamily: 'Inter_700Bold', fontSize: 20 },
   name: { fontFamily: 'Inter_700Bold', fontSize: 20, letterSpacing: -0.4 },
   memberSince: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 2 },
 
