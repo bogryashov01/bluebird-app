@@ -24,12 +24,17 @@ export default function VerifyEmailScreen() {
         if (data.demoVerificationToken) setVerificationToken(data.demoVerificationToken);
         setResent(true);
       },
+    },
+  });
+
+  const handleResend = () => {
+    resendMutation.mutate(undefined, {
       onError: (err: any) => {
         const msg = err?.response?.data?.error || err?.message || 'Could not resend the email';
         Alert.alert('Resend failed', msg);
       },
-    },
-  });
+    });
+  };
 
   const verifyMutation = useVerifyEmail({
     mutation: {
@@ -37,19 +42,38 @@ export default function VerifyEmailScreen() {
         updateUser(updated);
         router.replace('/(auth)/welcome-member');
       },
-      onError: (err: any) => {
-        const msg = err?.response?.data?.error || err?.message || 'Verification failed. Tap Resend Email and try again.';
-        Alert.alert('Verification failed', msg);
-      },
     },
   });
 
-  const handleContinue = () => {
-    if (!verificationToken) {
-      Alert.alert('Verification needed', 'Tap "Resend Email" to get a fresh verification link, then continue.');
-      return;
+  // Demo: silently mint a fresh single-use token (same server mechanism Resend
+  // uses) and consume it immediately, so Continue always advances.
+  const fetchFreshTokenAndVerify = async () => {
+    const data = await resendMutation.mutateAsync();
+    if (!data.demoVerificationToken) {
+      throw new Error('Could not get a verification token');
     }
-    verifyMutation.mutate({ data: { token: verificationToken } });
+    setVerificationToken(data.demoVerificationToken);
+    await verifyMutation.mutateAsync({ data: { token: data.demoVerificationToken } });
+  };
+
+  const handleContinue = async () => {
+    try {
+      if (verificationToken) {
+        try {
+          // Use the token already on hand (e.g. fresh registration route param).
+          await verifyMutation.mutateAsync({ data: { token: verificationToken } });
+          return;
+        } catch {
+          // Token expired or rotated — fall through and mint a fresh one.
+        }
+      }
+      await fetchFreshTokenAndVerify();
+    } catch (err: any) {
+      // Never advance unverified — only surface an error when both the token
+      // on hand and a freshly minted one failed.
+      const msg = err?.response?.data?.error || err?.message || 'Verification failed. Please try again.';
+      Alert.alert('Verification failed', msg);
+    }
   };
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
@@ -75,7 +99,7 @@ export default function VerifyEmailScreen() {
         <Text style={[styles.email, { color: colors.foreground }]}>{user?.email ?? 'your email address'}</Text>
 
         <TouchableOpacity
-          onPress={() => resendMutation.mutate()}
+          onPress={handleResend}
           disabled={resendMutation.isPending}
           style={styles.resendBtn}
           hitSlop={8}
@@ -92,12 +116,12 @@ export default function VerifyEmailScreen() {
 
       <View style={[styles.footer, { paddingBottom: bottomPad + 16 }]}>
         <TouchableOpacity
-          style={[styles.continueBtn, { backgroundColor: colors.primary }, verifyMutation.isPending && { opacity: 0.7 }]}
+          style={[styles.continueBtn, { backgroundColor: colors.primary }, (verifyMutation.isPending || resendMutation.isPending) && { opacity: 0.7 }]}
           onPress={handleContinue}
-          disabled={verifyMutation.isPending}
+          disabled={verifyMutation.isPending || resendMutation.isPending}
           activeOpacity={0.8}
         >
-          {verifyMutation.isPending ? (
+          {verifyMutation.isPending || resendMutation.isPending ? (
             <ActivityIndicator color={colors.primaryForeground} />
           ) : (
             <Text style={[styles.continueText, { color: colors.primaryForeground }]}>Continue</Text>
