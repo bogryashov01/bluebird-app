@@ -13,5 +13,6 @@ export const FlightStatus = {
   available: 'available',
   boarding: 'boarding',
   departed: 'departed',
+  completed: 'completed',
   cancelled: 'cancelled',
 } as const;

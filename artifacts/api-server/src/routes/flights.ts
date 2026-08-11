@@ -52,6 +52,118 @@ router.get("/", async (req, res) => {
   }
 });
 
+// Premium display names for known airports; falls back to "<City> Airport".
+const AIRPORT_NAMES: Record<string, string> = {
+  DAL: "Dallas Love Field",
+  TEB: "Teterboro Airport",
+  LAX: "Los Angeles Intl",
+  SFO: "San Francisco Intl",
+  JFK: "John F. Kennedy Intl",
+  MIA: "Miami Intl",
+  ORD: "Chicago O'Hare",
+  LAS: "Harry Reid Intl",
+  BOS: "Boston Logan Intl",
+  SEA: "Seattle-Tacoma Intl",
+  DEN: "Denver Intl",
+  ASP: "Aspen/Pitkin County",
+  SDL: "Scottsdale Airport",
+  PBI: "Palm Beach Intl",
+  NAS: "Lynden Pindling Intl",
+  YYZ: "Toronto Pearson",
+};
+
+function airportName(code: string, city: string): string {
+  return AIRPORT_NAMES[code] ?? `${city} Airport`;
+}
+
+function dateStr(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+// GET /flights/airports (public — onboarding airport picker)
+// Airports derived from flight data: any airport that appears as an origin.
+router.get("/airports", async (_req, res) => {
+  try {
+    const rows = await db
+      .select({
+        code: flightsTable.fromAirport,
+        city: flightsTable.fromCity,
+        flightCount: count(),
+      })
+      .from(flightsTable)
+      .groupBy(flightsTable.fromAirport, flightsTable.fromCity)
+      .orderBy(desc(count()));
+    return res.json(
+      rows.map((r) => ({
+        code: r.code,
+        name: airportName(r.code, r.city),
+        city: r.city,
+        flightCount: Number(r.flightCount),
+      })),
+    );
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to fetch airports" });
+  }
+});
+
+// GET /flights/airports/:code/summary (public — onboarding airport summary)
+router.get("/airports/:code/summary", async (req, res) => {
+  try {
+    const code = String(req.params.code).toUpperCase();
+    const flights = await db
+      .select()
+      .from(flightsTable)
+      .where(eq(flightsTable.fromAirport, code));
+    if (flights.length === 0) {
+      return res.status(404).json({ error: "Airport not found" });
+    }
+
+    const now = new Date();
+    const cutoff = dateStr(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
+    const today = dateStr(now);
+
+    // Flights over the last 30 days: departed within the window (inclusive of today)
+    const last30 = flights.filter(
+      (f) => f.departureDate >= cutoff && f.departureDate <= today,
+    );
+
+    // Top destinations across all flights from this airport
+    const destCounts = new Map<string, { code: string; city: string; count: number }>();
+    for (const f of flights) {
+      const d = destCounts.get(f.toAirport) ?? { code: f.toAirport, city: f.toCity, count: 0 };
+      d.count += 1;
+      destCounts.set(f.toAirport, d);
+    }
+    const topDestinations = [...destCounts.values()]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+
+    // Recent completed flights, newest first
+    const recentFlights = flights
+      .filter((f) => f.status === "completed")
+      .sort((a, b) =>
+        a.departureDate === b.departureDate
+          ? b.departureTime.localeCompare(a.departureTime)
+          : b.departureDate.localeCompare(a.departureDate),
+      )
+      .slice(0, 6);
+
+    return res.json({
+      airport: {
+        code,
+        name: airportName(code, flights[0].fromCity),
+        city: flights[0].fromCity,
+        flightCount: flights.length,
+      },
+      flightCount30d: last30.length,
+      topDestinations,
+      recentFlights,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to fetch airport summary" });
+  }
+});
+
 // GET /flights/:id (public)
 router.get("/:id", async (req, res) => {
   try {

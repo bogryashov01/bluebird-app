@@ -130,6 +130,7 @@ export const FlightStatus = {
   available: 'available',
   boarding: 'boarding',
   departed: 'departed',
+  completed: 'completed',
   cancelled: 'cancelled',
 } as const;
 
@@ -153,6 +154,26 @@ export interface Flight {
   status: FlightStatus;
   imageUrl?: string;
   createdAt: string;
+}
+
+export interface AirportInfo {
+  code: string;
+  name: string;
+  city: string;
+  flightCount: number;
+}
+
+export interface AirportDestination {
+  code: string;
+  city: string;
+  count: number;
+}
+
+export interface AirportSummary {
+  airport: AirportInfo;
+  flightCount30d: number;
+  topDestinations: AirportDestination[];
+  recentFlights: Flight[];
 }
 
 export interface JoinQueueRequest {
@@ -267,6 +288,7 @@ export interface Membership {
 export interface BuyPassResponse {
   linePassCount: number;
 }
+
 export type UpgradeMembershipRequestTier = typeof UpgradeMembershipRequestTier[keyof typeof UpgradeMembershipRequestTier];
 
 
@@ -358,3 +380,4 @@ export type GetConciergeHistoryParams = {
  */
 limit?: number;
 };
+

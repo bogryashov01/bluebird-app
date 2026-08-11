@@ -24,6 +24,10 @@ export const AIRPORT_COORDS: Record<string, Airport> = {
   DEN: { latitude: 39.8561, longitude: -104.6737, label: 'Denver' },
   ASP: { latitude: 39.2232, longitude: -106.8690, label: 'Aspen' },
   TEB: { latitude: 40.8501, longitude: -74.0608, label: 'Teterboro' },
+  SDL: { latitude: 33.6229, longitude: -111.9105, label: 'Scottsdale' },
+  PBI: { latitude: 26.6832, longitude: -80.0956, label: 'Palm Beach' },
+  NAS: { latitude: 25.0390, longitude: -77.4662, label: 'Nassau' },
+  YYZ: { latitude: 43.6777, longitude: -79.6248, label: 'Toronto' },
 };
 
 /** Quadratic-bezier arc between two points, bowed perpendicular to the route. */

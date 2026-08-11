@@ -34,6 +34,7 @@ function statusColor(status: string, primary: string, success: string, destructi
     case 'available': return success;
     case 'boarding':  return primary;
     case 'departed':  return muted;
+    case 'completed': return muted;
     case 'cancelled': return destructive;
     default:          return muted;
   }

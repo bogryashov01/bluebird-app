@@ -242,6 +242,46 @@ paths:
                 items:
                   $ref: "#/components/schemas/Flight"
 
+  /flights/airports:
+    get:
+      operationId: listAirports
+      tags: [flights]
+      summary: List departure airports derived from flight data (public)
+      responses:
+        "200":
+          description: List of airports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AirportInfo"
+
+  /flights/airports/{code}/summary:
+    get:
+      operationId: getAirportSummary
+      tags: [flights]
+      summary: Airport activity summary for onboarding (public)
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Airport summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AirportSummary"
+        "404":
+          description: Airport not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /flights/{id}:
     get:
       operationId: getFlight
@@ -875,7 +915,7 @@ components:
           type: number
         status:
           type: string
-          enum: [available, boarding, departed, cancelled]
+          enum: [available, boarding, departed, completed, cancelled]
         imageUrl:
           type: string
         createdAt:
@@ -894,6 +934,58 @@ components:
         - seatsAvailable
         - status
         - createdAt
+
+    AirportInfo:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        city:
+          type: string
+        flightCount:
+          type: number
+      required:
+        - code
+        - name
+        - city
+        - flightCount
+
+    AirportDestination:
+      type: object
+      properties:
+        code:
+          type: string
+        city:
+          type: string
+        count:
+          type: number
+      required:
+        - code
+        - city
+        - count
+
+    AirportSummary:
+      type: object
+      properties:
+        airport:
+          $ref: "#/components/schemas/AirportInfo"
+        flightCount30d:
+          type: number
+        topDestinations:
+          type: array
+          items:
+            $ref: "#/components/schemas/AirportDestination"
+        recentFlights:
+          type: array
+          items:
+            $ref: "#/components/schemas/Flight"
+      required:
+        - airport
+        - flightCount30d
+        - topDestinations
+        - recentFlights
 
     JoinQueueRequest:
       type: object

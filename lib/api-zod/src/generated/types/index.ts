@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './airportDestination';
+export * from './airportInfo';
+export * from './airportSummary';
 export * from './authResponse';
 export * from './buyPassResponse';
 export * from './cancelQueueResponse';
