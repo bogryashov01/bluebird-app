@@ -64,7 +64,10 @@ export default function JoinQueueAcknowledgeScreen() {
           queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
           queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
           queryClient.invalidateQueries({ queryKey: [`/api/flights/${flightId}/my-status`] });
-          router.replace({ pathname: '/flight/confirmed', params });
+          router.replace({
+            pathname: '/flight/confirmed',
+            params: useLinePass ? { ...params, passUsed: '1' } : params,
+          });
           return;
         }
         queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });

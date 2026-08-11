@@ -8,6 +8,7 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import * as Haptics from 'expo-haptics';
+import { PassCelebration } from '@/components/PassCelebration';
 
 function computeArrival(departureTime?: string, duration?: string): string {
   if (!departureTime || !duration) return '';
@@ -35,8 +36,10 @@ export default function FlightConfirmedScreen() {
   const params = useLocalSearchParams<{
     from?: string; to?: string; fromCity?: string; toCity?: string;
     departureTime?: string; duration?: string; aircraftType?: string;
-    departureDate?: string;
+    departureDate?: string; passUsed?: string;
   }>();
+  const passUsed = params.passUsed === '1';
+  const [celebrating, setCelebrating] = React.useState(passUsed);
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
@@ -44,12 +47,13 @@ export default function FlightConfirmedScreen() {
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   useEffect(() => {
+    if (celebrating) return; // celebration handles its own haptics; animate on reveal
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     Animated.parallel([
       Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 }),
       Animated.timing(opacityAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [celebrating]);
 
   const hasRoute = !!params.from && !!params.to;
   const arrival = computeArrival(params.departureTime, params.duration);
@@ -70,6 +74,7 @@ export default function FlightConfirmedScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundMid }]}>
+      {celebrating && <PassCelebration onDone={() => setCelebrating(false)} />}
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: topPad + 40, paddingBottom: bottomPad + 110 }]}
         showsVerticalScrollIndicator={false}

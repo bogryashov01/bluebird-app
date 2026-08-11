@@ -39,19 +39,22 @@ export default function SkipLinePassScreen() {
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const goConfirmed = () => {
+  const goConfirmed = (viaPass: boolean) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
     queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
     if (params.flightId) {
       queryClient.invalidateQueries({ queryKey: [`/api/flights/${params.flightId}/my-status`] });
     }
-    router.replace({ pathname: '/flight/confirmed', params });
+    router.replace({
+      pathname: '/flight/confirmed',
+      params: viaPass ? { ...params, passUsed: '1' } : params,
+    });
   };
 
   const confirmMutation = useConfirmQueueEntry({
     mutation: {
-      onSuccess: goConfirmed,
+      onSuccess: () => goConfirmed(false),
       onError: (err: any) => {
         Alert.alert('Could not confirm', err?.data?.error || err?.response?.data?.error || err?.message || 'Failed to confirm seat');
         queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
@@ -67,7 +70,7 @@ export default function SkipLinePassScreen() {
         }
         // The server consumes the pass and confirms the seat atomically —
         // the response comes back already confirmed.
-        goConfirmed();
+        goConfirmed(true);
       },
       onError: (err: any) => {
         Alert.alert('Could not use pass', err?.data?.error || err?.response?.data?.error || err?.message || 'Failed to use Skip the Line pass');
