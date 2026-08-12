@@ -1070,10 +1070,26 @@ components:
           type: array
           items:
             type: string
+        totalSavedUsd:
+          type: number
+          description: Sum of charter values (flight priceUsd) across the member's completed trips
+        referralBalanceUsd:
+          type: number
+          description: Dollar balance earned from the referral program
+        annualFlightAllowance:
+          type: number
+          description: The tier's annual flight allowance
+        flightsThisYear:
+          type: number
+          description: Completed flights in the current calendar year
       required:
         - tier
         - linePassCount
         - features
+        - totalSavedUsd
+        - referralBalanceUsd
+        - annualFlightAllowance
+        - flightsThisYear
 
     BuyPassResponse:
       type: object

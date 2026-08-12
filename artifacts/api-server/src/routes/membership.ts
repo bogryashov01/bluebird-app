@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { usersTable, notificationsTable } from "@workspace/db/schema";
+import { usersTable, notificationsTable, tripsTable, flightsTable } from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -40,13 +40,50 @@ function renewalDate(): string {
   return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-function membershipPayload(user: { membershipTier: string; linePassCount: number; pendingTier: string | null }) {
+// Annual flight allowance per tier (calendar year).
+const ANNUAL_FLIGHT_ALLOWANCE: Record<string, number> = { base: 10, plus: 20, concierge: 40 };
+
+// Referral earnings expressed as dollars ($150 credit per joined referral).
+const REFERRAL_CREDIT_USD = 150;
+
+async function membershipStats(user: { id: string; referralCode: string }) {
+  const completed = await db
+    .select({ priceUsd: flightsTable.priceUsd, departureDate: flightsTable.departureDate, bookedAt: tripsTable.bookedAt })
+    .from(tripsTable)
+    .innerJoin(flightsTable, eq(tripsTable.flightId, flightsTable.id))
+    .where(and(eq(tripsTable.userId, user.id), eq(tripsTable.status, "completed")));
+
+  const totalSavedUsd = completed.reduce((sum, t) => sum + (t.priceUsd ?? 0), 0);
+
+  const year = String(new Date().getFullYear());
+  const flightsThisYear = completed.filter(
+    (t) => (t.departureDate ?? "").startsWith(year) || t.bookedAt.getFullYear().toString() === year
+  ).length;
+
+  const [{ count: referrals }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(usersTable)
+    .where(eq(usersTable.referredBy, user.referralCode));
+
+  return { totalSavedUsd, flightsThisYear, referralBalanceUsd: referrals * REFERRAL_CREDIT_USD };
+}
+
+async function membershipPayload(user: {
+  id: string;
+  membershipTier: string;
+  linePassCount: number;
+  pendingTier: string | null;
+  referralCode: string;
+}) {
   const tier = user.membershipTier as "base" | "plus" | "concierge";
+  const stats = await membershipStats(user);
   return {
     tier,
     linePassCount: user.linePassCount,
     features: MEMBERSHIP_FEATURES[tier] ?? MEMBERSHIP_FEATURES.base,
     renewalDate: renewalDate(),
+    annualFlightAllowance: ANNUAL_FLIGHT_ALLOWANCE[tier] ?? ANNUAL_FLIGHT_ALLOWANCE.base,
+    ...stats,
     ...(user.pendingTier ? { pendingTier: user.pendingTier } : {}),
   };
 }
@@ -58,7 +95,7 @@ router.get("/", authMiddleware, async (req, res) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    return res.json(membershipPayload(user));
+    return res.json(await membershipPayload(user));
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch membership" });
   }
@@ -109,7 +146,7 @@ router.post("/upgrade", authMiddleware, async (req, res) => {
       type: "membership",
     });
 
-    return res.json(membershipPayload(updated));
+    return res.json(await membershipPayload(updated));
   } catch (err) {
     return res.status(500).json({ error: "Failed to upgrade membership" });
   }
@@ -205,7 +242,7 @@ router.post("/change", authMiddleware, async (req, res) => {
       type: "membership",
     });
 
-    return res.json(membershipPayload(updated));
+    return res.json(await membershipPayload(updated));
   } catch (err) {
     return res.status(500).json({ error: "Failed to update membership" });
   }

@@ -274,6 +274,14 @@ export interface Membership {
   /** Scheduled plan change taking effect at renewalDate. "cancelled" means the membership ends at renewal. Absent when no change is pending. */
   pendingTier?: MembershipPendingTier;
   features: string[];
+  /** Sum of charter values (flight priceUsd) across the member's completed trips */
+  totalSavedUsd: number;
+  /** Dollar balance earned from the referral program */
+  referralBalanceUsd: number;
+  /** The tier's annual flight allowance */
+  annualFlightAllowance: number;
+  /** Completed flights in the current calendar year */
+  flightsThisYear: number;
 }
 
 export interface BuyPassResponse {

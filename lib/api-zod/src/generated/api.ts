@@ -447,7 +447,11 @@ export const GetMembershipResponse = zod.object({
   "linePassCount": zod.number(),
   "renewalDate": zod.string().optional(),
   "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),
-  "features": zod.array(zod.string())
+  "features": zod.array(zod.string()),
+  "totalSavedUsd": zod.number().describe('Sum of charter values (flight priceUsd) across the member\'s completed trips'),
+  "referralBalanceUsd": zod.number().describe('Dollar balance earned from the referral program'),
+  "annualFlightAllowance": zod.number().describe('The tier\'s annual flight allowance'),
+  "flightsThisYear": zod.number().describe('Completed flights in the current calendar year')
 })
 
 
@@ -463,7 +467,11 @@ export const UpgradeMembershipResponse = zod.object({
   "linePassCount": zod.number(),
   "renewalDate": zod.string().optional(),
   "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),
-  "features": zod.array(zod.string())
+  "features": zod.array(zod.string()),
+  "totalSavedUsd": zod.number().describe('Sum of charter values (flight priceUsd) across the member\'s completed trips'),
+  "referralBalanceUsd": zod.number().describe('Dollar balance earned from the referral program'),
+  "annualFlightAllowance": zod.number().describe('The tier\'s annual flight allowance'),
+  "flightsThisYear": zod.number().describe('Completed flights in the current calendar year')
 })
 
 
@@ -488,7 +496,11 @@ export const ChangeMembershipResponse = zod.object({
   "linePassCount": zod.number(),
   "renewalDate": zod.string().optional(),
   "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),
-  "features": zod.array(zod.string())
+  "features": zod.array(zod.string()),
+  "totalSavedUsd": zod.number().describe('Sum of charter values (flight priceUsd) across the member\'s completed trips'),
+  "referralBalanceUsd": zod.number().describe('Dollar balance earned from the referral program'),
+  "annualFlightAllowance": zod.number().describe('The tier\'s annual flight allowance'),
+  "flightsThisYear": zod.number().describe('Completed flights in the current calendar year')
 })
 
 
