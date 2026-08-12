@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Platform,
 } from 'react-native';
@@ -11,6 +11,7 @@ import { useUseLinePassOnQueueEntry, useConfirmQueueEntry } from '@workspace/api
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
+import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPassOverlay';
 
 function shortDate(d?: string) {
   if (!d) return '';
@@ -34,6 +35,10 @@ export default function SkipLinePassScreen() {
   const queryClient = useQueryClient();
   const passCount = user?.linePassCount ?? 0;
   const [actionError, setActionError] = useState<string | null>(null);
+  // Overlay shown while the pass is applied; null = hidden.
+  const [overlayPhase, setOverlayPhase] = useState<ApplyingPassPhase | null>(null);
+  // Navigation to run once the overlay's resolve animation completes.
+  const pendingNavRef = useRef<(() => void) | null>(null);
   const position = parseInt(params.position ?? '0', 10) || 0;
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
@@ -69,11 +74,14 @@ export default function SkipLinePassScreen() {
           updateUser({ ...user, linePassCount: data.linePassCount });
         }
         // The server consumes the pass and confirms the seat atomically —
-        // the response comes back already confirmed.
-        goConfirmed(true);
+        // the response comes back already confirmed. Let the applying
+        // animation resolve before landing on the confirmed screen.
+        pendingNavRef.current = () => goConfirmed(true);
+        setOverlayPhase('success');
       },
       onError: (err: any) => {
         setActionError(err?.data?.error || err?.response?.data?.error || err?.message || 'Failed to use Skip the Line pass');
+        setOverlayPhase('error');
       },
     },
   });
@@ -87,8 +95,16 @@ export default function SkipLinePassScreen() {
       // Already at the front — no pass needed to shift position; just confirm.
       confirmMutation.mutate({ id: params.entryId });
     } else {
+      setOverlayPhase('applying');
       usePassMutation.mutate({ id: params.entryId });
     }
+  };
+
+  const handleOverlayDone = () => {
+    setOverlayPhase(null);
+    const nav = pendingNavRef.current;
+    pendingNavRef.current = null;
+    nav?.();
   };
 
   const routeLabel = `${params.from ?? '—'} → ${params.to ?? '—'}`;
@@ -96,6 +112,7 @@ export default function SkipLinePassScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad }]}>
+      {overlayPhase && <ApplyingPassOverlay phase={overlayPhase} onDone={handleOverlayDone} />}
       <FloatingBackButton variant="brand" />
 
       <View style={[styles.top, { paddingTop: 76 }]}>

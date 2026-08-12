@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Platform,
@@ -14,6 +14,7 @@ import { useJoinQueue, useGetFlightMyStatus, useGetFlight } from '@workspace/api
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
+import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPassOverlay';
 
 const POLICY_ITEMS = [
   'Flights may be cancelled or changed due to operational requirements.',
@@ -44,6 +45,10 @@ export default function JoinQueueAcknowledgeScreen() {
   // Set when the server rejects the join because the flight is gone — drives
   // the full-screen "no longer available" state instead of an inline error.
   const [rejectedUnavailable, setRejectedUnavailable] = useState(false);
+  // Skip-the-line applying overlay; null = hidden.
+  const [overlayPhase, setOverlayPhase] = useState<ApplyingPassPhase | null>(null);
+  // Navigation to run once the overlay's resolve animation completes.
+  const pendingNavRef = useRef<(() => void) | null>(null);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -81,15 +86,22 @@ export default function JoinQueueAcknowledgeScreen() {
           queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
           queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
           queryClient.invalidateQueries({ queryKey: [`/api/flights/${flightId}/my-status`] });
-          router.replace({
+          const nav = () => router.replace({
             pathname: '/flight/confirmed',
             params: useLinePass ? { ...params, passUsed: '1' } : params,
           });
+          if (useLinePass) {
+            // Let the applying animation resolve before landing on confirmed.
+            pendingNavRef.current = nav;
+            setOverlayPhase('success');
+          } else {
+            nav();
+          }
           return;
         }
         queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
         queryClient.invalidateQueries({ queryKey: [`/api/flights/${flightId}/my-status`] });
-        router.replace({
+        const navJoined = () => router.replace({
           pathname: '/queue/joined',
           params: {
             ...params,
@@ -99,6 +111,13 @@ export default function JoinQueueAcknowledgeScreen() {
             flightStatus: entry?.flight?.status ?? params.flightStatus ?? 'available',
           },
         });
+        if (useLinePass) {
+          // Edge case: pass didn't confirm — dismiss the overlay quietly.
+          pendingNavRef.current = navJoined;
+          setOverlayPhase('error');
+        } else {
+          navJoined();
+        }
       },
       onError: (err: any) => {
         const msg = err?.response?.data?.error || err?.data?.error || err?.message || 'Failed to join queue';
@@ -107,6 +126,7 @@ export default function JoinQueueAcknowledgeScreen() {
         } else {
           setJoinError(msg);
         }
+        setOverlayPhase((p) => (p ? 'error' : p));
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       },
     },
@@ -122,7 +142,15 @@ export default function JoinQueueAcknowledgeScreen() {
       router.push({ pathname: '/queue/intl-notice', params });
       return;
     }
+    if (useLinePass) setOverlayPhase('applying');
     joinMutation.mutate({ data: { flightId, useLinePass, passengers } });
+  };
+
+  const handleOverlayDone = () => {
+    setOverlayPhase(null);
+    const nav = pendingNavRef.current;
+    pendingNavRef.current = null;
+    nav?.();
   };
 
   // Note: a failed status lookup (statusError) does NOT disable the CTA — the
@@ -136,6 +164,7 @@ export default function JoinQueueAcknowledgeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
+      {overlayPhase && <ApplyingPassOverlay phase={overlayPhase} onDone={handleOverlayDone} />}
       <FloatingBackButton />
 
       <ScrollView
