@@ -242,10 +242,12 @@ export default function QueueStatusScreen() {
   // Tracks the entry whose pass button is mid-refetch, to disable the button.
   const [checkingPassEntryId, setCheckingPassEntryId] = useState<string | null>(null);
 
-  // Routes to the Skip the Line Pass sheet, which confirms the seat immediately.
-  // Refetches the entry first — the queue engine may have auto-confirmed it
-  // since the last 10s poll, in which case the screen simply updates to the
-  // confirmed banner instead of opening the sheet.
+  // Routes to the Skip the Line flow. With ≥1 pass it opens the pass
+  // confirmation sheet; with 0 passes it goes to the buy-pass screen (which
+  // carries the entry so the member lands back on the confirmation after
+  // purchasing). Refetches the entry first — the queue engine may have
+  // auto-confirmed it since the last 10s poll, in which case the screen
+  // simply updates to the confirmed banner instead of navigating.
   const handleUsePass = async (entry: QueueEntry) => {
     if (checkingPassEntryId) return;
     setCheckingPassEntryId(entry.id);
@@ -257,17 +259,23 @@ export default function QueueStatusScreen() {
         // already in the cache, so the screen re-renders to the right state.
         return;
       }
-      openPassSheet(latest);
+      if ((user?.linePassCount ?? 0) > 0) {
+        openPassSheet(latest);
+      } else {
+        router.push({ pathname: '/queue/buy-pass', params: entryParams(latest) });
+      }
     } finally {
       setCheckingPassEntryId(null);
     }
   };
 
   const openPassSheet = (entry: QueueEntry) => {
+    router.push({ pathname: '/queue/pass', params: entryParams(entry) });
+  };
+
+  const entryParams = (entry: QueueEntry) => {
     const flight = entry.flight;
-    router.push({
-      pathname: '/queue/pass',
-      params: {
+    return {
         entryId: entry.id,
         position: String(entry.position),
         flightId: entry.flightId,
@@ -279,8 +287,7 @@ export default function QueueStatusScreen() {
         departureTime: flight?.departureTime ?? '',
         duration: flight?.duration ?? '',
         aircraftType: flight?.aircraftType ?? '',
-      },
-    });
+    };
   };
 
   const handleCancel = async (entryId: string) => {
@@ -291,8 +298,13 @@ export default function QueueStatusScreen() {
   // Bottom-pinned actions apply to the first waiting entry in view (the
   // non-picker path shows exactly one waiting entry in practice).
   const footerEntry = !needsPicker ? waitingEntries[0] : undefined;
-  const footerCanUsePass =
-    !!footerEntry && !!user && user.linePassCount > 0 && footerEntry.position !== 1;
+  // Skip the Line is surfaced for every waiting entry. At position > 1 it is
+  // an actionable CTA whose destination branches on pass balance; at position
+  // 1 the use-pass API rejects the request ("already first in line"), so the
+  // footer shows explanatory copy instead of a button that would only fail.
+  const passCount = user?.linePassCount ?? 0;
+  const footerShowsPass = !!footerEntry && !!user && footerEntry.position !== 1;
+  const footerIsFirstInLine = !!footerEntry && footerEntry.position === 1;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
@@ -329,24 +341,51 @@ export default function QueueStatusScreen() {
           {allEntries.map((entry) => {
             const flight = entry.flight;
             const label = flight ? `${flight.fromAirport} → ${flight.toAirport}` : '— → —';
+            // Same rule as the footer: actionable CTA while waiting behind
+            // others; informational copy at position 1 (use-pass would fail).
+            const isWaiting = entry.status === 'waiting';
+            const showsPass = isWaiting && entry.position !== 1;
+            const showsFirstNote = isWaiting && entry.position === 1;
             return (
-              <TouchableOpacity
-                key={entry.id}
-                style={[styles.pickerRow, { backgroundColor: colors.surface }]}
-                onPress={() => router.setParams({ entryId: entry.id })}
-                activeOpacity={0.8}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.pickerRoute, { color: colors.textOnSurface }]}>{label}</Text>
-                  <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]}>
-                    {entry.status === 'confirmed'
-                      ? 'Confirmed'
-                      : `In queue · #${entry.position} of ${entry.totalInQueue}`}
-                    {flight ? ` · ${flight.departureDate} ${flight.departureTime}` : ''}
+              <View key={entry.id} style={[styles.pickerRow, { backgroundColor: colors.surface }]}>
+                <TouchableOpacity
+                  style={styles.pickerRowMain}
+                  onPress={() => router.setParams({ entryId: entry.id })}
+                  activeOpacity={0.8}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.pickerRoute, { color: colors.textOnSurface }]}>{label}</Text>
+                    <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]}>
+                      {entry.status === 'confirmed'
+                        ? 'Confirmed'
+                        : `In queue · #${entry.position} of ${entry.totalInQueue}`}
+                      {flight ? ` · ${flight.departureDate} ${flight.departureTime}` : ''}
+                    </Text>
+                  </View>
+                  <Text style={[styles.pickerChevron, { color: colors.mutedForegroundLight }]}>›</Text>
+                </TouchableOpacity>
+                {showsPass && (
+                  <TouchableOpacity
+                    style={[styles.pickerPassBtn, { backgroundColor: colors.primary + '14' }]}
+                    onPress={() => handleUsePass(entry)}
+                    disabled={checkingPassEntryId === entry.id}
+                    activeOpacity={0.8}
+                  >
+                    {checkingPassEntryId === entry.id ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <Text style={[styles.pickerPassText, { color: colors.primary }]}>
+                        {passCount > 0 ? 'Skip the Line — Use Pass' : 'Skip the Line — Get a Pass'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+                {showsFirstNote && (
+                  <Text style={[styles.pickerFirstNote, { color: colors.mutedForegroundLight }]}>
+                    You're first in line — no pass needed, your seat confirms automatically.
                   </Text>
-                </View>
-                <Text style={[styles.pickerChevron, { color: colors.mutedForegroundLight }]}>›</Text>
-              </TouchableOpacity>
+                )}
+              </View>
             );
           })}
         </ScrollView>
@@ -373,17 +412,26 @@ export default function QueueStatusScreen() {
           {/* Bottom-pinned actions (mockup): blue pass button + concierge link */}
           {footerEntry && (
             <View style={[styles.footer, { paddingBottom: bottomPad + 12, backgroundColor: colors.offWhite }]}>
-              {footerCanUsePass ? (
+              {footerShowsPass ? (
                 <PrimaryButton
-                  label={`Use Skip the Line Pass${user ? ` (${user.linePassCount} left)` : ''}`}
+                  label={passCount > 0
+                    ? `Use Skip the Line Pass (${passCount} left)`
+                    : 'Skip the Line — Get a Pass'}
                   loading={checkingPassEntryId === footerEntry.id}
                   onPress={() => handleUsePass(footerEntry)}
                 />
               ) : (
-                <PrimaryButton
-                  label="View Flight Details"
-                  onPress={() => router.push(`/flight/${footerEntry.flightId}`)}
-                />
+                <>
+                  {footerIsFirstInLine && (
+                    <Text style={[styles.footerNote, { color: colors.mutedForegroundLight }]}>
+                      Skip the Line isn't needed — you're first in line and your seat confirms automatically.
+                    </Text>
+                  )}
+                  <PrimaryButton
+                    label="View Flight Details"
+                    onPress={() => router.push(`/flight/${footerEntry.flightId}`)}
+                  />
+                </>
               )}
               <TouchableOpacity onPress={() => router.push('/concierge')} activeOpacity={0.7}>
                 <Text style={[styles.conciergeLink, { color: colors.mutedForegroundLight }]}>Ask AI Concierge</Text>
@@ -407,10 +455,17 @@ const styles = StyleSheet.create({
   pickerTitle: { fontFamily: 'Inter_700Bold', fontSize: 22, alignSelf: 'flex-start' },
   pickerSubtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, alignSelf: 'flex-start', marginBottom: 14, marginTop: 4 },
   pickerRow: {
-    width: '100%', flexDirection: 'row', alignItems: 'center',
-    borderRadius: 18, padding: 18, marginBottom: 12,
+    width: '100%',
+    borderRadius: 18, padding: 18, marginBottom: 12, gap: 12,
     shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowRadius: 16, shadowOpacity: 0.05, elevation: 2,
   },
+  pickerRowMain: { flexDirection: 'row', alignItems: 'center' },
+  pickerPassBtn: {
+    borderRadius: 12, paddingVertical: 11, alignItems: 'center', justifyContent: 'center',
+  },
+  pickerPassText: { fontFamily: 'Inter_600SemiBold', fontSize: 13.5 },
+  pickerFirstNote: { fontFamily: 'Inter_400Regular', fontSize: 12.5, lineHeight: 18 },
+  footerNote: { fontFamily: 'Inter_400Regular', fontSize: 12.5, lineHeight: 18, textAlign: 'center' },
   pickerRoute: { fontFamily: 'Inter_700Bold', fontSize: 17 },
   pickerMeta: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 3 },
   pickerChevron: { fontFamily: 'Inter_700Bold', fontSize: 20, marginLeft: 10 },

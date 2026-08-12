@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
@@ -28,6 +28,24 @@ export default function BuyPassScreen() {
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
   const [purchased, setPurchased] = useState(false);
+  // Optional originating queue entry (and its flight details) forwarded from
+  // Queue Status; when present, a successful purchase lands the member on the
+  // pass confirmation for that entry instead of dead-ending here.
+  const params = useLocalSearchParams<{
+    entryId?: string; position?: string; flightId?: string;
+    from?: string; to?: string; fromCity?: string; toCity?: string;
+    departureDate?: string; departureTime?: string; duration?: string;
+    aircraftType?: string;
+  }>();
+
+  const afterPurchase = () => {
+    if (params.entryId) {
+      // Guide the member straight into using the new pass on their queue.
+      router.replace({ pathname: '/queue/pass', params });
+    } else {
+      router.back();
+    }
+  };
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -42,13 +60,15 @@ export default function BuyPassScreen() {
         queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
         setPurchased(true);
         if (Platform.OS === 'web') {
-          // RN-web Alert.alert with buttons is a no-op — navigate back directly.
-          router.back();
+          // RN-web Alert.alert with buttons is a no-op — navigate directly.
+          afterPurchase();
         } else {
           Alert.alert(
             'Pass purchased',
-            '1 Skip the Line pass has been added to your account.',
-            [{ text: 'Done', onPress: () => router.back() }],
+            params.entryId
+              ? '1 Skip the Line pass has been added to your account. Use it now to confirm your seat.'
+              : '1 Skip the Line pass has been added to your account.',
+            [{ text: params.entryId ? 'Use Pass' : 'Done', onPress: afterPurchase }],
           );
         }
       },
