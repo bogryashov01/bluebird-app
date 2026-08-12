@@ -7,7 +7,10 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import { useListFlights, type Flight } from '@workspace/api-client-react';
+import {
+  useListFlights, useGetQueueStatus, useListTrips,
+  type Flight, type QueueEntry, type Trip,
+} from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
 import FlightMapView from '@/components/FlightMap';
 import { originalPrice } from '@/lib/pricing';
@@ -297,20 +300,48 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
 export default function DiscoverScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const [activeFilter, setActiveFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
 
-  const { data: flights, isLoading, isError, refetch, isRefetching } = useListFlights({});
+  const { data: flights, isLoading: flightsLoading, isError, refetch, isRefetching } = useListFlights({});
+
+  // Personalized data: flights the member is already queued for or booked on
+  // are hidden from Discover. Signed-out users see the full list.
+  const { data: queueEntries, isLoading: queueLoading } = useGetQueueStatus({
+    query: { enabled: !!user },
+  });
+  const { data: trips, isLoading: tripsLoading } = useListTrips({
+    query: { enabled: !!user },
+  });
+
+  // Avoid flashing soon-to-be-hidden flights: stay in the loading state while
+  // the persisted session is being restored, and while a signed-in member's
+  // queue/trips data is still loading.
+  const isLoading =
+    flightsLoading || authLoading || (!!user && (queueLoading || tripsLoading));
+
+  const excludedFlightIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    if (!user) return ids;
+    for (const e of (queueEntries as QueueEntry[]) ?? []) {
+      if (e.status === 'waiting' || e.status === 'confirmed') ids.add(e.flightId);
+    }
+    for (const t of (trips as Trip[]) ?? []) {
+      if (t.status === 'upcoming') ids.add(t.flightId);
+    }
+    return ids;
+  }, [user, queueEntries, trips]);
 
   const topPad = Platform.OS === 'web' ? 40 : insets.top;
 
   // Only joinable flights are offered — completed/departed/cancelled flights
   // are excluded so members are never led into a join flow that can't succeed.
+  // Flights the member has already joined or booked are hidden too.
   const all: FlightData[] = React.useMemo(
-    () => (flights ?? []).filter((f) => f.status === 'available'),
-    [flights],
+    () => (flights ?? []).filter((f) => f.status === 'available' && !excludedFlightIds.has(f.id)),
+    [flights, excludedFlightIds],
   );
   const featured = all.find((f) => f.featured);
   const q = search.trim().toLowerCase();
