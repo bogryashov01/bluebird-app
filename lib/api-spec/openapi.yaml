@@ -772,6 +772,9 @@ components:
         code:
           type: string
           description: The 6-digit SMS code.
+        name:
+          type: string
+          description: Optional display name for the member; applied only when this verification creates a new account.
       required:
         - phone
         - code

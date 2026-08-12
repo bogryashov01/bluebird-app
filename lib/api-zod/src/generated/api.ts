@@ -37,7 +37,8 @@ export const RequestLoginCodeResponse = zod.object({
  */
 export const VerifyLoginCodeBody = zod.object({
   "phone": zod.string(),
-  "code": zod.string().describe('The 6-digit SMS code.')
+  "code": zod.string().describe('The 6-digit SMS code.'),
+  "name": zod.string().optional().describe('Optional display name for the member; applied only when this verification creates a new account.')
 })
 
 export const VerifyLoginCodeResponse = zod.object({

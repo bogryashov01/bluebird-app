@@ -10,4 +10,6 @@ export interface VerifyCodeRequest {
   phone: string;
   /** The 6-digit SMS code. */
   code: string;
+  /** Optional display name for the member; applied only when this verification creates a new account. */
+  name?: string;
 }

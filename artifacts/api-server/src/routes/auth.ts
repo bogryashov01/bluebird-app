@@ -120,6 +120,9 @@ router.post("/request-code", async (req, res) => {
 router.post("/verify-code", async (req, res) => {
   const phone = normalizePhone(req.body?.phone);
   const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
+  // Optional registration name — applied only when this verification creates
+  // a brand-new account; ignored for existing members.
+  const requestedName = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 80) : "";
   if (!phone) {
     return res.status(400).json({ error: "Enter a valid phone number" });
   }
@@ -175,7 +178,7 @@ router.post("/verify-code", async (req, res) => {
     if (!user) {
       isNewUser = true;
       const userId = makeId();
-      const name = "Bluebird Member";
+      const name = requestedName.length >= 2 ? requestedName : "Bluebird Member";
       [user] = await db
         .insert(usersTable)
         .values({

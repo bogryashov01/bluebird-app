@@ -19,8 +19,11 @@ export default function VerifyCodeScreen() {
   const colors = useColors();
   const { signIn } = useAuth();
   const queryClient = useQueryClient();
-  const params = useLocalSearchParams<{ phone?: string; demoCode?: string; cooldown?: string }>();
+  const params = useLocalSearchParams<{ phone?: string; demoCode?: string; cooldown?: string; name?: string }>();
   const phone = typeof params.phone === 'string' ? params.phone : '';
+  // Registration hand-off: applied server-side only when this verification
+  // creates a brand-new account.
+  const registerName = typeof params.name === 'string' ? params.name.trim() : '';
   const initialCooldown = Number(params.cooldown) > 0 ? Number(params.cooldown) : 30;
 
   const [code, setCode] = useState('');
@@ -77,7 +80,7 @@ export default function VerifyCodeScreen() {
     // Auto-submit the moment the sixth digit lands (once per code value).
     if (digits.length === CODE_LENGTH && submittedRef.current !== digits && !verifyMutation.isPending) {
       submittedRef.current = digits;
-      verifyMutation.mutate({ data: { phone, code: digits } });
+      verifyMutation.mutate({ data: { phone, code: digits, ...(registerName ? { name: registerName } : {}) } });
     }
   };
 
