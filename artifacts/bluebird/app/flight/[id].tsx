@@ -13,6 +13,7 @@ import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
 
 // ── Aircraft image matching ────────────────────────────────────────────────────
+import { originalPrice } from '@/lib/pricing';
 const AIRCRAFT_IMAGES = [
   { match: /gulfstream|g280|challenger|falcon/i,  source: require('@/assets/images/aircraft-heavy.jpg') },
   { match: /king air|pilatus|pc-12|turboprop/i,   source: require('@/assets/images/aircraft-turboprop.jpg') },
@@ -50,16 +51,6 @@ function formatTime12(t: string): string {
   const hr = h % 12 === 0 ? 12 : h % 12;
   return `${hr}:${String(m).padStart(2, '0')} ${ampm}`;
 }
-
-// Original (pre-discount) price derived from the discounted price, rounded
-// to the nearest $100 so it reads like a real list price.
-function originalPrice(priceUsd: number, discountPct: number): number | null {
-  if (!priceUsd || !discountPct || discountPct <= 0 || discountPct >= 100) return null;
-  return Math.round(priceUsd / (1 - discountPct / 100) / 100) * 100;
-}
-
-// Info tiles: Seats always; Range / Speed / Weather only when the flight has
-// the enrichment data (older rows degrade gracefully).
 function infoTiles(f: any) {
   const tiles = [{ label: 'Seats', value: `${f.seatsAvailable} available` }];
   if (f.rangeNm)      tiles.push({ label: 'Range',  value: `${Number(f.rangeNm).toLocaleString()} nm` });
