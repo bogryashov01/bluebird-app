@@ -1,7 +1,17 @@
 import { db } from "@workspace/db";
-import { flightsTable, tripsTable, queueEntriesTable } from "@workspace/db/schema";
+import {
+  flightsTable,
+  tripsTable,
+  queueEntriesTable,
+  notificationsTable,
+} from "@workspace/db/schema";
 import { and, eq, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { logger } from "./logger";
+import { isSimUserId } from "./simulation";
+
+function makeId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+}
 
 /**
  * Single source of truth for "has this flight's departure passed?".
@@ -91,7 +101,44 @@ export async function completeDepartedFlights(): Promise<void> {
         ),
       ),
     )
-    .returning({ id: tripsTable.id });
+    .returning({
+      id: tripsTable.id,
+      userId: tripsTable.userId,
+      flightId: tripsTable.flightId,
+    });
+
+  // Tell each real member their flight has landed and moved to Past. The
+  // trips UPDATE above only ever flips a trip 'upcoming' → 'completed' once,
+  // so notifying exactly the returned rows is naturally idempotent — repeated
+  // sweeps can never duplicate the notification. Simulated members are
+  // skipped.
+  const tripsToNotify = completedTrips.filter((t) => !isSimUserId(t.userId));
+  if (tripsToNotify.length > 0) {
+    const flightIds = [...new Set(tripsToNotify.map((t) => t.flightId))];
+    const flights = await db
+      .select({
+        id: flightsTable.id,
+        fromCity: flightsTable.fromCity,
+        toCity: flightsTable.toCity,
+      })
+      .from(flightsTable)
+      .where(inArray(flightsTable.id, flightIds));
+    const flightById = new Map(flights.map((f) => [f.id, f]));
+
+    await db.insert(notificationsTable).values(
+      tripsToNotify.map((trip) => {
+        const flight = flightById.get(trip.flightId);
+        const route = flight ? `${flight.fromCity} → ${flight.toCity}` : "your flight";
+        return {
+          id: makeId(),
+          userId: trip.userId,
+          title: "Hope you enjoyed your flight ✈️",
+          body: `Your trip on ${route} is complete and now lives in your Past trips. Ready for the next one? Browse flights on Discover.`,
+          type: "flight_completed",
+        };
+      }),
+    );
+  }
 
   // Expire waiting queue entries on completed past-departure flights — the
   // queue no longer exists once the plane has left.
