@@ -9,8 +9,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRequestLoginCode, useVerifyLoginCode } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { welcomeTourKey } from './welcome-tour';
 
 const CODE_LENGTH = 6;
 
@@ -46,7 +48,17 @@ export default function VerifyCodeScreen() {
       onSuccess: async (data) => {
         await signIn(data.token, data.user as any);
         queryClient.clear();
-        router.replace('/(tabs)/discover');
+        // Brand-new members get a one-time feature tour before landing in the app.
+        const userId = (data.user as any)?.id;
+        let seenTour = false;
+        if (userId) {
+          seenTour = (await AsyncStorage.getItem(welcomeTourKey(userId)).catch(() => null)) === '1';
+        }
+        if (data.isNewUser && !seenTour) {
+          router.replace('/(auth)/welcome-tour');
+        } else {
+          router.replace('/(tabs)/discover');
+        }
       },
       onError: (err: any) => {
         submittedRef.current = null;
