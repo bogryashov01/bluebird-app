@@ -219,32 +219,13 @@ router.get("/:id/my-status", authMiddleware, async (req, res) => {
         .from(queueEntriesTable)
         .where(and(eq(queueEntriesTable.flightId, flightId), eq(queueEntriesTable.status, "waiting")));
 
-      // canConfirm: true when this entry is first in line AND the flight still
-      // has enough unconfirmed seats for the entry's party.
-      let canConfirm = false;
-      if (entry.position === 1) {
-        const [{ value: confirmedPax }] = await db
-          .select({ value: sql<number>`coalesce(sum(${queueEntriesTable.passengers}), 0)` })
-          .from(queueEntriesTable)
-          .where(
-            and(
-              eq(queueEntriesTable.flightId, flightId),
-              eq(queueEntriesTable.status, "confirmed"),
-            ),
-          );
-        const windowExpired =
-          !!entry.frontNotifiedAt &&
-          Date.now() - new Date(entry.frontNotifiedAt).getTime() > 30 * 60 * 1000;
-        canConfirm =
-          !windowExpired && entry.passengers <= (flight.seatsAvailable - Number(confirmedPax));
-      }
-
+      // Seats are confirmed automatically by the queue engine at the
+      // decision moment — there is no client-side confirm action.
       return res.json({
         status: "waiting",
         queueEntryId: entry.id,
         queuePosition: entry.position,
         totalInQueue: Number(totalInQueue),
-        canConfirm,
       });
     }
 

@@ -11,7 +11,7 @@ const POLICY_SECTIONS = [
   },
   {
     title: 'Queue System',
-    body: 'Members join a queue for each desired flight. When a seat becomes available and you are at the front of the queue, you will receive a confirmation notification. Acceptance must be confirmed within 30 minutes or your spot passes to the next member.',
+    body: 'Members join a queue for each desired flight. When a seat becomes available and you are at the front of the queue, your seat is confirmed automatically and you will receive a confirmation notification — no action is needed and your spot never expires.',
   },
   {
     title: 'Skip the Line Passes',

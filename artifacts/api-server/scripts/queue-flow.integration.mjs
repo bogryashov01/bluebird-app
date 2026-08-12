@@ -1,4 +1,4 @@
-// Integration test: queue join / use-pass / confirm / cancel flow, including
+// Integration test: queue join / use-pass / auto-confirmation / cancel flow, including
 // the Skip-the-Line totalInQueue count with N existing entries and the
 // server-side international-fee enforcement for Base members.
 //
@@ -79,12 +79,7 @@ const m0Status = await api("GET", "/queue/status", { token: members[0].token });
 const m0Entry = m0Status.json?.find?.((e) => e.flightId === flight.id && e.status === "waiting");
 check("waiting queue unaffected — first member still position 1", m0Entry?.position === 1, JSON.stringify(m0Entry));
 
-// ── 3. Normal confirm at #1 creates a trip; queue renumbers ──────────────────
-const confirm = await api("POST", `/queue/${m0Entry.id}/confirm`, { token: members[0].token });
-check("confirm at #1 creates upcoming trip", confirm.status === 200 && confirm.json?.status === "upcoming",
-  JSON.stringify(confirm.json));
-
-// ── 4. use-pass on an existing waiting entry confirms atomically ─────────────
+// ── 3. use-pass on an existing waiting entry confirms atomically ─────────────
 const m2Status = await api("GET", "/queue/status", { token: members[2].token });
 const m2Entry = m2Status.json?.find?.((e) => e.flightId === flight.id && e.status === "waiting");
 const usePass = await api("POST", `/queue/${m2Entry.id}/use-pass`, { token: members[2].token });
@@ -93,11 +88,54 @@ check("use-pass confirms the entry atomically", usePass.status === 200 && usePas
 check("use-pass returns the created trip", usePass.json?.trip?.status === "upcoming", "");
 check("use-pass decrements pass balance", typeof usePass.json?.linePassCount === "number", "");
 
+// ── 4. Auto-confirmation at the decision moment ──────────────────────────────
+// The manual confirm endpoint is retired: the queue engine confirms the front
+// member automatically once a seat is available. m0 is waiting at #1 with
+// capacity, so within a couple of engine ticks it must flip to confirmed with
+// a trip + flight_confirmed notification and the queue renumbered behind it.
+check("manual confirm endpoint is retired (404)",
+  (await api("POST", `/queue/${m0Entry.id}/confirm`, { token: members[0].token })).status === 404, "");
+check("queue status no longer exposes canConfirm",
+  !("canConfirm" in (m0Entry ?? {})), JSON.stringify(m0Entry));
+
+let autoConfirmed = null;
+for (let i = 0; i < 40 && !autoConfirmed; i++) {
+  await new Promise((r) => setTimeout(r, 2000));
+  const st = await api("GET", "/queue/status", { token: members[0].token });
+  autoConfirmed = st.json?.find?.((e) => e.flightId === flight.id && e.status === "confirmed") ?? null;
+}
+check("front member is auto-confirmed by the queue engine", !!autoConfirmed, "timed out after 80s");
+const trips = await api("GET", "/trips", { token: members[0].token });
+check("auto-confirmation created an upcoming trip",
+  trips.json?.some?.((t) => t.flightId === flight.id && t.status === "upcoming"), JSON.stringify(trips.json));
+const notifs = await api("GET", "/notifications", { token: members[0].token });
+check("auto-confirmation sent a flight_confirmed notification",
+  notifs.json?.some?.((n) => n.type === "flight_confirmed"), "");
+
+// Renumbering: m1 was waiting at #2 behind m0. After the auto-confirm the
+// engine closes the gap, so m1 is now #1 — or already auto-confirmed itself
+// on a later tick (which equally proves the queue advanced past m0).
+const m1After = await api("GET", "/queue/status", { token: members[1].token });
+const m1Now = m1After.json?.find?.((e) => e.flightId === flight.id);
+check("queue renumbered behind the auto-confirmed member",
+  m1Now?.status === "confirmed" || (m1Now?.status === "waiting" && m1Now?.position === 1),
+  JSON.stringify(m1Now));
+
 // ── 5. Cancel renumbers the queue ────────────────────────────────────────────
-const m1Status = await api("GET", "/queue/status", { token: members[1].token });
-const m1Entry = m1Status.json?.find?.((e) => e.flightId === flight.id && e.status === "waiting");
-const cancel = await api("DELETE", `/queue/${m1Entry.id}`, { token: members[1].token });
-check("cancel succeeds", cancel.status === 200 && cancel.json?.success === true, JSON.stringify(cancel.json));
+if (m1Now?.status === "waiting") {
+  const cancel = await api("DELETE", `/queue/${m1Now.id}`, { token: members[1].token });
+  check("cancel succeeds", cancel.status === 200 && cancel.json?.success === true, JSON.stringify(cancel.json));
+} else {
+  // m1 already auto-confirmed — exercise cancel with a fresh member instead.
+  const canceller = await makeVerifiedUser("canceller");
+  const j = await api("POST", "/queue/join", { token: canceller.token, body: { flightId: flight.id } });
+  if (j.status === 201) {
+    const cancel = await api("DELETE", `/queue/${j.json.id}`, { token: canceller.token });
+    check("cancel succeeds", cancel.status === 200 && cancel.json?.success === true, JSON.stringify(cancel.json));
+  } else {
+    console.log("  (skipped cancel check — flight no longer joinable)");
+  }
+}
 
 // ── 5b. Negative path: a pass is NEVER consumed without a confirmed seat ─────
 // Fill a fresh flight to capacity, then attempt a Skip-the-Line join: it must
@@ -107,13 +145,12 @@ check("cancel succeeds", cancel.status === 200 && cancel.json?.success === true,
   let fullFlight = null;
   for (const candidate of domestic) {
     if (candidate.id === flight.id || candidate.seatsAvailable > 10) continue;
+    // Skip-the-Line join confirms atomically, filling the flight to capacity
+    // without any manual confirm step.
     const probe = await api("POST", "/queue/join", {
-      token: filler.token, body: { flightId: candidate.id, passengers: candidate.seatsAvailable },
+      token: filler.token, body: { flightId: candidate.id, passengers: candidate.seatsAvailable, useLinePass: true },
     });
-    if (probe.status === 201 && probe.json.position === 1) {
-      const conf = await api("POST", `/queue/${probe.json.id}/confirm`, { token: filler.token });
-      if (conf.status === 200) { fullFlight = candidate; break; }
-    }
+    if (probe.status === 201 && probe.json.status === "confirmed") { fullFlight = candidate; break; }
     if (probe.status === 201) await api("DELETE", `/queue/${probe.json.id}`, { token: filler.token });
   }
   if (fullFlight) {

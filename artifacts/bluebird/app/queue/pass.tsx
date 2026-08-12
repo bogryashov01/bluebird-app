@@ -7,11 +7,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { FloatingBackButton } from '@/components/FloatingBackButton';
 import { PrimaryButton } from '@/components/PrimaryButton';
-import { useUseLinePassOnQueueEntry, useConfirmQueueEntry } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPassOverlay';
+import { useUseLinePassOnQueueEntry } from '@workspace/api-client-react';
 
 function shortDate(d?: string) {
   if (!d) return '';
@@ -39,12 +39,11 @@ export default function SkipLinePassScreen() {
   const [overlayPhase, setOverlayPhase] = useState<ApplyingPassPhase | null>(null);
   // Navigation to run once the overlay's resolve animation completes.
   const pendingNavRef = useRef<(() => void) | null>(null);
-  const position = parseInt(params.position ?? '0', 10) || 0;
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const goConfirmed = (viaPass: boolean) => {
+  const goConfirmed = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
     queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
@@ -53,19 +52,9 @@ export default function SkipLinePassScreen() {
     }
     router.replace({
       pathname: '/flight/confirmed',
-      params: viaPass ? { ...params, passUsed: '1' } : params,
+      params: { ...params, passUsed: '1' },
     });
   };
-
-  const confirmMutation = useConfirmQueueEntry({
-    mutation: {
-      onSuccess: () => goConfirmed(false),
-      onError: (err: any) => {
-        setActionError(err?.data?.error || err?.response?.data?.error || err?.message || 'Failed to confirm seat');
-        queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
-      },
-    },
-  });
 
   const usePassMutation = useUseLinePassOnQueueEntry({
     mutation: {
@@ -76,7 +65,7 @@ export default function SkipLinePassScreen() {
         // The server consumes the pass and confirms the seat atomically —
         // the response comes back already confirmed. Let the applying
         // animation resolve before landing on the confirmed screen.
-        pendingNavRef.current = () => goConfirmed(true);
+        pendingNavRef.current = () => goConfirmed();
         setOverlayPhase('success');
       },
       onError: (err: any) => {
@@ -86,18 +75,13 @@ export default function SkipLinePassScreen() {
     },
   });
 
-  const isPending = usePassMutation.isPending || confirmMutation.isPending;
+  const isPending = usePassMutation.isPending;
 
   const handleConfirm = () => {
     if (!params.entryId || isPending) return;
     setActionError(null);
-    if (position === 1) {
-      // Already at the front — no pass needed to shift position; just confirm.
-      confirmMutation.mutate({ id: params.entryId });
-    } else {
-      setOverlayPhase('applying');
-      usePassMutation.mutate({ id: params.entryId });
-    }
+    setOverlayPhase('applying');
+    usePassMutation.mutate({ id: params.entryId });
   };
 
   const handleOverlayDone = () => {
@@ -108,7 +92,7 @@ export default function SkipLinePassScreen() {
   };
 
   const routeLabel = `${params.from ?? '—'} → ${params.to ?? '—'}`;
-  const canConfirm = passCount > 0 || position === 1;
+  const canConfirm = passCount > 0;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad }]}>

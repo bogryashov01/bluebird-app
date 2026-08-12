@@ -375,45 +375,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /queue/{id}/confirm:
-    post:
-      operationId: confirmQueueEntry
-      tags: [queue]
-      summary: Confirm a waiting queue entry, creating an upcoming trip
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Entry confirmed, trip created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Trip"
-        "400":
-          description: Entry not in waiting state
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "403":
-          description: Not eligible to confirm — not at position 1 or insufficient seats
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Queue entry not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /queue/{id}/use-pass:
     post:
       operationId: useLinePassOnQueueEntry
@@ -996,11 +957,6 @@ components:
         status:
           type: string
           enum: [waiting, confirmed, cancelled, expired]
-        canConfirm:
-          type: boolean
-          description: >
-            Present on waiting entries. True when this entry is at position 1
-            and the flight has seats available for the party size.
         createdAt:
           type: string
       required:
@@ -1036,12 +992,6 @@ components:
           type: number
         tripId:
           type: string
-        canConfirm:
-          type: boolean
-          description: >
-            Present and true when status=waiting, position=1, and seats are
-            available for the entry's party size. The client should show the
-            "Confirm your seat" action only when this is true.
       required:
         - status
 

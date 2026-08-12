@@ -242,8 +242,7 @@ export const GetFlightMyStatusResponse = zod.object({
   "queueEntryId": zod.string().optional(),
   "queuePosition": zod.number().optional(),
   "totalInQueue": zod.number().optional(),
-  "tripId": zod.string().optional(),
-  "canConfirm": zod.boolean().optional().describe('Present and true when status=waiting, position=1, and seats are available for the entry\'s party size. The client should show the \"Confirm your seat\" action only when this is true.\n')
+  "tripId": zod.string().optional()
 })
 
 
@@ -293,7 +292,6 @@ export const JoinQueueResponse = zod.object({
   "position": zod.number(),
   "totalInQueue": zod.number(),
   "status": zod.enum(['waiting', 'confirmed', 'cancelled', 'expired']),
-  "canConfirm": zod.boolean().optional().describe('Present on waiting entries. True when this entry is at position 1 and the flight has seats available for the party size.\n'),
   "createdAt": zod.string()
 })
 
@@ -332,7 +330,6 @@ export const GetQueueStatusResponseItem = zod.object({
   "position": zod.number(),
   "totalInQueue": zod.number(),
   "status": zod.enum(['waiting', 'confirmed', 'cancelled', 'expired']),
-  "canConfirm": zod.boolean().optional().describe('Present on waiting entries. True when this entry is at position 1 and the flight has seats available for the party size.\n'),
   "createdAt": zod.string()
 })
 export const GetQueueStatusResponse = zod.array(GetQueueStatusResponseItem)
@@ -347,46 +344,6 @@ export const CancelQueueEntryParams = zod.object({
 
 export const CancelQueueEntryResponse = zod.object({
   "success": zod.boolean()
-})
-
-
-/**
- * @summary Confirm a waiting queue entry, creating an upcoming trip
- */
-export const ConfirmQueueEntryParams = zod.object({
-  "id": zod.coerce.string()
-})
-
-export const ConfirmQueueEntryResponse = zod.object({
-  "id": zod.string(),
-  "flightId": zod.string(),
-  "flight": zod.object({
-  "id": zod.string(),
-  "fromAirport": zod.string(),
-  "fromCity": zod.string(),
-  "toAirport": zod.string(),
-  "toCity": zod.string(),
-  "aircraftType": zod.string(),
-  "aircraftCapacity": zod.number(),
-  "departureDate": zod.string(),
-  "departureTime": zod.string(),
-  "duration": zod.string(),
-  "seatsAvailable": zod.number(),
-  "priceUsd": zod.number().optional(),
-  "discountPct": zod.number().optional(),
-  "featured": zod.boolean().optional(),
-  "international": zod.boolean().optional(),
-  "internationalFeeUsd": zod.number().optional(),
-  "rangeNm": zod.number().nullish(),
-  "cruiseSpeed": zod.string().nullish(),
-  "destWeather": zod.string().nullish(),
-  "departureFbo": zod.string().nullish(),
-  "status": zod.enum(['available', 'boarding', 'departed', 'completed', 'cancelled']),
-  "imageUrl": zod.string().optional(),
-  "createdAt": zod.string()
-}).optional(),
-  "status": zod.enum(['upcoming', 'completed', 'cancelled']),
-  "bookedAt": zod.string()
 })
 
 
@@ -428,7 +385,6 @@ export const UseLinePassOnQueueEntryResponse = zod.object({
   "position": zod.number(),
   "totalInQueue": zod.number(),
   "status": zod.enum(['waiting', 'confirmed', 'cancelled', 'expired']),
-  "canConfirm": zod.boolean().optional().describe('Present on waiting entries. True when this entry is at position 1 and the flight has seats available for the party size.\n'),
   "createdAt": zod.string()
 }).and(zod.object({
   "linePassCount": zod.number().describe('The user\'s remaining Skip the Line pass balance after use')

@@ -13,6 +13,4 @@ export interface FlightUserStatus {
   queuePosition?: number;
   totalInQueue?: number;
   tripId?: string;
-  /** Present and true when status=waiting, position=1, and seats are available for the entry's party size. The client should show the "Confirm your seat" action only when this is true. */
-  canConfirm?: boolean;
 }

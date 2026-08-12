@@ -4,6 +4,7 @@ import {
   flightsTable,
   usersTable,
   notificationsTable,
+  tripsTable,
 } from "@workspace/db/schema";
 import { eq, and, sql, asc } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
@@ -16,20 +17,20 @@ import { logger } from "./logger";
  * Periodically advances every flight queue so the app is genuinely playable:
  *  - Simulated members ahead of real users confirm (taking a seat) or drop out,
  *    so a real user who joins at #3 reaches #1 within a couple of minutes.
- *  - When a real user reaches the front with a seat available, they get a
- *    notification and the 30-minute acceptance window starts.
- *  - Front entries that ignore the window expire and the next person moves up.
+ *  - When a real member reaches the front with a seat available, the system's
+ *    decision moment fires: the seat is confirmed automatically in one
+ *    transaction (status change, renumbering, trip creation, notification).
+ *    There is no manual confirm step and no acceptance window — a member's
+ *    spot never expires.
  *  - Occasionally a "cancellation" frees a seat on a full flight, so browsing
- *    feels alive and canConfirm changes realistically.
+ *    feels alive and queues keep moving.
  *
- * All numbers below are demo pacing knobs, not product policy — except the
- * 30-minute acceptance window, which matches the flight policy copy.
+ * All numbers below are demo pacing knobs, not product policy.
  */
 const TICK_MS = 20_000; // how often the simulation advances
 const SIM_ACT_PROBABILITY = 0.6; // chance the front sim member acts each tick
 const SIM_CONFIRM_PROBABILITY = 0.75; // when acting w/ seats left: confirm vs leave
 const FREE_SEAT_PROBABILITY = 0.2; // chance per tick a full flight frees a seat
-const CONFIRM_WINDOW_MS = 30 * 60 * 1000; // policy: 30 minutes to accept
 
 export const SIM_USER_PREFIX = "sim-user-";
 
@@ -196,48 +197,46 @@ async function advanceFlightQueue(
       return;
     }
 
-    // ── Real user at the front ──
-    if (!front.frontNotifiedAt) {
-      // Start the acceptance window once a seat is actually available.
-      if (seatsRemaining >= front.passengers) {
-        await txDb
-          .update(queueEntriesTable)
-          .set({ frontNotifiedAt: new Date() })
-          .where(eq(queueEntriesTable.id, front.id));
-        await txDb.insert(notificationsTable).values({
-          id: makeId(),
-          userId: front.userId,
-          title: "Your seat is ready! ✈️",
-          body: `You're first in line for ${flight.fromCity} → ${flight.toCity}. Confirm your seat within 30 minutes to lock it in.`,
-          type: "queue_update",
-        });
-        await client.query("COMMIT");
+    // ── Real member at the front: the decision moment ──
+    // With a seat available, the system confirms automatically in this same
+    // transaction — status change, renumbering, trip creation, and the
+    // flight_confirmed notification commit together. No manual confirm step,
+    // no acceptance window, no expiry: a member's spot never lapses.
+    if (seatsRemaining >= front.passengers) {
+      const [confirmed] = await txDb
+        .update(queueEntriesTable)
+        .set({ status: "confirmed" })
+        .where(
+          and(
+            eq(queueEntriesTable.id, front.id),
+            eq(queueEntriesTable.status, "waiting"),
+          ),
+        )
+        .returning();
+      if (!confirmed) {
+        await client.query("ROLLBACK");
         return;
       }
-      await client.query("ROLLBACK");
-      return;
-    }
-
-    // Window already started — expire the entry if it ran out.
-    const elapsed = Date.now() - new Date(front.frontNotifiedAt).getTime();
-    if (elapsed > CONFIRM_WINDOW_MS) {
-      await txDb
-        .update(queueEntriesTable)
-        .set({ status: "expired" })
-        .where(eq(queueEntriesTable.id, front.id));
       await closeGap(txDb, flightId, front.position);
+      await txDb.insert(tripsTable).values({
+        id: makeId(),
+        userId: front.userId,
+        flightId,
+        status: "upcoming",
+      });
       await txDb.insert(notificationsTable).values({
         id: makeId(),
         userId: front.userId,
-        title: "Acceptance window expired",
-        body: `Your 30-minute window for ${flight.fromCity} → ${flight.toCity} passed, so your spot went to the next member in line.`,
-        type: "queue_update",
+        title: "Flight confirmed! ✈️",
+        body: `Your seat on ${flight.fromCity} → ${flight.toCity} is confirmed — no action needed. See you on board.`,
+        type: "flight_confirmed",
       });
       await notifyNewFront(txDb, flightId, flight);
       await client.query("COMMIT");
       return;
     }
 
+    // No seat available yet — hold position and re-check next tick.
     await client.query("ROLLBACK");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
@@ -266,7 +265,8 @@ async function closeGap(txDb: TxDb, flightId: string, removedPosition: number) {
 /**
  * After the queue advances, tell the new front-of-line member (if real) their
  * position improved. The acceptance-window notification itself fires on the
- * next tick via frontNotifiedAt, so this is a lightweight "you moved up" ping.
+ * auto-confirmation itself happens on the next tick, so this is a lightweight
+ * "you moved up" ping.
  */
 async function notifyNewFront(
   txDb: TxDb,
@@ -283,12 +283,12 @@ async function notifyNewFront(
         eq(queueEntriesTable.position, 1),
       ),
     );
-  if (newFront && !isSimUserId(newFront.userId) && !newFront.frontNotifiedAt) {
+  if (newFront && !isSimUserId(newFront.userId)) {
     await txDb.insert(notificationsTable).values({
       id: makeId(),
       userId: newFront.userId,
       title: "You're next in line",
-      body: `The queue moved — you're now #1 for ${flight.fromCity} → ${flight.toCity}.`,
+      body: `The queue moved — you're now #1 for ${flight.fromCity} → ${flight.toCity}. Your seat will be confirmed automatically at the decision moment.`,
       type: "queue_update",
     });
   }
@@ -354,7 +354,7 @@ async function maybeFreeSeatOnFullFlight(): Promise<void> {
       id: makeId(),
       userId: front.userId,
       title: "A seat just opened up",
-      body: `A member cancelled on ${flight.fromCity} → ${flight.toCity} — a seat is now available.`,
+      body: `A member cancelled on ${flight.fromCity} → ${flight.toCity} — a seat is now available and yours will be confirmed automatically.`,
       type: "queue_update",
     });
   }

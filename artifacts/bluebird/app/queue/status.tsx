@@ -12,7 +12,7 @@ import { useColors } from '@/hooks/useColors';
 import { FloatingBackButton } from '@/components/FloatingBackButton';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import { confirmDialog } from '@/lib/confirmDialog';
-import { useGetQueueStatus, useCancelQueueEntry, useConfirmQueueEntry } from '@workspace/api-client-react';
+import { useGetQueueStatus, useCancelQueueEntry } from '@workspace/api-client-react';
 
 import { useAuth } from '@/context/AuthContext';
 
@@ -90,16 +90,12 @@ const ring = StyleSheet.create({
 function QueueCard({
   entry,
   onCancel,
-  onConfirm,
-  isConfirming,
   onUsePass,
   isUsingPass,
   passCount,
 }: {
   entry: QueueEntry;
   onCancel: () => void;
-  onConfirm?: () => void;
-  isConfirming?: boolean;
   onUsePass?: () => void;
   isUsingPass?: boolean;
   passCount?: number;
@@ -109,7 +105,6 @@ function QueueCard({
   const countdown = useCountdown(flight?.departureDate, flight?.departureTime);
   const joinedAgo = formatAgo(entry.createdAt);
   const flightLabel = flight ? `${flight.fromAirport} → ${flight.toAirport}` : '— → —';
-  const canConfirm = (entry as any).canConfirm === true;
 
   return (
     <View style={[card.wrap, { backgroundColor: colors.surface }]}>
@@ -144,29 +139,17 @@ function QueueCard({
 
       <View style={[card.disclaimer, { backgroundColor: colors.primary + '0D' }]}>
         <Text style={[card.disclaimerText, { color: colors.textOnSurface }]}>
-          {canConfirm
-            ? "You're first in line — confirm now to secure your seat before someone else takes your spot."
+          {entry.position === 1
+            ? "You're first in line — your seat will be confirmed automatically at the decision moment. No action needed."
             : 'Flights may be modified or cancelled due to operational requirements.'}
         </Text>
       </View>
 
-      {/* Primary action: confirm if eligible, otherwise link to the flight */}
-      {canConfirm && onConfirm ? (
-        <PrimaryButton
-          label="✓  Confirm your seat"
-          onPress={onConfirm}
-          loading={isConfirming}
-          backgroundColor={colors.success}
-          textColor={colors.successForeground}
-          style={card.fullWidth}
-        />
-      ) : (
-        <PrimaryButton
-          label="View Flight Details"
-          onPress={() => router.push(`/flight/${entry.flightId}`)}
-          style={card.fullWidth}
-        />
-      )}
+      <PrimaryButton
+        label="View Flight Details"
+        onPress={() => router.push(`/flight/${entry.flightId}`)}
+        style={card.fullWidth}
+      />
 
       {/* Skip the Line pass — offered when the member holds passes and is not already #1 */}
       {onUsePass && (
@@ -346,9 +329,11 @@ export default function QueueStatusScreen() {
   const { user } = useAuth();
   const { entryId, flightId } = useLocalSearchParams<{ entryId?: string; flightId?: string }>();
 
-  // API returns waiting + confirmed entries for the member.
+  // API returns waiting + confirmed entries for the member. Poll so the
+  // screen flips to the confirmed state on its own when the queue engine
+  // auto-confirms the seat — no tap required.
   const { data: queueEntries, isLoading } = useGetQueueStatus({
-    query: { enabled: !!user },
+    query: { enabled: !!user, refetchInterval: 10_000 },
   });
   const allEntries = (queueEntries as QueueEntry[]) ?? [];
 
@@ -372,14 +357,6 @@ export default function QueueStatusScreen() {
       onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] }),
       onError: (err: any) => {
         Alert.alert('Error', err?.data?.error || err?.message || 'Failed to leave queue');
-      },
-    },
-  });
-
-  const confirmMutation = useConfirmQueueEntry({
-    mutation: {
-      onError: (err: any) => {
-        Alert.alert('Could not confirm', err?.data?.error || err?.message || 'Failed to confirm seat');
       },
     },
   });
@@ -408,31 +385,6 @@ export default function QueueStatusScreen() {
   const handleCancel = async (entryId: string) => {
     const ok = await confirmDialog('Leave Queue?', 'You will lose your position in the queue.', 'Leave Queue', true);
     if (ok) cancelMutation.mutate({ id: entryId });
-  };
-
-  const handleConfirm = async (entry: QueueEntry) => {
-    const flight = entry.flight;
-    const ok = await confirmDialog('Confirm your seat?', 'This will reserve your spot on this flight.');
-    if (!ok) return;
-    confirmMutation.mutate(
-      { id: entry.id },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
-          queryClient.invalidateQueries({ queryKey: [`/api/flights/${entry.flightId}/my-status`] });
-          router.push({
-            pathname: '/flight/confirmed',
-            params: {
-              from: flight?.fromAirport ?? '', to: flight?.toAirport ?? '',
-              fromCity: flight?.fromCity ?? '', toCity: flight?.toCity ?? '',
-              departureDate: flight?.departureDate ?? '', departureTime: flight?.departureTime ?? '',
-              duration: flight?.duration ?? '', aircraftType: flight?.aircraftType ?? '',
-            },
-          });
-        },
-      },
-    );
   };
 
   return (
@@ -507,8 +459,6 @@ export default function QueueStatusScreen() {
               key={entry.id}
               entry={entry}
               onCancel={() => handleCancel(entry.id)}
-              onConfirm={() => handleConfirm(entry)}
-              isConfirming={confirmMutation.isPending}
               onUsePass={
                 user && user.linePassCount > 0 && entry.position !== 1
                   ? () => handleUsePass(entry)

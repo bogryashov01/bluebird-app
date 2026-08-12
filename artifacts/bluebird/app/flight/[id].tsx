@@ -6,7 +6,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useGetFlight, useGetFlightMyStatus, useCancelQueueEntry, useConfirmQueueEntry } from '@workspace/api-client-react';
+import { useGetFlight, useGetFlightMyStatus, useCancelQueueEntry } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
@@ -113,40 +113,10 @@ export default function FlightDetailScreen() {
     },
   });
 
-  const confirmMutation = useConfirmQueueEntry({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
-        queryClient.invalidateQueries({ queryKey: [`/api/flights/${id}/my-status`] });
-        const fl = flight as any;
-        router.push({
-          pathname: '/flight/confirmed',
-          params: fl ? {
-            from: fl.fromAirport, to: fl.toAirport,
-            fromCity: fl.fromCity, toCity: fl.toCity,
-            departureDate: fl.departureDate, departureTime: fl.departureTime,
-            duration: fl.duration, aircraftType: fl.aircraftType,
-          } : {},
-        });
-      },
-      onError: (err: any) => {
-        const msg = err?.data?.error || err?.message || 'Failed to confirm seat';
-        Alert.alert('Could not confirm', msg);
-      },
-    },
-  });
-
   const handleLeaveQueue = async () => {
     if (!myStatus?.queueEntryId) return;
     const ok = await confirmDialog('Leave Queue?', 'You will lose your position in the queue.', 'Leave Queue', true);
     if (ok) cancelMutation.mutate({ id: myStatus.queueEntryId! });
-  };
-
-  const handleConfirmSeat = async () => {
-    if (!myStatus?.queueEntryId) return;
-    const ok = await confirmDialog('Confirm your seat?', 'This will reserve your spot on this flight.');
-    if (ok) confirmMutation.mutate({ id: myStatus.queueEntryId! });
   };
 
   // ── Loading / Error — guards before any flight-property access ──
@@ -268,8 +238,7 @@ export default function FlightDetailScreen() {
     }
 
     if (status === 'waiting') {
-      const canConfirm = myStatus?.canConfirm === true;
-      const anyPending = cancelMutation.isPending || confirmMutation.isPending;
+      const anyPending = cancelMutation.isPending;
       return (
         <>
           <View style={[styles.queuePositionCard, { backgroundColor: colors.primary + '12' }]}>
@@ -278,23 +247,10 @@ export default function FlightDetailScreen() {
               #{myStatus?.queuePosition}
               <Text style={[styles.queuePositionTotal, { color: colors.mutedForegroundLight }]}> of {myStatus?.totalInQueue}</Text>
             </Text>
-            {canConfirm && (
-              <Text style={[styles.queuePositionEligible, { color: colors.success }]}>Your seat is ready — confirm now</Text>
+            {myStatus?.queuePosition === 1 && (
+              <Text style={[styles.queuePositionEligible, { color: colors.success }]}>You're next — your seat will be confirmed automatically</Text>
             )}
           </View>
-          {canConfirm && (
-            <TouchableOpacity
-              style={[styles.confirmSeatBtn, { backgroundColor: colors.success, shadowColor: colors.success }, anyPending && { opacity: 0.6 }]}
-              onPress={handleConfirmSeat}
-              disabled={anyPending}
-              activeOpacity={0.8}
-            >
-              {confirmMutation.isPending
-                ? <ActivityIndicator color={colors.successForeground} size="small" />
-                : <Text style={[styles.confirmSeatBtnText, { color: colors.successForeground }]}>✓  Confirm your seat</Text>
-              }
-            </TouchableOpacity>
-          )}
           <TouchableOpacity
             style={[styles.leaveQueueBtn, { borderColor: colors.border }, anyPending && { opacity: 0.6 }]}
             onPress={handleLeaveQueue}
@@ -646,11 +602,6 @@ const styles = StyleSheet.create({
   queuePositionNumber: { fontFamily: 'Inter_700Bold', fontSize: 24 },
   queuePositionTotal: { fontFamily: 'Inter_400Regular', fontSize: 16 },
   queuePositionEligible: { fontFamily: 'Inter_600SemiBold', fontSize: 12, marginTop: 4 },
-  confirmSeatBtn: {
-    borderRadius: 14, paddingVertical: 15, alignItems: 'center',
-    shadowOffset: { width: 0, height: 6 }, shadowRadius: 16, shadowOpacity: 0.28, elevation: 4,
-  },
-  confirmSeatBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   leaveQueueBtn: {
     borderWidth: 1, borderRadius: 14,
     paddingVertical: 13, alignItems: 'center',

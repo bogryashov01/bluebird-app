@@ -206,8 +206,6 @@ export interface QueueEntry {
   position: number;
   totalInQueue: number;
   status: QueueEntryStatus;
-  /** Present on waiting entries. True when this entry is at position 1 and the flight has seats available for the party size. */
-  canConfirm?: boolean;
   createdAt: string;
 }
 
@@ -231,8 +229,6 @@ export interface FlightUserStatus {
   queuePosition?: number;
   totalInQueue?: number;
   tripId?: string;
-  /** Present and true when status=waiting, position=1, and seats are available for the entry's party size. The client should show the "Confirm your seat" action only when this is true. */
-  canConfirm?: boolean;
 }
 
 export type TripStatus = typeof TripStatus[keyof typeof TripStatus];
