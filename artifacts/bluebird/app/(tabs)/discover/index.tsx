@@ -291,7 +291,12 @@ export default function DiscoverScreen() {
 
   const topPad = Platform.OS === 'web' ? 40 : insets.top;
 
-  const all: FlightData[] = flights ?? [];
+  // Only joinable flights are offered — completed/departed/cancelled flights
+  // are excluded so members are never led into a join flow that can't succeed.
+  const all: FlightData[] = React.useMemo(
+    () => (flights ?? []).filter((f) => f.status === 'available'),
+    [flights],
+  );
   const featured = all.find((f) => f.featured);
   const q = search.trim().toLowerCase();
 

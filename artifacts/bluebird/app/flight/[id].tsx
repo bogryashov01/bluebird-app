@@ -180,8 +180,35 @@ export default function FlightDetailScreen() {
     router.push({ pathname: '/queue/join', params: joinFlowParams() });
   };
 
+  const flightAvailable = f.status === 'available';
+  const STATUS_LABELS: Record<string, string> = {
+    boarding: 'Boarding',
+    departed: 'Departed',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
+  };
+  const statusLabel = STATUS_LABELS[f.status as string] ?? 'Unavailable';
+
   // ── CTA footer rendering — branched on my-status ─────────────────────────
   function renderCTA() {
+    // Non-available flight: joining is impossible, so show the flight's
+    // status instead of any join action. Confirmed/waiting members still see
+    // their own state below (e.g. a confirmed trip on a departed flight).
+    if (!flightAvailable && (!user || !myStatus || myStatus.status === 'none')) {
+      return (
+        <>
+          <View style={[styles.unavailableBadge, { backgroundColor: colors.muted }]}>
+            <Text style={[styles.unavailableBadgeText, { color: colors.mutedForegroundLight }]}>
+              {f.status === 'cancelled' ? '✕' : '—'}  {statusLabel}
+            </Text>
+          </View>
+          <Text style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}>
+            This flight is no longer accepting join requests.
+          </Text>
+        </>
+      );
+    }
+
     if (!user) {
       // Unauthenticated: show join CTA
       return (
@@ -380,7 +407,7 @@ export default function FlightDetailScreen() {
         {/* ── Passenger stepper — only shown when user can still join.
              For signed-in users, wait until status is known so the stepper
              never flashes for someone already queued or confirmed. ── */}
-        {(!user || (!!myStatus && status === 'none')) && (
+        {flightAvailable && (!user || (!!myStatus && status === 'none')) && (
           <View style={[styles.stepperCard, { backgroundColor: colors.surface }]}>
             <View style={styles.stepperLeft}>
               <Text style={[styles.stepperTitle, { color: colors.textOnSurface }]}>Passengers</Text>
@@ -565,6 +592,13 @@ const styles = StyleSheet.create({
     borderRadius: 14, paddingVertical: 15, alignItems: 'center',
   },
   viewTripBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
+
+  // unavailable state
+  unavailableBadge: {
+    borderRadius: 14, paddingVertical: 15, alignItems: 'center',
+  },
+  unavailableBadgeText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
+  unavailableHint: { fontFamily: 'Inter_400Regular', fontSize: 13, textAlign: 'center', paddingBottom: 4 },
 
   conciergeLink: { alignItems: 'center', paddingBottom: 4 },
   conciergeLinkText: { fontFamily: 'Inter_500Medium', fontSize: 13 },

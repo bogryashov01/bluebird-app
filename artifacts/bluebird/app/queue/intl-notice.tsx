@@ -8,7 +8,8 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { FloatingBackButton } from '@/components/FloatingBackButton';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
-import { useJoinQueue } from '@workspace/api-client-react';
+import { useJoinQueue, useGetFlight } from '@workspace/api-client-react';
+import { FlightUnavailableState } from '@/components/FlightUnavailableState';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
@@ -30,6 +31,17 @@ export default function InternationalNoticeScreen() {
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
   const [joinError, setJoinError] = useState<string | null>(null);
+  // Set when the server rejects the join because the flight is gone — drives
+  // the full-screen "no longer available" state instead of an inline error.
+  const [rejectedUnavailable, setRejectedUnavailable] = useState(false);
+
+  // Re-check the flight's current status when the screen loads so members
+  // aren't offered fee/upgrade choices for a flight they can no longer join.
+  const { data: liveFlight } = useGetFlight(flightId!, {
+    query: { enabled: !!flightId },
+  });
+  const flightUnavailable =
+    rejectedUnavailable || (!!liveFlight && (liveFlight as any).status !== 'available');
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -69,7 +81,11 @@ export default function InternationalNoticeScreen() {
       },
       onError: (err: any) => {
         const msg = err?.response?.data?.error || err?.data?.error || err?.message || 'Failed to join queue';
-        setJoinError(msg);
+        if (/no longer available/i.test(msg)) {
+          setRejectedUnavailable(true);
+        } else {
+          setJoinError(msg);
+        }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       },
     },
@@ -80,6 +96,11 @@ export default function InternationalNoticeScreen() {
     setJoinError(null);
     joinMutation.mutate({ data: { flightId, useLinePass, passengers, acceptIntlFee: true } });
   };
+
+  // ── Flight no longer available: friendly full-screen state ──
+  if (flightUnavailable) {
+    return <FlightUnavailableState status={(liveFlight as any)?.status} bottomPad={bottomPad} />;
+  }
 
   // Brand-navy surface in both modes — textOnBrand/mutedOnBrand tokens apply.
   return (

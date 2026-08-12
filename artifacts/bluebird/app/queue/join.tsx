@@ -8,8 +8,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { FloatingBackButton } from '@/components/FloatingBackButton';
+import { FlightUnavailableState } from '@/components/FlightUnavailableState';
 import { PrimaryButton } from '@/components/PrimaryButton';
-import { useJoinQueue, useGetFlightMyStatus } from '@workspace/api-client-react';
+import { useJoinQueue, useGetFlightMyStatus, useGetFlight } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
@@ -40,6 +41,9 @@ export default function JoinQueueAcknowledgeScreen() {
   const [checked, setChecked] = useState([false, false, false]);
   const [punctualityChecked, setPunctualityChecked] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  // Set when the server rejects the join because the flight is gone — drives
+  // the full-screen "no longer available" state instead of an inline error.
+  const [rejectedUnavailable, setRejectedUnavailable] = useState(false);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -51,6 +55,15 @@ export default function JoinQueueAcknowledgeScreen() {
     query: { enabled: !!user && !!flightId },
   });
   const isConfirmed = myStatus?.status === 'confirmed';
+
+  // Re-check the flight's current status when the screen loads — if it became
+  // unavailable (departed, cancelled, …) we show a friendly full-screen state
+  // instead of letting the member fill out acknowledgments for nothing.
+  const { data: liveFlight } = useGetFlight(flightId!, {
+    query: { enabled: !!flightId },
+  });
+  const flightUnavailable =
+    rejectedUnavailable || (!!liveFlight && (liveFlight as any).status !== 'available');
   useEffect(() => {
     if (isConfirmed && flightId) router.replace(`/flight/${flightId}`);
   }, [isConfirmed, flightId]);
@@ -89,7 +102,11 @@ export default function JoinQueueAcknowledgeScreen() {
       },
       onError: (err: any) => {
         const msg = err?.response?.data?.error || err?.data?.error || err?.message || 'Failed to join queue';
-        setJoinError(msg);
+        if (/no longer available/i.test(msg)) {
+          setRejectedUnavailable(true);
+        } else {
+          setJoinError(msg);
+        }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       },
     },
@@ -111,6 +128,11 @@ export default function JoinQueueAcknowledgeScreen() {
   // Note: a failed status lookup (statusError) does NOT disable the CTA — the
   // server re-checks eligibility on join, so the member is never locked out.
   const ctaDisabled = !allChecked || joinMutation.isPending || (statusLoading && !statusError) || isConfirmed;
+
+  // ── Flight no longer available: friendly full-screen state ──
+  if (flightUnavailable) {
+    return <FlightUnavailableState status={(liveFlight as any)?.status} bottomPad={bottomPad} />;
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
