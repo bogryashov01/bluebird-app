@@ -12,7 +12,7 @@ export interface AuthUser {
   name: string;
   phone: string;
   email?: string | null;
-  membershipTier: 'base' | 'plus' | 'concierge';
+  membershipTier: 'none' | 'base' | 'plus' | 'concierge';
   linePassCount: number;
   referralCode: string;
   homeAirport?: string | null;

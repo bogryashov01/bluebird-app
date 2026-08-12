@@ -49,6 +49,54 @@ export default function MembershipScreen() {
     );
   }
 
+  // ── Non-member: "join Bluebird" state instead of member stats ──
+  if (currentTier === 'none') {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.offWhite }]}>
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingTop: topPad + 16, paddingBottom: botPad + 80 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={[styles.headerName, { color: colors.textOnSurface }]} numberOfLines={1}>
+            {user?.name ?? 'Welcome'}
+          </Text>
+          <View style={[styles.tierPill, { backgroundColor: colors.muted }]}>
+            <Text style={[styles.tierPillText, { color: colors.textOnSurface }]} numberOfLines={1}>
+              Not a member yet
+            </Text>
+          </View>
+
+          <TouchableOpacity activeOpacity={0.85} onPress={() => router.push('/membership/join' as any)}>
+            <LinearGradient
+              colors={['#0A1128', '#1259F2']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1.2 }}
+              style={styles.upgradeCard}
+            >
+              <Text style={styles.upgradeEyebrow}>JOIN BLUEBIRD</Text>
+              <Text style={styles.upgradeTitle}>Become a member</Text>
+              <Text style={styles.upgradeBody}>
+                You can browse every empty-leg flight for free. Join Bluebird to
+                queue for seats, use Skip the Line passes, and fly.
+              </Text>
+              <View style={[styles.upgradeBtn, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.upgradeBtnText, { color: '#0A1128' }]}>See plans</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push('/membership/plans' as any)}
+            style={styles.plansLink}
+          >
+            <Text style={[styles.plansLinkText, { color: colors.mutedForegroundLight }]}>Compare all plans</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  }
+
   const totalSaved: number = mem.totalSavedUsd ?? 0;
   const referralBalance: number = mem.referralBalanceUsd ?? 0;
   const linePasses: number = mem.linePassCount ?? user?.linePassCount ?? 0;

@@ -8,5 +8,6 @@
 import type { UpgradeMembershipRequestTier } from './upgradeMembershipRequestTier';
 
 export interface UpgradeMembershipRequest {
+  /** Non-members may purchase any tier, including Base. */
   tier: UpgradeMembershipRequestTier;
 }

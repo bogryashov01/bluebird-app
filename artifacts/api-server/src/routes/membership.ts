@@ -34,7 +34,15 @@ function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 }
 
-const TIER_ORDER: Record<string, number> = { base: 0, plus: 1, concierge: 2 };
+const TIER_ORDER: Record<string, number> = { none: -1, base: 0, plus: 1, concierge: 2 };
+
+// Purchasable plan catalog surfaced to clients (e.g. the non-member
+// membership-required screen). Pricing mirrors the app's plan screens.
+const PLAN_CATALOG = [
+  { id: "base" as const, label: "Base", priceMonthlyUsd: 99, features: MEMBERSHIP_FEATURES.base },
+  { id: "plus" as const, label: "Plus", priceMonthlyUsd: 995, features: MEMBERSHIP_FEATURES.plus },
+  { id: "concierge" as const, label: "Concierge", priceMonthlyUsd: 799, features: MEMBERSHIP_FEATURES.concierge },
+];
 
 function renewalDate(): string {
   return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -75,14 +83,15 @@ async function membershipPayload(user: {
   pendingTier: string | null;
   referralCode: string;
 }) {
-  const tier = user.membershipTier as "base" | "plus" | "concierge";
+  const tier = user.membershipTier as "none" | "base" | "plus" | "concierge";
   const stats = await membershipStats(user);
   return {
     tier,
     linePassCount: user.linePassCount,
-    features: MEMBERSHIP_FEATURES[tier] ?? MEMBERSHIP_FEATURES.base,
+    features: MEMBERSHIP_FEATURES[tier] ?? [],
     renewalDate: renewalDate(),
-    annualFlightAllowance: ANNUAL_FLIGHT_ALLOWANCE[tier] ?? ANNUAL_FLIGHT_ALLOWANCE.base,
+    annualFlightAllowance: ANNUAL_FLIGHT_ALLOWANCE[tier] ?? 0,
+    plans: PLAN_CATALOG,
     ...stats,
     ...(user.pendingTier ? { pendingTier: user.pendingTier } : {}),
   };
@@ -113,19 +122,21 @@ router.post("/upgrade", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
   const { tier } = req.body;
 
-  if (!tier || !["plus", "concierge"].includes(tier)) {
-    return res.status(400).json({ error: "Invalid tier. Choose 'plus' or 'concierge'" });
+  // "base" is purchasable too — that's how a non-member joins Bluebird.
+  if (!tier || !["base", "plus", "concierge"].includes(tier)) {
+    return res.status(400).json({ error: "Invalid tier. Choose 'base', 'plus' or 'concierge'" });
   }
 
   try {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    if (TIER_ORDER[tier] <= TIER_ORDER[user.membershipTier]) {
+    if (TIER_ORDER[tier] <= (TIER_ORDER[user.membershipTier] ?? -1)) {
       return res.status(400).json({ error: "You can only upgrade to a higher tier than your current plan" });
     }
 
-    const bonusPasses = tier === "plus" ? 5 : 10;
+    const wasNonMember = user.membershipTier === "none";
+    const bonusPasses = tier === "base" ? 0 : tier === "plus" ? 5 : 10;
     const [updated] = await db
       .update(usersTable)
       .set({
@@ -142,7 +153,9 @@ router.post("/upgrade", authMiddleware, async (req, res) => {
       id: makeId(),
       userId,
       title: `Welcome to ${label}! ✨`,
-      body: `Your membership has been upgraded to ${label}. ${bonusPasses} Skip the Line passes added.`,
+      body: wasNonMember
+        ? `Your Bluebird ${label} membership is active. You can now join flight queues${bonusPasses > 0 ? ` — ${bonusPasses} Skip the Line passes added` : ""}.`
+        : `Your membership has been upgraded to ${label}. ${bonusPasses} Skip the Line passes added.`,
       type: "membership",
     });
 
@@ -163,6 +176,19 @@ router.post("/buy-pass", authMiddleware, async (req, res) => {
   }
   const userId = (req as any).userId;
   try {
+    // Pass purchases are a member feature — non-members must join first.
+    const [buyer] = await db
+      .select({ membershipTier: usersTable.membershipTier })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId));
+    if (!buyer) return res.status(404).json({ error: "User not found" });
+    if (buyer.membershipTier === "none") {
+      return res.status(403).json({
+        error: "A Bluebird membership is required to buy Skip the Line passes. Choose a plan to join.",
+        code: "MEMBERSHIP_REQUIRED",
+      });
+    }
+
     const [updated] = await db
       .update(usersTable)
       .set({ linePassCount: sql`${usersTable.linePassCount} + 1` })

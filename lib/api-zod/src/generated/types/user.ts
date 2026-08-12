@@ -12,6 +12,7 @@ export interface User {
   name: string;
   phone: string;
   email?: string | null;
+  /** "none" marks a registered non-member who has not purchased a plan yet. */
   membershipTier: UserMembershipTier;
   linePassCount: number;
   referralCode: string;

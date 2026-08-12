@@ -193,6 +193,11 @@ export default function FlightDetailScreen() {
       router.push('/(auth)/welcome');
       return;
     }
+    if (user.membershipTier === 'none') {
+      // Non-member: joining a queue requires a membership purchase first.
+      router.push({ pathname: '/membership/join' as any, params: { flightId: f.id } });
+      return;
+    }
     router.push({ pathname: '/queue/join', params: joinFlowParams() });
   };
 

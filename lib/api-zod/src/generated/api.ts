@@ -48,7 +48,7 @@ export const VerifyLoginCodeResponse = zod.object({
   "name": zod.string(),
   "phone": zod.string(),
   "email": zod.string().nullish(),
-  "membershipTier": zod.enum(['base', 'plus', 'concierge']),
+  "membershipTier": zod.enum(['none', 'base', 'plus', 'concierge']).describe('\"none\" marks a registered non-member who has not purchased a plan yet.'),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
   "homeAirport": zod.string().nullish(),
@@ -74,7 +74,7 @@ export const GetMeResponse = zod.object({
   "name": zod.string(),
   "phone": zod.string(),
   "email": zod.string().nullish(),
-  "membershipTier": zod.enum(['base', 'plus', 'concierge']),
+  "membershipTier": zod.enum(['none', 'base', 'plus', 'concierge']).describe('\"none\" marks a registered non-member who has not purchased a plan yet.'),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
   "homeAirport": zod.string().nullish(),
@@ -96,7 +96,7 @@ export const UpdateMeResponse = zod.object({
   "name": zod.string(),
   "phone": zod.string(),
   "email": zod.string().nullish(),
-  "membershipTier": zod.enum(['base', 'plus', 'concierge']),
+  "membershipTier": zod.enum(['none', 'base', 'plus', 'concierge']).describe('\"none\" marks a registered non-member who has not purchased a plan yet.'),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
   "homeAirport": zod.string().nullish(),
@@ -503,7 +503,13 @@ export const ListTripsResponse = zod.array(ListTripsResponseItem)
  * @summary Get user membership
  */
 export const GetMembershipResponse = zod.object({
-  "tier": zod.enum(['base', 'plus', 'concierge']),
+  "tier": zod.enum(['none', 'base', 'plus', 'concierge']),
+  "plans": zod.array(zod.object({
+  "id": zod.enum(['base', 'plus', 'concierge']),
+  "label": zod.string(),
+  "priceMonthlyUsd": zod.number(),
+  "features": zod.array(zod.string())
+})).optional().describe('Purchasable plan catalog (always present; drives the non-member join screen).'),
   "linePassCount": zod.number(),
   "renewalDate": zod.string().optional(),
   "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),
@@ -519,11 +525,17 @@ export const GetMembershipResponse = zod.object({
  * @summary Upgrade membership tier
  */
 export const UpgradeMembershipBody = zod.object({
-  "tier": zod.enum(['plus', 'concierge'])
+  "tier": zod.enum(['base', 'plus', 'concierge']).describe('Non-members may purchase any tier, including Base.')
 })
 
 export const UpgradeMembershipResponse = zod.object({
-  "tier": zod.enum(['base', 'plus', 'concierge']),
+  "tier": zod.enum(['none', 'base', 'plus', 'concierge']),
+  "plans": zod.array(zod.object({
+  "id": zod.enum(['base', 'plus', 'concierge']),
+  "label": zod.string(),
+  "priceMonthlyUsd": zod.number(),
+  "features": zod.array(zod.string())
+})).optional().describe('Purchasable plan catalog (always present; drives the non-member join screen).'),
   "linePassCount": zod.number(),
   "renewalDate": zod.string().optional(),
   "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),
@@ -552,7 +564,13 @@ export const ChangeMembershipBody = zod.object({
 })
 
 export const ChangeMembershipResponse = zod.object({
-  "tier": zod.enum(['base', 'plus', 'concierge']),
+  "tier": zod.enum(['none', 'base', 'plus', 'concierge']),
+  "plans": zod.array(zod.object({
+  "id": zod.enum(['base', 'plus', 'concierge']),
+  "label": zod.string(),
+  "priceMonthlyUsd": zod.number(),
+  "features": zod.array(zod.string())
+})).optional().describe('Purchasable plan catalog (always present; drives the non-member join screen).'),
   "linePassCount": zod.number(),
   "renewalDate": zod.string().optional(),
   "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),

@@ -6,11 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type MembershipTier = typeof MembershipTier[keyof typeof MembershipTier];
+export type MembershipPlanId = typeof MembershipPlanId[keyof typeof MembershipPlanId];
 
 
-export const MembershipTier = {
-  none: 'none',
+export const MembershipPlanId = {
   base: 'base',
   plus: 'plus',
   concierge: 'concierge',

@@ -54,12 +54,23 @@ router.post("/join", authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "Flight is no longer available" });
     }
 
-    // 1a. International-fee enforcement — Base members must explicitly accept
-    //     the fee to join an international flight (Plus/Concierge waive it).
+    // 1a. Membership gate — joining a queue is a member feature. Non-members
+    //     (tier "none") get a distinct error the client routes to the
+    //     membership-required screen.
     const [member] = await txDb
       .select({ membershipTier: usersTable.membershipTier })
       .from(usersTable)
       .where(eq(usersTable.id, userId));
+    if (member?.membershipTier === "none") {
+      await client.query("ROLLBACK");
+      return res.status(403).json({
+        error: "A Bluebird membership is required to join the queue. Choose a plan to join.",
+        code: "MEMBERSHIP_REQUIRED",
+      });
+    }
+
+    // 1b. International-fee enforcement — Base members must explicitly accept
+    //     the fee to join an international flight (Plus/Concierge waive it).
     const feeApplies =
       flight.international && flight.internationalFeeUsd > 0 && member?.membershipTier === "base";
     if (feeApplies && !acceptIntlFee) {
@@ -363,6 +374,19 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
   try {
     await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
     const txDb = drizzle(client, { schema });
+
+    // 0. Membership gate — using a pass is a member feature.
+    const [passUser] = await txDb
+      .select({ membershipTier: usersTable.membershipTier })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId));
+    if (passUser?.membershipTier === "none") {
+      await client.query("ROLLBACK");
+      return res.status(403).json({
+        error: "A Bluebird membership is required to use Skip the Line passes. Choose a plan to join.",
+        code: "MEMBERSHIP_REQUIRED",
+      });
+    }
 
     // 1. Verify ownership and state
     const [entry] = await txDb

@@ -6,10 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * Non-members may purchase any tier, including Base.
+ */
 export type UpgradeMembershipRequestTier = typeof UpgradeMembershipRequestTier[keyof typeof UpgradeMembershipRequestTier];
 
 
 export const UpgradeMembershipRequestTier = {
+  base: 'base',
   plus: 'plus',
   concierge: 'concierge',
 } as const;

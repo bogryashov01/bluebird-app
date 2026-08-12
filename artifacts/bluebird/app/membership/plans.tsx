@@ -36,7 +36,7 @@ const TIERS = [
   },
 ];
 
-const TIER_IDX: Record<string, number> = { base: 0, plus: 1, concierge: 2 };
+const TIER_IDX: Record<string, number> = { none: -1, base: 0, plus: 1, concierge: 2 };
 
 export default function AllPlansScreen() {
   const insets = useSafeAreaInsets();
@@ -48,6 +48,7 @@ export default function AllPlansScreen() {
   const mem = membership as any;
   const currentTier: string = mem?.tier ?? user?.membershipTier ?? 'base';
   const currentIdx = TIER_IDX[currentTier] ?? 0;
+  const isNonMember = currentTier === 'none';
 
   const handleUpgrade = (tierId: string) => {
     if (TIER_IDX[tierId] <= currentIdx) return;
@@ -98,7 +99,9 @@ export default function AllPlansScreen() {
                     onPress={() => handleUpgrade(tier.id)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.upgradeSmallBtnText, { color: colors.primaryForeground }]}>Upgrade</Text>
+                    <Text style={[styles.upgradeSmallBtnText, { color: colors.primaryForeground }]}>
+                      {isNonMember ? 'Join' : 'Upgrade'}
+                    </Text>
                   </TouchableOpacity>
                 )}
                 {isCurrent && (

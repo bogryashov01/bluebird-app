@@ -14,6 +14,15 @@ const TIER_INFO: Record<string, {
   label: string; price: string; priceNum: string; tagline: string;
   color: string; features: string[]; passes: number;
 }> = {
+  base: {
+    label: 'Base',
+    price: '$99 / mo',
+    priceNum: '$99.00',
+    tagline: 'Get started with private aviation',
+    color: '#8896B3',
+    passes: 0,
+    features: ['Browse empty-leg flights', 'Join queue for any flight', 'Flight notifications', 'Community access'],
+  },
   plus: {
     label: 'Plus',
     price: '$995 / mo',
@@ -35,7 +44,9 @@ const TIER_INFO: Record<string, {
 };
 
 export default function UpgradeScreen() {
-  const { tier } = useLocalSearchParams<{ tier: string }>();
+  // returnFlightId: forwarded by the membership-required screen so a
+  // non-member who purchased a plan lands back on the flight they wanted.
+  const { tier, returnFlightId } = useLocalSearchParams<{ tier: string; returnFlightId?: string }>();
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { user, updateUser } = useAuth();
@@ -44,6 +55,7 @@ export default function UpgradeScreen() {
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
   const info = TIER_INFO[tier ?? ''];
+  const wasNonMember = user?.membershipTier === 'none';
 
   const upgradeMutation = useUpgradeMembership({
     mutation: {
@@ -75,14 +87,22 @@ export default function UpgradeScreen() {
         </View>
         <Text style={[styles.successTitle, { color: colors.textOnSurface }]}>Welcome to {info.label}!</Text>
         <Text style={[styles.successBody, { color: colors.mutedForegroundLight }]}>
-          Your membership has been upgraded. {info.passes} Skip the Line passes have been added to your account.
+          {info.passes > 0
+            ? `Your membership is active. ${info.passes} Skip the Line passes have been added to your account.`
+            : 'Your membership is active. You can now join the queue for any flight.'}
         </Text>
         <TouchableOpacity
           style={[styles.confirmBtn, { backgroundColor: info.color, alignSelf: 'stretch' }]}
           activeOpacity={0.85}
-          onPress={() => router.dismissTo('/(tabs)/membership')}
+          onPress={() =>
+            returnFlightId
+              ? router.dismissTo(`/flight/${returnFlightId}` as any)
+              : router.dismissTo('/(tabs)/membership')
+          }
         >
-          <Text style={[styles.confirmBtnText, { color: colors.primaryForeground }]}>Explore your benefits</Text>
+          <Text style={[styles.confirmBtnText, { color: colors.primaryForeground }]}>
+            {returnFlightId ? 'Back to your flight' : 'Explore your benefits'}
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -147,7 +167,9 @@ export default function UpgradeScreen() {
         >
           {upgradeMutation.isPending
             ? <ActivityIndicator color={colors.primaryForeground} />
-            : <Text style={[styles.confirmBtnText, { color: colors.primaryForeground }]}>Confirm upgrade — {info.priceNum}/mo</Text>}
+            : <Text style={[styles.confirmBtnText, { color: colors.primaryForeground }]}>
+                {wasNonMember ? `Join Bluebird — ${info.priceNum}/mo` : `Confirm upgrade — ${info.priceNum}/mo`}
+              </Text>}
         </TouchableOpacity>
       </ScrollView>
     </View>

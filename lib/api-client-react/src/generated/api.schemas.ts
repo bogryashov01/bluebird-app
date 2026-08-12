@@ -55,6 +55,8 @@ export interface ConciergeReply {
 
 export interface ErrorResponse {
   error: string;
+  /** Machine-readable error code (e.g. MEMBERSHIP_REQUIRED) for client-side routing. */
+  code?: string;
 }
 
 export interface SignOutResponse {
@@ -84,10 +86,14 @@ export interface VerifyCodeRequest {
   name?: string;
 }
 
+/**
+ * "none" marks a registered non-member who has not purchased a plan yet.
+ */
 export type UserMembershipTier = typeof UserMembershipTier[keyof typeof UserMembershipTier];
 
 
 export const UserMembershipTier = {
+  none: 'none',
   base: 'base',
   plus: 'plus',
   concierge: 'concierge',
@@ -98,6 +104,7 @@ export interface User {
   name: string;
   phone: string;
   email?: string | null;
+  /** "none" marks a registered non-member who has not purchased a plan yet. */
   membershipTier: UserMembershipTier;
   linePassCount: number;
   referralCode: string;
@@ -284,10 +291,27 @@ export interface CancelBookingResponse {
   trip?: Trip;
 }
 
+export type MembershipPlanId = typeof MembershipPlanId[keyof typeof MembershipPlanId];
+
+
+export const MembershipPlanId = {
+  base: 'base',
+  plus: 'plus',
+  concierge: 'concierge',
+} as const;
+
+export interface MembershipPlan {
+  id: MembershipPlanId;
+  label: string;
+  priceMonthlyUsd: number;
+  features: string[];
+}
+
 export type MembershipTier = typeof MembershipTier[keyof typeof MembershipTier];
 
 
 export const MembershipTier = {
+  none: 'none',
   base: 'base',
   plus: 'plus',
   concierge: 'concierge',
@@ -307,6 +331,8 @@ export const MembershipPendingTier = {
 
 export interface Membership {
   tier: MembershipTier;
+  /** Purchasable plan catalog (always present; drives the non-member join screen). */
+  plans?: MembershipPlan[];
   linePassCount: number;
   renewalDate?: string;
   /** Scheduled plan change taking effect at renewalDate. "cancelled" means the membership ends at renewal. Absent when no change is pending. */
@@ -326,15 +352,20 @@ export interface BuyPassResponse {
   linePassCount: number;
 }
 
+/**
+ * Non-members may purchase any tier, including Base.
+ */
 export type UpgradeMembershipRequestTier = typeof UpgradeMembershipRequestTier[keyof typeof UpgradeMembershipRequestTier];
 
 
 export const UpgradeMembershipRequestTier = {
+  base: 'base',
   plus: 'plus',
   concierge: 'concierge',
 } as const;
 
 export interface UpgradeMembershipRequest {
+  /** Non-members may purchase any tier, including Base. */
   tier: UpgradeMembershipRequestTier;
 }
 

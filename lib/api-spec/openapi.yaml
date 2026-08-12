@@ -719,6 +719,9 @@ components:
       properties:
         error:
           type: string
+        code:
+          type: string
+          description: Machine-readable error code (e.g. MEMBERSHIP_REQUIRED) for client-side routing.
       required:
         - error
 
@@ -813,7 +816,8 @@ components:
           nullable: true
         membershipTier:
           type: string
-          enum: [base, plus, concierge]
+          enum: [none, base, plus, concierge]
+          description: '"none" marks a registered non-member who has not purchased a plan yet.'
         linePassCount:
           type: number
         referralCode:
@@ -1104,12 +1108,37 @@ components:
         - passRefunded
         - linePassCount
 
+    MembershipPlan:
+      type: object
+      properties:
+        id:
+          type: string
+          enum: [base, plus, concierge]
+        label:
+          type: string
+        priceMonthlyUsd:
+          type: number
+        features:
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - label
+        - priceMonthlyUsd
+        - features
+
     Membership:
       type: object
       properties:
         tier:
           type: string
-          enum: [base, plus, concierge]
+          enum: [none, base, plus, concierge]
+        plans:
+          type: array
+          description: Purchasable plan catalog (always present; drives the non-member join screen).
+          items:
+            $ref: "#/components/schemas/MembershipPlan"
         linePassCount:
           type: number
         renewalDate:
@@ -1158,7 +1187,8 @@ components:
       properties:
         tier:
           type: string
-          enum: [plus, concierge]
+          enum: [base, plus, concierge]
+          description: Non-members may purchase any tier, including Base.
       required:
         - tier
 

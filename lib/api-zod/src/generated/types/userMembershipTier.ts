@@ -6,10 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * "none" marks a registered non-member who has not purchased a plan yet.
+ */
 export type UserMembershipTier = typeof UserMembershipTier[keyof typeof UserMembershipTier];
 
 
 export const UserMembershipTier = {
+  none: 'none',
   base: 'base',
   plus: 'plus',
   concierge: 'concierge',

@@ -185,7 +185,10 @@ router.post("/verify-code", async (req, res) => {
           id: userId,
           name,
           phone,
-          membershipTier: "base",
+          // New signups start as non-members: they can browse flights and
+          // receive notifications, but member actions require purchasing a
+          // membership plan first.
+          membershipTier: "none",
           referralCode: makeReferralCode(name),
           linePassCount: 0,
         })
@@ -195,13 +198,17 @@ router.post("/verify-code", async (req, res) => {
         id: makeId(),
         userId,
         title: "Welcome to Bluebird ✈️",
-        body: "Your account is ready. Browse available empty legs and join the queue to fly.",
+        body: "Your account is ready. Browse available empty legs — join Bluebird to queue for a seat.",
         type: "system",
       });
     }
 
     // Populate (or backfill) demo trips, queue entry, notifications, passes.
-    await seedDemoDataForUser(user.id);
+    // Non-members get none of this — trips, queues, and passes are member
+    // features they haven't purchased yet.
+    if (user.membershipTier !== "none") {
+      await seedDemoDataForUser(user.id);
+    }
 
     const [freshUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
     const token = signToken(user.id);

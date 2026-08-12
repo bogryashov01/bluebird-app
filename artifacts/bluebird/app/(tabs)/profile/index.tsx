@@ -86,6 +86,7 @@ export default function ProfileScreen() {
 
   const initials    = user?.name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) ?? '?';
   const tierLabel   = {
+    none:      'Not a member yet',
     base:      'Base Member',
     plus:      'Plus Member',
     concierge: 'Concierge Member',

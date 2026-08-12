@@ -73,10 +73,29 @@ export default function BuyPassScreen() {
         }
       },
       onError: (err: any) => {
+        const code = err?.data?.code || err?.response?.data?.code;
+        if (code === 'MEMBERSHIP_REQUIRED') {
+          router.replace({
+            pathname: '/membership/join' as any,
+            params: params.flightId ? { flightId: params.flightId } : {},
+          });
+          return;
+        }
         Alert.alert('Purchase failed', err?.data?.error || err?.response?.data?.error || err?.message || 'Failed to buy pass');
       },
     },
   });
+
+  // Non-member guard: pass purchases are a member feature — route straight to
+  // the membership-required screen instead of showing the demo checkout.
+  React.useEffect(() => {
+    if (user?.membershipTier === 'none') {
+      router.replace({
+        pathname: '/membership/join' as any,
+        params: params.flightId ? { flightId: params.flightId } : {},
+      });
+    }
+  }, [user?.membershipTier]);
 
   const handleBuy = () => {
     if (buyMutation.isPending || purchased) return;

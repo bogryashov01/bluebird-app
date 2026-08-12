@@ -8,4 +8,6 @@
 
 export interface ErrorResponse {
   error: string;
+  /** Machine-readable error code (e.g. MEMBERSHIP_REQUIRED) for client-side routing. */
+  code?: string;
 }

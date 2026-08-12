@@ -120,6 +120,13 @@ export default function JoinQueueAcknowledgeScreen() {
         }
       },
       onError: (err: any) => {
+        const code = err?.response?.data?.code || err?.data?.code;
+        if (code === 'MEMBERSHIP_REQUIRED') {
+          // Server-side gate fallback: send the non-member to the paywall.
+          setOverlayPhase(null);
+          router.replace({ pathname: '/membership/join' as any, params: { flightId: flightId ?? '' } });
+          return;
+        }
         const msg = err?.response?.data?.error || err?.data?.error || err?.message || 'Failed to join queue';
         if (/no longer available/i.test(msg)) {
           setRejectedUnavailable(true);
@@ -137,6 +144,11 @@ export default function JoinQueueAcknowledgeScreen() {
 
   const handleContinue = () => {
     if (!allChecked || !flightId || isConfirmed || joinMutation.isPending) return;
+    if (user?.membershipTier === 'none') {
+      // Non-member reached the join flow (e.g. deep link) — route to the paywall.
+      router.replace({ pathname: '/membership/join' as any, params: { flightId } });
+      return;
+    }
     setJoinError(null);
     if (needsIntlNotice) {
       router.push({ pathname: '/queue/intl-notice', params });

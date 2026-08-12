@@ -6,10 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { MembershipPendingTier } from './membershipPendingTier';
+import type { MembershipPlan } from './membershipPlan';
 import type { MembershipTier } from './membershipTier';
 
 export interface Membership {
   tier: MembershipTier;
+  /** Purchasable plan catalog (always present; drives the non-member join screen). */
+  plans?: MembershipPlan[];
   linePassCount: number;
   renewalDate?: string;
   /** Scheduled plan change taking effect at renewalDate. "cancelled" means the membership ends at renewal. Absent when no change is pending. */

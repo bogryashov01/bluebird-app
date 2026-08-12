@@ -35,6 +35,8 @@ export * from './joinQueueRequest';
 export * from './listFlightsParams';
 export * from './membership';
 export * from './membershipPendingTier';
+export * from './membershipPlan';
+export * from './membershipPlanId';
 export * from './membershipTier';
 export * from './notification';
 export * from './notificationType';

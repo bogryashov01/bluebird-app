@@ -124,6 +124,10 @@ function RootLayoutNav() {
         options={{ headerShown: true, title: 'Upgrade Membership', ...headerOptions }}
       />
       <Stack.Screen
+        name="membership/join"
+        options={{ headerShown: true, title: 'Join Bluebird', ...headerOptions }}
+      />
+      <Stack.Screen
         name="membership/plans"
         options={{ headerShown: true, title: 'All Plans', ...headerOptions }}
       />
