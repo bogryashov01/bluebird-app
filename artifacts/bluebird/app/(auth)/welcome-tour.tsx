@@ -72,7 +72,8 @@ export default function WelcomeTourScreen() {
     if (user?.id) {
       await AsyncStorage.setItem(welcomeTourKey(user.id), '1').catch(() => {});
     }
-    router.replace('/(tabs)/discover');
+    // Registration continues into home-airport selection (skip included).
+    router.replace('/(auth)/onboarding');
   };
 
   const next = () => {

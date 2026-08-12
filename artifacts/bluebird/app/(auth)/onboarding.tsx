@@ -14,11 +14,13 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useListAirports, type AirportInfo } from '@workspace/api-client-react';
+import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const { token } = useAuth();
   const [search, setSearch] = useState('');
   const { data: airports, isLoading, isError, refetch } = useListAirports();
 
@@ -129,11 +131,20 @@ export default function OnboardingScreen() {
       )}
 
       <View style={[styles.footer, { paddingBottom: bottomPad + 16 }]}>
-        <TouchableOpacity onPress={() => router.push('/(auth)/welcome')} activeOpacity={0.8}>
-          <Text style={[styles.skipText, { color: colors.mutedOnBrand }]}>
-            Skip — go to sign in <Text style={{ color: colors.primary }}>→</Text>
-          </Text>
-        </TouchableOpacity>
+        {token ? (
+          // Mid-registration: allow finishing without picking an airport.
+          <TouchableOpacity onPress={() => router.replace('/(tabs)/discover')} activeOpacity={0.8}>
+            <Text style={[styles.skipText, { color: colors.mutedOnBrand }]}>
+              Skip for now <Text style={{ color: colors.primary }}>→</Text>
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={() => router.push('/(auth)/welcome')} activeOpacity={0.8}>
+            <Text style={[styles.skipText, { color: colors.mutedOnBrand }]}>
+              Skip — go to sign in <Text style={{ color: colors.primary }}>→</Text>
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );

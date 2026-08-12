@@ -154,11 +154,11 @@ export default function AirportSummaryScreen() {
           <View style={[styles.footer, { paddingBottom: bottomPad + 16, borderTopColor: colors.border }]}>
             <TouchableOpacity
               style={[styles.ctaBtn, { backgroundColor: colors.primary }]}
-              onPress={() => router.push('/(auth)/welcome')}
+              onPress={() => router.replace('/(tabs)/discover')}
               activeOpacity={0.85}
             >
               <Text style={[styles.ctaText, { color: colors.primaryForeground }]}>
-                Get Started — It's Free
+                Confirm & Continue
               </Text>
             </TouchableOpacity>
           </View>
