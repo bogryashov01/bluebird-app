@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { flightsTable, queueEntriesTable, tripsTable } from "@workspace/db/schema";
 import { eq, ilike, and, inArray, count, desc, sql } from "drizzle-orm";
 import { authMiddleware } from "../middlewares/auth";
+import { sweepDeparturesSafe } from "../lib/departure";
 
 const router = Router();
 
@@ -34,6 +35,7 @@ function withDerivedSeats<T extends { id: string; seatsAvailable: number }>(
 // GET /flights (public — members can browse before signing in)
 router.get("/", async (req, res) => {
   try {
+    await sweepDeparturesSafe();
     const { from, to } = req.query;
     let query = db.select().from(flightsTable).$dynamic();
 
@@ -167,6 +169,7 @@ router.get("/airports/:code/summary", async (req, res) => {
 // GET /flights/:id (public)
 router.get("/:id", async (req, res) => {
   try {
+    await sweepDeparturesSafe();
     const [[flight], paxMap] = await Promise.all([
       db.select().from(flightsTable).where(eq(flightsTable.id, String(req.params.id))),
       confirmedPaxByFlight(),
@@ -188,6 +191,7 @@ router.get("/:id", async (req, res) => {
 router.get("/:id/my-status", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
   try {
+    await sweepDeparturesSafe();
     const flightId = String(req.params.id);
 
     // Verify the flight exists

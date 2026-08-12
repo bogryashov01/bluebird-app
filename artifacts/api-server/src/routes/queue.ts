@@ -5,6 +5,7 @@ import { eq, and, count, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
+import { flightAcceptsQueueActions } from "../lib/departure";
 
 const router = Router();
 
@@ -48,7 +49,7 @@ router.post("/join", authMiddleware, async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Flight not found" });
     }
-    if (flight.status !== "available") {
+    if (!flightAcceptsQueueActions(flight)) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Flight is no longer available" });
     }
@@ -426,6 +427,14 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
       .select()
       .from(flightsTable)
       .where(eq(flightsTable.id, entry.flightId));
+    // The pass must never be consumed for a flight that has departed or is
+    // no longer available — reject before touching the balance.
+    if (!flight || !flightAcceptsQueueActions(flight)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: "This flight has already departed — your pass was not used.",
+      });
+    }
     const [{ value: confirmedPax }] = await txDb
       .select({ value: sql<number>`coalesce(sum(${queueEntriesTable.passengers}), 0)` })
       .from(queueEntriesTable)

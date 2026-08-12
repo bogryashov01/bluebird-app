@@ -12,6 +12,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
 import { promoteFrontAfterSeatFreed } from "../lib/simulation";
+import { departurePassed, sweepDeparturesSafe } from "../lib/departure";
 
 const router = Router();
 
@@ -23,6 +24,7 @@ function makeId(): string {
 router.get("/", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
   try {
+    await sweepDeparturesSafe();
     const trips = await db.select().from(tripsTable).where(eq(tripsTable.userId, userId)).orderBy(tripsTable.bookedAt);
     const enriched = await Promise.all(
       trips.map(async (trip) => {
@@ -89,14 +91,10 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
       .from(flightsTable)
       .where(eq(flightsTable.id, trip.flightId));
     if (flight) {
-      const now = new Date();
-      const today = now.toISOString().slice(0, 10);
-      const hhmm = now.toISOString().slice(11, 16);
       const departed =
         flight.status === "departed" ||
         flight.status === "completed" ||
-        flight.departureDate < today ||
-        (flight.departureDate === today && flight.departureTime <= hhmm);
+        departurePassed(flight);
       if (departed) {
         await client.query("ROLLBACK");
         return res.status(409).json({

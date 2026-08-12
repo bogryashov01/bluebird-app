@@ -10,6 +10,7 @@ import { eq, and, sql, asc } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@workspace/db/schema";
 import { logger } from "./logger";
+import { completeDepartedFlights, flightAcceptsQueueActions } from "./departure";
 
 /**
  * Demo queue simulation.
@@ -88,6 +89,12 @@ export function startQueueSimulation(): void {
 }
 
 async function tick(): Promise<void> {
+  // Move past-departure flights (and their upcoming trips) to completed so
+  // Discover and Trips stay fresh even without read traffic.
+  await completeDepartedFlights().catch((err) =>
+    logger.error({ err }, "Departure sweep failed on simulation tick"),
+  );
+
   // Snapshot all waiting entries grouped by flight (ordered by position).
   const waiting = await db
     .select()
@@ -155,6 +162,12 @@ async function advanceFlightQueue(
       .from(flightsTable)
       .where(eq(flightsTable.id, flightId));
     if (!flight) {
+      await client.query("ROLLBACK");
+      return;
+    }
+    // Never advance a queue on a flight that has departed or is no longer
+    // available — the departure sweep will expire these waiting entries.
+    if (!flightAcceptsQueueActions(flight)) {
       await client.query("ROLLBACK");
       return;
     }
@@ -350,6 +363,8 @@ export async function promoteFrontAfterSeatFreed(
     .from(flightsTable)
     .where(eq(flightsTable.id, flightId));
   if (!flight) return;
+  // Never promote into a flight that has departed or is no longer available.
+  if (!flightAcceptsQueueActions(flight)) return;
 
   const [{ value: confirmedPax }] = await txDb
     .select({ value: sql<number>`coalesce(sum(${queueEntriesTable.passengers}), 0)` })
