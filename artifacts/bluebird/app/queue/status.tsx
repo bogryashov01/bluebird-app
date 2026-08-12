@@ -17,28 +17,30 @@ import { useGetQueueStatus, useCancelQueueEntry } from '@workspace/api-client-re
 import { useAuth } from '@/context/AuthContext';
 
 // ─── Countdown hook ───────────────────────────────────────────────────────────
-function useCountdown(departureDate?: string, departureTime?: string): string {
-  const [remaining, setRemaining] = useState('--:--:--');
+// Counts down to the decision moment: the queue engine holds a real member in
+// the waiting state for a minimum period after joining (60s — mirrors
+// REAL_MEMBER_MIN_WAIT_MS on the API server) before auto-confirming them at
+// the front of the line. Once the window elapses, confirmation happens on an
+// upcoming engine tick, so we show "Imminent".
+const DECISION_MIN_WAIT_MS = 60_000;
+
+function useDecisionCountdown(joinedAt?: string): string {
+  const [remaining, setRemaining] = useState('--:--');
 
   useEffect(() => {
-    if (!departureDate || !departureTime) return;
+    if (!joinedAt) return;
+    const target = new Date(joinedAt).getTime() + DECISION_MIN_WAIT_MS;
     const compute = () => {
-      const [h, m] = departureTime.split(':').map(Number);
-      const [y, mo, d] = departureDate.split('-').map(Number);
-      const target = new Date(y, mo - 1, d, h, m, 0).getTime();
       const diff = target - Date.now();
       if (diff <= 0) { setRemaining('Imminent'); return; }
-      const hours = Math.floor(diff / 3600000);
-      const mins  = Math.floor((diff % 3600000) / 60000);
-      const secs  = Math.floor((diff % 60000) / 1000);
-      setRemaining(
-        `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
-      );
+      const mins = Math.floor(diff / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+      setRemaining(`${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`);
     };
     compute();
     const id = setInterval(compute, 1000);
     return () => clearInterval(id);
-  }, [departureDate, departureTime]);
+  }, [joinedAt]);
 
   return remaining;
 }
@@ -102,7 +104,7 @@ function QueueCard({
 }) {
   const colors = useColors();
   const flight    = entry.flight;
-  const countdown = useCountdown(flight?.departureDate, flight?.departureTime);
+  const countdown = useDecisionCountdown(entry.createdAt);
   const joinedAgo = formatAgo(entry.createdAt);
   const flightLabel = flight ? `${flight.fromAirport} → ${flight.toAirport}` : '— → —';
 
@@ -111,7 +113,11 @@ function QueueCard({
       <Text style={[card.route, { color: colors.textOnSurface }]}>{flightLabel}</Text>
       <RingProgress position={entry.position} total={entry.totalInQueue} />
 
-      {flight && <Text style={[card.countdown, { color: colors.primary }]}>Decision in {countdown}</Text>}
+      {flight && (
+        <Text style={[card.countdown, { color: colors.primary }]}>
+          {countdown === 'Imminent' ? 'Decision imminent' : `Decision in ${countdown}`}
+        </Text>
+      )}
 
       <View style={[card.section, { backgroundColor: colors.surface }]}>
         <Text style={[card.sectionTitle, { color: colors.textOnSurface }]}>Queue Movement</Text>

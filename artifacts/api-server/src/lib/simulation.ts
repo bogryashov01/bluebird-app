@@ -31,6 +31,12 @@ const TICK_MS = 20_000; // how often the simulation advances
 const SIM_ACT_PROBABILITY = 0.6; // chance the front sim member acts each tick
 const SIM_CONFIRM_PROBABILITY = 0.75; // when acting w/ seats left: confirm vs leave
 const FREE_SEAT_PROBABILITY = 0.2; // chance per tick a full flight frees a seat
+// Minimum time a real member waits in the queue before auto-confirmation, so
+// they actually experience the waiting state after joining. Applies only to
+// regular joins — Skip-the-Line passes confirm instantly at join time and
+// never pass through this path. The mobile queue-status screen's "Decision
+// in" countdown mirrors this value; keep them in sync.
+export const REAL_MEMBER_MIN_WAIT_MS = 60_000;
 
 export const SIM_USER_PREFIX = "sim-user-";
 
@@ -202,6 +208,16 @@ async function advanceFlightQueue(
     // transaction — status change, renumbering, trip creation, and the
     // flight_confirmed notification commit together. No manual confirm step,
     // no acceptance window, no expiry: a member's spot never lapses.
+    //
+    // Minimum-wait gate: a real member is only confirmed once they have been
+    // in the queue for at least REAL_MEMBER_MIN_WAIT_MS, so a fresh join at
+    // position 1 still experiences the waiting state. Until then they hold
+    // their spot and are retried on later ticks.
+    const waitedMs = Date.now() - new Date(front.createdAt).getTime();
+    if (waitedMs < REAL_MEMBER_MIN_WAIT_MS) {
+      await client.query("ROLLBACK");
+      return;
+    }
     if (seatsRemaining >= front.passengers) {
       const [confirmed] = await txDb
         .update(queueEntriesTable)
