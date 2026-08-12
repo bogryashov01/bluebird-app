@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
+  Image,
   Platform,
   useWindowDimensions,
   type ViewToken,
@@ -12,7 +13,6 @@ import {
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
@@ -23,31 +23,44 @@ export function welcomeTourKey(userId: string) {
   return `${WELCOME_TOUR_KEY_PREFIX}${userId}`;
 }
 
-type Slide = {
-  key: string;
-  icon: React.ComponentProps<typeof Feather>['name'];
-  title: string;
-  body: string;
-};
+const logoSource = require('@/assets/images/bluebird-logo-white.png');
+const heroImage1 = require('@/assets/images/hero-aircraft.jpg');
+const heroImage2 = require('@/assets/images/aircraft-turboprop.jpg');
+
+const NAVY = '#060B1F';
+const NAVY_MID = '#0A1128';
+const BLUE = '#1259F2';
+
+type Step = { title: string; caption: string };
+
+type Slide =
+  | { key: string; kind: 'photo'; image: number; title: string; body?: string; steps?: Step[] }
+  | { key: string; kind: 'dark'; title: string; perks: string[] };
 
 const SLIDES: Slide[] = [
   {
-    key: 'queues',
-    icon: 'users',
-    title: 'Join flight queues',
-    body: 'Empty-leg flights open a queue. Join the line for the flights you want — when a seat frees up, the front of the line flies.',
+    key: 'access',
+    kind: 'photo',
+    image: heroImage1,
+    title: 'Private Aviation.\nMade Accessible.',
+    body: 'Bluebird members get access to Empty Leg flights on private jets — up to 75% off, whenever an aircraft is repositioning empty.',
   },
   {
-    key: 'passes',
-    icon: 'zap',
-    title: 'Passes & membership tiers',
-    body: 'Use Line Passes to jump ahead in a queue, and upgrade your membership tier for better placement and perks.',
+    key: 'how',
+    kind: 'photo',
+    image: heroImage2,
+    title: 'Browse. Queue. Fly.',
+    steps: [
+      { title: 'Browse available Empty Legs', caption: 'Discover last-minute repositioning flights' },
+      { title: 'Join the queue', caption: 'Request a seat in one tap' },
+      { title: 'Fly free when selected', caption: 'Or use a Skip the Line Pass to guarantee it' },
+    ],
   },
   {
-    key: 'concierge',
-    icon: 'message-circle',
-    title: 'Your personal concierge',
-    body: 'Questions about a route, a booking, or how anything works? The concierge chat is available any time from the app.',
+    key: 'perks',
+    kind: 'dark',
+    title: 'Membership Has\nIts Privileges.',
+    perks: ['Base Membership', 'Plus Membership', 'Skip the Line Passes', 'AI Concierge', 'Referral Rewards'],
   },
 ];
 
@@ -55,13 +68,14 @@ export default function WelcomeTourScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { user } = useAuth();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [index, setIndex] = useState(0);
   const listRef = useRef<FlatList<Slide>>(null);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
   const isLast = index === SLIDES.length - 1;
+  const heroHeight = Math.round(height * 0.55);
 
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     const first = viewableItems[0];
@@ -84,16 +98,15 @@ export default function WelcomeTourScreen() {
     }
   };
 
-  return (
-    <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad, paddingBottom: bottomPad + 24 }]}>
-      <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
+  const activeSlide = SLIDES[index];
+  const sheetBg = colors.scheme === 'dark' ? NAVY_MID : '#FFFFFF';
+  const sheetText = colors.scheme === 'dark' ? '#FFFFFF' : '#0A1128';
+  const sheetMuted = colors.scheme === 'dark' ? '#8896B3' : '#5B6779';
+  const containerBg = activeSlide.kind === 'dark' ? NAVY : sheetBg;
 
-      <View style={styles.topBar}>
-        <Text style={[styles.brand, { color: colors.textOnBrand }]}>Welcome to Bluebird</Text>
-        <TouchableOpacity onPress={finish} hitSlop={12}>
-          <Text style={[styles.skipText, { color: colors.mutedOnBrand }]}>Skip</Text>
-        </TouchableOpacity>
-      </View>
+  return (
+    <View style={[styles.container, { backgroundColor: containerBg }]}>
+      <StatusBar style="light" />
 
       <FlatList
         ref={listRef}
@@ -101,47 +114,103 @@ export default function WelcomeTourScreen() {
         keyExtractor={(item) => item.key}
         horizontal
         pagingEnabled
+        bounces={false}
         showsHorizontalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
-        renderItem={({ item }) => (
-          <View style={[styles.slide, { width }]}>
-            <View style={[styles.iconCircle, { backgroundColor: colors.primary + '1A' }]}>
-              <Feather name={item.icon} size={30} color={colors.primary} />
+        renderItem={({ item }) => {
+          if (item.kind === 'dark') {
+            return (
+              <View style={[styles.darkSlide, { width, paddingTop: topPad + 24 }]}>
+                {/* Subtle blue wing/streak accent near the top */}
+                <View style={styles.streakWrap} pointerEvents="none">
+                  <View style={[styles.streak, { width: width * 1.1 }]} />
+                  <View style={[styles.streakSoft, { width: width * 0.9 }]} />
+                </View>
+                <View style={styles.darkContent}>
+                  <Text style={styles.darkTitle}>{item.title}</Text>
+                  <View style={styles.perksList}>
+                    {item.perks.map((perk) => (
+                      <View key={perk} style={styles.perkRow}>
+                        <Text style={styles.perkPlus}>+</Text>
+                        <Text style={styles.perkText}>{perk}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            );
+          }
+          return (
+            <View style={[styles.photoSlide, { width, backgroundColor: sheetBg }]}>
+              <View style={{ height: heroHeight, width }}>
+                <Image source={item.image} style={styles.heroImage} resizeMode="cover" />
+                <View style={styles.heroOverlay} />
+                <Image
+                  source={logoSource}
+                  style={[styles.logo, { top: topPad + 12 }]}
+                  resizeMode="contain"
+                />
+              </View>
+              <View style={styles.sheet}>
+                <Text style={[styles.sheetTitle, { color: sheetText }]}>{item.title}</Text>
+                {item.body ? (
+                  <Text style={[styles.sheetBody, { color: sheetMuted }]}>{item.body}</Text>
+                ) : null}
+                {item.steps ? (
+                  <View style={styles.stepsList}>
+                    {item.steps.map((step, i) => (
+                      <View key={step.title} style={styles.stepRow}>
+                        <View style={styles.stepCircle}>
+                          <Text style={styles.stepNumber}>{i + 1}</Text>
+                        </View>
+                        <View style={styles.stepTextWrap}>
+                          <Text style={[styles.stepTitle, { color: sheetText }]}>{step.title}</Text>
+                          <Text style={[styles.stepCaption, { color: sheetMuted }]}>{step.caption}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
             </View>
-            <Text style={[styles.title, { color: colors.textOnBrand }]}>{item.title}</Text>
-            <Text style={[styles.body, { color: colors.mutedOnBrand }]}>{item.body}</Text>
-          </View>
-        )}
+          );
+        }}
       />
 
-      <View style={styles.dots}>
-        {SLIDES.map((s, i) => (
-          <View
-            key={s.key}
-            style={[
-              styles.dot,
-              {
-                backgroundColor: i === index ? colors.primary : colors.mutedOnBrand + '55',
-                width: i === index ? 22 : 8,
-              },
-            ]}
-          />
-        ))}
-      </View>
+      {/* Skip affordance stays visible over photos and the dark slide */}
+      <TouchableOpacity
+        onPress={finish}
+        hitSlop={12}
+        style={[styles.skip, { top: topPad + 14 }]}
+      >
+        <Text style={styles.skipText}>Skip</Text>
+      </TouchableOpacity>
 
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.cta, { backgroundColor: colors.primary }]}
-          onPress={next}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.ctaText, { color: colors.primaryForeground }]}>
-            {isLast ? 'Get Started' : 'Next'}
-          </Text>
-          <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
+      <View style={[styles.footer, { paddingBottom: bottomPad + 16 }]}>
+        <TouchableOpacity style={styles.cta} onPress={next} activeOpacity={0.85}>
+          <Text style={styles.ctaText}>{isLast ? 'Get Started' : 'Next'}</Text>
         </TouchableOpacity>
+        <View style={styles.dots}>
+          {SLIDES.map((s, i) => (
+            <View
+              key={s.key}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor:
+                    i === index
+                      ? BLUE
+                      : activeSlide.kind === 'dark' || colors.scheme === 'dark'
+                        ? 'rgba(255,255,255,0.35)'
+                        : 'rgba(10,17,40,0.2)',
+                  width: i === index ? 22 : 8,
+                },
+              ]}
+            />
+          ))}
+        </View>
       </View>
     </View>
   );
@@ -149,34 +218,101 @@ export default function WelcomeTourScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  topBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8,
+  skip: { position: 'absolute', right: 24, zIndex: 10 },
+  skipText: {
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    color: 'rgba(255,255,255,0.85)',
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowRadius: 6,
   },
-  brand: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
-  skipText: { fontSize: 14, fontFamily: 'Inter_500Medium' },
-  slide: { flex: 1, paddingHorizontal: 32, justifyContent: 'center', alignItems: 'center' },
-  iconCircle: {
-    width: 84, height: 84, borderRadius: 42,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 28,
+
+  // Photo-hero slides
+  photoSlide: { flex: 1 },
+  heroImage: { width: '100%', height: '100%' },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(6,11,31,0.25)',
   },
-  title: {
-    fontSize: 26, fontFamily: 'Inter_700Bold', letterSpacing: -0.5,
-    textAlign: 'center', marginBottom: 12,
+  logo: { position: 'absolute', left: 24, width: 44, height: 44 },
+  sheet: { flex: 1, paddingHorizontal: 28, paddingTop: 28 },
+  sheetTitle: {
+    fontSize: 28,
+    lineHeight: 36,
+    fontFamily: 'Inter_700Bold',
+    letterSpacing: -0.5,
+    marginBottom: 14,
   },
-  body: {
-    fontSize: 15, fontFamily: 'Inter_400Regular', lineHeight: 23,
-    textAlign: 'center', maxWidth: 320,
+  sheetBody: { fontSize: 15, lineHeight: 23, fontFamily: 'Inter_400Regular' },
+  stepsList: { marginTop: 6, gap: 20 },
+  stepRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
+  stepCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: 'rgba(18,89,242,0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 1,
   },
+  stepNumber: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: BLUE },
+  stepTextWrap: { flex: 1 },
+  stepTitle: { fontSize: 15, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
+  stepCaption: { fontSize: 13, lineHeight: 18, fontFamily: 'Inter_400Regular' },
+
+  // Dark perks slide
+  darkSlide: { flex: 1, backgroundColor: NAVY },
+  streakWrap: { position: 'absolute', top: 0, left: 0, right: 0, height: 120, overflow: 'hidden' },
+  streak: {
+    position: 'absolute',
+    top: 40,
+    left: -30,
+    height: 3,
+    borderRadius: 3,
+    backgroundColor: BLUE,
+    opacity: 0.8,
+    transform: [{ rotate: '-4deg' }],
+  },
+  streakSoft: {
+    position: 'absolute',
+    top: 52,
+    left: 10,
+    height: 10,
+    borderRadius: 10,
+    backgroundColor: BLUE,
+    opacity: 0.18,
+    transform: [{ rotate: '-4deg' }],
+  },
+  darkContent: { paddingHorizontal: 28, paddingTop: 72 },
+  darkTitle: {
+    fontSize: 28,
+    lineHeight: 36,
+    fontFamily: 'Inter_700Bold',
+    letterSpacing: -0.5,
+    color: '#FFFFFF',
+    marginBottom: 24,
+  },
+  perksList: { gap: 14 },
+  perkRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  perkPlus: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: BLUE, width: 14 },
+  perkText: { fontSize: 15, fontFamily: 'Inter_500Medium', color: '#E6EBF5' },
+
+  // Footer chrome
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 24 },
+  cta: {
+    height: 54,
+    borderRadius: 999,
+    backgroundColor: BLUE,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ctaText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
   dots: {
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    gap: 6, marginTop: 8, marginBottom: 24,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
   },
   dot: { height: 8, borderRadius: 4 },
-  footer: { paddingHorizontal: 24 },
-  cta: {
-    height: 52, borderRadius: 999, flexDirection: 'row',
-    justifyContent: 'center', alignItems: 'center', gap: 8,
-  },
-  ctaText: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
 });
