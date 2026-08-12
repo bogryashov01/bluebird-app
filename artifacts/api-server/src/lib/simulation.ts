@@ -318,6 +318,97 @@ async function notifyNewFront(
 }
 
 /**
+ * Called inside the same transaction as a real member's booking cancellation,
+ * right after the confirmed queue entry flips to 'cancelled'. Makes the queue
+ * feel instantly responsive instead of waiting for the next simulation tick:
+ *  - If the front waiting member is real, eligible (enough freed seats for
+ *    their party) and has passed the minimum-wait gate, they are confirmed
+ *    immediately — status flip, renumbering, trip creation, and notification
+ *    all commit atomically with the cancellation itself.
+ *  - Otherwise, a real front member gets the "a seat just opened up" ping so
+ *    they know their confirmation is imminent.
+ * Sim members at the front are left to the regular simulation cadence.
+ */
+export async function promoteFrontAfterSeatFreed(
+  txDb: TxDb,
+  flightId: string,
+): Promise<void> {
+  const [front] = await txDb
+    .select()
+    .from(queueEntriesTable)
+    .where(
+      and(
+        eq(queueEntriesTable.flightId, flightId),
+        eq(queueEntriesTable.status, "waiting"),
+        eq(queueEntriesTable.position, 1),
+      ),
+    );
+  if (!front || isSimUserId(front.userId)) return;
+
+  const [flight] = await txDb
+    .select()
+    .from(flightsTable)
+    .where(eq(flightsTable.id, flightId));
+  if (!flight) return;
+
+  const [{ value: confirmedPax }] = await txDb
+    .select({ value: sql<number>`coalesce(sum(${queueEntriesTable.passengers}), 0)` })
+    .from(queueEntriesTable)
+    .where(
+      and(
+        eq(queueEntriesTable.flightId, flightId),
+        eq(queueEntriesTable.status, "confirmed"),
+      ),
+    );
+  const seatsRemaining = flight.seatsAvailable - Number(confirmedPax);
+
+  const waitedMs = Date.now() - new Date(front.createdAt).getTime();
+  const eligible =
+    seatsRemaining >= front.passengers && waitedMs >= REAL_MEMBER_MIN_WAIT_MS;
+
+  if (!eligible) {
+    // Not confirmable yet (seat too small for their party or still inside the
+    // minimum-wait window) — at least tell them a seat opened.
+    await txDb.insert(notificationsTable).values({
+      id: makeId(),
+      userId: front.userId,
+      title: "A seat just opened up",
+      body: `A member cancelled on ${flight.fromCity} → ${flight.toCity} — a seat is now available and yours will be confirmed automatically.`,
+      type: "queue_update",
+    });
+    return;
+  }
+
+  const [confirmed] = await txDb
+    .update(queueEntriesTable)
+    .set({ status: "confirmed" })
+    .where(
+      and(
+        eq(queueEntriesTable.id, front.id),
+        eq(queueEntriesTable.status, "waiting"),
+      ),
+    )
+    .returning();
+  if (!confirmed) return;
+
+  await closeGap(txDb, flightId, front.position);
+  await txDb.insert(tripsTable).values({
+    id: makeId(),
+    userId: front.userId,
+    flightId,
+    status: "upcoming",
+  });
+  await txDb.insert(notificationsTable).values({
+    id: makeId(),
+    userId: front.userId,
+    title: "Flight confirmed! ✈️",
+    body: `Your seat on ${flight.fromCity} → ${flight.toCity} is confirmed — no action needed. See you on board.`,
+    type: "flight_confirmed",
+  });
+  await notifyNewFront(txDb, flightId, flight);
+}
+
+/**
  * Simulated cancellation: on a fully-booked flight (no remaining derived
  * seats), a simulated member who already confirmed occasionally cancels their
  * booking, freeing capacity for whoever is waiting.

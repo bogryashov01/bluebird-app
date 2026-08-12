@@ -11,6 +11,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
+import { promoteFrontAfterSeatFreed } from "../lib/simulation";
 
 const router = Router();
 
@@ -161,6 +162,14 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
         : `Your booking on ${route} was cancelled. Your seat has been released.`,
       type: "system",
     });
+
+    // 7. Give the freed seat to the next member in line right away (same
+    //    transaction): the front waiting real member is confirmed immediately
+    //    if eligible, or notified that a seat opened. Without this the queue
+    //    only advances on the next simulation tick (up to 20s later).
+    if (cancelledEntries.length > 0) {
+      await promoteFrontAfterSeatFreed(txDb, trip.flightId);
+    }
 
     await client.query("COMMIT");
     return res.json({
