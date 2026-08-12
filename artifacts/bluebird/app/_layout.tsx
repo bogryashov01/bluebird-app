@@ -5,6 +5,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AppHeader } from '@/components/AppHeader';
+import { ConciergeHeader } from '@/components/ConciergeHeader';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -92,7 +93,11 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="concierge"
-        options={{ headerShown: true, title: 'AI Concierge', ...headerOptions }}
+        options={{
+          headerShown: true,
+          title: 'AI Concierge',
+          header: (props: React.ComponentProps<typeof ConciergeHeader>) => <ConciergeHeader {...props} />,
+        }}
       />
       <Stack.Screen
         name="referral"
