@@ -24,8 +24,8 @@ export function welcomeTourKey(userId: string) {
 }
 
 const logoSource = require('@/assets/images/bluebird-logo-white.png');
-const heroImage1 = require('@/assets/images/hero-aircraft.jpg');
-const heroImage2 = require('@/assets/images/aircraft-turboprop.jpg');
+const heroImage1 = require('@/assets/images/onboarding-runway-golden-hour.jpg');
+const heroImage2 = require('@/assets/images/onboarding-cabin-interior.jpg');
 
 const NAVY = '#060B1F';
 const NAVY_MID = '#0A1128';
