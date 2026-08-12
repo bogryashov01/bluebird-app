@@ -253,6 +253,21 @@ export async function seedDemoDataForUser(userId: string): Promise<void> {
       ])
       .onConflictDoNothing();
 
+    // A confirmed queue entry backing the upcoming trip, so seeded data
+    // mirrors the real booking flow (my-status + seat derivation both count
+    // confirmed queue entries). Idempotent via deterministic ID.
+    await db
+      .insert(queueEntriesTable)
+      .values({
+        id: `demo-queue-confirmed-${userId}`,
+        userId,
+        flightId: upcomingFlight.id,
+        position: 0,
+        status: "confirmed",
+        usedLinePass: false,
+      })
+      .onConflictDoNothing();
+
     // An active queue entry (skip if already queued for that flight).
     // Seed the user a few positions back, behind simulated members, so the
     // queue simulation visibly advances them toward the front — showcasing

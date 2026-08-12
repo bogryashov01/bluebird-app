@@ -208,6 +208,31 @@ router.get("/:id/my-status", authMiddleware, async (req, res) => {
         ),
       );
 
+    // A member may hold an active trip on this flight without a confirmed
+    // queue entry (e.g. demo-seeded trips). An upcoming trip always means
+    // confirmed — it takes precedence over waiting/none states.
+    if (!entry || entry.status !== "confirmed") {
+      const [activeTrip] = await db
+        .select()
+        .from(tripsTable)
+        .where(
+          and(
+            eq(tripsTable.userId, userId),
+            eq(tripsTable.flightId, flightId),
+            eq(tripsTable.status, "upcoming"),
+          ),
+        )
+        .orderBy(desc(tripsTable.bookedAt))
+        .limit(1);
+      if (activeTrip) {
+        return res.json({
+          status: "confirmed",
+          queueEntryId: entry?.id ?? null,
+          tripId: activeTrip.id,
+        });
+      }
+    }
+
     if (!entry) {
       return res.json({ status: "none" });
     }
