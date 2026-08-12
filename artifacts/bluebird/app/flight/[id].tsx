@@ -274,17 +274,6 @@ export default function FlightDetailScreen() {
     // status === 'none' — full join flow
     return (
       <>
-        {user.linePassCount > 0 && (
-          <TouchableOpacity
-            style={[styles.skipBtn, { borderColor: colors.primary }]}
-            onPress={() =>
-              router.push({ pathname: '/queue/join', params: joinFlowParams({ useLinePass: '1' }) })
-            }
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.skipBtnText, { color: colors.primary }]}>⚡ Skip the Line ({user.linePassCount})</Text>
-          </TouchableOpacity>
-        )}
         <TouchableOpacity style={[styles.joinBtn, { backgroundColor: colors.primary }]} onPress={handleJoinQueue} activeOpacity={0.8}>
           <Text style={[styles.joinBtnText, { color: colors.primaryForeground }]}>Request to Join</Text>
         </TouchableOpacity>
@@ -575,10 +564,6 @@ const styles = StyleSheet.create({
   statusLoadingRow: { alignItems: 'center', paddingVertical: 16 },
 
   // none / join state
-  skipBtn: {
-    borderWidth: 1.5, borderRadius: 14, paddingVertical: 13, alignItems: 'center',
-  },
-  skipBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
   joinBtn: {
     borderRadius: 14, paddingVertical: 15, alignItems: 'center',
   },
