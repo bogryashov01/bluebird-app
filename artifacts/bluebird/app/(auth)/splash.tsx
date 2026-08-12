@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Platform, Image } from 'react-native';
+import { View, StyleSheet, Animated, Platform, Image, TouchableOpacity, Text } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 
 export default function SplashScreen() {
@@ -10,6 +11,8 @@ export default function SplashScreen() {
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(0.8)).current;
   const taglineOpacity = useRef(new Animated.Value(0)).current;
+  const buttonOpacity = useRef(new Animated.Value(0)).current;
+  const buttonTranslate = useRef(new Animated.Value(12)).current;
 
   useEffect(() => {
     Animated.sequence([
@@ -18,12 +21,11 @@ export default function SplashScreen() {
         Animated.spring(logoScale, { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 }),
       ]),
       Animated.timing(taglineOpacity, { toValue: 1, duration: 600, delay: 200, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.timing(buttonOpacity, { toValue: 1, duration: 500, delay: 150, useNativeDriver: true }),
+        Animated.timing(buttonTranslate, { toValue: 0, duration: 500, delay: 150, useNativeDriver: true }),
+      ]),
     ]).start();
-
-    const timer = setTimeout(() => {
-      router.replace('/(auth)/onboarding');
-    }, 2800);
-    return () => clearTimeout(timer);
   }, []);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
@@ -40,6 +42,19 @@ export default function SplashScreen() {
         <Animated.Text style={[styles.tagline, { color: colors.mutedOnBrand, opacity: taglineOpacity }]}>
           Private aviation, redefined.
         </Animated.Text>
+
+        <Animated.View style={{ opacity: buttonOpacity, transform: [{ translateY: buttonTranslate }], alignSelf: 'stretch' }}>
+          <TouchableOpacity
+            style={[styles.ctaButton, { backgroundColor: colors.primary }]}
+            onPress={() => router.push('/(auth)/welcome')}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Get Started"
+          >
+            <Text style={[styles.ctaText, { color: colors.primaryForeground }]}>Get Started</Text>
+            <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
+          </TouchableOpacity>
+        </Animated.View>
       </View>
 
       <View style={styles.dotsContainer}>
@@ -78,6 +93,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter_400Regular',
     letterSpacing: 0.3,
+  },
+  ctaButton: {
+    marginTop: 24,
+    height: 52,
+    borderRadius: 999,
+    paddingHorizontal: 32,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    alignSelf: 'center',
+    minWidth: 200,
+  },
+  ctaText: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
   },
   dotsContainer: {
     flexDirection: 'row',
