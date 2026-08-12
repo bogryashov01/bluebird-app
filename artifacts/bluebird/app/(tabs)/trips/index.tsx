@@ -1,13 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Platform, Image, ScrollView,
+  ActivityIndicator, Platform, Image, ScrollView, Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
-import { useListTrips, useGetQueueStatus } from '@workspace/api-client-react';
+import { useListTrips, useGetQueueStatus, useCancelTrip } from '@workspace/api-client-react';
 import type { Trip, QueueEntry } from '@workspace/api-client-react';
+import { confirmDialog } from '@/lib/confirmDialog';
 
 // ─── Aircraft images (same matching logic as Discover) ────────────────────────
 import { useAuth } from '@/context/AuthContext';
@@ -34,12 +36,14 @@ function fmtDate(dateStr: string, timeStr: string): string {
 type ActiveTab = 'upcoming' | 'pending' | 'past';
 
 // ─── Trip Card ────────────────────────────────────────────────────────────────
-function TripCard({ flight, badge, badgeBlue, onPress, colors }: {
+function TripCard({ flight, badge, badgeBlue, onPress, colors, onCancel, cancelling }: {
   flight: { fromCity: string; toCity: string; aircraftType: string; departureDate: string; departureTime: string };
   badge: string;
   badgeBlue: boolean;
   onPress?: () => void;
   colors: ReturnType<typeof useColors>;
+  onCancel?: () => void;
+  cancelling?: boolean;
 }) {
   return (
     <TouchableOpacity
@@ -63,6 +67,20 @@ function TripCard({ flight, badge, badgeBlue, onPress, colors }: {
         <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
           {flight.aircraftType} · {fmtDate(flight.departureDate, flight.departureTime)}
         </Text>
+        {onCancel && (
+          <TouchableOpacity
+            style={[styles.cancelBtn, { borderColor: colors.border }, cancelling && { opacity: 0.6 }]}
+            onPress={onCancel}
+            disabled={cancelling}
+            activeOpacity={0.75}
+          >
+            {cancelling ? (
+              <ActivityIndicator size="small" color={colors.mutedForeground} />
+            ) : (
+              <Text style={[styles.cancelBtnText, { color: colors.mutedForeground }]}>Cancel booking</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -73,7 +91,8 @@ export default function TripsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<ActiveTab>('upcoming');
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
+  const queryClient = useQueryClient();
 
   const topPad = Platform.OS === 'web' ? 40 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -98,6 +117,46 @@ export default function TripsScreen() {
     [queueEntries]);
 
   const isLoading = tripsLoading || queueLoading;
+
+  const cancelTripMutation = useCancelTrip({
+    mutation: {
+      onSuccess: (data: any, vars: { id: string }) => {
+        setCancellingTripId(null);
+        // Refresh trips (moves to Past as cancelled), queue status, and the
+        // flight lists whose derived seat counts just changed.
+        queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/flights'] });
+        if (user && typeof data?.linePassCount === 'number') {
+          updateUser({ ...user, linePassCount: data.linePassCount });
+        }
+      },
+      onError: (err: any) => {
+        setCancellingTripId(null);
+        const msg = err?.data?.error || err?.message || 'Failed to cancel booking';
+        if (Platform.OS === 'web') {
+          if (typeof window !== 'undefined') window.alert(msg);
+        } else {
+          Alert.alert('Cancellation failed', msg);
+        }
+      },
+    },
+  });
+  const [cancellingTripId, setCancellingTripId] = useState<string | null>(null);
+
+  const handleCancelTrip = async (trip: Trip) => {
+    if (cancellingTripId) return;
+    const route = trip.flight ? `${trip.flight.fromCity} → ${trip.flight.toCity}` : 'this flight';
+    const ok = await confirmDialog(
+      'Cancel booking?',
+      `Your seat on ${route} will be released to the next member in line. If you used a Skip the Line pass for this booking, it will be returned to your balance.`,
+      'Cancel Booking',
+      true,
+    );
+    if (!ok) return;
+    setCancellingTripId(trip.id);
+    cancelTripMutation.mutate({ id: trip.id });
+  };
 
   const TABS: { id: ActiveTab; label: string }[] = [
     { id: 'upcoming', label: 'Upcoming' },
@@ -145,6 +204,8 @@ export default function TripsScreen() {
               badge="CONFIRMED"
               badgeBlue
               onPress={() => trip.flight && router.push(`/flight/${trip.flight.id}`)}
+              onCancel={() => handleCancelTrip(trip)}
+              cancelling={cancellingTripId === trip.id}
             />
           ))}
         </ScrollView>
@@ -337,6 +398,18 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   cardMeta: {
+    fontSize: 13,
+  },
+  cancelBtn: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtnText: {
+    fontFamily: 'Inter_600SemiBold',
     fontSize: 13,
   },
 

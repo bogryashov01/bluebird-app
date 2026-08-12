@@ -24,6 +24,7 @@ import type {
   AirportSummary,
   AuthResponse,
   BuyPassResponse,
+  CancelBookingResponse,
   CancelQueueResponse,
   ChangeMembershipRequest,
   ConciergeChatRequest,
@@ -1196,6 +1197,77 @@ export const useUseLinePassOnQueueEntry = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getUseLinePassOnQueueEntryMutationOptions(options));
+    }
+
+export const getCancelTripUrl = (id: string,) => {
+
+
+
+
+  return `/api/trips/${id}/cancel`
+}
+
+/**
+ * @summary Cancel a confirmed booking — releases the seat, refunds a used Skip the Line pass, idempotent on repeat calls
+ */
+export const cancelTrip = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<CancelBookingResponse> => {
+
+  return customFetch<CancelBookingResponse>(getCancelTripUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCancelTripMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelTrip>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelTrip>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['cancelTrip'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelTrip>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  cancelTrip(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelTripMutationResult = NonNullable<Awaited<ReturnType<typeof cancelTrip>>>
+
+    export type CancelTripMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Cancel a confirmed booking — releases the seat, refunds a used Skip the Line pass, idempotent on repeat calls
+ */
+export const useCancelTrip = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelTrip>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelTrip>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getCancelTripMutationOptions(options));
     }
 
 export const getListTripsUrl = () => {

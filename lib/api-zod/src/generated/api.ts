@@ -257,6 +257,7 @@ export const joinQueueBodyPassengersDefault = 1;
 export const joinQueueBodyPassengersMax = 10;
 
 
+
 export const JoinQueueBody = zod.object({
   "flightId": zod.string(),
   "useLinePass": zod.boolean().optional(),
@@ -417,6 +418,51 @@ export const UseLinePassOnQueueEntryResponse = zod.object({
 
 
 /**
+ * @summary Cancel a confirmed booking — releases the seat, refunds a used Skip the Line pass, idempotent on repeat calls
+ */
+export const CancelTripParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const CancelTripResponse = zod.object({
+  "success": zod.boolean(),
+  "passRefunded": zod.boolean().describe('True when a Skip the Line pass spent on this booking was returned to the member\'s balance.'),
+  "linePassCount": zod.number().describe('The member\'s pass balance after the cancellation.'),
+  "trip": zod.object({
+  "id": zod.string(),
+  "flightId": zod.string(),
+  "flight": zod.object({
+  "id": zod.string(),
+  "fromAirport": zod.string(),
+  "fromCity": zod.string(),
+  "toAirport": zod.string(),
+  "toCity": zod.string(),
+  "aircraftType": zod.string(),
+  "aircraftCapacity": zod.number(),
+  "departureDate": zod.string(),
+  "departureTime": zod.string(),
+  "duration": zod.string(),
+  "seatsAvailable": zod.number(),
+  "priceUsd": zod.number().optional(),
+  "discountPct": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "international": zod.boolean().optional(),
+  "internationalFeeUsd": zod.number().optional(),
+  "rangeNm": zod.number().nullish(),
+  "cruiseSpeed": zod.string().nullish(),
+  "destWeather": zod.string().nullish(),
+  "departureFbo": zod.string().nullish(),
+  "status": zod.enum(['available', 'boarding', 'departed', 'completed', 'cancelled']),
+  "imageUrl": zod.string().optional(),
+  "createdAt": zod.string()
+}).optional(),
+  "status": zod.enum(['upcoming', 'completed', 'cancelled']),
+  "bookedAt": zod.string()
+}).optional()
+})
+
+
+/**
  * @summary Get user trips
  */
 export const ListTripsResponseItem = zod.object({
@@ -572,6 +618,7 @@ export const conciergeChatBodyMessagesItemContentMax = 4000;
 export const conciergeChatBodyMessagesMax = 40;
 
 
+
 export const ConciergeChatBody = zod.object({
   "messages": zod.array(zod.object({
   "role": zod.enum(['user', 'assistant']),
@@ -591,6 +638,7 @@ export const getConciergeHistoryQueryLimitDefault = 50;
 export const getConciergeHistoryQueryLimitMax = 100;
 
 
+
 export const GetConciergeHistoryQueryParams = zod.object({
   "limit": zod.coerce.number().int().min(1).max(getConciergeHistoryQueryLimitMax).default(getConciergeHistoryQueryLimitDefault)
 })
@@ -602,4 +650,5 @@ export const GetConciergeHistoryResponseItem = zod.object({
   "createdAt": zod.string()
 })
 export const GetConciergeHistoryResponse = zod.array(GetConciergeHistoryResponseItem)
+
 

@@ -6,7 +6,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useGetFlight, useGetFlightMyStatus, useCancelQueueEntry } from '@workspace/api-client-react';
+import { useGetFlight, useGetFlightMyStatus, useCancelQueueEntry, useCancelTrip } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
@@ -73,7 +73,7 @@ export default function FlightDetailScreen() {
   const { height: windowHeight } = useWindowDimensions();
   // Scale hero with screen height so small iPhones keep content above the fold
   const heroHeight = Math.round(Math.min(300, Math.max(200, windowHeight * 0.32)));
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
   const [passengers, setPassengers] = useState(1);
 
@@ -103,6 +103,41 @@ export default function FlightDetailScreen() {
       },
     },
   });
+
+  const cancelTripMutation = useCancelTrip({
+    mutation: {
+      onSuccess: (data: any) => {
+        queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/flights'] });
+        queryClient.invalidateQueries({ queryKey: [`/api/flights/${id}`] });
+        queryClient.invalidateQueries({ queryKey: [`/api/flights/${id}/my-status`] });
+        if (user && typeof data?.linePassCount === 'number') {
+          updateUser({ ...user, linePassCount: data.linePassCount });
+        }
+      },
+      onError: (err: any) => {
+        const msg = err?.data?.error || err?.message || 'Failed to cancel booking';
+        if (Platform.OS === 'web') {
+          if (typeof window !== 'undefined') window.alert(msg);
+        } else {
+          Alert.alert('Cancellation failed', msg);
+        }
+      },
+    },
+  });
+
+  const handleCancelBooking = async () => {
+    if (!myStatus?.tripId || cancelTripMutation.isPending) return;
+    const route = flight ? `${(flight as any).fromCity} → ${(flight as any).toCity}` : 'this flight';
+    const ok = await confirmDialog(
+      'Cancel booking?',
+      `Your seat on ${route} will be released to the next member in line. If you used a Skip the Line pass for this booking, it will be returned to your balance.`,
+      'Cancel Booking',
+      true,
+    );
+    if (ok) cancelTripMutation.mutate({ id: myStatus.tripId });
+  };
 
   const handleLeaveQueue = async () => {
     if (!myStatus?.queueEntryId) return;
@@ -224,6 +259,19 @@ export default function FlightDetailScreen() {
           >
             <Text style={[styles.viewTripBtnText, { color: colors.primaryForeground }]}>View in My Trips</Text>
           </TouchableOpacity>
+          {!!myStatus?.tripId && (
+            <TouchableOpacity
+              style={[styles.leaveQueueBtn, { borderColor: colors.border }, cancelTripMutation.isPending && { opacity: 0.6 }]}
+              onPress={handleCancelBooking}
+              disabled={cancelTripMutation.isPending}
+              activeOpacity={0.75}
+            >
+              {cancelTripMutation.isPending
+                ? <ActivityIndicator color={colors.mutedForegroundLight} size="small" />
+                : <Text style={[styles.leaveQueueBtnText, { color: colors.mutedForegroundLight }]}>Cancel Booking</Text>
+              }
+            </TouchableOpacity>
+          )}
         </>
       );
     }

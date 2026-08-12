@@ -408,6 +408,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /trips/{id}/cancel:
+    post:
+      operationId: cancelTrip
+      tags: [trips]
+      summary: Cancel a confirmed booking — releases the seat, refunds a used Skip the Line pass, idempotent on repeat calls
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Booking cancelled (or already cancelled — idempotent, no double refund)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelBookingResponse"
+        "404":
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Flight already departed, trip already completed, or concurrent update conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /trips:
     get:
       operationId: listTrips
@@ -1052,6 +1085,24 @@ components:
         - flightId
         - status
         - bookedAt
+
+    CancelBookingResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        passRefunded:
+          type: boolean
+          description: True when a Skip the Line pass spent on this booking was returned to the member's balance.
+        linePassCount:
+          type: number
+          description: The member's pass balance after the cancellation.
+        trip:
+          $ref: "#/components/schemas/Trip"
+      required:
+        - success
+        - passRefunded
+        - linePassCount
 
     Membership:
       type: object

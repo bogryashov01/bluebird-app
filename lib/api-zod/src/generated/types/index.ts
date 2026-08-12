@@ -11,6 +11,7 @@ export * from './airportInfo';
 export * from './airportSummary';
 export * from './authResponse';
 export * from './buyPassResponse';
+export * from './cancelBookingResponse';
 export * from './cancelQueueResponse';
 export * from './changeMembershipRequest';
 export * from './changeMembershipRequestAction';

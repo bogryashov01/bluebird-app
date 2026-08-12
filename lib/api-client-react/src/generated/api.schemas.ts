@@ -203,6 +203,25 @@ export const QueueEntryStatus = {
 } as const;
 
 export type QueueMovementEventType = typeof QueueMovementEventType[keyof typeof QueueMovementEventType];
+
+
+export const QueueMovementEventType = {
+  joined: 'joined',
+  moved: 'moved',
+} as const;
+
+export interface QueueMovementEvent {
+  type: QueueMovementEventType;
+  /** Initial position (joined events only). */
+  position?: number;
+  /** Previous position (moved events only). */
+  from?: number;
+  /** New position (moved events only). */
+  to?: number;
+  /** UTC ISO-8601 timestamp of the event. */
+  at: string;
+}
+
 export interface QueueEntry {
   id: string;
   flightId: string;
@@ -254,6 +273,15 @@ export interface Trip {
   flight?: Flight;
   status: TripStatus;
   bookedAt: string;
+}
+
+export interface CancelBookingResponse {
+  success: boolean;
+  /** True when a Skip the Line pass spent on this booking was returned to the member's balance. */
+  passRefunded: boolean;
+  /** The member's pass balance after the cancellation. */
+  linePassCount: number;
+  trip?: Trip;
 }
 
 export type MembershipTier = typeof MembershipTier[keyof typeof MembershipTier];
@@ -390,20 +418,3 @@ export type GetConciergeHistoryParams = {
 limit?: number;
 };
 
-
-export interface QueueMovementEvent {
-  type: QueueMovementEventType;
-  /** Initial position (joined events only). */
-  position?: number;
-  /** Previous position (moved events only). */
-  from?: number;
-  /** New position (moved events only). */
-  to?: number;
-  /** UTC ISO-8601 timestamp of the event. */
-  at: string;
-}
-
-export const QueueMovementEventType = {
-  joined: 'joined',
-  moved: 'moved',
-} as const;
