@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Platform, Alert, Share,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Platform, Alert, Share, Image,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -79,14 +79,13 @@ export default function FlightConfirmedScreen() {
         contentContainerStyle={[styles.scroll, { paddingTop: topPad + 40, paddingBottom: bottomPad + 110 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Success mark */}
-        <Animated.View style={[
-          styles.iconRing,
-          { backgroundColor: colors.primary + '26', opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
-        ]}>
-          <View style={[styles.iconBg, { backgroundColor: colors.primary }]}>
-            <Feather name="check" size={30} color={colors.primaryForeground} />
-          </View>
+        {/* Bluebird brand mark (mockup: blue bird instead of a check ring) */}
+        <Animated.View style={{ opacity: opacityAnim, transform: [{ scale: scaleAnim }] }}>
+          <Image
+            source={require('@/assets/images/bluebird-bird-mark.png')}
+            style={styles.birdMark}
+            resizeMode="contain"
+          />
         </Animated.View>
 
         <Animated.View style={{ opacity: opacityAnim, alignItems: 'center', gap: 6 }}>
@@ -94,7 +93,7 @@ export default function FlightConfirmedScreen() {
           {!!subtitle && <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>{subtitle}</Text>}
         </Animated.View>
 
-        {/* Route timeline */}
+        {/* Route row — codes with times, separated by a thin horizontal line */}
         {hasRoute && (
           <View style={styles.timeline}>
             <View style={styles.timelineEnd}>
@@ -103,13 +102,7 @@ export default function FlightConfirmedScreen() {
                 <Text style={[styles.timelineTime, { color: colors.mutedOnBrand }]}>{params.departureTime}</Text>
               )}
             </View>
-            <View style={styles.timelineCenter}>
-              <View style={[styles.timelineDot, { backgroundColor: colors.primary }]} />
-              <View style={[styles.timelineLine, { backgroundColor: colors.textOnBrand + '33' }]} />
-              <Feather name="send" size={13} color={colors.mutedOnBrand} style={{ transform: [{ rotate: '45deg' }] }} />
-              <View style={[styles.timelineLine, { backgroundColor: colors.textOnBrand + '33' }]} />
-              <View style={[styles.timelineDot, { backgroundColor: colors.primary }]} />
-            </View>
+            <View style={[styles.timelineLine, { backgroundColor: colors.textOnBrand + '33' }]} />
             <View style={[styles.timelineEnd, { alignItems: 'flex-end' }]}>
               <Text style={[styles.timelineCode, { color: colors.textOnBrand }]}>{params.to}</Text>
               {!!arrival && <Text style={[styles.timelineTime, { color: colors.mutedOnBrand }]}>{arrival}</Text>}
@@ -117,8 +110,8 @@ export default function FlightConfirmedScreen() {
           </View>
         )}
 
-        {/* Next steps */}
-        <View style={styles.nextSteps}>
+        {/* Next steps — slightly lighter card */}
+        <View style={[styles.nextSteps, { backgroundColor: colors.textOnBrand + '0D' }]}>
           <Text style={[styles.nextStepsTitle, { color: colors.textOnBrand }]}>Next Steps</Text>
           {NEXT_STEPS.map((step) => (
             <View key={step} style={styles.stepRow}>
@@ -157,25 +150,16 @@ export default function FlightConfirmedScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { paddingHorizontal: 24, alignItems: 'center', gap: 26 },
-  iconRing: {
-    width: 96, height: 96, borderRadius: 48,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  iconBg: {
-    width: 64, height: 64, borderRadius: 32,
-    justifyContent: 'center', alignItems: 'center',
-  },
+  birdMark: { width: 76, height: 59 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 28, textAlign: 'center' },
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, textAlign: 'center' },
-  timeline: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 12 },
+  timeline: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 16 },
   timelineEnd: { alignItems: 'flex-start' },
   timelineCode: { fontFamily: 'Inter_700Bold', fontSize: 22 },
   timelineTime: { fontFamily: 'Inter_500Medium', fontSize: 13, marginTop: 2 },
-  timelineCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  timelineLine: { flex: 1, height: 1 },
-  timelineDot: { width: 6, height: 6, borderRadius: 3 },
-  nextSteps: { alignSelf: 'stretch', gap: 10 },
-  nextStepsTitle: { fontFamily: 'Inter_700Bold', fontSize: 15, marginBottom: 2 },
+  timelineLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  nextSteps: { alignSelf: 'stretch', gap: 10, borderRadius: 16, padding: 16 },
+  nextStepsTitle: { fontFamily: 'Inter_700Bold', fontSize: 14, marginBottom: 2 },
   stepRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   stepText: { fontFamily: 'Inter_400Regular', fontSize: 14 },
   actionRow: { flexDirection: 'row', gap: 10, alignSelf: 'stretch' },

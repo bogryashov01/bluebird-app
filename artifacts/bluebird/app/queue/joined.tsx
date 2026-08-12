@@ -69,13 +69,12 @@ export default function QueueJoinedScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite, paddingTop: topPad, paddingBottom: bottomPad + 16 }]}>
       <View style={styles.content}>
+        {/* Soft light-blue circle with a blue check (mockup: no solid disc) */}
         <Animated.View style={[
           styles.iconRing,
-          { backgroundColor: colors.primary + '18', opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
+          { backgroundColor: colors.primary + '1F', opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
         ]}>
-          <View style={[styles.iconBg, { backgroundColor: colors.primary }]}>
-            <Feather name="check" size={30} color={colors.primaryForeground} />
-          </View>
+          <Feather name="check" size={38} color={colors.primary} />
         </Animated.View>
 
         <Animated.View style={{ opacity: opacityAnim, alignItems: 'center', gap: 6 }}>
@@ -92,7 +91,7 @@ export default function QueueJoinedScreen() {
 
         <View style={styles.chipRow}>
           <View style={[styles.chip, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.chipValue, { color: colors.textOnSurface }]}>#{params.position ?? '—'}</Text>
+            <Text style={[styles.chipValue, { color: colors.primary }]}>#{params.position ?? '—'}</Text>
             <Text style={[styles.chipLabel, { color: colors.mutedForegroundLight }]}>QUEUE POSITION</Text>
           </View>
           <View style={[styles.chip, { backgroundColor: colors.surface }]}>
@@ -133,10 +132,6 @@ const styles = StyleSheet.create({
   content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24, gap: 22 },
   iconRing: {
     width: 96, height: 96, borderRadius: 48,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  iconBg: {
-    width: 64, height: 64, borderRadius: 32,
     justifyContent: 'center', alignItems: 'center',
   },
   title: { fontFamily: 'Inter_700Bold', fontSize: 26, textAlign: 'center' },

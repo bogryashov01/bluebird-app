@@ -7,6 +7,7 @@
  */
 import type { Flight } from './flight';
 import type { QueueEntryStatus } from './queueEntryStatus';
+import type { QueueMovementEvent } from './queueMovementEvent';
 
 export interface QueueEntry {
   id: string;
@@ -16,4 +17,6 @@ export interface QueueEntry {
   totalInQueue: number;
   status: QueueEntryStatus;
   createdAt: string;
+  /** Append-only movement log — a 'joined' event recorded at insert time plus a 'moved' event for each position improvement. */
+  movementHistory?: QueueMovementEvent[];
 }

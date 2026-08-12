@@ -6,7 +6,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
-import type { QueueEntry } from '@workspace/api-client-react';
+import type { QueueEntry, QueueMovementEvent } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
 import { FloatingBackButton } from '@/components/FloatingBackButton';
@@ -25,7 +25,7 @@ import { useAuth } from '@/context/AuthContext';
 const DECISION_MIN_WAIT_MS = 60_000;
 
 function useDecisionCountdown(joinedAt?: string): string {
-  const [remaining, setRemaining] = useState('--:--');
+  const [remaining, setRemaining] = useState('--:--:--');
 
   useEffect(() => {
     if (!joinedAt) return;
@@ -33,9 +33,10 @@ function useDecisionCountdown(joinedAt?: string): string {
     const compute = () => {
       const diff = target - Date.now();
       if (diff <= 0) { setRemaining('Imminent'); return; }
-      const mins = Math.floor(diff / 60000);
+      const hours = Math.floor(diff / 3600000);
+      const mins = Math.floor((diff % 3600000) / 60000);
       const secs = Math.floor((diff % 60000) / 1000);
-      setRemaining(`${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`);
+      setRemaining(`${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`);
     };
     compute();
     const id = setInterval(compute, 1000);
@@ -51,7 +52,6 @@ const CIRC = 251;
 function RingProgress({ position, total }: { position: number; total: number }) {
   const colors = useColors();
   const { width: windowWidth } = useWindowDimensions();
-  // Card padding (22*2) + screen padding (22*2) leaves ~windowWidth-88; cap at 170
   const ringSize = Math.round(Math.min(170, Math.max(120, windowWidth - 200)));
   const progress   = total > 1 ? (total - position) / (total - 1) : 1;
   const dashoffset = CIRC * (1 - progress);
@@ -87,101 +87,6 @@ const ring = StyleSheet.create({
   total: { fontFamily: 'Inter_400Regular', fontSize: 18 },
   label: { fontFamily: 'Inter_600SemiBold', fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' },
 });
-
-// ─── Waiting queue entry card ─────────────────────────────────────────────────
-function QueueCard({
-  entry,
-  onCancel,
-  onUsePass,
-  isUsingPass,
-  passCount,
-}: {
-  entry: QueueEntry;
-  onCancel: () => void;
-  onUsePass?: () => void;
-  isUsingPass?: boolean;
-  passCount?: number;
-}) {
-  const colors = useColors();
-  const flight    = entry.flight;
-  const countdown = useDecisionCountdown(entry.createdAt);
-  const joinedAgo = formatAgo(entry.createdAt);
-  const flightLabel = flight ? `${flight.fromAirport} → ${flight.toAirport}` : '— → —';
-
-  return (
-    <View style={[card.wrap, { backgroundColor: colors.surface }]}>
-      <Text style={[card.route, { color: colors.textOnSurface }]}>{flightLabel}</Text>
-      <RingProgress position={entry.position} total={entry.totalInQueue} />
-
-      {flight && (
-        <Text style={[card.countdown, { color: colors.primary }]}>
-          {countdown === 'Imminent' ? 'Decision imminent' : `Decision in ${countdown}`}
-        </Text>
-      )}
-
-      <View style={[card.section, { backgroundColor: colors.surface }]}>
-        <Text style={[card.sectionTitle, { color: colors.textOnSurface }]}>Queue Movement</Text>
-        <View style={card.logRow}>
-          <Text style={[card.logText, { color: colors.mutedForegroundLight }]}>Currently #{entry.position} of {entry.totalInQueue}</Text>
-          <Text style={[card.logTime, { color: colors.mutedForegroundLight }]}>now</Text>
-        </View>
-        <View style={card.logRow}>
-          <Text style={[card.logText, { color: colors.mutedForegroundLight }]}>Joined queue</Text>
-          <Text style={[card.logTime, { color: colors.mutedForegroundLight }]}>{joinedAgo}</Text>
-        </View>
-      </View>
-
-      <View style={[card.section, { backgroundColor: colors.surface }]}>
-        <View style={card.statusRow}>
-          <Text style={[card.sectionTitle, { color: colors.textOnSurface }]}>Flight Status</Text>
-          <View style={card.statusBadge}>
-            <View style={[card.statusDot, { backgroundColor: colors.success }]} />
-            <Text style={[card.statusText, { color: colors.success }]}>
-              {flight?.status === 'available' ? 'Open' : flight?.status ?? 'Active'}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={[card.disclaimer, { backgroundColor: colors.primary + '0D' }]}>
-        <Text style={[card.disclaimerText, { color: colors.textOnSurface }]}>
-          {entry.position === 1
-            ? "You're first in line — your seat will be confirmed automatically at the decision moment. No action needed."
-            : 'Flights may be modified or cancelled due to operational requirements.'}
-        </Text>
-      </View>
-
-      <PrimaryButton
-        label="View Flight Details"
-        onPress={() => router.push(`/flight/${entry.flightId}`)}
-        style={card.fullWidth}
-      />
-
-      {/* Skip the Line pass — offered when the member holds passes and is not already #1 */}
-      {onUsePass && (
-        <TouchableOpacity
-          style={[card.passBtn, { borderColor: colors.primary }, isUsingPass && { opacity: 0.6 }]}
-          onPress={onUsePass}
-          disabled={isUsingPass}
-          activeOpacity={0.85}
-        >
-          <Text style={[card.passBtnText, { color: colors.primary }]}>
-            ⚡ Use Skip the Line Pass{typeof passCount === 'number' ? ` (${passCount} left)` : ''}
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      <TouchableOpacity style={card.ghostBtn} onPress={() => router.push('/concierge')} activeOpacity={0.7}>
-        <Text style={[card.ghostBtnText, { color: colors.mutedForegroundLight }]}>Ask AI Concierge</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={[card.leaveBtn, { borderColor: colors.border }]} onPress={onCancel} activeOpacity={0.7}>
-        <Text style={[card.leaveBtnText, { color: colors.mutedForegroundLight }]}>Leave queue</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
 function ConfirmedCard({ entry }: { entry: QueueEntry }) {
   const colors = useColors();
   const flight = entry.flight;
@@ -190,32 +95,31 @@ function ConfirmedCard({ entry }: { entry: QueueEntry }) {
     : '— → —';
 
   return (
-    <View style={[card.wrap, confirmed.wrap, { backgroundColor: colors.surface, borderColor: colors.success + '4D' }]}>
-      {/* Confirmed badge */}
+    <View style={[confirmed.wrap, { backgroundColor: colors.surface, borderColor: colors.success + '4D' }]}>
       <View style={[confirmed.badge, { backgroundColor: colors.success + '1F' }]}>
         <Text style={[confirmed.badgeText, { color: colors.success }]}>✓  CONFIRMED</Text>
       </View>
 
-      <Text style={[card.route, { color: colors.textOnSurface }]}>{flightLabel}</Text>
+      <Text style={[confirmed.route, { color: colors.textOnSurface }]}>{flightLabel}</Text>
 
       {flight && (
-        <View style={[card.section, { backgroundColor: colors.surface }]}>
-          <View style={card.statusRow}>
-            <Text style={[card.sectionTitle, { color: colors.textOnSurface }]}>Flight Status</Text>
-            <View style={card.statusBadge}>
-              <View style={[card.statusDot, { backgroundColor: colors.success }]} />
-              <Text style={[card.statusText, { color: colors.success }]}>
+        <View style={confirmed.details}>
+          <View style={flat.statusRow}>
+            <Text style={[flat.cardTitle, { color: colors.textOnSurface }]}>Flight Status</Text>
+            <View style={flat.statusBadge}>
+              <View style={[flat.statusDot, { backgroundColor: colors.success }]} />
+              <Text style={[flat.statusText, { color: colors.success }]}>
                 {flight.status === 'available' ? 'Open' : flight.status ?? 'Active'}
               </Text>
             </View>
           </View>
-          <View style={card.logRow}>
-            <Text style={[card.logText, { color: colors.mutedForegroundLight }]}>Departure</Text>
-            <Text style={[card.logTime, { color: colors.mutedForegroundLight }]}>{flight.departureDate} · {flight.departureTime}</Text>
+          <View style={flat.logRow}>
+            <Text style={[flat.logText, { color: colors.mutedForegroundLight }]}>Departure</Text>
+            <Text style={[flat.logTime, { color: colors.mutedForegroundLight }]}>{flight.departureDate} · {flight.departureTime}</Text>
           </View>
-          <View style={card.logRow}>
-            <Text style={[card.logText, { color: colors.mutedForegroundLight }]}>Route</Text>
-            <Text style={[card.logTime, { color: colors.mutedForegroundLight }]}>{flight.fromCity} → {flight.toCity}</Text>
+          <View style={flat.logRow}>
+            <Text style={[flat.logText, { color: colors.mutedForegroundLight }]}>Route</Text>
+            <Text style={[flat.logTime, { color: colors.mutedForegroundLight }]}>{flight.fromCity} → {flight.toCity}</Text>
           </View>
         </View>
       )}
@@ -223,25 +127,48 @@ function ConfirmedCard({ entry }: { entry: QueueEntry }) {
       <PrimaryButton
         label="View in My Trips"
         onPress={() => router.push('/(tabs)/trips')}
-        backgroundColor={colors.backgroundMid}
-        textColor={colors.primaryForeground}
-        style={card.fullWidth}
+        style={confirmed.fullWidth}
       />
     </View>
   );
 }
 function formatAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
+  const mins = Math.max(0, Math.floor(diff / 60000));
+  if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+function movementRows(entry: QueueEntry): { text: string; time: string }[] {
+  const history = (entry.movementHistory ?? []) as QueueMovementEvent[];
+  const rows = history.map((ev) =>
+    ev.type === 'moved'
+      ? { text: `Moved #${ev.from} → #${ev.to}`, time: formatAgo(ev.at) }
+      : { text: `Joined queue at #${ev.position}`, time: formatAgo(ev.at) },
+  );
+  if (rows.length === 0) {
+    // Legacy entries created before movement logging existed.
+    return [{ text: `Joined queue`, time: formatAgo(entry.createdAt) }];
+  }
+  return rows.reverse();
+}
 const confirmed = StyleSheet.create({
   wrap: {
+    width: '100%',
+    borderRadius: 24,
     borderWidth: 1.5,
+    padding: 22,
+    alignItems: 'center',
+    gap: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 24,
+    shadowOpacity: 0.06,
+    elevation: 4,
+    marginBottom: 20,
   },
   badge: {
     borderRadius: 999,
@@ -254,77 +181,10 @@ const confirmed = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 0.5,
   },
-});
-const card = StyleSheet.create({
-  wrap: {
-    width: '100%',
-    borderRadius: 24,
-    padding: 22,
-    alignItems: 'center',
-    gap: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 24,
-    shadowOpacity: 0.06,
-    elevation: 4,
-    marginBottom: 20,
-  },
-  route: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 22,
-    letterSpacing: -0.4,
-    alignSelf: 'center',
-  },
-  countdown: { fontFamily: 'Inter_700Bold', fontSize: 15 },
-  section: {
-    width: '100%',
-    borderRadius: 18,
-    padding: 16,
-    gap: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 16,
-    shadowOpacity: 0.05,
-    elevation: 2,
-  },
-  sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 13 },
-  logRow:  { flexDirection: 'row', justifyContent: 'space-between' },
-  logText: { fontFamily: 'Inter_400Regular', fontSize: 13 },
-  logTime: { fontFamily: 'Inter_400Regular', fontSize: 13 },
-  statusRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  statusDot:   { width: 7, height: 7, borderRadius: 3.5 },
-  statusText:  { fontFamily: 'Inter_700Bold', fontSize: 13 },
-  disclaimer: {
-    width: '100%',
-    borderRadius: 14,
-    padding: 14,
-  },
-  disclaimerText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19 },
+  route: { fontFamily: 'Inter_700Bold', fontSize: 22, letterSpacing: -0.4 },
+  details: { width: '100%', gap: 10 },
   fullWidth: { width: '100%' },
-  passBtn: {
-    width: '100%',
-    borderWidth: 1.5,
-    borderRadius: 999,
-    height: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  passBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
-  ghostBtn: { paddingVertical: 4 },
-  ghostBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, textAlign: 'center' },
-  leaveBtn: {
-    borderWidth: 1,
-    borderRadius: 999,
-    width: '100%',
-    height: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  leaveBtnText: { fontFamily: 'Inter_500Medium', fontSize: 14 },
 });
-
-// ─── Screen ──────────────────────────────────────────────────────────────────
 export default function QueueStatusScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -416,6 +276,12 @@ export default function QueueStatusScreen() {
     if (ok) cancelMutation.mutate({ id: entryId });
   };
 
+  // Bottom-pinned actions apply to the first waiting entry in view (the
+  // non-picker path shows exactly one waiting entry in practice).
+  const footerEntry = !needsPicker ? waitingEntries[0] : undefined;
+  const footerCanUsePass =
+    !!footerEntry && !!user && user.linePassCount > 0 && footerEntry.position !== 1;
+
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
       <FloatingBackButton />
@@ -473,31 +339,46 @@ export default function QueueStatusScreen() {
           })}
         </ScrollView>
       ) : (
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={[styles.scrollContent, { paddingTop: topPad + 80, paddingBottom: bottomPad + 24 }]}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Confirmed entries appear first — most actionable */}
-          {confirmedEntries.map((entry) => (
-            <ConfirmedCard key={entry.id} entry={entry} />
-          ))}
-          {/* Waiting entries */}
-          {waitingEntries.map((entry) => (
-            <QueueCard
-              key={entry.id}
-              entry={entry}
-              onCancel={() => handleCancel(entry.id)}
-              onUsePass={
-                user && user.linePassCount > 0 && entry.position !== 1
-                  ? () => handleUsePass(entry)
-                  : undefined
-              }
-              isUsingPass={checkingPassEntryId === entry.id}
-              passCount={user?.linePassCount ?? 0}
-            />
-          ))}
-        </ScrollView>
+        <>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingTop: topPad + 60, paddingBottom: bottomPad + (footerEntry ? 150 : 24) },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Confirmed entries appear first — most actionable */}
+            {confirmedEntries.map((entry) => (
+              <ConfirmedCard key={entry.id} entry={entry} />
+            ))}
+            {/* Waiting entries — flat mockup layout */}
+            {waitingEntries.map((entry) => (
+              <WaitingQueueView key={entry.id} entry={entry} onCancel={() => handleCancel(entry.id)} />
+            ))}
+          </ScrollView>
+
+          {/* Bottom-pinned actions (mockup): blue pass button + concierge link */}
+          {footerEntry && (
+            <View style={[styles.footer, { paddingBottom: bottomPad + 12, backgroundColor: colors.offWhite }]}>
+              {footerCanUsePass ? (
+                <PrimaryButton
+                  label={`Use Skip the Line Pass${user ? ` (${user.linePassCount} left)` : ''}`}
+                  loading={checkingPassEntryId === footerEntry.id}
+                  onPress={() => handleUsePass(footerEntry)}
+                />
+              ) : (
+                <PrimaryButton
+                  label="View Flight Details"
+                  onPress={() => router.push(`/flight/${footerEntry.flightId}`)}
+                />
+              )}
+              <TouchableOpacity onPress={() => router.push('/concierge')} activeOpacity={0.7}>
+                <Text style={[styles.conciergeLink, { color: colors.mutedForegroundLight }]}>Ask AI Concierge</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
       )}
     </View>
   );
@@ -521,4 +402,99 @@ const styles = StyleSheet.create({
   pickerRoute: { fontFamily: 'Inter_700Bold', fontSize: 17 },
   pickerMeta: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 3 },
   pickerChevron: { fontFamily: 'Inter_700Bold', fontSize: 20, marginLeft: 10 },
+  footer: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    paddingHorizontal: 22, paddingTop: 12, gap: 12,
+  },
+  conciergeLink: { fontFamily: 'Inter_600SemiBold', fontSize: 14, textAlign: 'center' },
+});
+
+function WaitingQueueView({ entry, onCancel }: { entry: QueueEntry; onCancel: () => void }) {
+  const colors = useColors();
+  const flight    = entry.flight;
+  const countdown = useDecisionCountdown(entry.createdAt);
+  const routeLabel = flight ? `${flight.fromAirport} → ${flight.toAirport}` : '— → —';
+
+  return (
+    <View style={flat.wrap}>
+      <Text style={[flat.route, { color: colors.textOnSurface }]}>{routeLabel}</Text>
+      <RingProgress position={entry.position} total={entry.totalInQueue} />
+
+      <Text style={[flat.countdown, { color: colors.primary }]}>
+        {countdown === 'Imminent' ? 'Decision imminent' : `Decision in ${countdown}`}
+      </Text>
+
+      {/* Queue Movement — flat full-width white card */}
+      <View style={[flat.card, { backgroundColor: colors.surface }]}>
+        <Text style={[flat.cardTitle, { color: colors.textOnSurface }]}>Queue Movement</Text>
+        {movementRows(entry).map((row, i) => (
+          <View key={i} style={flat.logRow}>
+            <Text style={[flat.logText, { color: colors.mutedForegroundLight }]}>{row.text}</Text>
+            <Text style={[flat.logTime, { color: colors.mutedForegroundLight }]}>{row.time}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Flight Status card */}
+      <View style={[flat.card, { backgroundColor: colors.surface }]}>
+        <View style={flat.statusRow}>
+          <Text style={[flat.cardTitle, { color: colors.textOnSurface }]}>Flight Status</Text>
+          <View style={flat.statusBadge}>
+            <View style={[flat.statusDot, { backgroundColor: colors.success }]} />
+            <Text style={[flat.statusText, { color: colors.success }]}>
+              {flight?.status === 'available' ? 'Open' : flight?.status ?? 'Active'}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Light-blue disclaimer banner */}
+      <View style={[flat.disclaimer, { backgroundColor: colors.primary + '14' }]}>
+        <Text style={[flat.disclaimerText, { color: colors.textOnSurface }]}>
+          {entry.position === 1
+            ? "You're first in line — your seat will be confirmed automatically at the decision moment. No action needed."
+            : 'Flights may be modified or cancelled due to operational requirements.'}
+        </Text>
+      </View>
+
+      <View style={flat.linkRow}>
+        <TouchableOpacity onPress={() => router.push(`/flight/${entry.flightId}`)} activeOpacity={0.7}>
+          <Text style={[flat.linkText, { color: colors.mutedForegroundLight }]}>View flight details</Text>
+        </TouchableOpacity>
+        <Text style={[flat.linkText, { color: colors.mutedForegroundLight }]}>·</Text>
+        <TouchableOpacity onPress={onCancel} activeOpacity={0.7}>
+          <Text style={[flat.linkText, { color: colors.mutedForegroundLight }]}>Leave queue</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const flat = StyleSheet.create({
+  wrap: { width: '100%', alignItems: 'center', gap: 18, marginBottom: 20 },
+  route: { fontFamily: 'Inter_700Bold', fontSize: 24, letterSpacing: -0.4 },
+  countdown: { fontFamily: 'Inter_700Bold', fontSize: 16 },
+  card: {
+    width: '100%',
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 16,
+    shadowOpacity: 0.05,
+    elevation: 2,
+  },
+  cardTitle: { fontFamily: 'Inter_700Bold', fontSize: 13 },
+  logRow:  { flexDirection: 'row', justifyContent: 'space-between' },
+  logText: { fontFamily: 'Inter_400Regular', fontSize: 13 },
+  logTime: { fontFamily: 'Inter_400Regular', fontSize: 13 },
+  statusRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statusDot:   { width: 7, height: 7, borderRadius: 3.5 },
+  statusText:  { fontFamily: 'Inter_700Bold', fontSize: 13 },
+  disclaimer: { width: '100%', borderRadius: 14, padding: 14 },
+  disclaimerText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19 },
+  linkRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 2 },
+  linkText: { fontFamily: 'Inter_500Medium', fontSize: 13 },
 });

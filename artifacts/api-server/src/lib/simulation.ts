@@ -264,11 +264,18 @@ async function advanceFlightQueue(
 
 type TxDb = NodePgDatabase<typeof schema>;
 
-/** Keeps waiting positions contiguous after the front entry leaves. */
+/**
+ * Keeps waiting positions contiguous after the front entry leaves, appending
+ * a 'moved' event to each renumbered row's movement_history in the same bulk
+ * UPDATE so the log can never drift from the actual position.
+ */
 async function closeGap(txDb: TxDb, flightId: string, removedPosition: number) {
   await txDb
     .update(queueEntriesTable)
-    .set({ position: sql`${queueEntriesTable.position} - 1` })
+    .set({
+      position: sql`${queueEntriesTable.position} - 1`,
+      movementHistory: sql`coalesce(${queueEntriesTable.movementHistory}, '[]'::jsonb) || jsonb_build_array(jsonb_build_object('type', 'moved', 'from', ${queueEntriesTable.position}, 'to', ${queueEntriesTable.position} - 1, 'at', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')))`,
+    })
     .where(
       and(
         eq(queueEntriesTable.flightId, flightId),

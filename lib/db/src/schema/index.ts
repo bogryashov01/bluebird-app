@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, boolean, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -57,8 +57,19 @@ export const queueEntriesTable = pgTable("queue_entries", {
   // Set when this entry reaches the front of the queue and is notified that a
   // seat is ready; starts the 30-minute acceptance window.
   frontNotifiedAt: timestamp("front_notified_at"),
+  // Append-only movement log: a 'joined' event at insert time plus a 'moved'
+  // event for every position improvement (gap-close renumbering). Rendered on
+  // the Queue Status screen as "Joined queue at #N" / "Moved #A → #B".
+  movementHistory: jsonb("movement_history")
+    .$type<QueueMovementEvent[]>()
+    .notNull()
+    .default([]),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+export type QueueMovementEvent =
+  | { type: "joined"; position: number; at: string }
+  | { type: "moved"; from: number; to: number; at: string };
 
 export const tripsTable = pgTable("trips", {
   id: text("id").primaryKey(),

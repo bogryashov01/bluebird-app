@@ -12,6 +12,11 @@ function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 }
 
+// Appends a {type:'moved', from, to, at} event to each renumbered row's
+// movement_history in the SAME bulk UPDATE that decrements its position, so
+// the log can never drift from the actual position. Timestamps are UTC ISO.
+const movedEventAppendSql = sql`coalesce(${queueEntriesTable.movementHistory}, '[]'::jsonb) || jsonb_build_array(jsonb_build_object('type', 'moved', 'from', ${queueEntriesTable.position}, 'to', ${queueEntriesTable.position} - 1, 'at', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')))`;
+
 // POST /queue/join
 //
 // Runs the entire eligibility + position + insert flow inside a SERIALIZABLE
@@ -150,6 +155,7 @@ router.post("/join", authMiddleware, async (req, res) => {
         passengers,
         usedLinePass: !!useLinePass,
         intlFeeAccepted: feeApplies && !!acceptIntlFee,
+        movementHistory: [{ type: "joined", position, at: new Date().toISOString() }],
       })
       .returning();
 
@@ -315,7 +321,10 @@ router.delete("/:id", authMiddleware, async (req, res) => {
     // ranked behind the one we just removed, keeping positions contiguous.
     await txDb
       .update(queueEntriesTable)
-      .set({ position: sql`${queueEntriesTable.position} - 1` })
+      .set({
+        position: sql`${queueEntriesTable.position} - 1`,
+        movementHistory: movedEventAppendSql,
+      })
       .where(
         and(
           eq(queueEntriesTable.flightId, entry.flightId),
@@ -467,7 +476,10 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
     // 5. Close the gap for members who were behind this entry
     await txDb
       .update(queueEntriesTable)
-      .set({ position: sql`${queueEntriesTable.position} - 1` })
+      .set({
+        position: sql`${queueEntriesTable.position} - 1`,
+        movementHistory: movedEventAppendSql,
+      })
       .where(
         and(
           eq(queueEntriesTable.flightId, entry.flightId),

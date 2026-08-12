@@ -149,12 +149,14 @@ export async function ensureSchema(): Promise<void> {
       status         TEXT        NOT NULL DEFAULT 'waiting',
       used_line_pass BOOLEAN     NOT NULL DEFAULT false,
       passengers     INTEGER     NOT NULL DEFAULT 1,
+      movement_history JSONB     NOT NULL DEFAULT '[]'::jsonb,
       created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS passengers INTEGER NOT NULL DEFAULT 1;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS front_notified_at TIMESTAMPTZ;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS intl_fee_accepted BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS movement_history JSONB NOT NULL DEFAULT '[]'::jsonb;
 
     CREATE TABLE IF NOT EXISTS trips (
       id         TEXT        PRIMARY KEY,

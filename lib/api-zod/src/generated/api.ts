@@ -257,7 +257,6 @@ export const joinQueueBodyPassengersDefault = 1;
 export const joinQueueBodyPassengersMax = 10;
 
 
-
 export const JoinQueueBody = zod.object({
   "flightId": zod.string(),
   "useLinePass": zod.boolean().optional(),
@@ -296,7 +295,14 @@ export const JoinQueueResponse = zod.object({
   "position": zod.number(),
   "totalInQueue": zod.number(),
   "status": zod.enum(['waiting', 'confirmed', 'cancelled', 'expired']),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "movementHistory": zod.array(zod.object({
+  "type": zod.enum(['joined', 'moved']),
+  "position": zod.number().optional().describe('Initial position (joined events only).'),
+  "from": zod.number().optional().describe('Previous position (moved events only).'),
+  "to": zod.number().optional().describe('New position (moved events only).'),
+  "at": zod.string().describe('UTC ISO-8601 timestamp of the event.')
+})).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.')
 })
 
 
@@ -334,7 +340,14 @@ export const GetQueueStatusResponseItem = zod.object({
   "position": zod.number(),
   "totalInQueue": zod.number(),
   "status": zod.enum(['waiting', 'confirmed', 'cancelled', 'expired']),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "movementHistory": zod.array(zod.object({
+  "type": zod.enum(['joined', 'moved']),
+  "position": zod.number().optional().describe('Initial position (joined events only).'),
+  "from": zod.number().optional().describe('Previous position (moved events only).'),
+  "to": zod.number().optional().describe('New position (moved events only).'),
+  "at": zod.string().describe('UTC ISO-8601 timestamp of the event.')
+})).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.')
 })
 export const GetQueueStatusResponse = zod.array(GetQueueStatusResponseItem)
 
@@ -389,7 +402,14 @@ export const UseLinePassOnQueueEntryResponse = zod.object({
   "position": zod.number(),
   "totalInQueue": zod.number(),
   "status": zod.enum(['waiting', 'confirmed', 'cancelled', 'expired']),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "movementHistory": zod.array(zod.object({
+  "type": zod.enum(['joined', 'moved']),
+  "position": zod.number().optional().describe('Initial position (joined events only).'),
+  "from": zod.number().optional().describe('Previous position (moved events only).'),
+  "to": zod.number().optional().describe('New position (moved events only).'),
+  "at": zod.string().describe('UTC ISO-8601 timestamp of the event.')
+})).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.')
 }).and(zod.object({
   "linePassCount": zod.number().describe('The user\'s remaining Skip the Line pass balance after use'),
   "alreadyConfirmed": zod.boolean().optional().describe('True when the entry was already confirmed before the pass was applied — no pass was consumed')
@@ -552,7 +572,6 @@ export const conciergeChatBodyMessagesItemContentMax = 4000;
 export const conciergeChatBodyMessagesMax = 40;
 
 
-
 export const ConciergeChatBody = zod.object({
   "messages": zod.array(zod.object({
   "role": zod.enum(['user', 'assistant']),
@@ -572,7 +591,6 @@ export const getConciergeHistoryQueryLimitDefault = 50;
 export const getConciergeHistoryQueryLimitMax = 100;
 
 
-
 export const GetConciergeHistoryQueryParams = zod.object({
   "limit": zod.coerce.number().int().min(1).max(getConciergeHistoryQueryLimitMax).default(getConciergeHistoryQueryLimitDefault)
 })
@@ -584,5 +602,4 @@ export const GetConciergeHistoryResponseItem = zod.object({
   "createdAt": zod.string()
 })
 export const GetConciergeHistoryResponse = zod.array(GetConciergeHistoryResponseItem)
-
 

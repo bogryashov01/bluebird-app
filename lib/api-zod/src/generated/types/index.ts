@@ -39,6 +39,8 @@ export * from './notification';
 export * from './notificationType';
 export * from './queueEntry';
 export * from './queueEntryStatus';
+export * from './queueMovementEvent';
+export * from './queueMovementEventType';
 export * from './referralInfo';
 export * from './requestCodeRequest';
 export * from './requestCodeResponse';

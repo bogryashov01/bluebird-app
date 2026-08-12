@@ -202,6 +202,7 @@ export const QueueEntryStatus = {
   expired: 'expired',
 } as const;
 
+export type QueueMovementEventType = typeof QueueMovementEventType[keyof typeof QueueMovementEventType];
 export interface QueueEntry {
   id: string;
   flightId: string;
@@ -210,6 +211,8 @@ export interface QueueEntry {
   totalInQueue: number;
   status: QueueEntryStatus;
   createdAt: string;
+  /** Append-only movement log — a 'joined' event recorded at insert time plus a 'moved' event for each position improvement. */
+  movementHistory?: QueueMovementEvent[];
 }
 
 export type UseLinePassResponse = QueueEntry & {
@@ -387,3 +390,20 @@ export type GetConciergeHistoryParams = {
 limit?: number;
 };
 
+
+export interface QueueMovementEvent {
+  type: QueueMovementEventType;
+  /** Initial position (joined events only). */
+  position?: number;
+  /** Previous position (moved events only). */
+  from?: number;
+  /** New position (moved events only). */
+  to?: number;
+  /** UTC ISO-8601 timestamp of the event. */
+  at: string;
+}
+
+export const QueueMovementEventType = {
+  joined: 'joined',
+  moved: 'moved',
+} as const;

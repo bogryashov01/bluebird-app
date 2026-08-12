@@ -966,6 +966,13 @@ components:
           enum: [waiting, confirmed, cancelled, expired]
         createdAt:
           type: string
+        movementHistory:
+          type: array
+          description: >-
+            Append-only movement log — a 'joined' event recorded at insert time
+            plus a 'moved' event for each position improvement.
+          items:
+            $ref: "#/components/schemas/QueueMovementEvent"
       required:
         - id
         - flightId
@@ -973,6 +980,27 @@ components:
         - totalInQueue
         - status
         - createdAt
+    QueueMovementEvent:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [joined, moved]
+        position:
+          type: number
+          description: Initial position (joined events only).
+        from:
+          type: number
+          description: Previous position (moved events only).
+        to:
+          type: number
+          description: New position (moved events only).
+        at:
+          type: string
+          description: UTC ISO-8601 timestamp of the event.
+      required:
+        - type
+        - at
 
     UseLinePassResponse:
       allOf:
