@@ -24,6 +24,55 @@ const FLIGHT_PRICING: Record<string, { priceUsd: number; discountPct: number; fe
 // One-time fee applied to Base members on international routes (Plus/Concierge waive it)
 const INTL_FEE_USD = 1000;
 
+// ── Flight-details enrichment (aircraft specs, destination weather, FBOs) ──
+const AIRCRAFT_SPECS: Record<string, { rangeNm: number; cruiseSpeed: string }> = {
+  "Cessna Citation CJ3": { rangeNm: 2040, cruiseSpeed: "Mach .70" },
+  "Phenom 300E":         { rangeNm: 2010, cruiseSpeed: "Mach .80" },
+  "King Air 350":        { rangeNm: 1806, cruiseSpeed: "312 kts" },
+  "HondaJet Elite II":   { rangeNm: 1547, cruiseSpeed: "Mach .72" },
+  "Cessna Citation XLS": { rangeNm: 2100, cruiseSpeed: "Mach .75" },
+  "Pilatus PC-12":       { rangeNm: 1800, cruiseSpeed: "290 kts" },
+  "Gulfstream G280":     { rangeNm: 3600, cruiseSpeed: "Mach .80" },
+  "Cessna Citation M2":  { rangeNm: 1550, cruiseSpeed: "Mach .71" },
+  "Citation Latitude":   { rangeNm: 2700, cruiseSpeed: "Mach .74" },
+};
+
+// Static demo weather per destination airport (out of scope: live weather API)
+const DEST_WEATHER: Record<string, string> = {
+  SFO: "62°F Fog",   MIA: "88°F Sunny",  DAL: "95°F Clear", LAX: "75°F Sunny",
+  JFK: "81°F Cloudy", SEA: "64°F Overcast", TEB: "79°F Clear", ASP: "72°F Clear",
+  NAS: "86°F Sunny", YYZ: "74°F Clear",  LAS: "104°F Sunny", SDL: "98°F Sunny",
+  PBI: "87°F Sunny", BOS: "73°F Clear",  ORD: "78°F Windy",  DEN: "83°F Clear",
+};
+
+// Departure FBO per origin airport
+const DEPARTURE_FBOS: Record<string, string> = {
+  LAX: "Clay Lacy Aviation",
+  SFO: "Signature Flight Support",
+  JFK: "Modern Aviation",
+  MIA: "Signature Flight Support",
+  ORD: "Atlantic Aviation",
+  DAL: "Business Jet Center",
+  LAS: "Henderson Executive",
+  BOS: "Signature Flight Support",
+  SEA: "Modern Aviation",
+  DEN: "Signature Flight Support",
+  TEB: "Signature Flight Support",
+  SDL: "Ross Aviation",
+  PBI: "Atlantic Aviation",
+  NAS: "Odyssey Aviation",
+};
+
+function enrichmentFor(f: { aircraftType: string; fromAirport: string; toAirport: string }) {
+  const spec = AIRCRAFT_SPECS[f.aircraftType];
+  return {
+    rangeNm: spec?.rangeNm ?? 2000,
+    cruiseSpeed: spec?.cruiseSpeed ?? "Mach .74",
+    destWeather: DEST_WEATHER[f.toAirport] ?? "72°F Clear",
+    departureFbo: DEPARTURE_FBOS[f.fromAirport] ?? "Signature Flight Support",
+  };
+}
+
 const SEED_FLIGHTS = [
   {
     fromAirport: "LAX",
@@ -421,6 +470,7 @@ function buildHistoricalFlights() {
         // Spread departures across the last ~28 days, deterministically
         const daysAgo = 1 + ((i * 5 + k * 3) % 28);
         rows.push({
+          ...enrichmentFor({ aircraftType: aircraft.type, fromAirport: from, toAirport: to }),
           id: `hist-${from}-${to}-${k + 1}`,
           fromAirport: from,
           fromCity: HIST_CITIES[from] ?? from,
@@ -483,6 +533,16 @@ export async function seedFlights(): Promise<void> {
       if (unpriced.length > 0) logger.info({ count: unpriced.length }, "Backfilled flight pricing");
       else logger.info("Flights already seeded, skipping.");
 
+      // Backfill details enrichment on flights seeded before it existed
+      const unenriched = await db
+        .select()
+        .from(flightsTable)
+        .where(sql`${flightsTable.departureFbo} IS NULL`);
+      for (const f of unenriched) {
+        await db.update(flightsTable).set(enrichmentFor(f)).where(eq(flightsTable.id, f.id));
+      }
+      if (unenriched.length > 0) logger.info({ count: unenriched.length }, "Backfilled flight details enrichment");
+
       // Backfill: ensure the international demo routes exist for DBs seeded
       // before international flights were introduced.
       const [intlExisting] = await db
@@ -493,7 +553,7 @@ export async function seedFlights(): Promise<void> {
       if (!intlExisting) {
         const intlFlights = SEED_FLIGHTS.filter((f: any) => f.international).map((f) => {
           const p = pricingFor(f.fromAirport, f.toAirport);
-          return { ...f, id: makeId(), priceUsd: p.priceUsd, discountPct: p.discountPct, featured: !!p.featured };
+          return { ...f, ...enrichmentFor(f), id: makeId(), priceUsd: p.priceUsd, discountPct: p.discountPct, featured: !!p.featured };
         });
         if (intlFlights.length > 0) {
           await db.insert(flightsTable).values(intlFlights);
@@ -505,7 +565,7 @@ export async function seedFlights(): Promise<void> {
     }
     const toInsert = SEED_FLIGHTS.map((f) => {
       const p = pricingFor(f.fromAirport, f.toAirport);
-      return { ...f, id: makeId(), priceUsd: p.priceUsd, discountPct: p.discountPct, featured: !!p.featured };
+      return { ...f, ...enrichmentFor(f), id: makeId(), priceUsd: p.priceUsd, discountPct: p.discountPct, featured: !!p.featured };
     });
     await db.insert(flightsTable).values(toInsert);
     logger.info({ count: toInsert.length }, "Seeded flights");

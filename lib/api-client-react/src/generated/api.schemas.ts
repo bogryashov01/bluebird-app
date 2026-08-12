@@ -144,6 +144,10 @@ export interface Flight {
   featured?: boolean;
   international?: boolean;
   internationalFeeUsd?: number;
+  rangeNm?: number | null;
+  cruiseSpeed?: string | null;
+  destWeather?: string | null;
+  departureFbo?: string | null;
   status: FlightStatus;
   imageUrl?: string;
   createdAt: string;

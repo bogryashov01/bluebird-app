@@ -866,6 +866,18 @@ components:
           type: boolean
         internationalFeeUsd:
           type: number
+        rangeNm:
+          type: number
+          nullable: true
+        cruiseSpeed:
+          type: string
+          nullable: true
+        destWeather:
+          type: string
+          nullable: true
+        departureFbo:
+          type: string
+          nullable: true
         status:
           type: string
           enum: [available, boarding, departed, completed, cancelled]

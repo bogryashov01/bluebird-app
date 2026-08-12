@@ -122,6 +122,10 @@ export async function ensureSchema(): Promise<void> {
       featured         BOOLEAN     NOT NULL DEFAULT false,
       international    BOOLEAN     NOT NULL DEFAULT false,
       international_fee_usd INTEGER NOT NULL DEFAULT 0,
+      range_nm         INTEGER,
+      cruise_speed     TEXT,
+      dest_weather     TEXT,
+      departure_fbo    TEXT,
       status           TEXT        NOT NULL DEFAULT 'available',
       created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -131,6 +135,10 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE flights ADD COLUMN IF NOT EXISTS featured     BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE flights ADD COLUMN IF NOT EXISTS international BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE flights ADD COLUMN IF NOT EXISTS international_fee_usd INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE flights ADD COLUMN IF NOT EXISTS range_nm      INTEGER;
+    ALTER TABLE flights ADD COLUMN IF NOT EXISTS cruise_speed  TEXT;
+    ALTER TABLE flights ADD COLUMN IF NOT EXISTS dest_weather  TEXT;
+    ALTER TABLE flights ADD COLUMN IF NOT EXISTS departure_fbo TEXT;
 
     CREATE TABLE IF NOT EXISTS queue_entries (
       id             TEXT        PRIMARY KEY,

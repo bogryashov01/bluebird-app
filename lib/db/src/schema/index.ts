@@ -32,6 +32,12 @@ export const flightsTable = pgTable("flights", {
   featured: boolean("featured").notNull().default(false),
   international: boolean("international").notNull().default(false),
   internationalFeeUsd: integer("international_fee_usd").notNull().default(0),
+  // Aircraft & departure enrichment for the flight details screen. Nullable
+  // so pre-existing rows degrade gracefully until backfilled by the seeder.
+  rangeNm: integer("range_nm"),
+  cruiseSpeed: text("cruise_speed"),
+  destWeather: text("dest_weather"),
+  departureFbo: text("departure_fbo"),
   status: text("status").notNull().default("available"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

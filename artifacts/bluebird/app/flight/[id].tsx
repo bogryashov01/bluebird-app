@@ -44,16 +44,35 @@ function formatDate(d: string) {
   });
 }
 
-function amenities(f: any) {
-  return [
-    { label: 'Duration',  value: f.duration },
-    { label: 'Seats',     value: `${f.seatsAvailable} / ${f.aircraftCapacity}` },
-    { label: 'WiFi',      value: 'Onboard' },
-    { label: 'Pets',      value: 'Welcome' },
-    { label: 'Baggage',   value: '2 per seat' },
-    { label: 'Aircraft',  value: (f.aircraftType as string).split(' ').slice(-2).join(' ') },
-  ];
+function formatTime12(t: string): string {
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hr = h % 12 === 0 ? 12 : h % 12;
+  return `${hr}:${String(m).padStart(2, '0')} ${ampm}`;
 }
+
+// Original (pre-discount) price derived from the discounted price, rounded
+// to the nearest $100 so it reads like a real list price.
+function originalPrice(priceUsd: number, discountPct: number): number | null {
+  if (!priceUsd || !discountPct || discountPct <= 0 || discountPct >= 100) return null;
+  return Math.round(priceUsd / (1 - discountPct / 100) / 100) * 100;
+}
+
+// Info tiles: Seats always; Range / Speed / Weather only when the flight has
+// the enrichment data (older rows degrade gracefully).
+function infoTiles(f: any) {
+  const tiles = [{ label: 'Seats', value: `${f.seatsAvailable} available` }];
+  if (f.rangeNm)      tiles.push({ label: 'Range',  value: `${Number(f.rangeNm).toLocaleString()} nm` });
+  if (f.cruiseSpeed)  tiles.push({ label: 'Speed',  value: f.cruiseSpeed });
+  if (f.destWeather)  tiles.push({ label: `Weather · ${f.toAirport}`, value: f.destWeather });
+  return tiles;
+}
+
+const AMENITY_PILLS = [
+  { label: 'WiFi',    value: 'Onboard' },
+  { label: 'Pets',    value: 'Welcome' },
+  { label: 'Baggage', value: '2 per seat' },
+];
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 export default function FlightDetailScreen() {
@@ -150,6 +169,7 @@ export default function FlightDetailScreen() {
   const f         = flight as any;
   const imgSource = aircraftImage(f.aircraftType);
   const price     = f.priceUsd ? `$${f.priceUsd.toLocaleString()}` : null;
+  const wasPrice  = originalPrice(f.priceUsd, f.discountPct);
 
   const status = myStatus?.status ?? 'none';
 
@@ -374,11 +394,22 @@ export default function FlightDetailScreen() {
         {/* ── Title row ── */}
         <View style={styles.titleRow}>
           <Text style={[styles.aircraftName, { color: colors.textOnSurface }]} numberOfLines={1}>{f.aircraftType}</Text>
-          {price && <Text style={[styles.priceText, { color: colors.primary }]}>{price}</Text>}
+          {price && (
+            <View style={styles.priceCol}>
+              <Text style={[styles.priceText, { color: colors.primary }]}>{price}</Text>
+              {wasPrice && (
+                <Text style={[styles.wasPriceText, { color: colors.mutedForegroundLight }]}>
+                  ${wasPrice.toLocaleString()}
+                </Text>
+              )}
+            </View>
+          )}
         </View>
 
-        {/* ── Date row ── */}
-        <Text style={[styles.dateText, { color: colors.mutedForegroundLight }]}>{formatDate(f.departureDate)}</Text>
+        {/* ── Date · departure line ── */}
+        <Text style={[styles.dateText, { color: colors.mutedForegroundLight }]}>
+          {formatDate(f.departureDate)} · Departs {formatTime12(f.departureTime)}
+        </Text>
 
         {/* ── Horizontal route card ── */}
         <View style={[styles.routeCard, { backgroundColor: colors.surface }]}>
@@ -401,15 +432,35 @@ export default function FlightDetailScreen() {
           </View>
         </View>
 
-        {/* ── Amenity tile grid ── */}
+        {/* ── Info tile grid (Seats / Range / Speed / Weather) ── */}
         <View style={styles.amenityGrid}>
-          {amenities(f).map((a) => (
+          {infoTiles(f).map((a) => (
             <View key={a.label} style={[styles.amenityTile, { backgroundColor: colors.surface }]}>
               <Text style={[styles.amenityLabel, { color: colors.mutedForegroundLight }]}>{a.label}</Text>
               <Text style={[styles.amenityValue, { color: colors.textOnSurface }]}>{a.value}</Text>
             </View>
           ))}
         </View>
+
+        {/* ── Compact amenity pills (WiFi / Pets / Baggage) ── */}
+        <View style={styles.pillRow}>
+          {AMENITY_PILLS.map((p) => (
+            <View key={p.label} style={[styles.pill, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.pillLabel, { color: colors.mutedForegroundLight }]}>{p.label}</Text>
+              <Text style={[styles.pillValue, { color: colors.textOnSurface }]}>{p.value}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* ── FBO departure card ── */}
+        {!!f.departureFbo && (
+          <View style={[styles.fboCard, { backgroundColor: colors.backgroundMid }]}>
+            <Text style={[styles.fboLabel, { color: colors.mutedOnBrand }]}>FBO · DEPARTURE</Text>
+            <Text style={[styles.fboValue, { color: colors.textOnBrand }]} numberOfLines={1}>
+              {f.departureFbo} — {f.fromAirport}
+            </Text>
+          </View>
+        )}
 
         {/* ── Passenger stepper — only shown when user can still join.
              For signed-in users, wait until status is known so the stepper
@@ -488,7 +539,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, marginTop: 8,
   },
   aircraftName: { fontFamily: 'Inter_700Bold', fontSize: 22, flex: 1, marginRight: 12 },
+  priceCol:    { alignItems: 'flex-end' },
   priceText:   { fontFamily: 'Inter_700Bold', fontSize: 22 },
+  wasPriceText: { fontFamily: 'Inter_500Medium', fontSize: 13, textDecorationLine: 'line-through', marginTop: 1 },
 
   // Date
   dateText: { fontFamily: 'Inter_400Regular', fontSize: 14, paddingHorizontal: 20, marginTop: 4, marginBottom: 18 },
@@ -519,6 +572,23 @@ const styles = StyleSheet.create({
   },
   amenityLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 },
   amenityValue: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+
+  // Compact amenity pills
+  pillRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginBottom: 14 },
+  pill: {
+    flex: 1, borderRadius: 14, paddingVertical: 10, alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
+  },
+  pillLabel: { fontFamily: 'Inter_500Medium', fontSize: 11 },
+  pillValue: { fontFamily: 'Inter_600SemiBold', fontSize: 13, marginTop: 2 },
+
+  // Dark FBO departure card
+  fboCard: {
+    marginHorizontal: 16, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18,
+    marginBottom: 14,
+  },
+  fboLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 1, marginBottom: 4 },
+  fboValue: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
 
   // Passenger stepper
   stepperCard: {
