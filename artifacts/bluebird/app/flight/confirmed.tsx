@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Platform, Alert, Share, Image,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Platform, Share, Image,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { useColors } from '@/hooks/useColors';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import * as Haptics from 'expo-haptics';
 import { PassCelebration } from '@/components/PassCelebration';
+import { addFlightToCalendar } from '@/lib/addToCalendar';
 
 function computeArrival(departureTime?: string, duration?: string): string {
   if (!departureTime || !duration) return '';
@@ -36,7 +37,7 @@ export default function FlightConfirmedScreen() {
   const params = useLocalSearchParams<{
     from?: string; to?: string; fromCity?: string; toCity?: string;
     departureTime?: string; duration?: string; aircraftType?: string;
-    departureDate?: string; passUsed?: string;
+    departureDate?: string; passUsed?: string; flightId?: string;
   }>();
   const passUsed = params.passUsed === '1';
   const [celebrating, setCelebrating] = React.useState(passUsed);
@@ -69,8 +70,22 @@ export default function FlightConfirmedScreen() {
     }).catch(() => {});
   };
 
-  const demoAction = (title: string) =>
-    Alert.alert(title, 'Demo — this action is not wired to a real service yet.');
+  const handleAddToCalendar = () => {
+    addFlightToCalendar({
+      from: params.from, to: params.to,
+      fromCity: params.fromCity, toCity: params.toCity,
+      departureDate: params.departureDate, departureTime: params.departureTime,
+      duration: params.duration, aircraftType: params.aircraftType,
+    });
+  };
+
+  const handleItinerary = () => {
+    if (params.flightId) {
+      router.push(`/flight/${params.flightId}`);
+    } else {
+      router.dismissTo('/(tabs)/trips');
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundMid }]}>
@@ -124,8 +139,8 @@ export default function FlightConfirmedScreen() {
         {/* Actions */}
         <View style={styles.actionRow}>
           {[
-            { label: 'Add to\nCalendar', onPress: () => demoAction('Add to Calendar') },
-            { label: 'Itinerary', onPress: () => demoAction('Itinerary') },
+            { label: 'Add to\nCalendar', onPress: handleAddToCalendar },
+            { label: 'Itinerary', onPress: handleItinerary },
             { label: 'Share', onPress: handleShare },
           ].map((a) => (
             <TouchableOpacity
