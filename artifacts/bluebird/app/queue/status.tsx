@@ -15,6 +15,7 @@ import { confirmDialog } from '@/lib/confirmDialog';
 import { useGetQueueStatus, useCancelQueueEntry } from '@workspace/api-client-react';
 
 import { useAuth } from '@/context/AuthContext';
+import { observeQueueEntries } from '@/lib/queueCelebration';
 
 // ─── Countdown hook ───────────────────────────────────────────────────────────
 // Counts down to the decision moment: the queue engine holds a real member in
@@ -216,41 +217,14 @@ export default function QueueStatusScreen() {
 
   // Celebration on the flip to confirmed: when polling reveals an entry we
   // previously saw as *waiting* is now *confirmed*, land on the full-screen
-  // "You're confirmed!" screen (same one the pass flow uses, minus the pass
-  // celebration overlay). Only fires on the observed transition — entries
-  // that were already confirmed when the screen mounted just render the
-  // inline ConfirmedCard, so revisits never re-trigger the celebration.
-  const seenWaitingIds = useRef<Set<string>>(new Set());
-  const celebratedIds = useRef<Set<string>>(new Set());
+  // "You're confirmed!" screen. Flip tracking lives in the shared
+  // queueCelebration module (also fed by the app-wide watcher in the root
+  // layout), so the celebration fires exactly once no matter which observer
+  // sees the transition first — and never on revisits, since entries already
+  // confirmed on mount were never observed as waiting.
   useEffect(() => {
-    const flipped = allEntries.find(
-      (e) =>
-        e.status === 'confirmed' &&
-        seenWaitingIds.current.has(e.id) &&
-        !celebratedIds.current.has(e.id),
-    );
-    for (const e of allEntries) {
-      if (e.status === 'waiting') seenWaitingIds.current.add(e.id);
-    }
-    if (!flipped) return;
-    celebratedIds.current.add(flipped.id);
-    queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
-    queryClient.invalidateQueries({ queryKey: [`/api/flights/${flipped.flightId}/my-status`] });
-    const flight = flipped.flight;
-    router.push({
-      pathname: '/flight/confirmed',
-      params: {
-        from: flight?.fromAirport ?? '',
-        to: flight?.toAirport ?? '',
-        fromCity: flight?.fromCity ?? '',
-        toCity: flight?.toCity ?? '',
-        departureDate: flight?.departureDate ?? '',
-        departureTime: flight?.departureTime ?? '',
-        duration: flight?.duration ?? '',
-        aircraftType: flight?.aircraftType ?? '',
-      },
-    });
-  }, [allEntries]);
+    observeQueueEntries(allEntries, queryClient);
+  }, [allEntries, queryClient]);
 
   const waitingEntries = visibleEntries.filter((e) => e.status === 'waiting');
   const confirmedEntries = visibleEntries.filter((e) => e.status === 'confirmed');

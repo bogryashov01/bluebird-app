@@ -19,6 +19,7 @@ import { setBaseUrl } from '@workspace/api-client-react';
 import { AuthProvider } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { useColors } from '@/hooks/useColors';
+import { QueueConfirmationWatcher } from '@/lib/queueCelebration';
 import { StatusBar } from 'expo-status-bar';
 
 SplashScreen.preventAutoHideAsync();
@@ -47,6 +48,9 @@ function RootLayoutNav() {
   return (
     <>
     <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
+    {/* App-wide waiting→confirmed watcher: celebrates a confirmed seat even
+        when the member isn't on the Queue Status screen. */}
+    <QueueConfirmationWatcher />
     <Stack
       screenOptions={{
         contentStyle: { backgroundColor: colors.background },

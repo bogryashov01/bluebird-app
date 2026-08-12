@@ -12,6 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPassOverlay';
 import { useUseLinePassOnQueueEntry } from '@workspace/api-client-react';
+import { markQueueEntryCelebrated } from '@/lib/queueCelebration';
 
 function shortDate(d?: string) {
   if (!d) return '';
@@ -62,6 +63,10 @@ export default function SkipLinePassScreen() {
   const usePassMutation = useUseLinePassOnQueueEntry({
     mutation: {
       onSuccess: (data: any) => {
+        // This flow shows its own celebration (or reassurance) — keep the
+        // shared waiting→confirmed watchers from firing a duplicate one when
+        // the next poll reveals this entry flipped to confirmed.
+        if (params.entryId) markQueueEntryCelebrated(params.entryId);
         if (user && typeof data?.linePassCount === 'number') {
           updateUser({ ...user, linePassCount: data.linePassCount });
         }
