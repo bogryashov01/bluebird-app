@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Alert, useWindowDimensions,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import type { QueueEntry } from '@workspace/api-client-react';
@@ -344,14 +344,27 @@ export default function QueueStatusScreen() {
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { user } = useAuth();
+  const { entryId, flightId } = useLocalSearchParams<{ entryId?: string; flightId?: string }>();
 
-  // API now returns waiting + confirmed; we render each group separately
+  // API returns waiting + confirmed entries for the member.
   const { data: queueEntries, isLoading } = useGetQueueStatus({
     query: { enabled: !!user },
   });
   const allEntries = (queueEntries as QueueEntry[]) ?? [];
-  const waitingEntries = allEntries.filter((e) => e.status === 'waiting');
-  const confirmedEntries = allEntries.filter((e) => e.status === 'confirmed');
+
+  // Select only the tapped entry when navigation carried an identifier.
+  // Fallbacks: single entry → show it; multiple entries with no identifier →
+  // show a picker so the member chooses which queue to view.
+  const targetedEntry =
+    (entryId ? allEntries.find((e) => e.id === entryId) : undefined) ??
+    (flightId ? allEntries.find((e) => e.flightId === flightId) : undefined);
+  // If the identifier no longer matches an entry (cancelled/expired), fall
+  // back to the no-identifier behavior rather than a dead-end empty screen.
+  const visibleEntries = targetedEntry ? [targetedEntry] : allEntries;
+  const needsPicker = !targetedEntry && allEntries.length > 1;
+
+  const waitingEntries = visibleEntries.filter((e) => e.status === 'waiting');
+  const confirmedEntries = visibleEntries.filter((e) => e.status === 'confirmed');
   const hasAny = allEntries.length > 0;
 
   const cancelMutation = useCancelQueueEntry({
@@ -444,6 +457,40 @@ export default function QueueStatusScreen() {
             style={styles.browseBtn}
           />
         </View>
+      ) : needsPicker ? (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: topPad + 80, paddingBottom: bottomPad + 24 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={[styles.pickerTitle, { color: colors.textOnSurface }]}>Your queues</Text>
+          <Text style={[styles.pickerSubtitle, { color: colors.mutedForegroundLight }]}>
+            Select a queue to see its details.
+          </Text>
+          {allEntries.map((entry) => {
+            const flight = entry.flight;
+            const label = flight ? `${flight.fromAirport} → ${flight.toAirport}` : '— → —';
+            return (
+              <TouchableOpacity
+                key={entry.id}
+                style={[styles.pickerRow, { backgroundColor: colors.surface }]}
+                onPress={() => router.setParams({ entryId: entry.id })}
+                activeOpacity={0.8}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.pickerRoute, { color: colors.textOnSurface }]}>{label}</Text>
+                  <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]}>
+                    {entry.status === 'confirmed'
+                      ? 'Confirmed'
+                      : `In queue · #${entry.position} of ${entry.totalInQueue}`}
+                    {flight ? ` · ${flight.departureDate} ${flight.departureTime}` : ''}
+                  </Text>
+                </View>
+                <Text style={[styles.pickerChevron, { color: colors.mutedForegroundLight }]}>›</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       ) : (
         <ScrollView
           style={{ flex: 1 }}
@@ -485,4 +532,14 @@ const styles = StyleSheet.create({
   emptyTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 20 },
   emptyBody:  { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 22, textAlign: 'center' },
   browseBtn: { marginTop: 6, paddingHorizontal: 24 },
+  pickerTitle: { fontFamily: 'Inter_700Bold', fontSize: 22, alignSelf: 'flex-start' },
+  pickerSubtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, alignSelf: 'flex-start', marginBottom: 14, marginTop: 4 },
+  pickerRow: {
+    width: '100%', flexDirection: 'row', alignItems: 'center',
+    borderRadius: 18, padding: 18, marginBottom: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowRadius: 16, shadowOpacity: 0.05, elevation: 2,
+  },
+  pickerRoute: { fontFamily: 'Inter_700Bold', fontSize: 17 },
+  pickerMeta: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 3 },
+  pickerChevron: { fontFamily: 'Inter_700Bold', fontSize: 20, marginLeft: 10 },
 });

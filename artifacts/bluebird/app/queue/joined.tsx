@@ -107,7 +107,18 @@ export default function QueueJoinedScreen() {
       </View>
 
       <View style={styles.footer}>
-        <PrimaryButton label="View Queue Status" onPress={() => router.replace('/queue/status')} />
+        <PrimaryButton
+          label="View Queue Status"
+          onPress={() =>
+            router.replace({
+              pathname: '/queue/status',
+              params: {
+                ...(params.entryId ? { entryId: params.entryId } : {}),
+                ...(params.flightId ? { flightId: params.flightId } : {}),
+              },
+            })
+          }
+        />
         <SecondaryButton
           label="Use Skip the Line Pass Instead"
           onPress={() => router.push({ pathname: '/queue/pass', params })}

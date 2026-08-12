@@ -181,7 +181,7 @@ export default function TripsScreen() {
               flight={entry.flight ?? emptyFlight}
               badge={`IN QUEUE · #${entry.position}`}
               badgeBlue={false}
-              onPress={() => router.push('/queue/status')}
+              onPress={() => router.push({ pathname: '/queue/status', params: { entryId: entry.id } })}
             />
           ))}
         </ScrollView>

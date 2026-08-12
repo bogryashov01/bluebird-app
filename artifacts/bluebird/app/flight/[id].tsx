@@ -288,7 +288,14 @@ export default function FlightDetailScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.conciergeLink}
-            onPress={() => router.push('/queue/status')}
+            onPress={() =>
+              router.push({
+                pathname: '/queue/status',
+                params: myStatus?.queueEntryId
+                  ? { entryId: myStatus.queueEntryId }
+                  : { flightId: id! },
+              })
+            }
             activeOpacity={0.7}
           >
             <Text style={[styles.conciergeLinkText, { color: colors.mutedForegroundLight }]}>View full queue status</Text>
