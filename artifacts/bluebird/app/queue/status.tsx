@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Alert, useWindowDimensions,
@@ -213,6 +213,44 @@ export default function QueueStatusScreen() {
   // back to the no-identifier behavior rather than a dead-end empty screen.
   const visibleEntries = targetedEntry ? [targetedEntry] : allEntries;
   const needsPicker = !targetedEntry && allEntries.length > 1;
+
+  // Celebration on the flip to confirmed: when polling reveals an entry we
+  // previously saw as *waiting* is now *confirmed*, land on the full-screen
+  // "You're confirmed!" screen (same one the pass flow uses, minus the pass
+  // celebration overlay). Only fires on the observed transition — entries
+  // that were already confirmed when the screen mounted just render the
+  // inline ConfirmedCard, so revisits never re-trigger the celebration.
+  const seenWaitingIds = useRef<Set<string>>(new Set());
+  const celebratedIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const flipped = allEntries.find(
+      (e) =>
+        e.status === 'confirmed' &&
+        seenWaitingIds.current.has(e.id) &&
+        !celebratedIds.current.has(e.id),
+    );
+    for (const e of allEntries) {
+      if (e.status === 'waiting') seenWaitingIds.current.add(e.id);
+    }
+    if (!flipped) return;
+    celebratedIds.current.add(flipped.id);
+    queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+    queryClient.invalidateQueries({ queryKey: [`/api/flights/${flipped.flightId}/my-status`] });
+    const flight = flipped.flight;
+    router.push({
+      pathname: '/flight/confirmed',
+      params: {
+        from: flight?.fromAirport ?? '',
+        to: flight?.toAirport ?? '',
+        fromCity: flight?.fromCity ?? '',
+        toCity: flight?.toCity ?? '',
+        departureDate: flight?.departureDate ?? '',
+        departureTime: flight?.departureTime ?? '',
+        duration: flight?.duration ?? '',
+        aircraftType: flight?.aircraftType ?? '',
+      },
+    });
+  }, [allEntries]);
 
   const waitingEntries = visibleEntries.filter((e) => e.status === 'waiting');
   const confirmedEntries = visibleEntries.filter((e) => e.status === 'confirmed');
