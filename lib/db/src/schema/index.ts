@@ -12,6 +12,7 @@ export const usersTable = pgTable("users", {
   linePassCount: integer("line_pass_count").notNull().default(0),
   referralCode: text("referral_code").notNull(),
   referredBy: text("referred_by"),
+  homeAirport: text("home_airport"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

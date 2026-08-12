@@ -11,6 +11,7 @@ import {
 import type { Notification } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
+import { useAuth } from '@/context/AuthContext';
 import { SettingsGroup } from '@/components/SettingsGroup';
 import { notificationRoute } from '@/lib/notificationRoute';
 
@@ -47,6 +48,7 @@ export default function NotificationsScreen() {
   const colors      = useColors();
   const insets      = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -127,7 +129,11 @@ export default function NotificationsScreen() {
         <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>TRAVEL PREFERENCES</Text>
         <SettingsGroup
           rows={[
-            { label: 'Home Airport', hint: 'TEB', onPress: () => {} },
+            {
+              label: 'Home Airport',
+              hint: user?.homeAirport ?? 'Not set',
+              onPress: () => router.push('/airport-picker' as any),
+            },
           ]}
         />
 

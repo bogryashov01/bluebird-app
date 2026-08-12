@@ -21,6 +21,7 @@ export async function ensureSchema(): Promise<void> {
 
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_tier TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS home_airport TEXT;
 
     -- Phone + SMS PIN auth migration: drop password/email-verification
     -- columns outright (demo — password access is intentionally removed),

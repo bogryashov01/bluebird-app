@@ -15,6 +15,7 @@ export interface AuthUser {
   membershipTier: 'base' | 'plus' | 'concierge';
   linePassCount: number;
   referralCode: string;
+  homeAirport?: string | null;
   createdAt: string;
 }
 

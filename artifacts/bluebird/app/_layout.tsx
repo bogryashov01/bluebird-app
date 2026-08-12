@@ -108,6 +108,10 @@ function RootLayoutNav() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="airport-picker"
+        options={{ headerShown: false, presentation: 'modal' }}
+      />
+      <Stack.Screen
         name="community"
         options={{ headerShown: true, title: 'Community', ...headerOptions }}
       />

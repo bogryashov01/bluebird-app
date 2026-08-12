@@ -15,5 +15,6 @@ export interface User {
   membershipTier: UserMembershipTier;
   linePassCount: number;
   referralCode: string;
+  homeAirport?: string | null;
   createdAt: string;
 }

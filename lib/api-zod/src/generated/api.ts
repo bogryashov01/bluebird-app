@@ -51,6 +51,7 @@ export const VerifyLoginCodeResponse = zod.object({
   "membershipTier": zod.enum(['base', 'plus', 'concierge']),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
+  "homeAirport": zod.string().nullish(),
   "createdAt": zod.string()
 }),
   "isNewUser": zod.boolean().optional().describe('True when this verification created the account.')
@@ -76,6 +77,7 @@ export const GetMeResponse = zod.object({
   "membershipTier": zod.enum(['base', 'plus', 'concierge']),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
+  "homeAirport": zod.string().nullish(),
   "createdAt": zod.string()
 })
 
@@ -85,7 +87,8 @@ export const GetMeResponse = zod.object({
  */
 export const UpdateMeBody = zod.object({
   "name": zod.string().optional(),
-  "email": zod.string().optional()
+  "email": zod.string().optional(),
+  "homeAirport": zod.string().nullish().describe('IATA-style code of an airport served by Bluebird; null clears it.')
 })
 
 export const UpdateMeResponse = zod.object({
@@ -96,6 +99,7 @@ export const UpdateMeResponse = zod.object({
   "membershipTier": zod.enum(['base', 'plus', 'concierge']),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
+  "homeAirport": zod.string().nullish(),
   "createdAt": zod.string()
 })
 

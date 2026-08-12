@@ -761,6 +761,10 @@ components:
           type: string
         email:
           type: string
+        homeAirport:
+          type: string
+          nullable: true
+          description: IATA-style code of an airport served by Bluebird; null clears it.
 
     User:
       type: object
@@ -781,6 +785,9 @@ components:
           type: number
         referralCode:
           type: string
+        homeAirport:
+          type: string
+          nullable: true
         createdAt:
           type: string
       required:

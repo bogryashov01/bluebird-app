@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
-import { usersTable, notificationsTable, revokedTokensTable, loginCodesTable } from "@workspace/db/schema";
+import { usersTable, notificationsTable, revokedTokensTable, loginCodesTable, flightsTable } from "@workspace/db/schema";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { activeSmsProvider, sendSms } from "../lib/sms";
 import jwt from "jsonwebtoken";
@@ -251,7 +251,7 @@ router.get("/me", authMiddleware, async (req, res) => {
 // account identifier and cannot be changed here.
 router.patch("/me", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
-  const { name, email } = req.body ?? {};
+  const { name, email, homeAirport } = req.body ?? {};
 
   const updates: Record<string, string | null> = {};
   if (name !== undefined) {
@@ -269,6 +269,26 @@ router.patch("/me", authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "Enter a valid email address" });
     }
     updates.email = trimmed || null;
+  }
+  if (homeAirport !== undefined) {
+    if (homeAirport === null || homeAirport === "") {
+      updates.homeAirport = null;
+    } else {
+      if (typeof homeAirport !== "string" || !/^[A-Za-z]{3,4}$/.test(homeAirport.trim())) {
+        return res.status(400).json({ error: "Enter a valid airport code" });
+      }
+      const code = homeAirport.trim().toUpperCase();
+      // Only airports the app actually serves (i.e. appear as a flight origin)
+      const [served] = await db
+        .select({ code: flightsTable.fromAirport })
+        .from(flightsTable)
+        .where(eq(flightsTable.fromAirport, code))
+        .limit(1);
+      if (!served) {
+        return res.status(400).json({ error: "That airport isn't served by Bluebird yet" });
+      }
+      updates.homeAirport = code;
+    }
   }
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: "Nothing to update" });

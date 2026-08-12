@@ -9,4 +9,6 @@
 export interface UpdateMeRequest {
   name?: string;
   email?: string;
+  /** IATA-style code of an airport served by Bluebird; null clears it. */
+  homeAirport?: string | null;
 }

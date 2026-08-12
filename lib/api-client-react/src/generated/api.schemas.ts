@@ -101,6 +101,7 @@ export interface User {
   membershipTier: UserMembershipTier;
   linePassCount: number;
   referralCode: string;
+  homeAirport?: string | null;
   createdAt: string;
 }
 
@@ -114,6 +115,8 @@ export interface AuthResponse {
 export interface UpdateMeRequest {
   name?: string;
   email?: string;
+  /** IATA-style code of an airport served by Bluebird; null clears it. */
+  homeAirport?: string | null;
 }
 
 export type FlightStatus = typeof FlightStatus[keyof typeof FlightStatus];
