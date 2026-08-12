@@ -338,7 +338,7 @@ export default function QueueStatusScreen() {
   // API returns waiting + confirmed entries for the member. Poll so the
   // screen flips to the confirmed state on its own when the queue engine
   // auto-confirms the seat — no tap required.
-  const { data: queueEntries, isLoading } = useGetQueueStatus({
+  const { data: queueEntries, isLoading, refetch } = useGetQueueStatus({
     query: { enabled: !!user, refetchInterval: 10_000 },
   });
   const allEntries = (queueEntries as QueueEntry[]) ?? [];
@@ -367,8 +367,31 @@ export default function QueueStatusScreen() {
     },
   });
 
+  // Tracks the entry whose pass button is mid-refetch, to disable the button.
+  const [checkingPassEntryId, setCheckingPassEntryId] = useState<string | null>(null);
+
   // Routes to the Skip the Line Pass sheet, which confirms the seat immediately.
-  const handleUsePass = (entry: QueueEntry) => {
+  // Refetches the entry first — the queue engine may have auto-confirmed it
+  // since the last 10s poll, in which case the screen simply updates to the
+  // confirmed banner instead of opening the sheet.
+  const handleUsePass = async (entry: QueueEntry) => {
+    if (checkingPassEntryId) return;
+    setCheckingPassEntryId(entry.id);
+    try {
+      const { data: fresh } = await refetch();
+      const latest = ((fresh as QueueEntry[]) ?? []).find((e) => e.id === entry.id);
+      if (!latest || latest.status !== 'waiting') {
+        // No longer waiting (confirmed/cancelled) — the refetched data is
+        // already in the cache, so the screen re-renders to the right state.
+        return;
+      }
+      openPassSheet(latest);
+    } finally {
+      setCheckingPassEntryId(null);
+    }
+  };
+
+  const openPassSheet = (entry: QueueEntry) => {
     const flight = entry.flight;
     router.push({
       pathname: '/queue/pass',
@@ -470,7 +493,7 @@ export default function QueueStatusScreen() {
                   ? () => handleUsePass(entry)
                   : undefined
               }
-              isUsingPass={false}
+              isUsingPass={checkingPassEntryId === entry.id}
               passCount={user?.linePassCount ?? 0}
             />
           ))}

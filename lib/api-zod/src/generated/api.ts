@@ -391,7 +391,8 @@ export const UseLinePassOnQueueEntryResponse = zod.object({
   "status": zod.enum(['waiting', 'confirmed', 'cancelled', 'expired']),
   "createdAt": zod.string()
 }).and(zod.object({
-  "linePassCount": zod.number().describe('The user\'s remaining Skip the Line pass balance after use')
+  "linePassCount": zod.number().describe('The user\'s remaining Skip the Line pass balance after use'),
+  "alreadyConfirmed": zod.boolean().optional().describe('True when the entry was already confirmed before the pass was applied — no pass was consumed')
 }))
 
 

@@ -39,6 +39,9 @@ export default function SkipLinePassScreen() {
   const [overlayPhase, setOverlayPhase] = useState<ApplyingPassPhase | null>(null);
   // Navigation to run once the overlay's resolve animation completes.
   const pendingNavRef = useRef<(() => void) | null>(null);
+  // True when the server reported the seat was already confirmed — a positive
+  // outcome where no pass was spent; the overlay copy changes to match.
+  const [alreadyConfirmed, setAlreadyConfirmed] = useState(false);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -61,6 +64,26 @@ export default function SkipLinePassScreen() {
       onSuccess: (data: any) => {
         if (user && typeof data?.linePassCount === 'number') {
           updateUser({ ...user, linePassCount: data.linePassCount });
+        }
+        if (data?.alreadyConfirmed) {
+          // Race with the queue engine: the seat was confirmed while this
+          // sheet was open. Good news — no pass was spent. Reassure and land
+          // on the confirmed queue status view.
+          setAlreadyConfirmed(true);
+          pendingNavRef.current = () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            queryClient.invalidateQueries({ queryKey: ['/api/queue/status'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+            if (params.flightId) {
+              queryClient.invalidateQueries({ queryKey: [`/api/flights/${params.flightId}/my-status`] });
+            }
+            router.replace({
+              pathname: '/queue/status',
+              params: params.entryId ? { entryId: params.entryId } : {},
+            });
+          };
+          setOverlayPhase('success');
+          return;
         }
         // The server consumes the pass and confirms the seat atomically —
         // the response comes back already confirmed. Let the applying
@@ -96,7 +119,14 @@ export default function SkipLinePassScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad }]}>
-      {overlayPhase && <ApplyingPassOverlay phase={overlayPhase} onDone={handleOverlayDone} />}
+      {overlayPhase && (
+        <ApplyingPassOverlay
+          phase={overlayPhase}
+          onDone={handleOverlayDone}
+          successHeadline={alreadyConfirmed ? 'Your seat is already confirmed' : undefined}
+          subline={alreadyConfirmed ? 'No pass was used — you were confirmed while waiting' : undefined}
+        />
+      )}
       <FloatingBackButton variant="brand" />
 
       <View style={[styles.top, { paddingTop: 76 }]}>

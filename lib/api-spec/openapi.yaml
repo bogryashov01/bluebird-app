@@ -390,13 +390,13 @@ paths:
             type: string
       responses:
         "200":
-          description: Pass applied, entry moved to position 1
+          description: Pass applied and seat confirmed, or the entry was already confirmed (alreadyConfirmed=true, no pass consumed)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/UseLinePassResponse"
         "400":
-          description: Entry not waiting, already at position 1, or no passes available
+          description: Entry cancelled/expired, already at position 1, or no passes available
           content:
             application/json:
               schema:
@@ -982,6 +982,9 @@ components:
             linePassCount:
               type: number
               description: The user's remaining Skip the Line pass balance after use
+            alreadyConfirmed:
+              type: boolean
+              description: True when the entry was already confirmed before the pass was applied — no pass was consumed
           required:
             - linePassCount
 

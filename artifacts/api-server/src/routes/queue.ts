@@ -369,9 +369,42 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Queue entry not found" });
     }
+    if (entry.status === "confirmed") {
+      // Race with the queue engine: the seat was auto-confirmed while the
+      // pass sheet was open. This is good news, not an error — return the
+      // confirmed entry, flag it, and leave the pass balance untouched.
+      const [confirmedFlight] = await txDb
+        .select()
+        .from(flightsTable)
+        .where(eq(flightsTable.id, entry.flightId));
+      const [me] = await txDb
+        .select({ linePassCount: usersTable.linePassCount })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId));
+      const [{ value: waitingCount }] = await txDb
+        .select({ value: count() })
+        .from(queueEntriesTable)
+        .where(
+          and(
+            eq(queueEntriesTable.flightId, entry.flightId),
+            eq(queueEntriesTable.status, "waiting"),
+          ),
+        );
+      await client.query("ROLLBACK");
+      return res.json({
+        ...entry,
+        flight: confirmedFlight ?? null,
+        totalInQueue: Number(waitingCount),
+        linePassCount: me?.linePassCount ?? 0,
+        alreadyConfirmed: true,
+      });
+    }
     if (entry.status !== "waiting") {
       await client.query("ROLLBACK");
-      return res.status(400).json({ error: "Only waiting entries can use a Skip the Line pass" });
+      return res.status(400).json({
+        error:
+          "This queue entry is no longer active, so a Skip the Line pass can't be used on it. Your pass was not used.",
+      });
     }
     if (entry.position === 1) {
       await client.query("ROLLBACK");

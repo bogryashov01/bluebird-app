@@ -29,6 +29,10 @@ type Props = {
    */
   phase: ApplyingPassPhase;
   onDone: () => void;
+  /** Override the success headline (default "Front of the line"). */
+  successHeadline?: string;
+  /** Override the subline (default "Skip the Line Pass · moving you to the front"). */
+  subline?: string;
 };
 
 /**
@@ -37,7 +41,7 @@ type Props = {
  * success before dissolving into the confirmed screen. Brand-navy backdrop
  * in both modes (theme tokens only); haptics on native.
  */
-export function ApplyingPassOverlay({ phase, onDone }: Props) {
+export function ApplyingPassOverlay({ phase, onDone, successHeadline, subline }: Props) {
   const colors = useColors();
   const [finished, setFinished] = useState(false);
   const doneRef = useRef(false);
@@ -202,10 +206,10 @@ export function ApplyingPassOverlay({ phase, onDone }: Props) {
             Applying your pass…
           </Animated.Text>
           <Animated.Text style={[styles.headline, styles.successHeadline, { color: colors.textOnBrand }, successTextStyle]}>
-            Front of the line
+            {successHeadline ?? 'Front of the line'}
           </Animated.Text>
           <Text style={[styles.subline, { color: colors.mutedOnBrand }]}>
-            Skip the Line Pass · moving you to the front
+            {subline ?? 'Skip the Line Pass · moving you to the front'}
           </Text>
         </View>
       </Animated.View>

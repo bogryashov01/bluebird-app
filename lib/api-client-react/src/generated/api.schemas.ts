@@ -215,6 +215,8 @@ export interface QueueEntry {
 export type UseLinePassResponse = QueueEntry & {
   /** The user's remaining Skip the Line pass balance after use */
   linePassCount: number;
+  /** True when the entry was already confirmed before the pass was applied — no pass was consumed */
+  alreadyConfirmed?: boolean;
 };
 
 export type FlightUserStatusStatus = typeof FlightUserStatusStatus[keyof typeof FlightUserStatusStatus];
