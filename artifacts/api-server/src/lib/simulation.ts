@@ -56,10 +56,7 @@ export function isSimUserId(userId: string): boolean {
 
 /** Creates the pool of simulated members (idempotent). */
 export async function ensureSimUsers(): Promise<void> {
-  await db
-    .insert(usersTable)
-    .values(
-      SIM_MEMBERS.map((m, i) => ({
+  const fixtures = SIM_MEMBERS.map((m, i) => ({
         id: m.id,
         name: m.name,
         // Sim users can never sign in: their reserved placeholder phone
@@ -67,9 +64,16 @@ export async function ensureSimUsers(): Promise<void> {
         phone: `+1000000${String(i + 1).padStart(4, "0")}`,
         email: `${m.id}@bluebird-demo.local`,
         referralCode: `SIM${i + 1}DEMO`,
-      })),
-    )
-    .onConflictDoNothing();
+      }));
+  await db.insert(usersTable).values(fixtures).onConflictDoNothing();
+  for (const fixture of fixtures) {
+    await db.update(usersTable).set({
+      name: fixture.name,
+      phone: fixture.phone,
+      email: fixture.email,
+      referralCode: fixture.referralCode,
+    }).where(eq(usersTable.id, fixture.id));
+  }
 }
 
 function makeId(): string {

@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { flightsTable, tripsTable, queueEntriesTable, notificationsTable, usersTable } from "@workspace/db/schema";
-import { eq, and, count, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { ensureSimUsers, SIM_USER_PREFIX } from "./simulation";
 
@@ -210,126 +210,152 @@ const SEED_FLIGHTS = [
   },
 ];
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DEMO_FLIGHT_PREFIX = "demo-flight-";
+
+function demoFlightId(flight: (typeof SEED_FLIGHTS)[number]): string {
+  return `${DEMO_FLIGHT_PREFIX}${flight.fromAirport}-${flight.toAirport}`;
+}
+
+function upcomingDate(index: number): string {
+  return new Date(Date.now() + (index + 2) * DAY_MS).toISOString().slice(0, 10);
+}
+
 /**
  * Seeds demo data for a user so the app feels alive after login:
  * a completed trip, an upcoming trip, an active queue entry,
  * a few notifications, and 2 Skip the Line passes.
- * Safe to call repeatedly — no-ops if the user already has trips.
+ * Safe to call repeatedly: every fixture is independently keyed and restored.
  */
 export async function seedDemoDataForUser(userId: string): Promise<void> {
-  try {
-    const [{ value: existingTrips }] = await db
-      .select({ value: count() })
-      .from(tripsTable)
-      .where(eq(tripsTable.userId, userId));
-    if (Number(existingTrips) > 0) return;
+  const completedFlightId = "hist-LAX-SFO-1";
+  const upcomingFlightId = demoFlightId(SEED_FLIGHTS[0]);
+  const queuedFlightId = demoFlightId(SEED_FLIGHTS[1]);
+  const [completedFlight, upcomingFlight, queuedFlight] = await Promise.all(
+    [completedFlightId, upcomingFlightId, queuedFlightId].map(async (id) => {
+      const [flight] = await db.select().from(flightsTable).where(eq(flightsTable.id, id));
+      return flight;
+    }),
+  );
+  if (!completedFlight || !upcomingFlight || !queuedFlight) {
+    throw new Error("Required demo flights are missing; restore flights before member fixtures");
+  }
 
-    const flights = await db.select().from(flightsTable).limit(4);
-    if (flights.length < 3) return;
-
-    const [completedFlight, upcomingFlight, queuedFlight] = flights;
-
-    // Deterministic IDs make every insert idempotent under concurrent
-    // registration/login calls: a second concurrent run conflicts on the
-    // primary key and is silently skipped.
-    // One completed and one upcoming trip
-    await db
-      .insert(tripsTable)
-      .values([
-        {
-          id: `demo-trip-completed-${userId}`,
-          userId,
-          flightId: completedFlight.id,
-          status: "completed",
-          bookedAt: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000),
-        },
-        {
-          id: `demo-trip-upcoming-${userId}`,
-          userId,
-          flightId: upcomingFlight.id,
-          status: "upcoming",
-          bookedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-        },
-      ])
-      .onConflictDoNothing();
+  await db.transaction(async (tx) => {
+    const completedTrip = {
+      id: `demo-trip-completed-${userId}`,
+      userId,
+      flightId: completedFlight.id,
+      status: "completed",
+      bookedAt: new Date(Date.now() - 21 * DAY_MS),
+    };
+    const upcomingTrip = {
+      id: `demo-trip-upcoming-${userId}`,
+      userId,
+      flightId: upcomingFlight.id,
+      status: "upcoming",
+      bookedAt: new Date(Date.now() - 2 * DAY_MS),
+    };
+    await tx.insert(tripsTable).values([
+      completedTrip,
+      upcomingTrip,
+    ]).onConflictDoNothing();
+    await tx.update(tripsTable).set({
+      flightId: completedTrip.flightId,
+      status: completedTrip.status,
+    }).where(and(
+      eq(tripsTable.id, completedTrip.id),
+      sql`${tripsTable.flightId} <> ${completedTrip.flightId}`,
+    ));
+    await tx.update(tripsTable).set({
+      flightId: upcomingTrip.flightId,
+      status: upcomingTrip.status,
+    }).where(and(
+      eq(tripsTable.id, upcomingTrip.id),
+      sql`${tripsTable.flightId} <> ${upcomingTrip.flightId}`,
+    ));
 
     // A confirmed queue entry backing the upcoming trip, so seeded data
     // mirrors the real booking flow (my-status + seat derivation both count
     // confirmed queue entries). Idempotent via deterministic ID.
-    await db
-      .insert(queueEntriesTable)
-      .values({
+    const confirmedQueue = {
         id: `demo-queue-confirmed-${userId}`,
         userId,
         flightId: upcomingFlight.id,
         position: 0,
         status: "confirmed",
         usedLinePass: false,
-      })
-      .onConflictDoNothing();
+      };
+    await tx.insert(queueEntriesTable).values(confirmedQueue).onConflictDoNothing();
+    await tx.update(queueEntriesTable).set({
+      flightId: confirmedQueue.flightId,
+      position: confirmedQueue.position,
+      status: confirmedQueue.status,
+    }).where(and(
+      eq(queueEntriesTable.id, confirmedQueue.id),
+      sql`${queueEntriesTable.flightId} <> ${confirmedQueue.flightId}`,
+    ));
 
-    // An active queue entry (skip if already queued for that flight).
+    // Restore simulated queue fixtures independently of the member's row.
+    const simulatedQueueFixtures = [
+      {
+        id: `demo-simq-${queuedFlight.id}-1`,
+        userId: `${SIM_USER_PREFIX}1`,
+        flightId: queuedFlight.id,
+        position: 1,
+        status: "waiting",
+        usedLinePass: false,
+      },
+      {
+        id: `demo-simq-${queuedFlight.id}-2`,
+        userId: `${SIM_USER_PREFIX}2`,
+        flightId: queuedFlight.id,
+        position: 2,
+        status: "waiting",
+        usedLinePass: false,
+      },
+    ];
+    await tx.insert(queueEntriesTable).values(simulatedQueueFixtures).onConflictDoNothing();
+
     // Seed the user a few positions back, behind simulated members, so the
-    // queue simulation visibly advances them toward the front — showcasing
-    // the playable loop rather than a static fixture.
-    const [alreadyQueued] = await db
+    // queue simulation visibly advances them toward the front.
+    const activeQueueId = `demo-queue-${userId}`;
+    const [fixtureQueue] = await tx
+      .select()
+      .from(queueEntriesTable)
+      .where(eq(queueEntriesTable.id, activeQueueId));
+    if (fixtureQueue) {
+      // Preserve a queue that simulation or the member already resolved.
+      // Only move legacy fixture rows that still point at an obsolete flight.
+      if (fixtureQueue.flightId !== queuedFlight.id) {
+        await tx.update(queueEntriesTable).set({
+          flightId: queuedFlight.id,
+          position: 3,
+          status: "waiting",
+          usedLinePass: false,
+          frontNotifiedAt: null,
+          movementHistory: [],
+        }).where(eq(queueEntriesTable.id, activeQueueId));
+      }
+    } else {
+      const [alreadyQueued] = await tx
       .select()
       .from(queueEntriesTable)
       .where(and(eq(queueEntriesTable.userId, userId), eq(queueEntriesTable.flightId, queuedFlight.id)));
-    if (!alreadyQueued) {
-      await ensureSimUsers();
-
-      // Ensure at least 2 simulated members are waiting ahead in this queue.
-      const [{ value: simWaiting }] = await db
-        .select({ value: count() })
-        .from(queueEntriesTable)
-        .where(
-          and(
-            eq(queueEntriesTable.flightId, queuedFlight.id),
-            eq(queueEntriesTable.status, "waiting"),
-            sql`${queueEntriesTable.userId} LIKE ${SIM_USER_PREFIX + "%"}`,
-          ),
-        );
-      const simsToAdd = Math.max(0, 2 - Number(simWaiting));
-      if (simsToAdd > 0) {
-        const [{ value: existingWaiting }] = await db
-          .select({ value: count() })
-          .from(queueEntriesTable)
-          .where(and(eq(queueEntriesTable.flightId, queuedFlight.id), eq(queueEntriesTable.status, "waiting")));
-        await db
-          .insert(queueEntriesTable)
-          .values(
-            Array.from({ length: simsToAdd }, (_, i) => ({
-              id: `demo-simq-${queuedFlight.id}-${Number(existingWaiting) + i + 1}`,
-              userId: `${SIM_USER_PREFIX}${i + 1}`,
-              flightId: queuedFlight.id,
-              position: Number(existingWaiting) + i + 1,
-              status: "waiting",
-              usedLinePass: false,
-            })),
-          )
-          .onConflictDoNothing();
-      }
-
-      const [{ value: queueCount }] = await db
-        .select({ value: count() })
-        .from(queueEntriesTable)
-        .where(and(eq(queueEntriesTable.flightId, queuedFlight.id), eq(queueEntriesTable.status, "waiting")));
-      await db
-        .insert(queueEntriesTable)
-        .values({
-          id: `demo-queue-${userId}`,
+      if (!alreadyQueued) {
+        await tx.insert(queueEntriesTable).values({
+          id: activeQueueId,
           userId,
           flightId: queuedFlight.id,
-          position: Number(queueCount) + 1,
+          position: 3,
           status: "waiting",
           usedLinePass: false,
-        })
-        .onConflictDoNothing();
+        }).onConflictDoNothing();
+      }
     }
 
     // Demo notifications
-    await db
+    await tx
       .insert(notificationsTable)
       .values([
         {
@@ -360,15 +386,12 @@ export async function seedDemoDataForUser(userId: string): Promise<void> {
       .onConflictDoNothing();
 
     // Welcome gift: 2 line passes so Skip the Line is usable right away
-    await db
+    await tx
       .update(usersTable)
-      .set({ linePassCount: sql`${usersTable.linePassCount} + 2` })
-      .where(and(eq(usersTable.id, userId), sql`${usersTable.linePassCount} = 0`));
-
-    logger.info({ userId }, "Seeded demo data for user");
-  } catch (err) {
-    logger.error({ err, userId }, "Failed to seed demo data for user");
-  }
+      .set({ linePassCount: sql`GREATEST(${usersTable.linePassCount}, 2)` })
+      .where(eq(usersTable.id, userId));
+  });
+  logger.info({ userId }, "Restored demo data for member");
 }
 
 /**
@@ -378,34 +401,35 @@ export async function seedDemoDataForUser(userId: string): Promise<void> {
  */
 export const DEMO_MEMBER_PHONE = "+15555550100";
 export const DEMO_MEMBER_EMAIL = "demo@bluebird.app";
+export const DEMO_MEMBER_ID = "demo-member";
 
 export async function seedDemoMember(): Promise<void> {
-  try {
-    const [existing] = await db.select().from(usersTable).where(eq(usersTable.phone, DEMO_MEMBER_PHONE));
-    if (existing) return;
+    let [member] = await db.select().from(usersTable).where(eq(usersTable.phone, DEMO_MEMBER_PHONE));
+    if (member) {
+      await seedDemoDataForUser(member.id);
+      return;
+    }
     // Adopt the legacy email/password-era demo row (its phone was backfilled
     // with a placeholder during migration) instead of inserting a duplicate.
     const [legacy] = await db.select().from(usersTable).where(eq(usersTable.email, DEMO_MEMBER_EMAIL));
     if (legacy) {
       await db.update(usersTable).set({ phone: DEMO_MEMBER_PHONE }).where(eq(usersTable.id, legacy.id));
       logger.info("Re-keyed legacy demo member to demo phone number");
+      member = { ...legacy, phone: DEMO_MEMBER_PHONE };
+      await seedDemoDataForUser(member.id);
       return;
     }
-    const userId = makeId();
-    await db.insert(usersTable).values({
-      id: userId,
+    const [created] = await db.insert(usersTable).values({
+      id: DEMO_MEMBER_ID,
       name: "Demo Member",
       phone: DEMO_MEMBER_PHONE,
       email: DEMO_MEMBER_EMAIL,
-      referralCode: "DEMO" + Math.random().toString(36).slice(2, 6).toUpperCase(),
+      referralCode: "DEMOBIRD",
       membershipTier: "base",
       linePassCount: 0,
-    });
-    await seedDemoDataForUser(userId);
+    }).returning();
+    await seedDemoDataForUser(created.id);
     logger.info("Seeded demo member account");
-  } catch (err) {
-    logger.error({ err }, "Failed to seed demo member");
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -533,59 +557,46 @@ function pricingFor(fromAirport: string, toAirport: string) {
 }
 
 export async function seedFlights(): Promise<void> {
-  try {
-    const [{ value: existing }] = await db.select({ value: count() }).from(flightsTable);
-    if (Number(existing) > 0) {
-      // Backfill pricing on flights seeded before pricing existed
-      const unpriced = await db.select().from(flightsTable).where(eq(flightsTable.priceUsd, 0));
-      for (const f of unpriced) {
-        const p = pricingFor(f.fromAirport, f.toAirport);
-        await db
-          .update(flightsTable)
-          .set({ priceUsd: p.priceUsd, discountPct: p.discountPct, featured: !!p.featured })
-          .where(eq(flightsTable.id, f.id));
-      }
-      if (unpriced.length > 0) logger.info({ count: unpriced.length }, "Backfilled flight pricing");
-      else logger.info("Flights already seeded, skipping.");
-
-      // Backfill details enrichment on flights seeded before it existed
-      const unenriched = await db
-        .select()
-        .from(flightsTable)
-        .where(sql`${flightsTable.departureFbo} IS NULL`);
-      for (const f of unenriched) {
-        await db.update(flightsTable).set(enrichmentFor(f)).where(eq(flightsTable.id, f.id));
-      }
-      if (unenriched.length > 0) logger.info({ count: unenriched.length }, "Backfilled flight details enrichment");
-
-      // Backfill: ensure the international demo routes exist for DBs seeded
-      // before international flights were introduced.
-      const [intlExisting] = await db
-        .select()
-        .from(flightsTable)
-        .where(eq(flightsTable.international, true))
-        .limit(1);
-      if (!intlExisting) {
-        const intlFlights = SEED_FLIGHTS.filter((f: any) => f.international).map((f) => {
-          const p = pricingFor(f.fromAirport, f.toAirport);
-          return { ...f, ...enrichmentFor(f), id: makeId(), priceUsd: p.priceUsd, discountPct: p.discountPct, featured: !!p.featured };
-        });
-        if (intlFlights.length > 0) {
-          await db.insert(flightsTable).values(intlFlights);
-          logger.info({ count: intlFlights.length }, "Backfilled international flights");
-        }
-      }
-      await seedHistoricalFlights();
-      return;
-    }
-    const toInsert = SEED_FLIGHTS.map((f) => {
+    const toInsert = SEED_FLIGHTS.map((f, index) => {
       const p = pricingFor(f.fromAirport, f.toAirport);
-      return { ...f, ...enrichmentFor(f), id: makeId(), priceUsd: p.priceUsd, discountPct: p.discountPct, featured: !!p.featured };
+      return {
+        ...f,
+        ...enrichmentFor(f),
+        id: demoFlightId(f),
+        departureDate: upcomingDate(index),
+        priceUsd: p.priceUsd,
+        discountPct: p.discountPct,
+        featured: !!p.featured,
+      };
     });
-    await db.insert(flightsTable).values(toInsert);
-    logger.info({ count: toInsert.length }, "Seeded flights");
+    await db.insert(flightsTable).values(toInsert).onConflictDoNothing();
+    for (const flight of toInsert) {
+      await db.update(flightsTable).set({
+        fromAirport: flight.fromAirport,
+        fromCity: flight.fromCity,
+        toAirport: flight.toAirport,
+        toCity: flight.toCity,
+        aircraftType: flight.aircraftType,
+        aircraftCapacity: flight.aircraftCapacity,
+        departureDate: flight.departureDate,
+        departureTime: flight.departureTime,
+        duration: flight.duration,
+        seatsAvailable: flight.seatsAvailable,
+        priceUsd: flight.priceUsd,
+        discountPct: flight.discountPct,
+        featured: flight.featured,
+        international: flight.international ?? false,
+        internationalFeeUsd: flight.internationalFeeUsd ?? 0,
+        status: flight.status,
+        ...enrichmentFor(flight),
+      }).where(eq(flightsTable.id, flight.id));
+    }
     await seedHistoricalFlights();
-  } catch (err) {
-    logger.error({ err }, "Failed to seed flights");
-  }
+    logger.info({ count: toInsert.length }, "Restored demo flight fixtures");
+}
+
+export async function restoreDemoData(): Promise<void> {
+  await seedFlights();
+  await ensureSimUsers();
+  await seedDemoMember();
 }
