@@ -20,7 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  AirportInfo,
+  AirportGroup,
   AirportSummary,
   AuthResponse,
   BuyPassResponse,
@@ -683,11 +683,11 @@ export const getListAirportsUrl = () => {
 }
 
 /**
- * @summary List departure airports derived from flight data (public)
+ * @summary List canonical airports grouped by metro area (public)
  */
-export const listAirports = async ( options?: Parameters<typeof customFetch>[1]): Promise<AirportInfo[]> => {
+export const listAirports = async ( options?: Parameters<typeof customFetch>[1]): Promise<AirportGroup[]> => {
 
-  return customFetch<AirportInfo[]>(getListAirportsUrl(),
+  return customFetch<AirportGroup[]>(getListAirportsUrl(),
   {
     ...options,
     method: 'GET'
@@ -730,7 +730,7 @@ export type ListAirportsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List departure airports derived from flight data (public)
+ * @summary List canonical airports grouped by metro area (public)
  */
 
 export function useListAirports<TData = Awaited<ReturnType<typeof listAirports>>, TError = ErrorType<unknown>>(

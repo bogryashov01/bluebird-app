@@ -16,12 +16,42 @@ export async function ensureSchema(): Promise<void> {
       line_pass_count INTEGER     NOT NULL DEFAULT 0,
       referral_code   TEXT        NOT NULL,
       referred_by     TEXT,
+      home_airports   TEXT[]      NOT NULL DEFAULT ARRAY[]::TEXT[],
       created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_tier TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS home_airport TEXT;
+    -- Convert the legacy single value exactly once. Detecting whether the new
+    -- column already existed distinguishes an unmigrated account from a member
+    -- who intentionally cleared their list. Retire the legacy value after it
+    -- has been considered so future startups can never restore a cleared list.
+    DO $$
+    DECLARE had_home_airports BOOLEAN;
+    BEGIN
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'users'
+          AND column_name = 'home_airports'
+      ) INTO had_home_airports;
+
+      IF NOT had_home_airports THEN
+        ALTER TABLE users ADD COLUMN home_airports TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+        -- Keep this allowlist aligned with the canonical airport catalog:
+        -- unknown legacy values must not become unsaveable preferences.
+        UPDATE users
+          SET home_airports = ARRAY[upper(trim(home_airport))]
+          WHERE home_airport IS NOT NULL
+            AND upper(trim(home_airport)) IN (
+              'DFW', 'DAL', 'TEB', 'JFK', 'LGA', 'EWR', 'LAX', 'SFO', 'MIA',
+              'ORD', 'LAS', 'BOS', 'SEA', 'DEN', 'ASP', 'SDL', 'PBI', 'NAS', 'YYZ'
+            );
+      END IF;
+
+      UPDATE users SET home_airport = NULL WHERE home_airport IS NOT NULL;
+    END $$;
 
     -- Phone + SMS PIN auth migration: drop password/email-verification
     -- columns outright (demo — password access is intentionally removed),

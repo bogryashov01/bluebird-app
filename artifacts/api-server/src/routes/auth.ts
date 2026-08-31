@@ -1,12 +1,13 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
-import { usersTable, notificationsTable, revokedTokensTable, loginCodesTable, registrationGrantsTable, flightsTable } from "@workspace/db/schema";
+import { usersTable, notificationsTable, revokedTokensTable, loginCodesTable, registrationGrantsTable } from "@workspace/db/schema";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { activeSmsProvider, sendSms } from "../lib/sms";
 import jwt from "jsonwebtoken";
 import { signToken, authMiddleware, hashToken } from "../middlewares/auth";
 import { seedDemoDataForUser } from "../lib/seed";
+import { isCatalogAirportCode } from "../lib/airport-catalog";
 
 const router = Router();
 
@@ -37,8 +38,11 @@ function makeReferralCode(name: string): string {
 }
 
 function sanitizeUser<T extends Record<string, unknown>>(user: T) {
-  const { ...safeUser } = user;
-  return safeUser;
+  const { homeAirport: _legacyHomeAirport, ...safeUser } = user;
+  return {
+    ...safeUser,
+    homeAirports: Array.isArray(user.homeAirports) ? user.homeAirports : [],
+  };
 }
 
 // POST /auth/request-code — issue a 6-digit SMS sign-in code (demo: no real
@@ -299,13 +303,13 @@ router.get("/me", authMiddleware, async (req, res) => {
   }
 });
 
-// PATCH /auth/me — update profile (name, email). The phone number is the
+// PATCH /auth/me — update profile (name, email, preferred airports). The phone number is the
 // account identifier and cannot be changed here.
 router.patch("/me", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
-  const { name, email, homeAirport } = req.body ?? {};
+  const { name, email, homeAirports } = req.body ?? {};
 
-  const updates: Record<string, string | null> = {};
+  const updates: { name?: string; email?: string | null; homeAirports?: string[] } = {};
   if (name !== undefined) {
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ error: "Name cannot be empty" });
@@ -322,25 +326,25 @@ router.patch("/me", authMiddleware, async (req, res) => {
     }
     updates.email = trimmed || null;
   }
-  if (homeAirport !== undefined) {
-    if (homeAirport === null || homeAirport === "") {
-      updates.homeAirport = null;
-    } else {
-      if (typeof homeAirport !== "string" || !/^[A-Za-z]{3,4}$/.test(homeAirport.trim())) {
-        return res.status(400).json({ error: "Enter a valid airport code" });
-      }
-      const code = homeAirport.trim().toUpperCase();
-      // Only airports the app actually serves (i.e. appear as a flight origin)
-      const [served] = await db
-        .select({ code: flightsTable.fromAirport })
-        .from(flightsTable)
-        .where(eq(flightsTable.fromAirport, code))
-        .limit(1);
-      if (!served) {
-        return res.status(400).json({ error: "That airport isn't served by Bluebird yet" });
-      }
-      updates.homeAirport = code;
+  if (homeAirports !== undefined) {
+    if (!Array.isArray(homeAirports)) {
+      return res.status(400).json({ error: "homeAirports must be an array of airport codes" });
     }
+    if (homeAirports.length > 20) {
+      return res.status(400).json({ error: "Select no more than 20 airports" });
+    }
+    const normalized: string[] = [];
+    for (const value of homeAirports) {
+      if (typeof value !== "string" || !/^[A-Za-z]{3,4}$/.test(value.trim())) {
+        return res.status(400).json({ error: "Enter valid airport codes" });
+      }
+      const code = value.trim().toUpperCase();
+      if (!isCatalogAirportCode(code)) {
+        return res.status(400).json({ error: `Unknown airport code: ${code}` });
+      }
+      if (!normalized.includes(code)) normalized.push(code);
+    }
+    updates.homeAirports = normalized;
   }
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: "Nothing to update" });

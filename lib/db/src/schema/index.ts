@@ -12,7 +12,10 @@ export const usersTable = pgTable("users", {
   linePassCount: integer("line_pass_count").notNull().default(0),
   referralCode: text("referral_code").notNull(),
   referredBy: text("referred_by"),
+  // Kept temporarily so ensureSchema can migrate installations that predate
+  // multi-airport preferences. API responses never expose this legacy value.
   homeAirport: text("home_airport"),
+  homeAirports: text("home_airports").array().notNull().default([]),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

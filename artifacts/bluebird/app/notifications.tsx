@@ -130,8 +130,8 @@ export default function NotificationsScreen() {
         <SettingsGroup
           rows={[
             {
-              label: 'Home Airport',
-              hint: user?.homeAirport ?? 'Not set',
+              label: 'Home Airports',
+              hint: user?.homeAirports?.length ? user.homeAirports.join(', ') : 'Not set',
               onPress: () => router.push('/airport-picker' as any),
             },
           ]}
@@ -143,7 +143,7 @@ export default function NotificationsScreen() {
         </Text>
         <View style={[styles.toggleCard, { backgroundColor: colors.surface }]}>
           {([
-            ['flightFromHome', 'Flights from Home Airport'],
+            ['flightFromHome', 'Flights from Home Airports'],
             ['allFlights',     'All New Flights'],
           ] as const).map(([key, label], i, arr) => (
             <View key={key}>

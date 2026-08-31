@@ -38,6 +38,19 @@ async function req(path, { method = 'GET', token, body } = {}) {
   return { status: res.status, json: await res.json().catch(() => null) };
 }
 
+// Canonical grouped catalog is available before authentication and includes
+// airports that do not need to exist in current flight inventory.
+const airportList = await req('/flights/airports');
+const dallas = airportList.json?.find?.((group) => group.city === 'Dallas');
+const newYork = airportList.json?.find?.((group) => group.city === 'New York');
+check('airport list returns grouped canonical metadata',
+  airportList.status === 200 && Array.isArray(dallas?.airports) && Array.isArray(newYork?.airports),
+  JSON.stringify(airportList.json));
+check('Dallas contains DFW and DAL independent of inventory',
+  JSON.stringify(dallas?.airports?.map((airport) => airport.code)) === JSON.stringify(['DFW', 'DAL']));
+check('New York contains TEB, JFK, LGA, and EWR',
+  JSON.stringify(newYork?.airports?.map((airport) => airport.code)) === JSON.stringify(['TEB', 'JFK', 'LGA', 'EWR']));
+
 // Unique per-run test phone (area code 555 test range, random suffix)
 const suffix = String(Math.floor(Math.random() * 10000000)).padStart(7, '0');
 const rawPhone = `(555) ${suffix.slice(0, 3)}-${suffix.slice(3)}`; // formatted input
@@ -122,6 +135,7 @@ check('registered user carries normalized phone and full name',
   registered?.json?.user?.phone === normalized && registered?.json?.user?.name === 'Auth Tester');
 check('registered user has the submitted email', registered?.json?.user?.email === profile.email);
 check('new account starts as a non-member', registered?.json?.user?.membershipTier === 'none');
+check('registered user always has homeAirports', Array.isArray(registered?.json?.user?.homeAirports));
 const jwt = registered?.json?.token;
 
 const grantReplay = await req('/auth/complete-registration', { method: 'POST', body: profile });
@@ -130,6 +144,32 @@ check('consumed registration grant cannot be replayed', grantReplay.status === 4
 // 5. /auth/me works with the issued token.
 const me = await req('/auth/me', { token: jwt });
 check('/auth/me returns the member', me.status === 200 && me.json?.phone === normalized);
+check('/auth/me returns homeAirports and not the legacy field',
+  Array.isArray(me.json?.homeAirports) && !Object.hasOwn(me.json ?? {}, 'homeAirport'));
+
+// 5b. Preferred airports are normalized, deduplicated, and are not limited to
+// airports represented in current flight inventory (DFW/LGA).
+const updatedPrefs = await req('/auth/me', {
+  method: 'PATCH',
+  token: jwt,
+  body: { homeAirports: ['dfw', 'DAL', 'DFW', ' lga '] },
+});
+check('PATCH /auth/me saves multiple canonical airports',
+  updatedPrefs.status === 200
+    && JSON.stringify(updatedPrefs.json?.homeAirports) === JSON.stringify(['DFW', 'DAL', 'LGA']),
+  JSON.stringify(updatedPrefs.json));
+const invalidPrefs = await req('/auth/me', {
+  method: 'PATCH',
+  token: jwt,
+  body: { homeAirports: ['XYZ'] },
+});
+check('PATCH /auth/me rejects airports outside the catalog', invalidPrefs.status === 400);
+const invalidPrefsShape = await req('/auth/me', {
+  method: 'PATCH',
+  token: jwt,
+  body: { homeAirports: 'DAL' },
+});
+check('PATCH /auth/me rejects a non-array preference', invalidPrefsShape.status === 400);
 
 // 6. Returning member: request a new code (fast-forward the cooldown via DB),
 // verify, and confirm it signs into the SAME account without creating a new one.
@@ -140,6 +180,8 @@ check('resend rotates the code', reqCode2.json?.demoCode !== activeCode);
 const login2 = await req('/auth/verify-code', { method: 'POST', body: { phone: rawPhone, code: reqCode2.json.demoCode } });
 check('returning member signs into the same account', login2.status === 200 && login2.json?.user?.id === registered?.json?.user?.id);
 check('returning member receives an immediate session', login2.json?.outcome === 'signed_in' && typeof login2.json?.token === 'string');
+check('airport preferences persist on the member account',
+  JSON.stringify(login2.json?.user?.homeAirports) === JSON.stringify(['DFW', 'DAL', 'LGA']));
 
 // 7. Expired codes are rejected (age the row via DB instead of waiting 5 min)
 await pool.query(`UPDATE login_codes SET last_sent_at = NOW() - INTERVAL '10 minutes' WHERE phone = $1`, [normalized]);

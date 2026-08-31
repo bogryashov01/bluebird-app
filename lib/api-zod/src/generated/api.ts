@@ -51,7 +51,7 @@ export const VerifyLoginCodeResponse = zod.union([zod.object({
   "membershipTier": zod.enum(['none', 'base', 'plus', 'concierge']).describe('\"none\" marks a registered non-member who has not purchased a plan yet.'),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
-  "homeAirport": zod.string().nullish(),
+  "homeAirports": zod.array(zod.string()),
   "createdAt": zod.string()
 })
 }),zod.object({
@@ -81,7 +81,7 @@ export const CompletePhoneRegistrationResponse = zod.object({
   "membershipTier": zod.enum(['none', 'base', 'plus', 'concierge']).describe('\"none\" marks a registered non-member who has not purchased a plan yet.'),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
-  "homeAirport": zod.string().nullish(),
+  "homeAirports": zod.array(zod.string()),
   "createdAt": zod.string()
 })
 })
@@ -106,7 +106,7 @@ export const GetMeResponse = zod.object({
   "membershipTier": zod.enum(['none', 'base', 'plus', 'concierge']).describe('\"none\" marks a registered non-member who has not purchased a plan yet.'),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
-  "homeAirport": zod.string().nullish(),
+  "homeAirports": zod.array(zod.string()),
   "createdAt": zod.string()
 })
 
@@ -114,10 +114,15 @@ export const GetMeResponse = zod.object({
 /**
  * @summary Update current user's profile
  */
+export const updateMeBodyHomeAirportsItemRegExp = new RegExp('^\\s*[A-Za-z]{3,4}\\s*$');
+export const updateMeBodyHomeAirportsMax = 20;
+
+
+
 export const UpdateMeBody = zod.object({
   "name": zod.string().optional(),
   "email": zod.string().optional(),
-  "homeAirport": zod.string().nullish().describe('IATA-style code of an airport served by Bluebird; null clears it.')
+  "homeAirports": zod.array(zod.string().regex(updateMeBodyHomeAirportsItemRegExp)).max(updateMeBodyHomeAirportsMax).optional().describe('Canonical airport codes to save as the member\'s preferences. Surrounding whitespace is trimmed, casing is normalized, and duplicates are removed server-side. An empty array clears all selections.')
 })
 
 export const UpdateMeResponse = zod.object({
@@ -128,7 +133,7 @@ export const UpdateMeResponse = zod.object({
   "membershipTier": zod.enum(['none', 'base', 'plus', 'concierge']).describe('\"none\" marks a registered non-member who has not purchased a plan yet.'),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
-  "homeAirport": zod.string().nullish(),
+  "homeAirports": zod.array(zod.string()),
   "createdAt": zod.string()
 })
 
@@ -170,13 +175,16 @@ export const ListFlightsResponse = zod.array(ListFlightsResponseItem)
 
 
 /**
- * @summary List departure airports derived from flight data (public)
+ * @summary List canonical airports grouped by metro area (public)
  */
 export const ListAirportsResponseItem = zod.object({
+  "city": zod.string(),
+  "airports": zod.array(zod.object({
   "code": zod.string(),
   "name": zod.string(),
   "city": zod.string(),
-  "flightCount": zod.number()
+  "flightCount": zod.number().optional()
+}))
 })
 export const ListAirportsResponse = zod.array(ListAirportsResponseItem)
 
@@ -193,7 +201,7 @@ export const GetAirportSummaryResponse = zod.object({
   "code": zod.string(),
   "name": zod.string(),
   "city": zod.string(),
-  "flightCount": zod.number()
+  "flightCount": zod.number().optional()
 }),
   "flightCount30d": zod.number(),
   "topDestinations": zod.array(zod.object({

@@ -113,7 +113,7 @@ export interface User {
   membershipTier: UserMembershipTier;
   linePassCount: number;
   referralCode: string;
-  homeAirport?: string | null;
+  homeAirports: string[];
   createdAt: string;
 }
 
@@ -154,8 +154,12 @@ export interface AuthResponse {
 export interface UpdateMeRequest {
   name?: string;
   email?: string;
-  /** IATA-style code of an airport served by Bluebird; null clears it. */
-  homeAirport?: string | null;
+  /**
+     * Canonical airport codes to save as the member's preferences. Surrounding whitespace is trimmed, casing is normalized, and duplicates are removed server-side. An empty array clears all selections.
+     * @maxItems 20
+     * @items.pattern ^\s*[A-Za-z]{3,4}\s*$
+     */
+  homeAirports?: string[];
 }
 
 export type FlightStatus = typeof FlightStatus[keyof typeof FlightStatus];
@@ -199,7 +203,12 @@ export interface AirportInfo {
   code: string;
   name: string;
   city: string;
-  flightCount: number;
+  flightCount?: number;
+}
+
+export interface AirportGroup {
+  city: string;
+  airports: AirportInfo[];
 }
 
 export interface AirportDestination {

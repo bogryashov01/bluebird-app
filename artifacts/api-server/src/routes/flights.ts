@@ -4,6 +4,7 @@ import { flightsTable, queueEntriesTable, tripsTable } from "@workspace/db/schem
 import { eq, ilike, and, inArray, count, desc, sql } from "drizzle-orm";
 import { authMiddleware } from "../middlewares/auth";
 import { sweepDeparturesSafe } from "../lib/departure";
+import { AIRPORT_GROUPS } from "../lib/airport-catalog";
 
 const router = Router();
 
@@ -54,25 +55,9 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Premium display names for known airports; falls back to "<City> Airport".
-const AIRPORT_NAMES: Record<string, string> = {
-  DAL: "Dallas Love Field",
-  TEB: "Teterboro Airport",
-  LAX: "Los Angeles Intl",
-  SFO: "San Francisco Intl",
-  JFK: "John F. Kennedy Intl",
-  MIA: "Miami Intl",
-  ORD: "Chicago O'Hare",
-  LAS: "Harry Reid Intl",
-  BOS: "Boston Logan Intl",
-  SEA: "Seattle-Tacoma Intl",
-  DEN: "Denver Intl",
-  ASP: "Aspen/Pitkin County",
-  SDL: "Scottsdale Airport",
-  PBI: "Palm Beach Intl",
-  NAS: "Lynden Pindling Intl",
-  YYZ: "Toronto Pearson",
-};
+const AIRPORT_NAMES = Object.fromEntries(
+  AIRPORT_GROUPS.flatMap((group) => group.airports.map((airport) => [airport.code, airport.name])),
+);
 
 function airportName(code: string, city: string): string {
   return AIRPORT_NAMES[code] ?? `${city} Airport`;
@@ -83,7 +68,7 @@ function dateStr(d: Date): string {
 }
 
 // GET /flights/airports (public — onboarding airport picker)
-// Airports derived from flight data: any airport that appears as an origin.
+// The catalog is canonical; inventory counts are optional enrichment.
 router.get("/airports", async (_req, res) => {
   try {
     const rows = await db
@@ -95,14 +80,15 @@ router.get("/airports", async (_req, res) => {
       .from(flightsTable)
       .groupBy(flightsTable.fromAirport, flightsTable.fromCity)
       .orderBy(desc(count()));
-    return res.json(
-      rows.map((r) => ({
-        code: r.code,
-        name: airportName(r.code, r.city),
-        city: r.city,
-        flightCount: Number(r.flightCount),
+    const counts = new Map(rows.map((row) => [row.code, Number(row.flightCount)]));
+    return res.json(AIRPORT_GROUPS.map((group) => ({
+      city: group.city,
+      airports: group.airports.map((airport) => ({
+        ...airport,
+        city: group.city,
+        ...(counts.has(airport.code) ? { flightCount: counts.get(airport.code) } : {}),
       })),
-    );
+    })));
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch airports" });
   }

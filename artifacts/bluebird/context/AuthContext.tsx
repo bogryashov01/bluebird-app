@@ -1,24 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setAuthTokenGetter, logout } from '@workspace/api-client-react';
+import { setAuthTokenGetter, logout, type User } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 
 const TOKEN_KEY = 'bluebird_token';
 const USER_KEY = 'bluebird_user';
 
-export interface AuthUser {
-  id: string;
-  name: string;
-  phone: string;
-  email?: string | null;
-  membershipTier: 'none' | 'base' | 'plus' | 'concierge';
-  linePassCount: number;
-  referralCode: string;
-  homeAirport?: string | null;
-  createdAt: string;
-}
-
+export type AuthUser = User;
 interface AuthContextType {
   token: string | null;
   user: AuthUser | null;
@@ -67,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               headers: { Authorization: `Bearer ${storedToken}` },
             });
             if (resp.ok) {
-              const freshUser = await resp.json();
+              const freshUser = normalizeUser(await resp.json());
               setToken(storedToken);
               setUser(freshUser);
               AsyncStorage.setItem(USER_KEY, JSON.stringify(freshUser)).catch(() => {});
@@ -80,12 +69,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } else {
               // Server error — keep cached session, fail open
               setToken(storedToken);
-              setUser(JSON.parse(storedUser));
+              setUser(normalizeUser(JSON.parse(storedUser)));
             }
           } catch {
             // Network error — keep cached session so offline use still works
             setToken(storedToken);
-            setUser(JSON.parse(storedUser));
+            setUser(normalizeUser(JSON.parse(storedUser)));
           }
         }
       } catch {
@@ -98,12 +87,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (newToken: string, newUser: AuthUser) => {
+    const normalized = normalizeUser(newUser);
     await Promise.all([
       AsyncStorage.setItem(TOKEN_KEY, newToken),
-      AsyncStorage.setItem(USER_KEY, JSON.stringify(newUser)),
+      AsyncStorage.setItem(USER_KEY, JSON.stringify(normalized)),
     ]);
     setToken(newToken);
-    setUser(newUser);
+    setUser(normalized);
     setPendingRegistrationGrant(null);
   };
 
@@ -130,8 +120,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateUser = (updatedUser: AuthUser) => {
-    setUser(updatedUser);
-    AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUser)).catch(() => {});
+    const normalized = normalizeUser(updatedUser);
+    setUser(normalized);
+    AsyncStorage.setItem(USER_KEY, JSON.stringify(normalized)).catch(() => {});
   };
 
   return (
@@ -154,4 +145,16 @@ export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
+}
+
+function normalizeUser(value: unknown): User {
+  const cached = value as User & { homeAirport?: string | null };
+  return {
+    ...cached,
+    homeAirports: Array.isArray(cached.homeAirports)
+      ? cached.homeAirports
+      : cached.homeAirport
+        ? [cached.homeAirport]
+        : [],
+  };
 }

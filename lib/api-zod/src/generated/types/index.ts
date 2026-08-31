@@ -7,6 +7,7 @@
  */
 
 export * from './airportDestination';
+export * from './airportGroup';
 export * from './airportInfo';
 export * from './airportSummary';
 export * from './authResponse';

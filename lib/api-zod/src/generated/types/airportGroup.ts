@@ -5,10 +5,9 @@
  * Bluebird private aviation API
  * OpenAPI spec version: 0.1.0
  */
+import type { AirportInfo } from './airportInfo';
 
-export interface AirportInfo {
-  code: string;
-  name: string;
+export interface AirportGroup {
   city: string;
-  flightCount?: number;
+  airports: AirportInfo[];
 }

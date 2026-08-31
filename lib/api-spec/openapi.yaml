@@ -247,16 +247,16 @@ paths:
     get:
       operationId: listAirports
       tags: [flights]
-      summary: List departure airports derived from flight data (public)
+      summary: List canonical airports grouped by metro area (public)
       responses:
         "200":
-          description: List of airports
+          description: Airport groups with optional flight inventory counts
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/AirportInfo"
+                  $ref: "#/components/schemas/AirportGroup"
 
   /flights/airports/{code}/summary:
     get:
@@ -886,10 +886,13 @@ components:
           type: string
         email:
           type: string
-        homeAirport:
-          type: string
-          nullable: true
-          description: IATA-style code of an airport served by Bluebird; null clears it.
+        homeAirports:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            pattern: "^\\s*[A-Za-z]{3,4}\\s*$"
+          description: Canonical airport codes to save as the member's preferences. Surrounding whitespace is trimmed, casing is normalized, and duplicates are removed server-side. An empty array clears all selections.
 
     User:
       type: object
@@ -911,9 +914,10 @@ components:
           type: number
         referralCode:
           type: string
-        homeAirport:
-          type: string
-          nullable: true
+        homeAirports:
+          type: array
+          items:
+            type: string
         createdAt:
           type: string
       required:
@@ -923,6 +927,7 @@ components:
         - membershipTier
         - linePassCount
         - referralCode
+        - homeAirports
         - createdAt
 
     Flight:
@@ -1009,7 +1014,19 @@ components:
         - code
         - name
         - city
-        - flightCount
+
+    AirportGroup:
+      type: object
+      properties:
+        city:
+          type: string
+        airports:
+          type: array
+          items:
+            $ref: "#/components/schemas/AirportInfo"
+      required:
+        - city
+        - airports
 
     AirportDestination:
       type: object
