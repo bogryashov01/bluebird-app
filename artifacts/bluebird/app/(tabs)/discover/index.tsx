@@ -13,7 +13,6 @@ import {
 } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
 import FlightMapView from '@/components/FlightMap';
-import { originalPrice } from '@/lib/pricing';
 
 const FILTERS = ['All', 'This Week', 'Under 4 hrs', 'Heavy Jet', 'Near Me'];
 
@@ -152,30 +151,9 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
               <Text style={[styles.featuredRoute, { color: '#FFFFFF', fontFamily: 'Inter_700Bold' }]}>
                 {featured.fromCity} → {featured.toCity}
               </Text>
-              <View style={styles.featuredMetaRow}>
-                <Text style={[styles.featuredMeta, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_400Regular' }]}>
-                  {featured.aircraftType} · {formatDateTime(featured)}
-                </Text>
-                {featured.priceUsd ? (
-                  <View style={styles.featuredPriceCol}>
-                    <Text style={[styles.featuredDiscount, { color: colors.paleBlue, fontFamily: 'Inter_700Bold' }]}>
-                      ${featured.priceUsd.toLocaleString()}
-                    </Text>
-                    {(() => {
-                      const was = originalPrice(featured.priceUsd, featured.discountPct ?? 0);
-                      return was ? (
-                        <Text style={[styles.featuredWasPrice, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_400Regular' }]}>
-                          ${was.toLocaleString()}
-                        </Text>
-                      ) : null;
-                    })()}
-                  </View>
-                ) : featured.discountPct ? (
-                  <Text style={[styles.featuredDiscount, { color: colors.paleBlue, fontFamily: 'Inter_700Bold' }]}>
-                    {featured.discountPct}% off
-                  </Text>
-                ) : null}
-              </View>
+              <Text style={[styles.featuredMeta, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_400Regular' }]}>
+                {featured.aircraftType} · {formatDateTime(featured)}
+              </Text>
             </View>
           </ImageBackground>
         </TouchableOpacity>
@@ -380,21 +358,6 @@ export default function DiscoverScreen() {
           {item.aircraftType} · {formatDateTime(item)}
         </Text>
       </View>
-      {item.priceUsd ? (
-        <View style={styles.cardPriceCol}>
-          <Text style={[styles.cardPrice, { color: colors.paleBlue, fontFamily: 'Inter_700Bold' }]}>
-            ${item.priceUsd.toLocaleString()}
-          </Text>
-          {(() => {
-            const was = originalPrice(item.priceUsd, item.discountPct ?? 0);
-            return was ? (
-              <Text style={[styles.cardWasPrice, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                ${was.toLocaleString()}
-              </Text>
-            ) : null;
-          })()}
-        </View>
-      ) : null}
     </TouchableOpacity>
   );
 
@@ -483,11 +446,7 @@ const styles = StyleSheet.create({
   featuredBadgeText: { fontSize: 11, letterSpacing: 0.4 },
   featuredBottom: { padding: 16, gap: 4 },
   featuredRoute: { fontSize: 20, letterSpacing: -0.4 },
-  featuredMetaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   featuredMeta: { fontSize: 13 },
-  featuredDiscount: { fontSize: 17 },
-  featuredPriceCol: { alignItems: 'flex-end' },
-  featuredWasPrice: { fontSize: 12.5, textDecorationLine: 'line-through' },
 
   // Search
   searchWrap: {
@@ -518,9 +477,6 @@ const styles = StyleSheet.create({
   cardBody: { flex: 1, minWidth: 0 },
   cardRoute: { fontSize: 15 },
   cardMeta: { fontSize: 12.5, marginTop: 2 },
-  cardPriceCol: { alignItems: 'flex-end' },
-  cardPrice: { fontSize: 15 },
-  cardWasPrice: { fontSize: 12, textDecorationLine: 'line-through', marginTop: 1 },
 
   // States
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
