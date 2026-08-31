@@ -8,8 +8,8 @@ export default function AuthLayout() {
       <Stack.Screen name="onboarding" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="airport-summary" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="phone" options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="register" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="verify-code" options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="complete-registration" options={{ animation: 'slide_from_right', gestureEnabled: false }} />
       <Stack.Screen name="welcome-tour" options={{ animation: 'slide_from_right', gestureEnabled: false }} />
     </Stack>
   );

@@ -33,15 +33,15 @@ export const RequestLoginCodeResponse = zod.object({
 
 
 /**
- * @summary Verify a phone + 6-digit code, creating the account on first sign-in
+ * @summary Verify a phone + 6-digit code and either sign in or authorize registration
  */
 export const VerifyLoginCodeBody = zod.object({
   "phone": zod.string(),
-  "code": zod.string().describe('The 6-digit SMS code.'),
-  "name": zod.string().optional().describe('Optional display name for the member; applied only when this verification creates a new account.')
+  "code": zod.string().describe('The 6-digit SMS code.')
 })
 
-export const VerifyLoginCodeResponse = zod.object({
+export const VerifyLoginCodeResponse = zod.union([zod.object({
+  "outcome": zod.enum(['signed_in']),
   "token": zod.string(),
   "user": zod.object({
   "id": zod.string(),
@@ -53,8 +53,37 @@ export const VerifyLoginCodeResponse = zod.object({
   "referralCode": zod.string(),
   "homeAirport": zod.string().nullish(),
   "createdAt": zod.string()
-}),
-  "isNewUser": zod.boolean().optional().describe('True when this verification created the account.')
+})
+}),zod.object({
+  "outcome": zod.enum(['registration_required']),
+  "registrationGrant": zod.string().describe('Short-lived single-use credential returned only when registration is required.'),
+  "registrationGrantExpiresInSeconds": zod.number()
+})])
+
+
+/**
+ * @summary Create an account after successful phone verification
+ */
+export const CompletePhoneRegistrationBody = zod.object({
+  "registrationGrant": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string()
+})
+
+export const CompletePhoneRegistrationResponse = zod.object({
+  "token": zod.string(),
+  "user": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "phone": zod.string(),
+  "email": zod.string().nullish(),
+  "membershipTier": zod.enum(['none', 'base', 'plus', 'concierge']).describe('\"none\" marks a registered non-member who has not purchased a plan yet.'),
+  "linePassCount": zod.number(),
+  "referralCode": zod.string(),
+  "homeAirport": zod.string().nullish(),
+  "createdAt": zod.string()
+})
 })
 
 

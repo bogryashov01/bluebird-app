@@ -26,6 +26,8 @@ interface AuthContextType {
   signIn: (token: string, user: AuthUser) => Promise<void>;
   signOut: () => Promise<void>;
   updateUser: (user: AuthUser) => void;
+  pendingRegistrationGrant: string | null;
+  setPendingRegistrationGrant: (grant: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -44,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pendingRegistrationGrant, setPendingRegistrationGrant] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadAuth() {
@@ -101,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ]);
     setToken(newToken);
     setUser(newUser);
+    setPendingRegistrationGrant(null);
   };
 
   const signOut = async () => {
@@ -118,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ]);
     setToken(null);
     setUser(null);
+    setPendingRegistrationGrant(null);
     // Wipe all cached member data (flights, queues, notifications, profile)
     // so a different account signing in on this device sees nothing stale.
     queryClient.clear();
@@ -130,7 +135,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ token, user, isLoading, signIn, signOut, updateUser }}>
+    <AuthContext.Provider value={{
+      token,
+      user,
+      isLoading,
+      signIn,
+      signOut,
+      updateUser,
+      pendingRegistrationGrant,
+      setPendingRegistrationGrant,
+    }}>
       {children}
     </AuthContext.Provider>
   );

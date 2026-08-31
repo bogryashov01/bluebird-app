@@ -82,7 +82,7 @@ paths:
     post:
       operationId: verifyLoginCode
       tags: [auth]
-      summary: Verify a phone + 6-digit code, creating the account on first sign-in
+      summary: Verify a phone + 6-digit code and either sign in or authorize registration
       requestBody:
         required: true
         content:
@@ -91,11 +91,11 @@ paths:
               $ref: "#/components/schemas/VerifyCodeRequest"
       responses:
         "200":
-          description: Signed in
+          description: Existing member signed in, or unknown phone verified for registration
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                $ref: "#/components/schemas/VerifyCodeResponse"
         "400":
           description: Invalid input
           content:
@@ -104,6 +104,43 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Wrong, expired, or exhausted code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/complete-registration:
+    post:
+      operationId: completePhoneRegistration
+      tags: [auth]
+      summary: Create an account after successful phone verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteRegistrationRequest"
+      responses:
+        "200":
+          description: Account created and signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Invalid profile data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Registration grant is invalid, expired, or already used
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Phone or email conflicts with an existing account
           content:
             application/json:
               schema:
@@ -769,12 +806,67 @@ components:
         code:
           type: string
           description: The 6-digit SMS code.
-        name:
-          type: string
-          description: Optional display name for the member; applied only when this verification creates a new account.
       required:
         - phone
         - code
+
+    VerifyCodeResponse:
+      oneOf:
+        - $ref: "#/components/schemas/SignedInVerification"
+        - $ref: "#/components/schemas/RegistrationRequiredVerification"
+      discriminator:
+        propertyName: outcome
+        mapping:
+          signed_in: "#/components/schemas/SignedInVerification"
+          registration_required: "#/components/schemas/RegistrationRequiredVerification"
+
+    SignedInVerification:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum: [signed_in]
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - outcome
+        - token
+        - user
+
+    RegistrationRequiredVerification:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum: [registration_required]
+        registrationGrant:
+          type: string
+          description: Short-lived single-use credential returned only when registration is required.
+        registrationGrantExpiresInSeconds:
+          type: number
+      required:
+        - outcome
+        - registrationGrant
+        - registrationGrantExpiresInSeconds
+
+    CompleteRegistrationRequest:
+      type: object
+      properties:
+        registrationGrant:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+      required:
+        - registrationGrant
+        - firstName
+        - lastName
+        - email
 
     AuthResponse:
       type: object
@@ -783,9 +875,6 @@ components:
           type: string
         user:
           $ref: "#/components/schemas/User"
-        isNewUser:
-          type: boolean
-          description: True when this verification created the account.
       required:
         - token
         - user

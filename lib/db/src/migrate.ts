@@ -106,6 +106,13 @@ export async function ensureSchema(): Promise<void> {
       last_sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS registration_grants (
+      grant_hash TEXT        PRIMARY KEY,
+      phone      TEXT        NOT NULL UNIQUE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS flights (
       id               TEXT        PRIMARY KEY,
       from_airport     TEXT        NOT NULL,

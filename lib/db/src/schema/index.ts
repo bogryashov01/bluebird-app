@@ -108,6 +108,16 @@ export const loginCodesTable = pgTable("login_codes", {
   lastSentAt: timestamp("last_sent_at").notNull().defaultNow(),
 });
 
+// Short-lived proof that an unknown phone successfully completed SMS
+// verification. Only the grant hash is stored; successful registration
+// consumes the row in the same transaction that creates the user.
+export const registrationGrantsTable = pgTable("registration_grants", {
+  grantHash: text("grant_hash").primaryKey(),
+  phone: text("phone").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const revokedTokensTable = pgTable("revoked_tokens", {
   tokenHash: text("token_hash").primaryKey(),
   userId: text("user_id").notNull(),
@@ -128,4 +138,5 @@ export type Trip = typeof tripsTable.$inferSelect;
 export type Notification = typeof notificationsTable.$inferSelect;
 export type RevokedToken = typeof revokedTokensTable.$inferSelect;
 export type LoginCode = typeof loginCodesTable.$inferSelect;
+export type RegistrationGrant = typeof registrationGrantsTable.$inferSelect;
 export type ConciergeMessage = typeof conciergeMessagesTable.$inferSelect;

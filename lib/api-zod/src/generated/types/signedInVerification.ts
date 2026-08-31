@@ -5,9 +5,11 @@
  * Bluebird private aviation API
  * OpenAPI spec version: 0.1.0
  */
+import type { SignedInVerificationOutcome } from './signedInVerificationOutcome';
 import type { User } from './user';
 
-export interface AuthResponse {
+export interface SignedInVerification {
+  outcome: SignedInVerificationOutcome;
   token: string;
   user: User;
 }

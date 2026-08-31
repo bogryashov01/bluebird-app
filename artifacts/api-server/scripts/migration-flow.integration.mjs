@@ -117,6 +117,10 @@ const loginCodes = (await pool.query(`
   SELECT count(*)::int AS n FROM information_schema.tables
   WHERE table_schema = '${SCHEMA}' AND table_name = 'login_codes'`)).rows[0].n;
 check("login_codes table created", loginCodes === 1);
+const registrationGrants = Number((await pool.query(`
+  SELECT count(*)::int AS n FROM information_schema.tables
+  WHERE table_schema = '${SCHEMA}' AND table_name = 'registration_grants'`)).rows[0].n);
+check("registration_grants table created", registrationGrants === 1);
 
 await admin.query(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE;`);
 await pool.end();

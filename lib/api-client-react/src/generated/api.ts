@@ -27,6 +27,7 @@ import type {
   CancelBookingResponse,
   CancelQueueResponse,
   ChangeMembershipRequest,
+  CompleteRegistrationRequest,
   ConciergeChatRequest,
   ConciergeHistoryMessage,
   ConciergeReply,
@@ -49,7 +50,8 @@ import type {
   UpgradeMembershipRequest,
   UseLinePassResponse,
   User,
-  VerifyCodeRequest
+  VerifyCodeRequest,
+  VerifyCodeResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -236,11 +238,11 @@ export const getVerifyLoginCodeUrl = () => {
 }
 
 /**
- * @summary Verify a phone + 6-digit code, creating the account on first sign-in
+ * @summary Verify a phone + 6-digit code and either sign in or authorize registration
  */
-export const verifyLoginCode = async (verifyCodeRequest: VerifyCodeRequest, options?: Parameters<typeof customFetch>[1]): Promise<AuthResponse> => {
+export const verifyLoginCode = async (verifyCodeRequest: VerifyCodeRequest, options?: Parameters<typeof customFetch>[1]): Promise<VerifyCodeResponse> => {
 
-  return customFetch<AuthResponse>(getVerifyLoginCodeUrl(),
+  return customFetch<VerifyCodeResponse>(getVerifyLoginCodeUrl(),
   {
     ...options,
     method: 'POST',
@@ -285,7 +287,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type VerifyLoginCodeMutationError = ErrorType<ErrorResponse>
 
     /**
- * @summary Verify a phone + 6-digit code, creating the account on first sign-in
+ * @summary Verify a phone + 6-digit code and either sign in or authorize registration
  */
 export const useVerifyLoginCode = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyLoginCode>>, TError,{data: BodyType<VerifyCodeRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -296,6 +298,77 @@ export const useVerifyLoginCode = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getVerifyLoginCodeMutationOptions(options));
+    }
+
+export const getCompletePhoneRegistrationUrl = () => {
+
+
+
+
+  return `/api/auth/complete-registration`
+}
+
+/**
+ * @summary Create an account after successful phone verification
+ */
+export const completePhoneRegistration = async (completeRegistrationRequest: CompleteRegistrationRequest, options?: Parameters<typeof customFetch>[1]): Promise<AuthResponse> => {
+
+  return customFetch<AuthResponse>(getCompletePhoneRegistrationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(completeRegistrationRequest)
+  }
+);}
+
+
+
+
+
+export const getCompletePhoneRegistrationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completePhoneRegistration>>, TError,{data: BodyType<CompleteRegistrationRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completePhoneRegistration>>, TError,{data: BodyType<CompleteRegistrationRequest>}, TContext> => {
+
+const mutationKey = ['completePhoneRegistration'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completePhoneRegistration>>, {data: BodyType<CompleteRegistrationRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  completePhoneRegistration(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompletePhoneRegistrationMutationResult = NonNullable<Awaited<ReturnType<typeof completePhoneRegistration>>>
+    export type CompletePhoneRegistrationMutationBody = BodyType<CompleteRegistrationRequest>
+    export type CompletePhoneRegistrationMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Create an account after successful phone verification
+ */
+export const useCompletePhoneRegistration = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completePhoneRegistration>>, TError,{data: BodyType<CompleteRegistrationRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completePhoneRegistration>>,
+        TError,
+        {data: BodyType<CompleteRegistrationRequest>},
+        TContext
+      > => {
+      return useMutation(getCompletePhoneRegistrationMutationOptions(options));
     }
 
 export const getLogoutUrl = () => {

@@ -3,8 +3,8 @@
  *
  * Covers: phone normalization, resend cooldown, wrong-code attempts and
  * exhaustion, expiry, single-use/replay (including concurrent verification),
- * auto account creation for new phones vs. sign-in for existing ones, and
- * the logout token denylist.
+ * registration grants for new phones vs. immediate sign-in for existing ones,
+ * atomic grant consumption, profile conflicts, and the logout token denylist.
  *
  * Run with the API server up (development):  pnpm run test:auth-flow
  * Base URL defaults to the dev domain proxy; override with API_BASE.
@@ -79,8 +79,8 @@ check('wrong code rejected with 401', wrong.status === 401, JSON.stringify(wrong
 const malformed = await req('/auth/verify-code', { method: 'POST', body: { phone: normalized, code: '12ab' } });
 check('malformed code rejected with 400', malformed.status === 400);
 
-// 4. Correct code signs in and auto-creates the account — fire two concurrent
-// verifications with the same valid code: exactly one may succeed (single-use).
+// 4. Correct code verifies the unknown phone without creating an account.
+// Fire two concurrent verifications: exactly one may succeed (single-use).
 const [c1, c2] = await Promise.all([
   req('/auth/verify-code', { method: 'POST', body: { phone: normalized, code: activeCode } }),
   req('/auth/verify-code', { method: 'POST', body: { phone: normalized, code: activeCode } }),
@@ -88,17 +88,46 @@ const [c1, c2] = await Promise.all([
 const successes = [c1, c2].filter((r) => r.status === 200);
 check('exactly one concurrent verification succeeds', successes.length === 1, `statuses ${c1.status}/${c2.status}`);
 const ok = successes[0];
-check('verification returns a JWT', typeof ok?.json?.token === 'string');
-check('first-time phone auto-creates the account', ok?.json?.isNewUser === true);
-check('user record carries the normalized phone', ok?.json?.user?.phone === normalized);
-check('user has a referral code', typeof ok?.json?.user?.referralCode === 'string');
-const jwt = ok?.json?.token;
+check('unknown phone requires registration', ok?.json?.outcome === 'registration_required', JSON.stringify(ok?.json));
+check('verification returns no session or user', !ok?.json?.token && !ok?.json?.user);
+check('verification returns a registration grant', typeof ok?.json?.registrationGrant === 'string');
+const registrationGrant = ok?.json?.registrationGrant;
+const beforeRegistration = await pool.query(`SELECT id FROM users WHERE phone = $1`, [normalized]);
+check('verification alone does not create an account', beforeRegistration.rowCount === 0);
 
 // 4b. Sequential replay of the consumed code is rejected
 const replay = await req('/auth/verify-code', { method: 'POST', body: { phone: normalized, code: activeCode } });
 check('replayed consumed code rejected', replay.status === 401, JSON.stringify(replay.json));
 
-// 5. /auth/me works with the issued token
+// 4c. Invalid profile data does not consume the verified flow.
+const invalidProfile = await req('/auth/complete-registration', {
+  method: 'POST',
+  body: { registrationGrant, firstName: '', lastName: 'Member', email: 'invalid' },
+});
+check('invalid registration profile rejected', invalidProfile.status === 400, JSON.stringify(invalidProfile.json));
+const grantAfterInvalid = await pool.query(`SELECT grant_hash FROM registration_grants WHERE phone = $1`, [normalized]);
+check('validation failure preserves registration grant', grantAfterInvalid.rowCount === 1);
+
+// 4d. Registration consumes the grant and creates the account atomically.
+const profile = { registrationGrant, firstName: 'Auth', lastName: 'Tester', email: `auth-${suffix}@example.test` };
+const [r1, r2] = await Promise.all([
+  req('/auth/complete-registration', { method: 'POST', body: profile }),
+  req('/auth/complete-registration', { method: 'POST', body: profile }),
+]);
+const registrations = [r1, r2].filter((r) => r.status === 200);
+check('exactly one concurrent registration succeeds', registrations.length === 1, `statuses ${r1.status}/${r2.status}`);
+const registered = registrations[0];
+check('registration returns a JWT', typeof registered?.json?.token === 'string');
+check('registered user carries normalized phone and full name',
+  registered?.json?.user?.phone === normalized && registered?.json?.user?.name === 'Auth Tester');
+check('registered user has the submitted email', registered?.json?.user?.email === profile.email);
+check('new account starts as a non-member', registered?.json?.user?.membershipTier === 'none');
+const jwt = registered?.json?.token;
+
+const grantReplay = await req('/auth/complete-registration', { method: 'POST', body: profile });
+check('consumed registration grant cannot be replayed', grantReplay.status === 401, JSON.stringify(grantReplay.json));
+
+// 5. /auth/me works with the issued token.
 const me = await req('/auth/me', { token: jwt });
 check('/auth/me returns the member', me.status === 200 && me.json?.phone === normalized);
 
@@ -109,8 +138,8 @@ const reqCode2 = await req('/auth/request-code', { method: 'POST', body: { phone
 check('resend works after cooldown', reqCode2.status === 200 && /^\d{6}$/.test(reqCode2.json?.demoCode ?? ''));
 check('resend rotates the code', reqCode2.json?.demoCode !== activeCode);
 const login2 = await req('/auth/verify-code', { method: 'POST', body: { phone: rawPhone, code: reqCode2.json.demoCode } });
-check('returning member signs into the same account', login2.status === 200 && login2.json?.user?.id === ok?.json?.user?.id);
-check('returning member is not flagged as new', login2.json?.isNewUser === false);
+check('returning member signs into the same account', login2.status === 200 && login2.json?.user?.id === registered?.json?.user?.id);
+check('returning member receives an immediate session', login2.json?.outcome === 'signed_in' && typeof login2.json?.token === 'string');
 
 // 7. Expired codes are rejected (age the row via DB instead of waiting 5 min)
 await pool.query(`UPDATE login_codes SET last_sent_at = NOW() - INTERVAL '10 minutes' WHERE phone = $1`, [normalized]);
@@ -147,14 +176,40 @@ check('concurrent guesses never push attempts past the cap', (rows[0]?.attempts 
 const afterRace = await req('/auth/verify-code', { method: 'POST', body: { phone: normalized, code: realCode5 } });
 check('correct code rejected after concurrent exhaustion', afterRace.status === 401, JSON.stringify(afterRace.json));
 
-// 8c. International number: request + verify with a "+" formatted number the
-// mobile client would send (regression: intl users must be able to sign in).
+// 8c. Expired registration grants cannot create accounts.
+const grantPhone = `+1556${String(Math.floor(Math.random() * 10000000)).padStart(7, '0')}`;
+const grantCode = await req('/auth/request-code', { method: 'POST', body: { phone: grantPhone } });
+const grantVerify = await req('/auth/verify-code', { method: 'POST', body: { phone: grantPhone, code: grantCode.json?.demoCode } });
+await pool.query(`UPDATE registration_grants SET expires_at = NOW() - INTERVAL '1 minute' WHERE phone = $1`, [grantPhone]);
+const expiredGrant = await req('/auth/complete-registration', {
+  method: 'POST',
+  body: { registrationGrant: grantVerify.json?.registrationGrant, firstName: 'Expired', lastName: 'Grant', email: `expired-${suffix}@example.test` },
+});
+check('expired registration grant rejected', expiredGrant.status === 401, JSON.stringify(expiredGrant.json));
+const noExpiredUser = await pool.query(`SELECT id FROM users WHERE phone = $1`, [grantPhone]);
+check('expired grant creates no account', noExpiredUser.rowCount === 0);
+
+// 8d. Conflicting email is clear and leaves the grant retryable.
+const conflictPhone = `+1557${String(Math.floor(Math.random() * 10000000)).padStart(7, '0')}`;
+const conflictCode = await req('/auth/request-code', { method: 'POST', body: { phone: conflictPhone } });
+const conflictVerify = await req('/auth/verify-code', { method: 'POST', body: { phone: conflictPhone, code: conflictCode.json?.demoCode } });
+const conflict = await req('/auth/complete-registration', {
+  method: 'POST',
+  body: { registrationGrant: conflictVerify.json?.registrationGrant, firstName: 'Email', lastName: 'Conflict', email: profile.email.toUpperCase() },
+});
+check('duplicate email rejected with conflict', conflict.status === 409, JSON.stringify(conflict.json));
+const grantAfterConflict = await pool.query(`SELECT grant_hash FROM registration_grants WHERE phone = $1`, [conflictPhone]);
+check('email conflict preserves registration grant', grantAfterConflict.rowCount === 1);
+
+// 8e. International number: request + verify with a "+" formatted number the
+// mobile client would send.
 const intlPhone = `+4420${String(Math.floor(Math.random() * 100000000)).padStart(8, '0')}`;
 const intlReq = await req('/auth/request-code', { method: 'POST', body: { phone: intlPhone } });
 check('international request-code succeeds', intlReq.status === 200 && intlReq.json?.phone === intlPhone, JSON.stringify(intlReq.json));
 const intlVerify = await req('/auth/verify-code', { method: 'POST', body: { phone: intlPhone, code: intlReq.json?.demoCode } });
-check('international sign-in succeeds', intlVerify.status === 200 && intlVerify.json?.user?.phone === intlPhone, JSON.stringify(intlVerify.json));
+check('international phone verification succeeds', intlVerify.status === 200 && intlVerify.json?.outcome === 'registration_required', JSON.stringify(intlVerify.json));
 await pool.query(`DELETE FROM login_codes WHERE phone = $1`, [intlPhone]);
+await pool.query(`DELETE FROM registration_grants WHERE phone IN ($1, $2, $3)`, [intlPhone, grantPhone, conflictPhone]);
 
 // 9. Logout revokes the token (denylist)
 const logout = await req('/auth/logout', { method: 'POST', token: jwt });

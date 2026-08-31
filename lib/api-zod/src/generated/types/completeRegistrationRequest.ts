@@ -5,9 +5,10 @@
  * Bluebird private aviation API
  * OpenAPI spec version: 0.1.0
  */
-import type { User } from './user';
 
-export interface AuthResponse {
-  token: string;
-  user: User;
+export interface CompleteRegistrationRequest {
+  registrationGrant: string;
+  firstName: string;
+  lastName: string;
+  email: string;
 }

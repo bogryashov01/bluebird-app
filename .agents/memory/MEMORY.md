@@ -11,3 +11,4 @@
 - [Departure lifecycle](departure-lifecycle.md) — all queue transitions must pass the shared flight-accepts-actions guard; the sweep completes flights/trips and expires waiting entries.
 - [Seat capacity model](seat-capacity-model.md) — flights.seatsAvailable is a baseline, never mutated; remaining seats derived from confirmed queue entries.
 - [Stale composite TS builds](stale-ts-builds.md) — phantom missing-export/field type errors mean stale lib dist; run `tsc -b lib/*` before believing them.
+- [OpenAPI email format](openapi-email-format.md) — avoid `format: email` until generated Zod and the installed Zod major agree; keep runtime validation server-side.

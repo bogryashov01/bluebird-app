@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
-import { usersTable, notificationsTable, revokedTokensTable, loginCodesTable, flightsTable } from "@workspace/db/schema";
+import { usersTable, notificationsTable, revokedTokensTable, loginCodesTable, registrationGrantsTable, flightsTable } from "@workspace/db/schema";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { activeSmsProvider, sendSms } from "../lib/sms";
 import jwt from "jsonwebtoken";
@@ -17,6 +17,7 @@ function makeId(): string {
 const CODE_TTL_MS = 5 * 60 * 1000; // codes expire after 5 minutes
 const RESEND_COOLDOWN_MS = 30 * 1000; // 30s between sends per phone
 const MAX_ATTEMPTS = 5; // wrong guesses before the code is invalidated
+const REGISTRATION_GRANT_TTL_MS = 10 * 60 * 1000;
 
 /**
  * Normalizes a phone number to E.164-ish form: digits only with a leading +.
@@ -115,14 +116,11 @@ router.post("/request-code", async (req, res) => {
   }
 });
 
-// POST /auth/verify-code — verify phone + code; creates the account on first
-// successful sign-in and returns a JWT.
+// POST /auth/verify-code — verify phone + code, then either sign in an
+// existing user or issue a short-lived grant for profile completion.
 router.post("/verify-code", async (req, res) => {
   const phone = normalizePhone(req.body?.phone);
   const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
-  // Optional registration name — applied only when this verification creates
-  // a brand-new account; ignored for existing members.
-  const requestedName = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 80) : "";
   if (!phone) {
     return res.status(400).json({ error: "Enter a valid phone number" });
   }
@@ -172,34 +170,23 @@ router.post("/verify-code", async (req, res) => {
       return res.status(401).json({ error: "Code already used or invalidated. Request a new one." });
     }
 
-    // Find or create the member for this phone number.
-    let [user] = await db.select().from(usersTable).where(eq(usersTable.phone, phone));
-    let isNewUser = false;
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.phone, phone));
     if (!user) {
-      isNewUser = true;
-      const userId = makeId();
-      const name = requestedName.length >= 2 ? requestedName : "Bluebird Member";
-      [user] = await db
-        .insert(usersTable)
-        .values({
-          id: userId,
-          name,
-          phone,
-          // New signups start as non-members: they can browse flights and
-          // receive notifications, but member actions require purchasing a
-          // membership plan first.
-          membershipTier: "none",
-          referralCode: makeReferralCode(name),
-          linePassCount: 0,
-        })
-        .returning();
-
-      await db.insert(notificationsTable).values({
-        id: makeId(),
-        userId,
-        title: "Welcome to Bluebird ✈️",
-        body: "Your account is ready. Browse available empty legs — join Bluebird to queue for a seat.",
-        type: "system",
+      const registrationGrant = crypto.randomBytes(32).toString("base64url");
+      const values = {
+        grantHash: hashToken(registrationGrant),
+        phone,
+        expiresAt: new Date(Date.now() + REGISTRATION_GRANT_TTL_MS),
+      };
+      await db
+        .insert(registrationGrantsTable)
+        .values(values)
+        .onConflictDoUpdate({ target: registrationGrantsTable.phone, set: values });
+      await db.delete(registrationGrantsTable).where(lt(registrationGrantsTable.expiresAt, new Date()));
+      return res.json({
+        outcome: "registration_required",
+        registrationGrant,
+        registrationGrantExpiresInSeconds: REGISTRATION_GRANT_TTL_MS / 1000,
       });
     }
 
@@ -212,9 +199,67 @@ router.post("/verify-code", async (req, res) => {
 
     const [freshUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
     const token = signToken(user.id);
-    return res.json({ token, user: sanitizeUser(freshUser ?? user), isNewUser });
+    return res.json({ outcome: "signed_in", token, user: sanitizeUser(freshUser ?? user) });
   } catch (err) {
     return res.status(500).json({ error: "Sign in failed" });
+  }
+});
+
+router.post("/complete-registration", async (req, res) => {
+  const registrationGrant = typeof req.body?.registrationGrant === "string" ? req.body.registrationGrant.trim() : "";
+  const firstName = typeof req.body?.firstName === "string" ? req.body.firstName.trim() : "";
+  const lastName = typeof req.body?.lastName === "string" ? req.body.lastName.trim() : "";
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  if (!registrationGrant) return res.status(401).json({ error: "Phone verification expired. Request a new code." });
+  if (firstName.length < 1 || firstName.length > 40) return res.status(400).json({ error: "Enter your first name" });
+  if (lastName.length < 1 || lastName.length > 40) return res.status(400).json({ error: "Enter your last name" });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    return res.status(400).json({ error: "Enter a valid email address" });
+  }
+
+  try {
+    const grantHash = hashToken(registrationGrant);
+    const result = await db.transaction(async (tx) => {
+      const [grant] = await tx.select().from(registrationGrantsTable).where(eq(registrationGrantsTable.grantHash, grantHash));
+      if (!grant || grant.expiresAt.getTime() < Date.now()) return { status: 401 as const, error: "Phone verification expired. Request a new code." };
+      // Email is profile data rather than the account identifier, but two
+      // registrations still must not race past the conflict check.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${email}))`);
+      const [phoneConflict] = await tx.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.phone, grant.phone));
+      if (phoneConflict) return { status: 409 as const, error: "An account already exists for this phone. Sign in instead." };
+      const [emailConflict] = await tx.select({ id: usersTable.id }).from(usersTable).where(sql`lower(${usersTable.email}) = ${email}`);
+      if (emailConflict) return { status: 409 as const, error: "That email is already connected to another account." };
+
+      const consumed = await tx
+        .delete(registrationGrantsTable)
+        .where(and(eq(registrationGrantsTable.grantHash, grantHash), sql`${registrationGrantsTable.expiresAt} > NOW()`))
+        .returning();
+      if (consumed.length === 0) return { status: 401 as const, error: "Phone verification expired or was already used. Request a new code." };
+
+      const name = `${firstName} ${lastName}`;
+      const userId = makeId();
+      const [user] = await tx.insert(usersTable).values({
+        id: userId,
+        name,
+        phone: grant.phone,
+        email,
+        membershipTier: "none",
+        referralCode: makeReferralCode(name),
+        linePassCount: 0,
+      }).returning();
+      await tx.insert(notificationsTable).values({
+        id: makeId(),
+        userId,
+        title: "Welcome to Bluebird",
+        body: "Your account is ready. Browse available empty legs — join Bluebird to queue for a seat.",
+        type: "system",
+      });
+      return { status: 200 as const, user };
+    });
+    if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+    return res.json({ token: signToken(result.user.id), user: sanitizeUser(result.user) });
+  } catch (err) {
+    return res.status(500).json({ error: "Could not create your account. Please try again." });
   }
 });
 

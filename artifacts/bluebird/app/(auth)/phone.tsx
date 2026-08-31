@@ -105,6 +105,7 @@ export default function PhoneScreen() {
             autoFocus
             returnKeyType="go"
             onSubmitEditing={handleContinue}
+            testID="phone-input"
           />
           {error && <Text style={[styles.errorText, { color: colors.destructive }]}>{error}</Text>}
         </View>
@@ -118,6 +119,7 @@ export default function PhoneScreen() {
           onPress={handleContinue}
           disabled={!valid || requestCode.isPending}
           activeOpacity={0.8}
+          testID="send-code-button"
         >
           {requestCode.isPending ? (
             <ActivityIndicator color={colors.primaryForeground} />

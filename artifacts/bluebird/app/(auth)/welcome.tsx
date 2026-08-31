@@ -39,16 +39,6 @@ export default function WelcomeScreen() {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.pill, styles.secondaryPill, { borderColor: colors.primary }]}
-          onPress={() => router.push('/(auth)/register')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.pillInner}>
-            <Feather name="user-plus" size={17} color={colors.primary} />
-            <Text style={[styles.pillText, { color: colors.primary }]}>Register</Text>
-          </View>
-        </TouchableOpacity>
       </View>
 
       <Text style={[styles.footerText, { color: colors.mutedOnBrand }]}>
@@ -80,7 +70,6 @@ const styles = StyleSheet.create({
     height: 52, borderRadius: 999,
     justifyContent: 'center', alignItems: 'center',
   },
-  secondaryPill: { borderWidth: 1.5, backgroundColor: 'transparent', marginTop: 12 },
   pillInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pillText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
   footerText: {

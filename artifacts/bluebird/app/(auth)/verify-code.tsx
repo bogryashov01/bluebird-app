@@ -9,23 +9,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRequestLoginCode, useVerifyLoginCode } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
-import { welcomeTourKey } from './welcome-tour';
 
 const CODE_LENGTH = 6;
 
 export default function VerifyCodeScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { signIn } = useAuth();
+  const { signIn, setPendingRegistrationGrant } = useAuth();
   const queryClient = useQueryClient();
-  const params = useLocalSearchParams<{ phone?: string; demoCode?: string; cooldown?: string; name?: string }>();
+  const params = useLocalSearchParams<{ phone?: string; demoCode?: string; cooldown?: string }>();
   const phone = typeof params.phone === 'string' ? params.phone : '';
-  // Registration hand-off: applied server-side only when this verification
-  // creates a brand-new account.
-  const registerName = typeof params.name === 'string' ? params.name.trim() : '';
   const initialCooldown = Number(params.cooldown) > 0 ? Number(params.cooldown) : 30;
 
   const [code, setCode] = useState('');
@@ -46,19 +41,21 @@ export default function VerifyCodeScreen() {
   const verifyMutation = useVerifyLoginCode({
     mutation: {
       onSuccess: async (data) => {
+        if (data.outcome === 'registration_required' && data.registrationGrant) {
+          setPendingRegistrationGrant(data.registrationGrant);
+          router.replace('/(auth)/complete-registration');
+          return;
+        }
+        if (data.outcome !== 'signed_in' || !data.token || !data.user) {
+          submittedRef.current = null;
+          setCode('');
+          setError('The sign-in response was incomplete. Please request a new code.');
+          inputRef.current?.focus();
+          return;
+        }
         await signIn(data.token, data.user as any);
         queryClient.clear();
-        // Brand-new members get a one-time feature tour before landing in the app.
-        const userId = (data.user as any)?.id;
-        let seenTour = false;
-        if (userId) {
-          seenTour = (await AsyncStorage.getItem(welcomeTourKey(userId)).catch(() => null)) === '1';
-        }
-        if (data.isNewUser && !seenTour) {
-          router.replace('/(auth)/welcome-tour');
-        } else {
-          router.replace('/(tabs)/discover');
-        }
+        router.replace('/(tabs)/discover');
       },
       onError: (err: any) => {
         submittedRef.current = null;
@@ -92,7 +89,7 @@ export default function VerifyCodeScreen() {
     // Auto-submit the moment the sixth digit lands (once per code value).
     if (digits.length === CODE_LENGTH && submittedRef.current !== digits && !verifyMutation.isPending) {
       submittedRef.current = digits;
-      verifyMutation.mutate({ data: { phone, code: digits, ...(registerName ? { name: registerName } : {}) } });
+      verifyMutation.mutate({ data: { phone, code: digits } });
     }
   };
 
@@ -134,6 +131,7 @@ export default function VerifyCodeScreen() {
           autoFocus
           caretHidden
           editable={!busy}
+          testID="verification-code-input"
         />
         <View style={styles.boxes} pointerEvents="none">
           {Array.from({ length: CODE_LENGTH }).map((_, i) => {
@@ -182,6 +180,7 @@ export default function VerifyCodeScreen() {
         disabled={cooldown > 0 || resendMutation.isPending}
         style={styles.resendBtn}
         hitSlop={8}
+        testID="resend-code-button"
       >
         {resendMutation.isPending ? (
           <ActivityIndicator size="small" color={colors.primary} />

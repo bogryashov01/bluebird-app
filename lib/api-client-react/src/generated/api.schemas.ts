@@ -82,9 +82,14 @@ export interface VerifyCodeRequest {
   phone: string;
   /** The 6-digit SMS code. */
   code: string;
-  /** Optional display name for the member; applied only when this verification creates a new account. */
-  name?: string;
 }
+
+export type SignedInVerificationOutcome = typeof SignedInVerificationOutcome[keyof typeof SignedInVerificationOutcome];
+
+
+export const SignedInVerificationOutcome = {
+  signed_in: 'signed_in',
+} as const;
 
 /**
  * "none" marks a registered non-member who has not purchased a plan yet.
@@ -112,11 +117,38 @@ export interface User {
   createdAt: string;
 }
 
+export interface SignedInVerification {
+  outcome: SignedInVerificationOutcome;
+  token: string;
+  user: User;
+}
+
+export type RegistrationRequiredVerificationOutcome = typeof RegistrationRequiredVerificationOutcome[keyof typeof RegistrationRequiredVerificationOutcome];
+
+
+export const RegistrationRequiredVerificationOutcome = {
+  registration_required: 'registration_required',
+} as const;
+
+export interface RegistrationRequiredVerification {
+  outcome: RegistrationRequiredVerificationOutcome;
+  /** Short-lived single-use credential returned only when registration is required. */
+  registrationGrant: string;
+  registrationGrantExpiresInSeconds: number;
+}
+
+export type VerifyCodeResponse = SignedInVerification | RegistrationRequiredVerification;
+
+export interface CompleteRegistrationRequest {
+  registrationGrant: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
 export interface AuthResponse {
   token: string;
   user: User;
-  /** True when this verification created the account. */
-  isNewUser?: boolean;
 }
 
 export interface UpdateMeRequest {
