@@ -33,7 +33,7 @@ export default function MembershipScreen() {
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { data: membership, isLoading } = useGetMembership({});
-  const mem = membership as any;
+  const mem = membership;
 
   const currentTier: string = mem?.tier ?? user?.membershipTier ?? 'base';
   const currentIdx = TIER_ORDER.indexOf(currentTier);
@@ -98,8 +98,11 @@ export default function MembershipScreen() {
   }
 
   const totalSaved: number = mem.totalSavedUsd ?? 0;
-  const referralBalance: number = mem.referralBalanceUsd ?? 0;
+  const lifetimeFlights: number = mem.lifetimeCompletedFlights ?? 0;
   const linePasses: number = mem.linePassCount ?? user?.linePassCount ?? 0;
+  const memberSince = user?.createdAt
+    ? new Date(user.createdAt).getFullYear().toString()
+    : '—';
   const allowance: number = mem.annualFlightAllowance ?? 0;
   const usedThisYear: number = mem.flightsThisYear ?? 0;
   const usagePct = allowance > 0 ? Math.min(usedThisYear / allowance, 1) : 0;
@@ -126,14 +129,30 @@ export default function MembershipScreen() {
           </Text>
         </View>
 
-        {/* ── 2×2 Stats grid ── */}
+        {/* ── Lifetime membership value ── */}
+        <View style={[styles.valueCard, { backgroundColor: colors.backgroundMid }]}>
+          <Text style={[styles.valueEyebrow, { color: colors.mutedOnBrand }]}>TOTAL SAVED</Text>
+          <Text
+            style={[styles.valueAmount, { color: colors.textOnBrand }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+          >
+            {fmtUsd(totalSaved)}
+          </Text>
+          <Text style={[styles.valueCopy, { color: colors.mutedOnBrand }]}>
+            Estimated private-flight value received on completed Bluebird flights, compared with
+            booking those charter flights outside your membership. Not cash or referral credit.
+          </Text>
+        </View>
+
+        {/* ── Supporting membership stats ── */}
         <View style={styles.statRow}>
-          <StatCard label="Flights Flown" value={usedThisYear} />
-          <StatCard label="Total Saved" value={fmtUsd(totalSaved)} />
+          <StatCard label="Flights Taken" value={lifetimeFlights} />
+          <StatCard label="Member Since" value={memberSince} />
         </View>
         <View style={[styles.statRow, { marginTop: 10 }]}>
           <StatCard label="Skip the Line Passes" value={linePasses} />
-          <StatCard label="Referral Balance" value={fmtUsd(referralBalance)} />
         </View>
 
         {/* ── This Year's Usage ── */}
@@ -240,6 +259,30 @@ const styles = StyleSheet.create({
   tierPillText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
 
   statRow: { flexDirection: 'row', gap: 10 },
+  valueCard: {
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    marginBottom: 10,
+  },
+  valueEyebrow: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
+    letterSpacing: 1.2,
+    marginBottom: 6,
+  },
+  valueAmount: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 42,
+    letterSpacing: -1.2,
+  },
+  valueCopy: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12.5,
+    lineHeight: 18,
+    marginTop: 10,
+    maxWidth: 520,
+  },
 
   usageCard: {
     borderRadius: 18, padding: 16, marginTop: 18,

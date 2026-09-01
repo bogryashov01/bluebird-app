@@ -62,6 +62,7 @@ async function membershipStats(user: { id: string; referralCode: string }) {
     .where(and(eq(tripsTable.userId, user.id), eq(tripsTable.status, "completed")));
 
   const totalSavedUsd = completed.reduce((sum, t) => sum + (t.priceUsd ?? 0), 0);
+  const lifetimeCompletedFlights = completed.length;
 
   const year = String(new Date().getFullYear());
   const flightsThisYear = completed.filter(
@@ -73,7 +74,12 @@ async function membershipStats(user: { id: string; referralCode: string }) {
     .from(usersTable)
     .where(eq(usersTable.referredBy, user.referralCode));
 
-  return { totalSavedUsd, flightsThisYear, referralBalanceUsd: referrals * REFERRAL_CREDIT_USD };
+  return {
+    totalSavedUsd,
+    lifetimeCompletedFlights,
+    flightsThisYear,
+    referralBalanceUsd: referrals * REFERRAL_CREDIT_USD,
+  };
 }
 
 async function membershipPayload(user: {

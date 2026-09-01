@@ -1578,7 +1578,13 @@ components:
             type: string
         totalSavedUsd:
           type: number
-          description: Sum of charter values (flight priceUsd) across the member's completed trips
+          description: >
+            Estimated private-flight value received through completed Bluebird trips,
+            calculated as the sum of each completed flight's charter value (priceUsd).
+            This is not cash, referral credit, or a withdrawable balance.
+        lifetimeCompletedFlights:
+          type: number
+          description: Total completed Bluebird flights across the member's account lifetime
         referralBalanceUsd:
           type: number
           description: Dollar balance earned from the referral program
@@ -1593,6 +1599,7 @@ components:
         - linePassCount
         - features
         - totalSavedUsd
+        - lifetimeCompletedFlights
         - referralBalanceUsd
         - annualFlightAllowance
         - flightsThisYear

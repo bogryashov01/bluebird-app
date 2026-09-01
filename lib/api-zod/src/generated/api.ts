@@ -755,7 +755,8 @@ export const GetMembershipResponse = zod.object({
   "renewalDate": zod.string().optional(),
   "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),
   "features": zod.array(zod.string()),
-  "totalSavedUsd": zod.number().describe('Sum of charter values (flight priceUsd) across the member\'s completed trips'),
+  "totalSavedUsd": zod.number().describe('Estimated private-flight value received through completed Bluebird trips, calculated as the sum of each completed flight\'s charter value (priceUsd). This is not cash, referral credit, or a withdrawable balance.\n'),
+  "lifetimeCompletedFlights": zod.number().describe('Total completed Bluebird flights across the member\'s account lifetime'),
   "referralBalanceUsd": zod.number().describe('Dollar balance earned from the referral program'),
   "annualFlightAllowance": zod.number().describe('The tier\'s annual flight allowance'),
   "flightsThisYear": zod.number().describe('Completed flights in the current calendar year')
@@ -781,7 +782,8 @@ export const UpgradeMembershipResponse = zod.object({
   "renewalDate": zod.string().optional(),
   "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),
   "features": zod.array(zod.string()),
-  "totalSavedUsd": zod.number().describe('Sum of charter values (flight priceUsd) across the member\'s completed trips'),
+  "totalSavedUsd": zod.number().describe('Estimated private-flight value received through completed Bluebird trips, calculated as the sum of each completed flight\'s charter value (priceUsd). This is not cash, referral credit, or a withdrawable balance.\n'),
+  "lifetimeCompletedFlights": zod.number().describe('Total completed Bluebird flights across the member\'s account lifetime'),
   "referralBalanceUsd": zod.number().describe('Dollar balance earned from the referral program'),
   "annualFlightAllowance": zod.number().describe('The tier\'s annual flight allowance'),
   "flightsThisYear": zod.number().describe('Completed flights in the current calendar year')
@@ -816,7 +818,8 @@ export const ChangeMembershipResponse = zod.object({
   "renewalDate": zod.string().optional(),
   "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),
   "features": zod.array(zod.string()),
-  "totalSavedUsd": zod.number().describe('Sum of charter values (flight priceUsd) across the member\'s completed trips'),
+  "totalSavedUsd": zod.number().describe('Estimated private-flight value received through completed Bluebird trips, calculated as the sum of each completed flight\'s charter value (priceUsd). This is not cash, referral credit, or a withdrawable balance.\n'),
+  "lifetimeCompletedFlights": zod.number().describe('Total completed Bluebird flights across the member\'s account lifetime'),
   "referralBalanceUsd": zod.number().describe('Dollar balance earned from the referral program'),
   "annualFlightAllowance": zod.number().describe('The tier\'s annual flight allowance'),
   "flightsThisYear": zod.number().describe('Completed flights in the current calendar year')

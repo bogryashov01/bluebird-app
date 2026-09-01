@@ -498,8 +498,10 @@ export interface Membership {
   /** Scheduled plan change taking effect at renewalDate. "cancelled" means the membership ends at renewal. Absent when no change is pending. */
   pendingTier?: MembershipPendingTier;
   features: string[];
-  /** Sum of charter values (flight priceUsd) across the member's completed trips */
+  /** Estimated private-flight value received through completed Bluebird trips, calculated as the sum of each completed flight's charter value (priceUsd). This is not cash, referral credit, or a withdrawable balance. */
   totalSavedUsd: number;
+  /** Total completed Bluebird flights across the member's account lifetime */
+  lifetimeCompletedFlights: number;
   /** Dollar balance earned from the referral program */
   referralBalanceUsd: number;
   /** The tier's annual flight allowance */
