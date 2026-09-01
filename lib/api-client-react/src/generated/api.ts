@@ -40,10 +40,12 @@ import type {
   ListFlightsParams,
   Membership,
   Notification,
+  PassengerManifest,
   QueueEntry,
   ReferralInfo,
   RequestCodeRequest,
   RequestCodeResponse,
+  SavePassengerManifestRequest,
   SignOutResponse,
   Trip,
   UpdateMeRequest,
@@ -1420,6 +1422,226 @@ export function useListTrips<TData = Awaited<ReturnType<typeof listTrips>>, TErr
 
 
 
+export const getGetTripManifestUrl = (id: string,) => {
+
+
+
+
+  return `/api/trips/${id}/manifest`
+}
+
+/**
+ * @summary Get the passenger manifest for an owned confirmed upcoming trip
+ */
+export const getTripManifest = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<PassengerManifest> => {
+
+  return customFetch<PassengerManifest>(getGetTripManifestUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTripManifestQueryKey = (id: string,) => {
+    return [
+    `/api/trips/${id}/manifest`
+    ] as const;
+    }
+
+
+export const getGetTripManifestQueryOptions = <TData = Awaited<ReturnType<typeof getTripManifest>>, TError = ErrorType<ErrorResponse>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTripManifest>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTripManifestQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTripManifest>>> = ({ signal }) => getTripManifest(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTripManifest>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTripManifestQueryResult = NonNullable<Awaited<ReturnType<typeof getTripManifest>>>
+export type GetTripManifestQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get the passenger manifest for an owned confirmed upcoming trip
+ */
+
+export function useGetTripManifest<TData = Awaited<ReturnType<typeof getTripManifest>>, TError = ErrorType<ErrorResponse>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTripManifest>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTripManifestQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveTripManifestUrl = (id: string,) => {
+
+
+
+
+  return `/api/trips/${id}/manifest`
+}
+
+/**
+ * @summary Save passenger details for an owned confirmed upcoming trip
+ */
+export const saveTripManifest = async (id: string,
+    savePassengerManifestRequest: SavePassengerManifestRequest, options?: Parameters<typeof customFetch>[1]): Promise<PassengerManifest> => {
+
+  return customFetch<PassengerManifest>(getSaveTripManifestUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(savePassengerManifestRequest)
+  }
+);}
+
+
+
+
+
+export const getSaveTripManifestMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveTripManifest>>, TError,{id: string;data: BodyType<SavePassengerManifestRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveTripManifest>>, TError,{id: string;data: BodyType<SavePassengerManifestRequest>}, TContext> => {
+
+const mutationKey = ['saveTripManifest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveTripManifest>>, {id: string;data: BodyType<SavePassengerManifestRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  saveTripManifest(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveTripManifestMutationResult = NonNullable<Awaited<ReturnType<typeof saveTripManifest>>>
+    export type SaveTripManifestMutationBody = BodyType<SavePassengerManifestRequest>
+    export type SaveTripManifestMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Save passenger details for an owned confirmed upcoming trip
+ */
+export const useSaveTripManifest = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveTripManifest>>, TError,{id: string;data: BodyType<SavePassengerManifestRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveTripManifest>>,
+        TError,
+        {id: string;data: BodyType<SavePassengerManifestRequest>},
+        TContext
+      > => {
+      return useMutation(getSaveTripManifestMutationOptions(options));
+    }
+
+export const getSubmitTripManifestUrl = (id: string,) => {
+
+
+
+
+  return `/api/trips/${id}/manifest/submit`
+}
+
+/**
+ * @summary Submit a complete passenger manifest to Bluebird operations
+ */
+export const submitTripManifest = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<PassengerManifest> => {
+
+  return customFetch<PassengerManifest>(getSubmitTripManifestUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getSubmitTripManifestMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitTripManifest>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitTripManifest>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['submitTripManifest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitTripManifest>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  submitTripManifest(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitTripManifestMutationResult = NonNullable<Awaited<ReturnType<typeof submitTripManifest>>>
+
+    export type SubmitTripManifestMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Submit a complete passenger manifest to Bluebird operations
+ */
+export const useSubmitTripManifest = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitTripManifest>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitTripManifest>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getSubmitTripManifestMutationOptions(options));
+    }
+
 export const getGetMembershipUrl = () => {
 
 
@@ -2083,10 +2305,3 @@ export function useGetConciergeHistory<TData = Awaited<ReturnType<typeof getConc
 
   return withQueryKey(query, queryOptions.queryKey);
 }
-
-
-
-
-
-
-

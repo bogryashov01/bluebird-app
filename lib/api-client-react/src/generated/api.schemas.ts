@@ -297,6 +297,23 @@ export const TripStatus = {
   cancelled: 'cancelled',
 } as const;
 
+export type ManifestProgressDeliveryStatus = typeof ManifestProgressDeliveryStatus[keyof typeof ManifestProgressDeliveryStatus] | null;
+
+
+export const ManifestProgressDeliveryStatus = {
+  delivered: 'delivered',
+  demo_recorded: 'demo_recorded',
+} as const;
+
+export interface ManifestProgress {
+  requiredCount: number;
+  completedCount: number;
+  isComplete: boolean;
+  version: number;
+  submittedAt?: string | null;
+  deliveryStatus?: ManifestProgressDeliveryStatus;
+}
+
 export interface Trip {
   id: string;
   flightId: string;
@@ -305,6 +322,7 @@ export interface Trip {
   bookedAt: string;
   /** Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero. */
   cleaningFeeUsd: number;
+  manifest?: ManifestProgress;
 }
 
 export type UseLinePassResponse = QueueEntry & {
@@ -331,6 +349,70 @@ export interface FlightUserStatus {
   queuePosition?: number;
   totalInQueue?: number;
   tripId?: string;
+  manifest?: ManifestProgress;
+}
+
+export interface Passenger {
+  /** @minimum 1 */
+  passengerOrder: number;
+  firstName: string;
+  lastName: string;
+  weightKg?: number | null;
+  passportNumber?: string | null;
+  issuingCountry?: string | null;
+  nationality?: string | null;
+  passportExpirationDate?: string | null;
+}
+
+export interface PassengerInput {
+  /** @minimum 1 */
+  passengerOrder: number;
+  /** @maxLength 100 */
+  firstName: string;
+  /** @maxLength 100 */
+  lastName: string;
+  /**
+     * @minimum 1
+     * @maximum 500
+     */
+  weightKg?: number | null;
+  /** @maxLength 100 */
+  passportNumber?: string | null;
+  /** @maxLength 100 */
+  issuingCountry?: string | null;
+  /** @maxLength 100 */
+  nationality?: string | null;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  passportExpirationDate?: string | null;
+}
+
+export interface SavePassengerManifestRequest {
+  /**
+     * @minItems 1
+     * @maxItems 10
+     */
+  passengers: PassengerInput[];
+}
+
+export type PassengerManifestDeliveryStatus = typeof PassengerManifestDeliveryStatus[keyof typeof PassengerManifestDeliveryStatus] | null;
+
+
+export const PassengerManifestDeliveryStatus = {
+  delivered: 'delivered',
+  demo_recorded: 'demo_recorded',
+} as const;
+
+export interface PassengerManifest {
+  tripId: string;
+  requiredCount: number;
+  completedCount: number;
+  isComplete: boolean;
+  international: boolean;
+  passengers: Passenger[];
+  version: number;
+  submittedAt?: string | null;
+  deliveryStatus?: PassengerManifestDeliveryStatus;
+  operationsNotified?: boolean;
 }
 
 export interface CancelBookingResponse {
@@ -499,4 +581,3 @@ export type GetConciergeHistoryParams = {
  */
 limit?: number;
 };
-

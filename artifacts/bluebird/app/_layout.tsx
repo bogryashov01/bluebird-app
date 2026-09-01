@@ -72,6 +72,10 @@ function RootLayoutNav() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="trip/[id]/passengers"
+        options={{ headerShown: true, title: 'Passenger List', ...headerOptions }}
+      />
+      <Stack.Screen
         name="queue/join"
         options={{ headerShown: false }}
       />

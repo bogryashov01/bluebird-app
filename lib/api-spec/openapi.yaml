@@ -507,6 +507,118 @@ paths:
                 items:
                   $ref: "#/components/schemas/Trip"
 
+  /trips/{id}/manifest:
+    get:
+      operationId: getTripManifest
+      tags: [trips]
+      summary: Get the passenger manifest for an owned confirmed upcoming trip
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Passenger manifest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassengerManifest"
+        "404":
+          description: Trip not found or inaccessible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Trip is not eligible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: saveTripManifest
+      tags: [trips]
+      summary: Save passenger details for an owned confirmed upcoming trip
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavePassengerManifestRequest"
+      responses:
+        "200":
+          description: Saved manifest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassengerManifest"
+        "400":
+          description: Invalid passenger details or passenger count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Trip not found or inaccessible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Trip is not eligible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /trips/{id}/manifest/submit:
+    post:
+      operationId: submitTripManifest
+      tags: [trips]
+      summary: Submit a complete passenger manifest to Bluebird operations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Submitted manifest, idempotent when unchanged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassengerManifest"
+        "400":
+          description: Manifest is incomplete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Trip not found or inaccessible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Trip is not eligible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /membership:
     get:
       operationId: getMembership
@@ -1201,6 +1313,8 @@ components:
           type: number
         tripId:
           type: string
+        manifest:
+          $ref: "#/components/schemas/ManifestProgress"
       required:
         - status
 
@@ -1221,12 +1335,118 @@ components:
         cleaningFeeUsd:
           type: number
           description: Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero.
+        manifest:
+          $ref: "#/components/schemas/ManifestProgress"
       required:
         - id
         - flightId
         - status
         - bookedAt
         - cleaningFeeUsd
+
+    ManifestProgress:
+      type: object
+      required: [requiredCount, completedCount, isComplete, version]
+      properties:
+        requiredCount: { type: number }
+        completedCount: { type: number }
+        isComplete: { type: boolean }
+        version: { type: number }
+        submittedAt:
+          type: string
+          nullable: true
+        deliveryStatus:
+          type: string
+          nullable: true
+          enum: [delivered, demo_recorded]
+
+    Passenger:
+      type: object
+      required: [passengerOrder, firstName, lastName]
+      properties:
+        passengerOrder: { type: number, minimum: 1 }
+        firstName: { type: string }
+        lastName: { type: string }
+        weightKg:
+          type: number
+          nullable: true
+        passportNumber:
+          type: string
+          nullable: true
+        issuingCountry:
+          type: string
+          nullable: true
+        nationality:
+          type: string
+          nullable: true
+        passportExpirationDate:
+          type: string
+          nullable: true
+
+    PassengerInput:
+      type: object
+      required: [passengerOrder, firstName, lastName]
+      properties:
+        passengerOrder: { type: number, minimum: 1, multipleOf: 1 }
+        firstName: { type: string, maxLength: 100 }
+        lastName: { type: string, maxLength: 100 }
+        weightKg:
+          type: number
+          nullable: true
+          minimum: 1
+          maximum: 500
+          multipleOf: 1
+        passportNumber:
+          type: string
+          nullable: true
+          maxLength: 100
+        issuingCountry:
+          type: string
+          nullable: true
+          maxLength: 100
+        nationality:
+          type: string
+          nullable: true
+          maxLength: 100
+        passportExpirationDate:
+          type: string
+          nullable: true
+          pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+
+    SavePassengerManifestRequest:
+      type: object
+      required: [passengers]
+      properties:
+        passengers:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/PassengerInput"
+
+    PassengerManifest:
+      type: object
+      required: [tripId, requiredCount, completedCount, isComplete, international, passengers, version]
+      properties:
+        tripId: { type: string }
+        requiredCount: { type: number }
+        completedCount: { type: number }
+        isComplete: { type: boolean }
+        international: { type: boolean }
+        passengers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Passenger"
+        version: { type: number }
+        submittedAt:
+          type: string
+          nullable: true
+        deliveryStatus:
+          type: string
+          nullable: true
+          enum: [delivered, demo_recorded]
+        operationsNotified:
+          type: boolean
 
     CancelBookingResponse:
       type: object

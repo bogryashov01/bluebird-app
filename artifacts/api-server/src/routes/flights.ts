@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { flightsTable, queueEntriesTable, tripsTable } from "@workspace/db/schema";
+import { flightsTable, queueEntriesTable, tripsTable, tripPassengersTable } from "@workspace/db/schema";
 import { eq, ilike, and, inArray, count, desc, sql } from "drizzle-orm";
 import { authMiddleware } from "../middlewares/auth";
 import { sweepDeparturesSafe } from "../lib/departure";
@@ -65,6 +65,34 @@ function airportName(code: string, city: string): string {
 
 function dateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+async function flightManifestProgress(trip: any, entry: any, international: boolean) {
+  const passengers = await db.select().from(tripPassengersTable)
+    .where(eq(tripPassengersTable.tripId, trip.id));
+  const complete = passengers.filter((passenger) =>
+    !!passenger.firstName.trim() && !!passenger.lastName.trim() && Number(passenger.weightKg) > 0 &&
+    (!international || (
+      !!passenger.passportNumber?.trim() && !!passenger.issuingCountry?.trim() &&
+      !!passenger.nationality?.trim() && validFutureDate(passenger.passportExpirationDate)
+    ))
+  ).length;
+  return {
+    requiredCount: entry.passengers,
+    completedCount: complete,
+    isComplete: complete === entry.passengers,
+    version: trip.manifestVersion,
+    submittedAt: trip.manifestSubmittedAt?.toISOString?.() ?? null,
+    deliveryStatus: trip.manifestDeliveryStatus ?? null,
+  };
+}
+
+function validFutureDate(value: unknown): boolean {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.valueOf()) &&
+    date.toISOString().slice(0, 10) === value &&
+    date > new Date();
 }
 
 // GET /flights/airports (public — onboarding airport picker)
@@ -257,6 +285,7 @@ router.get("/:id/my-status", authMiddleware, async (req, res) => {
       status: "confirmed",
       queueEntryId: entry.id,
       tripId: trip?.id ?? null,
+      manifest: trip ? await flightManifestProgress(trip, entry, flight.international) : undefined,
     });
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch flight status" });

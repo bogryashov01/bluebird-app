@@ -7,6 +7,25 @@
  */
 import * as zod from 'zod';
 
+export const updateMeBodyHomeAirportsItemRegExp = new RegExp('^\\s*[A-Za-z]{3,4}\\s*$');
+export const updateMeBodyHomeAirportsMax = 20;
+export const joinQueueBodyPassengersDefault = 1;
+export const joinQueueBodyPassengersMax = 10;
+export const saveTripManifestBodyPassengersItemPassengerOrderMultipleOf = 1;
+export const saveTripManifestBodyPassengersItemFirstNameMax = 100;
+export const saveTripManifestBodyPassengersItemLastNameMax = 100;
+export const saveTripManifestBodyPassengersItemWeightKgMax = 500;
+export const saveTripManifestBodyPassengersItemWeightKgMultipleOf = 1;
+export const saveTripManifestBodyPassengersItemPassportNumberMax = 100;
+export const saveTripManifestBodyPassengersItemIssuingCountryMax = 100;
+export const saveTripManifestBodyPassengersItemNationalityMax = 100;
+export const saveTripManifestBodyPassengersItemPassportExpirationDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const saveTripManifestBodyPassengersMax = 10;
+export const conciergeChatBodyMessagesItemContentMax = 4000;
+export const conciergeChatBodyMessagesMax = 40;
+export const getConciergeHistoryQueryLimitDefault = 50;
+export const getConciergeHistoryQueryLimitMax = 100;
+
 
 /**
  * @summary Health check
@@ -114,8 +133,6 @@ export const GetMeResponse = zod.object({
 /**
  * @summary Update current user's profile
  */
-export const updateMeBodyHomeAirportsItemRegExp = new RegExp('^\\s*[A-Za-z]{3,4}\\s*$');
-export const updateMeBodyHomeAirportsMax = 20;
 
 
 
@@ -283,15 +300,21 @@ export const GetFlightMyStatusResponse = zod.object({
   "queueEntryId": zod.string().optional(),
   "queuePosition": zod.number().optional(),
   "totalInQueue": zod.number().optional(),
-  "tripId": zod.string().optional()
+  "tripId": zod.string().optional(),
+  "manifest": zod.object({
+  "requiredCount": zod.number(),
+  "completedCount": zod.number(),
+  "isComplete": zod.boolean(),
+  "version": zod.number(),
+  "submittedAt": zod.string().nullish(),
+  "deliveryStatus": zod.enum(['delivered', 'demo_recorded']).nullish()
+}).optional()
 })
 
 
 /**
  * @summary Join queue for a flight
  */
-export const joinQueueBodyPassengersDefault = 1;
-export const joinQueueBodyPassengersMax = 10;
 
 
 
@@ -489,7 +512,15 @@ export const UseLinePassOnQueueEntryResponse = zod.object({
 }).optional(),
   "status": zod.enum(['upcoming', 'completed', 'cancelled']),
   "bookedAt": zod.string(),
-  "cleaningFeeUsd": zod.number().describe('Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero.')
+  "cleaningFeeUsd": zod.number().describe('Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero.'),
+  "manifest": zod.object({
+  "requiredCount": zod.number(),
+  "completedCount": zod.number(),
+  "isComplete": zod.boolean(),
+  "version": zod.number(),
+  "submittedAt": zod.string().nullish(),
+  "deliveryStatus": zod.enum(['delivered', 'demo_recorded']).nullish()
+}).optional()
 }).optional().describe('The upcoming trip created by a successful pass redemption; absent when alreadyConfirmed is true')
 }))
 
@@ -535,7 +566,15 @@ export const CancelTripResponse = zod.object({
 }).optional(),
   "status": zod.enum(['upcoming', 'completed', 'cancelled']),
   "bookedAt": zod.string(),
-  "cleaningFeeUsd": zod.number().describe('Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero.')
+  "cleaningFeeUsd": zod.number().describe('Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero.'),
+  "manifest": zod.object({
+  "requiredCount": zod.number(),
+  "completedCount": zod.number(),
+  "isComplete": zod.boolean(),
+  "version": zod.number(),
+  "submittedAt": zod.string().nullish(),
+  "deliveryStatus": zod.enum(['delivered', 'demo_recorded']).nullish()
+}).optional()
 }).optional()
 })
 
@@ -573,9 +612,139 @@ export const ListTripsResponseItem = zod.object({
 }).optional(),
   "status": zod.enum(['upcoming', 'completed', 'cancelled']),
   "bookedAt": zod.string(),
-  "cleaningFeeUsd": zod.number().describe('Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero.')
+  "cleaningFeeUsd": zod.number().describe('Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero.'),
+  "manifest": zod.object({
+  "requiredCount": zod.number(),
+  "completedCount": zod.number(),
+  "isComplete": zod.boolean(),
+  "version": zod.number(),
+  "submittedAt": zod.string().nullish(),
+  "deliveryStatus": zod.enum(['delivered', 'demo_recorded']).nullish()
+}).optional()
 })
 export const ListTripsResponse = zod.array(ListTripsResponseItem)
+
+
+/**
+ * @summary Get the passenger manifest for an owned confirmed upcoming trip
+ */
+export const GetTripManifestParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const GetTripManifestResponse = zod.object({
+  "tripId": zod.string(),
+  "requiredCount": zod.number(),
+  "completedCount": zod.number(),
+  "isComplete": zod.boolean(),
+  "international": zod.boolean(),
+  "passengers": zod.array(zod.object({
+  "passengerOrder": zod.number().min(1),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "weightKg": zod.number().nullish(),
+  "passportNumber": zod.string().nullish(),
+  "issuingCountry": zod.string().nullish(),
+  "nationality": zod.string().nullish(),
+  "passportExpirationDate": zod.string().nullish()
+})),
+  "version": zod.number(),
+  "submittedAt": zod.string().nullish(),
+  "deliveryStatus": zod.enum(['delivered', 'demo_recorded']).nullish(),
+  "operationsNotified": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Save passenger details for an owned confirmed upcoming trip
+ */
+export const SaveTripManifestParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+
+
+
+
+
+
+
+export const SaveTripManifestBody = zod.object({
+  "passengers": zod.array(zod.object({
+  "passengerOrder": zod.number().min(1).multipleOf(saveTripManifestBodyPassengersItemPassengerOrderMultipleOf),
+  "firstName": zod.string().max(saveTripManifestBodyPassengersItemFirstNameMax),
+  "lastName": zod.string().max(saveTripManifestBodyPassengersItemLastNameMax),
+  "weightKg": zod.number().min(1).max(saveTripManifestBodyPassengersItemWeightKgMax).multipleOf(saveTripManifestBodyPassengersItemWeightKgMultipleOf).nullish(),
+  "passportNumber": zod.string().max(saveTripManifestBodyPassengersItemPassportNumberMax).nullish(),
+  "issuingCountry": zod.string().max(saveTripManifestBodyPassengersItemIssuingCountryMax).nullish(),
+  "nationality": zod.string().max(saveTripManifestBodyPassengersItemNationalityMax).nullish(),
+  "passportExpirationDate": zod.string().regex(saveTripManifestBodyPassengersItemPassportExpirationDateRegExp).nullish()
+})).min(1).max(saveTripManifestBodyPassengersMax)
+})
+
+
+
+
+export const SaveTripManifestResponse = zod.object({
+  "tripId": zod.string(),
+  "requiredCount": zod.number(),
+  "completedCount": zod.number(),
+  "isComplete": zod.boolean(),
+  "international": zod.boolean(),
+  "passengers": zod.array(zod.object({
+  "passengerOrder": zod.number().min(1),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "weightKg": zod.number().nullish(),
+  "passportNumber": zod.string().nullish(),
+  "issuingCountry": zod.string().nullish(),
+  "nationality": zod.string().nullish(),
+  "passportExpirationDate": zod.string().nullish()
+})),
+  "version": zod.number(),
+  "submittedAt": zod.string().nullish(),
+  "deliveryStatus": zod.enum(['delivered', 'demo_recorded']).nullish(),
+  "operationsNotified": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Submit a complete passenger manifest to Bluebird operations
+ */
+export const SubmitTripManifestParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const SubmitTripManifestResponse = zod.object({
+  "tripId": zod.string(),
+  "requiredCount": zod.number(),
+  "completedCount": zod.number(),
+  "isComplete": zod.boolean(),
+  "international": zod.boolean(),
+  "passengers": zod.array(zod.object({
+  "passengerOrder": zod.number().min(1),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "weightKg": zod.number().nullish(),
+  "passportNumber": zod.string().nullish(),
+  "issuingCountry": zod.string().nullish(),
+  "nationality": zod.string().nullish(),
+  "passportExpirationDate": zod.string().nullish()
+})),
+  "version": zod.number(),
+  "submittedAt": zod.string().nullish(),
+  "deliveryStatus": zod.enum(['delivered', 'demo_recorded']).nullish(),
+  "operationsNotified": zod.boolean().optional()
+})
 
 
 /**
@@ -710,9 +879,7 @@ export const MarkNotificationReadResponse = zod.object({
 /**
  * @summary Send a message to the AI concierge
  */
-export const conciergeChatBodyMessagesItemContentMax = 4000;
 
-export const conciergeChatBodyMessagesMax = 40;
 
 
 
@@ -731,8 +898,6 @@ export const ConciergeChatResponse = zod.object({
 /**
  * @summary Load the caller's recent concierge conversation history
  */
-export const getConciergeHistoryQueryLimitDefault = 50;
-export const getConciergeHistoryQueryLimitMax = 100;
 
 
 
@@ -747,5 +912,3 @@ export const GetConciergeHistoryResponseItem = zod.object({
   "createdAt": zod.string()
 })
 export const GetConciergeHistoryResponse = zod.array(GetConciergeHistoryResponseItem)
-
-

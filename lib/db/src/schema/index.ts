@@ -1,4 +1,5 @@
-import { pgTable, text, boolean, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, boolean, integer, timestamp, jsonb, uniqueIndex, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -83,7 +84,41 @@ export const tripsTable = pgTable("trips", {
   status: text("status").notNull().default("upcoming"),
   cleaningFeeUsd: integer("cleaning_fee_usd").notNull().default(0),
   bookedAt: timestamp("booked_at").notNull().defaultNow(),
+  manifestVersion: integer("manifest_version").notNull().default(0),
+  manifestSubmittedAt: timestamp("manifest_submitted_at"),
+  manifestDeliveryStatus: text("manifest_delivery_status"),
 });
+
+export const tripPassengersTable = pgTable("trip_passengers", {
+  id: text("id").primaryKey(),
+  tripId: text("trip_id").notNull().references(() => tripsTable.id, { onDelete: "cascade" }),
+  passengerOrder: integer("passenger_order").notNull(),
+  firstName: text("first_name").notNull().default(""),
+  lastName: text("last_name").notNull().default(""),
+  weightKg: integer("weight_kg"),
+  passportNumber: text("passport_number"),
+  issuingCountry: text("issuing_country"),
+  nationality: text("nationality"),
+  passportExpirationDate: text("passport_expiration_date"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("trip_passengers_trip_order_unique").on(table.tripId, table.passengerOrder),
+  check("trip_passengers_order_positive", sql`${table.passengerOrder} > 0`),
+  check("trip_passengers_weight_positive", sql`${table.weightKg} IS NULL OR ${table.weightKg} > 0`),
+]);
+
+export const manifestOperationalUpdatesTable = pgTable("manifest_operational_updates", {
+  id: text("id").primaryKey(),
+  tripId: text("trip_id").notNull().references(() => tripsTable.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  recipient: text("recipient").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  deliveryStatus: text("delivery_status").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("manifest_updates_trip_version_unique").on(table.tripId, table.version),
+]);
 
 export const notificationsTable = pgTable("notifications", {
   id: text("id").primaryKey(),
@@ -141,6 +176,7 @@ export type User = typeof usersTable.$inferSelect;
 export type Flight = typeof flightsTable.$inferSelect;
 export type QueueEntry = typeof queueEntriesTable.$inferSelect;
 export type Trip = typeof tripsTable.$inferSelect;
+export type TripPassenger = typeof tripPassengersTable.$inferSelect;
 export type Notification = typeof notificationsTable.$inferSelect;
 export type RevokedToken = typeof revokedTokensTable.$inferSelect;
 export type LoginCode = typeof loginCodesTable.$inferSelect;

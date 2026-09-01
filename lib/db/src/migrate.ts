@@ -206,6 +206,36 @@ export async function ensureSchema(): Promise<void> {
       booked_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     ALTER TABLE trips ADD COLUMN IF NOT EXISTS cleaning_fee_usd INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS manifest_version INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS manifest_submitted_at TIMESTAMPTZ;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS manifest_delivery_status TEXT;
+
+    CREATE TABLE IF NOT EXISTS trip_passengers (
+      id TEXT PRIMARY KEY,
+      trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      passenger_order INTEGER NOT NULL CHECK (passenger_order > 0),
+      first_name TEXT NOT NULL DEFAULT '',
+      last_name TEXT NOT NULL DEFAULT '',
+      weight_kg INTEGER CHECK (weight_kg IS NULL OR weight_kg > 0),
+      passport_number TEXT,
+      issuing_country TEXT,
+      nationality TEXT,
+      passport_expiration_date TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT trip_passengers_trip_order_unique UNIQUE (trip_id, passenger_order)
+    );
+
+    CREATE TABLE IF NOT EXISTS manifest_operational_updates (
+      id TEXT PRIMARY KEY,
+      trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      version INTEGER NOT NULL,
+      recipient TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      delivery_status TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT manifest_updates_trip_version_unique UNIQUE (trip_id, version)
+    );
 
     CREATE TABLE IF NOT EXISTS revoked_tokens (
       token_hash TEXT        PRIMARY KEY,

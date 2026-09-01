@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { FlightUserStatusStatus } from './flightUserStatusStatus';
+import type { ManifestProgress } from './manifestProgress';
 
 export interface FlightUserStatus {
   status: FlightUserStatusStatus;
@@ -13,4 +14,5 @@ export interface FlightUserStatus {
   queuePosition?: number;
   totalInQueue?: number;
   tripId?: string;
+  manifest?: ManifestProgress;
 }

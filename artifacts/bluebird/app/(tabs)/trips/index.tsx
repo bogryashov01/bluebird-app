@@ -36,7 +36,7 @@ function fmtDate(dateStr: string, timeStr: string): string {
 type ActiveTab = 'upcoming' | 'pending' | 'past';
 
 // ─── Trip Card ────────────────────────────────────────────────────────────────
-function TripCard({ flight, badge, badgeBlue, onPress, colors, onCancel, cancelling }: {
+function TripCard({ flight, badge, badgeBlue, onPress, colors, onCancel, cancelling, manifestProgress, onManifest }: {
   flight: { fromCity: string; toCity: string; aircraftType: string; departureDate: string; departureTime: string };
   badge: string;
   badgeBlue: boolean;
@@ -44,6 +44,8 @@ function TripCard({ flight, badge, badgeBlue, onPress, colors, onCancel, cancell
   colors: ReturnType<typeof useColors>;
   onCancel?: () => void;
   cancelling?: boolean;
+  manifestProgress?: string;
+  onManifest?: () => void;
 }) {
   return (
     <TouchableOpacity
@@ -67,6 +69,15 @@ function TripCard({ flight, badge, badgeBlue, onPress, colors, onCancel, cancell
         <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
           {flight.aircraftType} · {fmtDate(flight.departureDate, flight.departureTime)}
         </Text>
+        {manifestProgress && onManifest && (
+          <TouchableOpacity testID="trip-passenger-list" style={[styles.manifestRow, { backgroundColor: colors.muted }]} onPress={onManifest}>
+            <View>
+              <Text style={[styles.manifestTitle, { color: colors.foreground }]}>Passenger Information</Text>
+              <Text style={[styles.manifestMeta, { color: colors.mutedForeground }]}>{manifestProgress}</Text>
+            </View>
+            <Text style={[styles.manifestChevron, { color: colors.primary }]}>›</Text>
+          </TouchableOpacity>
+        )}
         {onCancel && (
           <TouchableOpacity
             style={[styles.cancelBtn, { borderColor: colors.border }, cancelling && { opacity: 0.6 }]}
@@ -206,6 +217,8 @@ export default function TripsScreen() {
               onPress={() => trip.flight && router.push(`/flight/${trip.flight.id}`)}
               onCancel={() => handleCancelTrip(trip)}
               cancelling={cancellingTripId === trip.id}
+              manifestProgress={trip.manifest ? `${trip.manifest.completedCount} of ${trip.manifest.requiredCount} completed` : undefined}
+              onManifest={trip.manifest ? () => router.push(`/trip/${trip.id}/passengers` as any) : undefined}
             />
           ))}
         </ScrollView>
@@ -412,6 +425,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     fontSize: 13,
   },
+  manifestRow: {
+    marginTop: 12, padding: 12, borderRadius: 14, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'space-between',
+  },
+  manifestTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  manifestMeta: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 2 },
+  manifestChevron: { fontFamily: 'Inter_600SemiBold', fontSize: 24 },
 
   // ── Empty states
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },

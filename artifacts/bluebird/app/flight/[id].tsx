@@ -265,6 +265,18 @@ export default function FlightDetailScreen() {
           </TouchableOpacity>
           {!!myStatus?.tripId && (
             <TouchableOpacity
+              testID="open-passenger-list"
+              style={[styles.leaveQueueBtn, { borderColor: colors.primary }]}
+              onPress={() => router.push(`/trip/${myStatus.tripId}/passengers` as any)}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.leaveQueueBtnText, { color: colors.primary }]}>
+                Passenger Information{myStatus?.manifest ? ` — ${myStatus.manifest.completedCount} of ${myStatus.manifest.requiredCount} completed` : ''}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {!!myStatus?.tripId && (
+            <TouchableOpacity
               style={[styles.leaveQueueBtn, { borderColor: colors.border }, cancelTripMutation.isPending && { opacity: 0.6 }]}
               onPress={handleCancelBooking}
               disabled={cancelTripMutation.isPending}

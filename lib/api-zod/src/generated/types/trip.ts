@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Flight } from './flight';
+import type { ManifestProgress } from './manifestProgress';
 import type { TripStatus } from './tripStatus';
 
 export interface Trip {
@@ -16,4 +17,5 @@ export interface Trip {
   bookedAt: string;
   /** Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero. */
   cleaningFeeUsd: number;
+  manifest?: ManifestProgress;
 }
