@@ -288,30 +288,6 @@ export interface QueueEntry {
   petFeeAcknowledged: boolean;
 }
 
-export type UseLinePassResponse = QueueEntry & {
-  /** The user's remaining Skip the Line pass balance after use */
-  linePassCount: number;
-  /** True when the entry was already confirmed before the pass was applied — no pass was consumed */
-  alreadyConfirmed?: boolean;
-};
-
-export type FlightUserStatusStatus = typeof FlightUserStatusStatus[keyof typeof FlightUserStatusStatus];
-
-
-export const FlightUserStatusStatus = {
-  none: 'none',
-  waiting: 'waiting',
-  confirmed: 'confirmed',
-} as const;
-
-export interface FlightUserStatus {
-  status: FlightUserStatusStatus;
-  queueEntryId?: string;
-  queuePosition?: number;
-  totalInQueue?: number;
-  tripId?: string;
-}
-
 export type TripStatus = typeof TripStatus[keyof typeof TripStatus];
 
 
@@ -329,6 +305,32 @@ export interface Trip {
   bookedAt: string;
   /** Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero. */
   cleaningFeeUsd: number;
+}
+
+export type UseLinePassResponse = QueueEntry & {
+  /** The user's remaining Skip the Line pass balance after use */
+  linePassCount: number;
+  /** True when the entry was already confirmed before the pass was applied — no pass was consumed */
+  alreadyConfirmed?: boolean;
+  /** The upcoming trip created by a successful pass redemption; absent when alreadyConfirmed is true */
+  trip?: Trip;
+};
+
+export type FlightUserStatusStatus = typeof FlightUserStatusStatus[keyof typeof FlightUserStatusStatus];
+
+
+export const FlightUserStatusStatus = {
+  none: 'none',
+  waiting: 'waiting',
+  confirmed: 'confirmed',
+} as const;
+
+export interface FlightUserStatus {
+  status: FlightUserStatusStatus;
+  queueEntryId?: string;
+  queuePosition?: number;
+  totalInQueue?: number;
+  tripId?: string;
 }
 
 export interface CancelBookingResponse {

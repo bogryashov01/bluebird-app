@@ -409,7 +409,7 @@ export const CancelQueueEntryResponse = zod.object({
 
 
 /**
- * @summary Apply a Skip the Line pass to an existing waiting queue entry, moving it to position 1
+ * @summary Apply a Skip the Line pass to any existing waiting queue entry, including position 1, and confirm the seat immediately
  */
 export const UseLinePassOnQueueEntryParams = zod.object({
   "id": zod.coerce.string()
@@ -458,7 +458,39 @@ export const UseLinePassOnQueueEntryResponse = zod.object({
   "petFeeAcknowledged": zod.boolean()
 }).and(zod.object({
   "linePassCount": zod.number().describe('The user\'s remaining Skip the Line pass balance after use'),
-  "alreadyConfirmed": zod.boolean().optional().describe('True when the entry was already confirmed before the pass was applied — no pass was consumed')
+  "alreadyConfirmed": zod.boolean().optional().describe('True when the entry was already confirmed before the pass was applied — no pass was consumed'),
+  "trip": zod.object({
+  "id": zod.string(),
+  "flightId": zod.string(),
+  "flight": zod.object({
+  "id": zod.string(),
+  "fromAirport": zod.string(),
+  "fromCity": zod.string(),
+  "toAirport": zod.string(),
+  "toCity": zod.string(),
+  "aircraftType": zod.string(),
+  "aircraftCapacity": zod.number(),
+  "departureDate": zod.string(),
+  "departureTime": zod.string(),
+  "duration": zod.string(),
+  "seatsAvailable": zod.number(),
+  "priceUsd": zod.number().optional(),
+  "discountPct": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "international": zod.boolean().optional(),
+  "internationalFeeUsd": zod.number().optional(),
+  "rangeNm": zod.number().nullish(),
+  "cruiseSpeed": zod.string().nullish(),
+  "destWeather": zod.string().nullish(),
+  "departureFbo": zod.string().nullish(),
+  "status": zod.enum(['available', 'boarding', 'departed', 'completed', 'cancelled']),
+  "imageUrl": zod.string().optional(),
+  "createdAt": zod.string()
+}).optional(),
+  "status": zod.enum(['upcoming', 'completed', 'cancelled']),
+  "bookedAt": zod.string(),
+  "cleaningFeeUsd": zod.number().describe('Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero.')
+}).optional().describe('The upcoming trip created by a successful pass redemption; absent when alreadyConfirmed is true')
 }))
 
 

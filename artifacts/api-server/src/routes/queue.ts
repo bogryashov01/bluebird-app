@@ -386,11 +386,10 @@ router.delete("/:id", authMiddleware, async (req, res) => {
 
 // POST /queue/:id/use-pass
 //
-// Applies a Skip the Line pass to an EXISTING waiting entry: consumes one
-// line pass, moves the entry to position 1, and shifts the entries that were
-// ahead of it down by one. Mirrors the join-with-pass logic above and runs
-// under the same SERIALIZABLE isolation so concurrent queue transitions on
-// the same flight cannot corrupt positions.
+// Applies a Skip the Line pass to ANY existing waiting entry, including the
+// member currently at position 1. The pass consumption, immediate
+// confirmation, trip creation, and waiting-queue gap close all commit
+// atomically under SERIALIZABLE isolation.
 router.post("/:id/use-pass", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
 
@@ -464,11 +463,6 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
           "This queue entry is no longer active, so a Skip the Line pass can't be used on it. Your pass was not used.",
       });
     }
-    if (entry.position === 1) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ error: "You are already first in line" });
-    }
-
     // 2. Seat capacity check FIRST — the pass must never be consumed unless
     //    the seat can actually be confirmed in this same transaction.
     const [flight] = await txDb

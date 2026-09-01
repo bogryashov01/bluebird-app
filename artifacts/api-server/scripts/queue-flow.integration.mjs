@@ -9,6 +9,7 @@ const fixtureSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const domesticFixtureId = `queue-flow-domestic-${fixtureSuffix}`;
 const intlFixtureId = `queue-flow-intl-${fixtureSuffix}`;
 const seatFreedFixtureId = `queue-flow-seat-freed-${fixtureSuffix}`;
+const positionOneFixtureId = `queue-flow-position-one-${fixtureSuffix}`;
 
 async function main() {
 await pool.query(`DELETE FROM trips WHERE flight_id LIKE 'queue-flow-%'`);
@@ -19,14 +20,16 @@ await pool.query(
      id, from_airport, from_city, to_airport, to_city, aircraft_type,
      aircraft_capacity, departure_date, departure_time, duration,
      seats_available, international, international_fee_usd, status
-   ) VALUES
+     ) VALUES
      ($1, 'BFI', 'Seattle', 'PDX', 'Portland', 'Citation Latitude',
       20, '2099-01-01', '12:00', '0h 45m', 20, false, 0, 'available'),
      ($2, 'BFI', 'Seattle', 'YVR', 'Vancouver', 'Citation Latitude',
       10, '2099-01-01', '14:00', '0h 55m', 10, true, 1000, 'available'),
-     ($3, 'BFI', 'Seattle', 'GEG', 'Spokane', 'Citation Latitude',
-      2, '2099-01-01', '16:00', '1h 00m', 2, false, 0, 'available')`,
-  [domesticFixtureId, intlFixtureId, seatFreedFixtureId],
+      ($3, 'BFI', 'Seattle', 'GEG', 'Spokane', 'Citation Latitude',
+       2, '2099-01-01', '16:00', '1h 00m', 2, false, 0, 'available'),
+      ($4, 'BFI', 'Seattle', 'SFO', 'San Francisco', 'Citation Latitude',
+       4, '2099-01-01', '18:00', '2h 10m', 4, false, 0, 'available')`,
+  [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId],
 );
 
 let failures = 0;
@@ -143,6 +146,42 @@ check("use-pass returns the created trip", usePass.json?.trip?.status === "upcom
 check("existing pet entry awarded with a pass applies the $500 cleaning fee",
   usePass.json?.trip?.cleaningFeeUsd === 500, JSON.stringify(usePass.json?.trip));
 check("use-pass decrements pass balance", typeof usePass.json?.linePassCount === "number", "");
+
+// ── 3b. Position #1 can redeem, and competing submissions stay safe ──────────
+{
+  const first = await makeVerifiedUser("position-one");
+  const joined = await api("POST", "/queue/join", {
+    token: first.token,
+    body: { flightId: positionOneFixtureId, bringingPet: false },
+  });
+  check("position-one fixture joins waiting at #1",
+    joined.status === 201 && joined.json?.status === "waiting" && joined.json?.position === 1,
+    JSON.stringify(joined.json));
+
+  const balanceBefore = (await api("GET", "/auth/me", { token: first.token })).json?.linePassCount;
+  const [attemptA, attemptB] = await Promise.all([
+    api("POST", `/queue/${joined.json.id}/use-pass`, { token: first.token }),
+    api("POST", `/queue/${joined.json.id}/use-pass`, { token: first.token }),
+  ]);
+  const attempts = [attemptA, attemptB];
+  check("position #1 redemption confirms immediately",
+    attempts.some((attempt) => attempt.status === 200 && attempt.json?.status === "confirmed"),
+    JSON.stringify(attempts));
+  check("competing redemption is confirmed/idempotent or safely conflicts",
+    attempts.every((attempt) =>
+      (attempt.status === 200 && attempt.json?.status === "confirmed") ||
+      (attempt.status === 409 && attempt.json?.error?.includes("conflict"))),
+    JSON.stringify(attempts));
+
+  const balanceAfter = (await api("GET", "/auth/me", { token: first.token })).json?.linePassCount;
+  check("competing redemption consumes exactly one pass",
+    balanceAfter === balanceBefore - 1,
+    `before=${balanceBefore} after=${balanceAfter}`);
+  const positionOneTrips = (await api("GET", "/trips", { token: first.token })).json ?? [];
+  check("competing redemption creates exactly one trip",
+    positionOneTrips.filter((trip) => trip.flightId === positionOneFixtureId).length === 1,
+    JSON.stringify(positionOneTrips));
+}
 
 // ── 4. Auto-confirmation at the decision moment ──────────────────────────────
 // The manual confirm endpoint is retired: the queue engine confirms the front
@@ -313,9 +352,9 @@ const buy = await api("POST", "/membership/buy-pass", { token: buyer.token });
 check("buy-pass increments balance by 1", buy.status === 200 && buy.json?.linePassCount === (before ?? 0) + 1,
   `before=${before} after=${buy.json?.linePassCount}`);
 
-await pool.query(`DELETE FROM trips WHERE flight_id IN ($1, $2, $3)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId]);
-await pool.query(`DELETE FROM queue_entries WHERE flight_id IN ($1, $2, $3)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId]);
-await pool.query(`DELETE FROM flights WHERE id IN ($1, $2, $3)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId]);
+await pool.query(`DELETE FROM trips WHERE flight_id IN ($1, $2, $3, $4)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId]);
+await pool.query(`DELETE FROM queue_entries WHERE flight_id IN ($1, $2, $3, $4)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId]);
+await pool.query(`DELETE FROM flights WHERE id IN ($1, $2, $3, $4)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId]);
 await pool.end();
 
 if (failures > 0) { console.error(`\n${failures} check(s) FAILED`); process.exit(1); }

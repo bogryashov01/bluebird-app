@@ -1210,7 +1210,7 @@ export const getUseLinePassOnQueueEntryUrl = (id: string,) => {
 }
 
 /**
- * @summary Apply a Skip the Line pass to an existing waiting queue entry, moving it to position 1
+ * @summary Apply a Skip the Line pass to any existing waiting queue entry, including position 1, and confirm the seat immediately
  */
 export const useLinePassOnQueueEntry = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<UseLinePassResponse> => {
 
@@ -1259,7 +1259,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type UseLinePassOnQueueEntryMutationError = ErrorType<ErrorResponse>
 
     /**
- * @summary Apply a Skip the Line pass to an existing waiting queue entry, moving it to position 1
+ * @summary Apply a Skip the Line pass to any existing waiting queue entry, including position 1, and confirm the seat immediately
  */
 export const useUseLinePassOnQueueEntry = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof useLinePassOnQueueEntry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}

@@ -416,7 +416,7 @@ paths:
     post:
       operationId: useLinePassOnQueueEntry
       tags: [queue]
-      summary: Apply a Skip the Line pass to an existing waiting queue entry, moving it to position 1
+      summary: Apply a Skip the Line pass to any existing waiting queue entry, including position 1, and confirm the seat immediately
       security:
         - bearerAuth: []
       parameters:
@@ -433,13 +433,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/UseLinePassResponse"
         "400":
-          description: Entry cancelled/expired, already at position 1, or no passes available
+          description: Entry cancelled/expired or no passes available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Membership required or insufficient remaining seat capacity; no pass consumed
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Queue entry not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Flight no longer accepts queue actions or a concurrent queue update conflicted; no pass consumed and retry may be appropriate
           content:
             application/json:
               schema:
@@ -1169,6 +1181,9 @@ components:
             alreadyConfirmed:
               type: boolean
               description: True when the entry was already confirmed before the pass was applied — no pass was consumed
+            trip:
+              $ref: "#/components/schemas/Trip"
+              description: The upcoming trip created by a successful pass redemption; absent when alreadyConfirmed is true
           required:
             - linePassCount
 

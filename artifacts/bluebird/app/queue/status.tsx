@@ -299,13 +299,9 @@ export default function QueueStatusScreen() {
   // Bottom-pinned actions apply to the first waiting entry in view (the
   // non-picker path shows exactly one waiting entry in practice).
   const footerEntry = !needsPicker ? waitingEntries[0] : undefined;
-  // Skip the Line is surfaced for every waiting entry. At position > 1 it is
-  // an actionable CTA whose destination branches on pass balance; at position
-  // 1 the use-pass API rejects the request ("already first in line"), so the
-  // footer shows explanatory copy instead of a button that would only fail.
+  // Skip the Line is surfaced for every waiting entry, including position 1,
+  // because queue position alone does not guarantee the seat.
   const passCount = user?.linePassCount ?? 0;
-  const footerShowsPass = !!footerEntry && !!user && footerEntry.position !== 1;
-  const footerIsFirstInLine = !!footerEntry && footerEntry.position === 1;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
@@ -342,11 +338,7 @@ export default function QueueStatusScreen() {
           {allEntries.map((entry) => {
             const flight = entry.flight;
             const label = flight ? `${flight.fromAirport} → ${flight.toAirport}` : '— → —';
-            // Same rule as the footer: actionable CTA while waiting behind
-            // others; informational copy at position 1 (use-pass would fail).
             const isWaiting = entry.status === 'waiting';
-            const showsPass = isWaiting && entry.position !== 1;
-            const showsFirstNote = isWaiting && entry.position === 1;
             return (
               <View key={entry.id} style={[styles.pickerRow, { backgroundColor: colors.surface }]}>
                 <TouchableOpacity
@@ -365,12 +357,13 @@ export default function QueueStatusScreen() {
                   </View>
                   <Text style={[styles.pickerChevron, { color: colors.mutedForegroundLight }]}>›</Text>
                 </TouchableOpacity>
-                {showsPass && (
+                {isWaiting && (
                   <TouchableOpacity
                     style={[styles.pickerPassBtn, { backgroundColor: colors.primary + '14' }]}
                     onPress={() => handleUsePass(entry)}
                     disabled={checkingPassEntryId === entry.id}
                     activeOpacity={0.8}
+                    testID={`use-skip-line-${entry.id}`}
                   >
                     {checkingPassEntryId === entry.id ? (
                       <ActivityIndicator size="small" color={colors.primary} />
@@ -380,11 +373,6 @@ export default function QueueStatusScreen() {
                       </Text>
                     )}
                   </TouchableOpacity>
-                )}
-                {showsFirstNote && (
-                  <Text style={[styles.pickerFirstNote, { color: colors.mutedForegroundLight }]}>
-                    You're first in line — no pass needed, your seat confirms automatically.
-                  </Text>
                 )}
               </View>
             );
@@ -410,33 +398,16 @@ export default function QueueStatusScreen() {
             ))}
           </ScrollView>
 
-          {/* Bottom-pinned actions (mockup): blue pass button + concierge link */}
+          {/* Bottom-pinned primary action */}
           {footerEntry && (
             <View style={[styles.footer, { paddingBottom: bottomPad + 12, backgroundColor: colors.offWhite }]}>
-              {footerShowsPass ? (
-                <PrimaryButton
-                  label={passCount > 0
-                    ? `Use Skip the Line Pass (${passCount} left)`
-                    : 'Skip the Line — Get a Pass'}
-                  loading={checkingPassEntryId === footerEntry.id}
-                  onPress={() => handleUsePass(footerEntry)}
-                />
-              ) : (
-                <>
-                  {footerIsFirstInLine && (
-                    <Text style={[styles.footerNote, { color: colors.mutedForegroundLight }]}>
-                      Skip the Line isn't needed — you're first in line and your seat confirms automatically.
-                    </Text>
-                  )}
-                  <PrimaryButton
-                    label="View Flight Details"
-                    onPress={() => router.push(`/flight/${footerEntry.flightId}`)}
-                  />
-                </>
-              )}
-              <TouchableOpacity onPress={() => router.push('/concierge')} activeOpacity={0.7}>
-                <Text style={[styles.conciergeLink, { color: colors.mutedForegroundLight }]}>Ask AI Concierge</Text>
-              </TouchableOpacity>
+              <PrimaryButton
+                label={passCount > 0
+                  ? `Use Skip the Line Pass (${passCount} left)`
+                  : 'Skip the Line — Get a Pass'}
+                loading={checkingPassEntryId === footerEntry.id}
+                onPress={() => handleUsePass(footerEntry)}
+              />
             </View>
           )}
         </>
@@ -465,8 +436,6 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingVertical: 11, alignItems: 'center', justifyContent: 'center',
   },
   pickerPassText: { fontFamily: 'Inter_600SemiBold', fontSize: 13.5 },
-  pickerFirstNote: { fontFamily: 'Inter_400Regular', fontSize: 12.5, lineHeight: 18 },
-  footerNote: { fontFamily: 'Inter_400Regular', fontSize: 12.5, lineHeight: 18, textAlign: 'center' },
   pickerRoute: { fontFamily: 'Inter_700Bold', fontSize: 17 },
   pickerMeta: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 3 },
   pickerChevron: { fontFamily: 'Inter_700Bold', fontSize: 20, marginLeft: 10 },
@@ -474,7 +443,6 @@ const styles = StyleSheet.create({
     position: 'absolute', left: 0, right: 0, bottom: 0,
     paddingHorizontal: 22, paddingTop: 12, gap: 12,
   },
-  conciergeLink: { fontFamily: 'Inter_600SemiBold', fontSize: 14, textAlign: 'center' },
 });
 
 function WaitingQueueView({ entry, onCancel }: { entry: QueueEntry; onCancel: () => void }) {
@@ -519,9 +487,7 @@ function WaitingQueueView({ entry, onCancel }: { entry: QueueEntry; onCancel: ()
       {/* Light-blue disclaimer banner */}
       <View style={[flat.disclaimer, { backgroundColor: colors.primary + '14' }]}>
         <Text style={[flat.disclaimerText, { color: colors.textOnSurface }]}>
-          {entry.position === 1
-            ? "You're first in line — your seat will be confirmed automatically at the decision moment. No action needed."
-            : 'Flights may be modified or cancelled due to operational requirements.'}
+          Flights may be modified or cancelled due to operational requirements.
         </Text>
       </View>
 
