@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, Share, Platform, Linking,
+  ActivityIndicator, Share, Platform, Linking, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
@@ -28,6 +28,14 @@ function shortName(full: string): string {
   return `${parts[0][0]}. ${parts.slice(1).join(' ')}`;
 }
 
+function showFeedback(title: string, message: string) {
+  if (Platform.OS === 'web') {
+    window.alert(`${title}\n\n${message}`);
+    return;
+  }
+  Alert.alert(title, message);
+}
+
 export default function ReferralScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -37,33 +45,95 @@ export default function ReferralScreen() {
   const ref = referral as any;
   const [copied, setCopied] = useState(false);
 
-  const link = ref?.code ? `https://bluebird.com/join?ref=${ref.code}` : '';
-  const shareMessage = `Join Bluebird — private aviation for everyone. Use my referral code ${ref?.code} to get started. ${link}`;
+  const referralCode = typeof ref?.code === 'string' ? ref.code.trim() : '';
+  const link = referralCode
+    ? `https://bluebird.com/join?ref=${encodeURIComponent(referralCode)}`
+    : '';
+  const shareMessage = link
+    ? `Join Bluebird — private aviation for everyone. Use my referral link to get started: ${link}`
+    : '';
+
+  const requireLink = () => {
+    if (link) return true;
+    showFeedback(
+      'Referral link unavailable',
+      'We could not load your personal referral link. Please try again in a moment.',
+    );
+    return false;
+  };
 
   const handleCopy = async () => {
-    if (!ref?.code) return;
-    await Clipboard.setStringAsync(ref.code);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    if (!requireLink()) return;
+    try {
+      await Clipboard.setStringAsync(link);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      showFeedback(
+        'Could not copy link',
+        'Your referral link could not be copied. Please try again.',
+      );
+    }
   };
 
-  const handleMessage = () => {
-    if (!link) return;
-    const sep = Platform.OS === 'ios' ? '&' : '?';
-    Linking.openURL(`sms:${sep}body=${encodeURIComponent(shareMessage)}`).catch(() => {});
+  const openReferralUrl = async (
+    url: string,
+    flowName: string,
+    fallbackMessage: string,
+  ) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) throw new Error(`${flowName} is not supported`);
+      await Linking.openURL(url);
+    } catch {
+      showFeedback(`Could not open ${flowName}`, fallbackMessage);
+    }
   };
 
-  const handleMail = () => {
-    if (!link) return;
-    Linking.openURL(
-      `mailto:?subject=${encodeURIComponent('Join me on Bluebird')}&body=${encodeURIComponent(shareMessage)}`
-    ).catch(() => {});
+  const handleSms = async () => {
+    if (!requireLink()) return;
+    const separator = Platform.OS === 'ios' ? '&' : '?';
+    await openReferralUrl(
+      `sms:${separator}body=${encodeURIComponent(shareMessage)}`,
+      'SMS',
+      'No text messaging app is available. You can copy your referral link instead.',
+    );
   };
 
-  const handleMore = () => {
-    if (!link) return;
-    Share.share({ message: shareMessage, title: 'Join Bluebird' });
+  const handleEmail = async () => {
+    if (!requireLink()) return;
+    await openReferralUrl(
+      `mailto:?subject=${encodeURIComponent('Join me on Bluebird')}&body=${encodeURIComponent(shareMessage)}`,
+      'Email',
+      'No email app is available. You can copy your referral link instead.',
+    );
+  };
+
+  const handleShare = async () => {
+    if (!requireLink()) return;
+    try {
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({
+          title: 'Join Bluebird',
+          text: shareMessage,
+          url: link,
+        });
+        return;
+      }
+
+      await Share.share(
+        Platform.OS === 'ios'
+          ? { message: shareMessage, url: link }
+          : { message: shareMessage, title: 'Join Bluebird' },
+      );
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      showFeedback(
+        'Could not share link',
+        'Sharing is not available right now. You can copy your referral link instead.',
+      );
+    }
   };
 
   if (isLoading) {
@@ -84,7 +154,7 @@ export default function ReferralScreen() {
     >
       <Text style={[styles.headline, { color: colors.textOnSurface }]}>Invite your friends.{'\n'}Help them save.</Text>
       <Text style={[styles.subcopy, { color: colors.mutedForegroundLight }]}>
-        Share your code and help friends save on private aviation. Earn rewards together when they become members.
+        Share your personal link and help friends save on private aviation. Earn rewards together when they become members.
       </Text>
 
       {/* QR-style graphic */}
@@ -96,8 +166,16 @@ export default function ReferralScreen() {
 
       {/* Code card */}
       <View style={[styles.codeCard, { backgroundColor: colors.surface, shadowColor: '#0A1128' }]}>
-        <Text style={[styles.code, { color: colors.textOnSurface }]} numberOfLines={1}>{ref?.code ?? '—'}</Text>
-        <TouchableOpacity style={[styles.copyPill, { backgroundColor: colors.primary + '14' }]} onPress={handleCopy} activeOpacity={0.7}>
+        <Text style={[styles.code, { color: colors.textOnSurface }]} numberOfLines={1}>
+          {link || 'Referral link unavailable'}
+        </Text>
+        <TouchableOpacity
+          testID="copy-referral-link"
+          accessibilityLabel="Copy referral link"
+          style={[styles.copyPill, { backgroundColor: colors.primary + '14' }]}
+          onPress={handleCopy}
+          activeOpacity={0.7}
+        >
           <Text style={[styles.copyText, { color: colors.primary }]}>{copied ? 'Copied' : 'Copy'}</Text>
         </TouchableOpacity>
       </View>
@@ -105,11 +183,19 @@ export default function ReferralScreen() {
       {/* Share actions */}
       <View style={styles.actionsRow}>
         {[
-          { label: 'Message', onPress: handleMessage },
-          { label: 'Mail', onPress: handleMail },
-          { label: 'More', onPress: handleMore },
+          { label: 'SMS', onPress: handleSms, testID: 'share-referral-sms' },
+          { label: 'Email', onPress: handleEmail, testID: 'share-referral-email' },
+          { label: 'Share', onPress: handleShare, testID: 'share-referral-share' },
         ].map((a) => (
-          <TouchableOpacity key={a.label} style={[styles.actionBtn, { backgroundColor: colors.muted }]} onPress={a.onPress} activeOpacity={0.7}>
+          <TouchableOpacity
+            key={a.label}
+            testID={a.testID}
+            accessibilityRole="button"
+            accessibilityLabel={`Share referral link by ${a.label}`}
+            style={[styles.actionBtn, { backgroundColor: colors.muted }]}
+            onPress={a.onPress}
+            activeOpacity={0.7}
+          >
             <Text style={[styles.actionText, { color: colors.textOnSurface }]}>{a.label}</Text>
           </TouchableOpacity>
         ))}
