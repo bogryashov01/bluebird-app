@@ -28,6 +28,7 @@ export interface Flight {
   cruiseSpeed?: string | null;
   destWeather?: string | null;
   departureFbo?: string | null;
+  departureFboAddress?: string | null;
   status: FlightStatus;
   imageUrl?: string;
   createdAt: string;

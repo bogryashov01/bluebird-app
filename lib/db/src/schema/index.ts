@@ -43,6 +43,7 @@ export const flightsTable = pgTable("flights", {
   cruiseSpeed: text("cruise_speed"),
   destWeather: text("dest_weather"),
   departureFbo: text("departure_fbo"),
+  departureFboAddress: text("departure_fbo_address"),
   status: text("status").notNull().default("available"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

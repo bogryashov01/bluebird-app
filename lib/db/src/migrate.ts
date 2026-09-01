@@ -164,6 +164,7 @@ export async function ensureSchema(): Promise<void> {
       cruise_speed     TEXT,
       dest_weather     TEXT,
       departure_fbo    TEXT,
+      departure_fbo_address TEXT,
       status           TEXT        NOT NULL DEFAULT 'available',
       created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -177,6 +178,7 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE flights ADD COLUMN IF NOT EXISTS cruise_speed  TEXT;
     ALTER TABLE flights ADD COLUMN IF NOT EXISTS dest_weather  TEXT;
     ALTER TABLE flights ADD COLUMN IF NOT EXISTS departure_fbo TEXT;
+    ALTER TABLE flights ADD COLUMN IF NOT EXISTS departure_fbo_address TEXT;
 
     CREATE TABLE IF NOT EXISTS queue_entries (
       id             TEXT        PRIMARY KEY,

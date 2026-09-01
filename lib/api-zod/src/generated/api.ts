@@ -136,7 +136,6 @@ export const GetMeResponse = zod.object({
  */
 
 
-
 export const UpdateMeBody = zod.object({
   "name": zod.string().optional(),
   "email": zod.string().optional(),
@@ -185,6 +184,7 @@ export const ListFlightsResponseItem = zod.object({
   "cruiseSpeed": zod.string().nullish(),
   "destWeather": zod.string().nullish(),
   "departureFbo": zod.string().nullish(),
+  "departureFboAddress": zod.string().nullish(),
   "status": zod.enum(['available', 'boarding', 'departed', 'completed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()
@@ -248,6 +248,7 @@ export const GetAirportSummaryResponse = zod.object({
   "cruiseSpeed": zod.string().nullish(),
   "destWeather": zod.string().nullish(),
   "departureFbo": zod.string().nullish(),
+  "departureFboAddress": zod.string().nullish(),
   "status": zod.enum(['available', 'boarding', 'departed', 'completed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()
@@ -283,6 +284,7 @@ export const GetFlightResponse = zod.object({
   "cruiseSpeed": zod.string().nullish(),
   "destWeather": zod.string().nullish(),
   "departureFbo": zod.string().nullish(),
+  "departureFboAddress": zod.string().nullish(),
   "status": zod.enum(['available', 'boarding', 'departed', 'completed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()
@@ -318,7 +320,6 @@ export const GetFlightMyStatusResponse = zod.object({
  */
 
 
-
 export const JoinQueueBody = zod.object({
   "flightId": zod.string(),
   "useLinePass": zod.boolean().optional(),
@@ -352,6 +353,7 @@ export const JoinQueueResponse = zod.object({
   "cruiseSpeed": zod.string().nullish(),
   "destWeather": zod.string().nullish(),
   "departureFbo": zod.string().nullish(),
+  "departureFboAddress": zod.string().nullish(),
   "status": zod.enum(['available', 'boarding', 'departed', 'completed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()
@@ -399,6 +401,7 @@ export const GetQueueStatusResponseItem = zod.object({
   "cruiseSpeed": zod.string().nullish(),
   "destWeather": zod.string().nullish(),
   "departureFbo": zod.string().nullish(),
+  "departureFboAddress": zod.string().nullish(),
   "status": zod.enum(['available', 'boarding', 'departed', 'completed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()
@@ -463,6 +466,7 @@ export const UseLinePassOnQueueEntryResponse = zod.object({
   "cruiseSpeed": zod.string().nullish(),
   "destWeather": zod.string().nullish(),
   "departureFbo": zod.string().nullish(),
+  "departureFboAddress": zod.string().nullish(),
   "status": zod.enum(['available', 'boarding', 'departed', 'completed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()
@@ -507,6 +511,7 @@ export const UseLinePassOnQueueEntryResponse = zod.object({
   "cruiseSpeed": zod.string().nullish(),
   "destWeather": zod.string().nullish(),
   "departureFbo": zod.string().nullish(),
+  "departureFboAddress": zod.string().nullish(),
   "status": zod.enum(['available', 'boarding', 'departed', 'completed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()
@@ -561,6 +566,7 @@ export const CancelTripResponse = zod.object({
   "cruiseSpeed": zod.string().nullish(),
   "destWeather": zod.string().nullish(),
   "departureFbo": zod.string().nullish(),
+  "departureFboAddress": zod.string().nullish(),
   "status": zod.enum(['available', 'boarding', 'departed', 'completed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()
@@ -607,6 +613,7 @@ export const ListTripsResponseItem = zod.object({
   "cruiseSpeed": zod.string().nullish(),
   "destWeather": zod.string().nullish(),
   "departureFbo": zod.string().nullish(),
+  "departureFboAddress": zod.string().nullish(),
   "status": zod.enum(['available', 'boarding', 'departed', 'completed', 'cancelled']),
   "imageUrl": zod.string().optional(),
   "createdAt": zod.string()
@@ -632,8 +639,6 @@ export const ListTripsResponse = zod.array(ListTripsResponseItem)
 export const GetTripManifestParams = zod.object({
   "id": zod.coerce.string()
 })
-
-
 
 
 export const GetTripManifestResponse = zod.object({
@@ -667,15 +672,6 @@ export const SaveTripManifestParams = zod.object({
 })
 
 
-
-
-
-
-
-
-
-
-
 export const SaveTripManifestBody = zod.object({
   "passengers": zod.array(zod.object({
   "passengerOrder": zod.number().min(1).multipleOf(saveTripManifestBodyPassengersItemPassengerOrderMultipleOf),
@@ -688,8 +684,6 @@ export const SaveTripManifestBody = zod.object({
   "passportExpirationDate": zod.string().regex(saveTripManifestBodyPassengersItemPassportExpirationDateRegExp).nullish()
 })).min(1).max(saveTripManifestBodyPassengersMax)
 })
-
-
 
 
 export const SaveTripManifestResponse = zod.object({
@@ -721,8 +715,6 @@ export const SaveTripManifestResponse = zod.object({
 export const SubmitTripManifestParams = zod.object({
   "id": zod.coerce.string()
 })
-
-
 
 
 export const SubmitTripManifestResponse = zod.object({
@@ -882,8 +874,6 @@ export const MarkNotificationReadResponse = zod.object({
  */
 
 
-
-
 export const ConciergeChatBody = zod.object({
   "messages": zod.array(zod.object({
   "role": zod.enum(['user', 'assistant']),
@@ -901,7 +891,6 @@ export const ConciergeChatResponse = zod.object({
 /**
  * @summary Load the caller's recent concierge conversation history
  */
-
 
 
 export const GetConciergeHistoryQueryParams = zod.object({

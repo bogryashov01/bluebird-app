@@ -45,31 +45,33 @@ const DEST_WEATHER: Record<string, string> = {
   PBI: "87°F Sunny", BOS: "73°F Clear",  ORD: "78°F Windy",  DEN: "83°F Clear",
 };
 
-// Departure FBO per origin airport
-const DEPARTURE_FBOS: Record<string, string> = {
-  LAX: "Clay Lacy Aviation",
-  SFO: "Signature Flight Support",
-  JFK: "Modern Aviation",
-  MIA: "Signature Flight Support",
-  ORD: "Atlantic Aviation",
-  DAL: "Business Jet Center",
-  LAS: "Henderson Executive",
-  BOS: "Signature Flight Support",
-  SEA: "Modern Aviation",
-  DEN: "Signature Flight Support",
-  TEB: "Signature Flight Support",
-  SDL: "Ross Aviation",
-  PBI: "Atlantic Aviation",
-  NAS: "Odyssey Aviation",
+// Display-ready departure FBO details per origin airport.
+const DEPARTURE_FBOS: Record<string, { name: string; address: string }> = {
+  LAX: { name: "Clay Lacy Aviation", address: "7435 Valjean Avenue\nVan Nuys, CA 91406" },
+  SFO: { name: "Signature Aviation", address: "1052 North Access Road\nSan Francisco, CA 94128" },
+  JFK: { name: "Modern Aviation", address: "1 Hangar Road\nJamaica, NY 11430" },
+  MIA: { name: "Signature Aviation", address: "5700 Northwest 36th Street\nMiami, FL 33122" },
+  ORD: { name: "Atlantic Aviation", address: "10510 West Zemke Boulevard\nChicago, IL 60666" },
+  DAL: { name: "Business Jet Center", address: "8611 Lemmon Avenue\nDallas, TX 75209" },
+  LAS: { name: "Henderson Executive Airport", address: "3500 Executive Terminal Drive\nHenderson, NV 89052" },
+  BOS: { name: "Signature Aviation", address: "240 Prescott Street\nEast Boston, MA 02128" },
+  SEA: { name: "Modern Aviation", address: "8285 Perimeter Road South\nSeattle, WA 98108" },
+  DEN: { name: "Signature Aviation", address: "7850 Harry B Combs Parkway\nDenver, CO 80249" },
+  TEB: { name: "Signature Aviation", address: "101 Charles A. Lindbergh Drive\nTeterboro, NJ 07608" },
+  SDL: { name: "Ross Aviation", address: "14600 North Airport Drive\nScottsdale, AZ 85260" },
+  PBI: { name: "Atlantic Aviation", address: "3800 Southern Boulevard\nWest Palm Beach, FL 33406" },
+  NAS: { name: "Odyssey Aviation", address: "Coral Harbour Road\nNassau, The Bahamas" },
 };
 
 function enrichmentFor(f: { aircraftType: string; fromAirport: string; toAirport: string }) {
   const spec = AIRCRAFT_SPECS[f.aircraftType];
+  const fbo = DEPARTURE_FBOS[f.fromAirport];
   return {
     rangeNm: spec?.rangeNm ?? 2000,
     cruiseSpeed: spec?.cruiseSpeed ?? "Mach .74",
     destWeather: DEST_WEATHER[f.toAirport] ?? "72°F Clear",
-    departureFbo: DEPARTURE_FBOS[f.fromAirport] ?? "Signature Flight Support",
+    departureFbo: fbo?.name ?? null,
+    departureFboAddress: fbo?.address ?? null,
   };
 }
 

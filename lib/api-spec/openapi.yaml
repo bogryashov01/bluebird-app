@@ -1163,6 +1163,9 @@ components:
         departureFbo:
           type: string
           nullable: true
+        departureFboAddress:
+          type: string
+          nullable: true
         status:
           type: string
           enum: [available, boarding, departed, completed, cancelled]

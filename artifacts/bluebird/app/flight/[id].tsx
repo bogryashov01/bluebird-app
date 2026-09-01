@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Alert, ImageBackground, useWindowDimensions,
+  Modal, Pressable, Linking,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -75,6 +77,7 @@ export default function FlightDetailScreen() {
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
   const [passengers, setPassengers] = useState(1);
+  const [directionsOpen, setDirectionsOpen] = useState(false);
 
   const { data: flight, isLoading, isError } = useGetFlight(id!);
 
@@ -167,6 +170,31 @@ export default function FlightDetailScreen() {
   const wasPrice  = originalPrice(f.priceUsd, f.discountPct);
 
   const status = myStatus?.status ?? 'none';
+  const canOpenDirections = status === 'confirmed' && !!f.departureFboAddress?.trim();
+
+  const showMapError = () => {
+    const message = `We couldn't open maps. Search for this address instead:\n\n${f.departureFboAddress}`;
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined') window.alert(message);
+    } else {
+      Alert.alert('Unable to open maps', message);
+    }
+  };
+
+  const openDirections = async (service: 'apple' | 'google') => {
+    setDirectionsOpen(false);
+    const address = f.departureFboAddress?.trim();
+    if (!address) return;
+    const destination = encodeURIComponent(address.replace(/\n/g, ', '));
+    const url = service === 'apple'
+      ? `https://maps.apple.com/?daddr=${destination}&dirflg=d`
+      : `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      showMapError();
+    }
+  };
 
   const joinFlowParams = (extra: Record<string, string> = {}) => ({
     flightId:      f.id,
@@ -462,12 +490,32 @@ export default function FlightDetailScreen() {
 
         {/* ── FBO departure card ── */}
         {!!f.departureFbo && (
-          <View style={[styles.fboCard, { backgroundColor: colors.backgroundMid }]}>
-            <Text style={[styles.fboLabel, { color: colors.mutedOnBrand }]}>FBO · DEPARTURE</Text>
-            <Text style={[styles.fboValue, { color: colors.textOnBrand }]} numberOfLines={1}>
+          <TouchableOpacity
+            style={[styles.fboCard, { backgroundColor: colors.backgroundMid }]}
+            disabled={!canOpenDirections}
+            onPress={() => setDirectionsOpen(true)}
+            activeOpacity={0.78}
+            accessibilityRole={canOpenDirections ? 'button' : undefined}
+            accessibilityLabel={canOpenDirections ? `Get directions to ${f.departureFbo}` : undefined}
+            accessibilityHint={canOpenDirections ? 'Choose Apple Maps or Google Maps' : undefined}
+            testID={canOpenDirections ? 'departure-fbo-directions' : undefined}
+          >
+            <View style={styles.fboHeader}>
+              <Text style={[styles.fboLabel, { color: colors.mutedOnBrand }]}>FBO · DEPARTURE</Text>
+              {canOpenDirections && <Feather name="navigation" size={19} color={colors.textOnBrand} />}
+            </View>
+            <Text style={[styles.fboValue, { color: colors.textOnBrand }]}>
               {f.departureFbo} — {f.fromAirport}
             </Text>
-          </View>
+            {canOpenDirections && (
+              <>
+                <Text style={[styles.fboAddress, { color: colors.mutedOnBrand }]}>
+                  {f.departureFboAddress}
+                </Text>
+                <Text style={[styles.fboAction, { color: colors.textOnBrand }]}>Get directions</Text>
+              </>
+            )}
+          </TouchableOpacity>
         )}
 
         {/* ── Passenger stepper — only shown when user can still join.
@@ -509,6 +557,47 @@ export default function FlightDetailScreen() {
           <Text style={[styles.policyChevron, { color: colors.mutedForegroundLight }]}>›</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal visible={directionsOpen} transparent animationType="fade" onRequestClose={() => setDirectionsOpen(false)}>
+        <Pressable
+          style={[styles.modalBackdrop, { backgroundColor: colors.backgroundMid + 'B8', paddingBottom: botPad + 12 }]}
+          onPress={() => setDirectionsOpen(false)}
+        >
+          <Pressable style={[styles.mapSheet, { backgroundColor: colors.surface }]} onPress={(event) => event.stopPropagation()}>
+            <View style={styles.mapSheetHeader}>
+              <View style={styles.mapSheetTitleGroup}>
+                <Text style={[styles.mapSheetTitle, { color: colors.textOnSurface }]}>Open directions</Text>
+                <Text style={[styles.mapSheetAddress, { color: colors.mutedForegroundLight }]}>{f.departureFboAddress}</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setDirectionsOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close directions choices"
+              >
+                <Feather name="x" size={23} color={colors.mutedForegroundLight} />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={[styles.mapChoice, { borderColor: colors.separator }]}
+              onPress={() => openDirections('apple')}
+              testID="open-apple-maps"
+            >
+              <Feather name="map-pin" size={20} color={colors.primary} />
+              <Text style={[styles.mapChoiceText, { color: colors.textOnSurface }]}>Open in Apple Maps</Text>
+              <Feather name="external-link" size={17} color={colors.mutedForegroundLight} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.mapChoice, { borderColor: colors.separator }]}
+              onPress={() => openDirections('google')}
+              testID="open-google-maps"
+            >
+              <Feather name="map" size={20} color={colors.primary} />
+              <Text style={[styles.mapChoiceText, { color: colors.textOnSurface }]}>Open in Google Maps</Text>
+              <Feather name="external-link" size={17} color={colors.mutedForegroundLight} />
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* ── Bottom sticky CTA ── */}
       <View style={[styles.ctaBar, { backgroundColor: colors.offWhite, borderTopColor: colors.separator, paddingBottom: botPad + 12 }]}>
@@ -606,6 +695,23 @@ const styles = StyleSheet.create({
   },
   fboLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 1, marginBottom: 4 },
   fboValue: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
+  fboHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  fboAddress: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, marginTop: 7 },
+  fboAction: { fontFamily: 'Inter_600SemiBold', fontSize: 13, marginTop: 8, textDecorationLine: 'underline' },
+
+  modalBackdrop: {
+    flex: 1, justifyContent: 'flex-end', paddingHorizontal: 12,
+  },
+  mapSheet: { borderRadius: 20, padding: 18, gap: 10 },
+  mapSheetHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 },
+  mapSheetTitleGroup: { flex: 1, paddingRight: 16 },
+  mapSheetTitle: { fontFamily: 'Inter_700Bold', fontSize: 19 },
+  mapSheetAddress: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, marginTop: 4 },
+  mapChoice: {
+    minHeight: 54, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+  },
+  mapChoiceText: { flex: 1, fontFamily: 'Inter_600SemiBold', fontSize: 15 },
 
   // Passenger stepper
   stepperCard: {
