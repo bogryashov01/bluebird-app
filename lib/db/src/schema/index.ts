@@ -57,6 +57,8 @@ export const queueEntriesTable = pgTable("queue_entries", {
   // Base members joining an international flight accept a one-time fee
   // (demo charge — recorded, never billed).
   intlFeeAccepted: boolean("intl_fee_accepted").notNull().default(false),
+  bringingPet: boolean("bringing_pet").notNull().default(false),
+  petFeeAcknowledged: boolean("pet_fee_acknowledged").notNull().default(false),
   // Set when this entry reaches the front of the queue and is notified that a
   // seat is ready; starts the 30-minute acceptance window.
   frontNotifiedAt: timestamp("front_notified_at"),
@@ -79,6 +81,7 @@ export const tripsTable = pgTable("trips", {
   userId: text("user_id").notNull().references(() => usersTable.id),
   flightId: text("flight_id").notNull().references(() => flightsTable.id),
   status: text("status").notNull().default("upcoming"),
+  cleaningFeeUsd: integer("cleaning_fee_usd").notNull().default(0),
   bookedAt: timestamp("booked_at").notNull().defaultNow(),
 });
 

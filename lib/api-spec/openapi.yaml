@@ -1080,8 +1080,15 @@ components:
           description: >
             Base member accepted the one-time international fee for this
             flight (demo charge — recorded, never billed).
+        bringingPet:
+          type: boolean
+          description: Whether the member will travel with a pet.
+        petFeeAcknowledged:
+          type: boolean
+          description: Member acknowledged the conditional $500 cleaning fee.
       required:
         - flightId
+        - bringingPet
 
     CancelQueueResponse:
       type: object
@@ -1116,6 +1123,10 @@ components:
             plus a 'moved' event for each position improvement.
           items:
             $ref: "#/components/schemas/QueueMovementEvent"
+        bringingPet:
+          type: boolean
+        petFeeAcknowledged:
+          type: boolean
       required:
         - id
         - flightId
@@ -1123,6 +1134,8 @@ components:
         - totalInQueue
         - status
         - createdAt
+        - bringingPet
+        - petFeeAcknowledged
     QueueMovementEvent:
       type: object
       properties:
@@ -1190,11 +1203,15 @@ components:
           enum: [upcoming, completed, cancelled]
         bookedAt:
           type: string
+        cleaningFeeUsd:
+          type: number
+          description: Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero.
       required:
         - id
         - flightId
         - status
         - bookedAt
+        - cleaningFeeUsd
 
     CancelBookingResponse:
       type: object

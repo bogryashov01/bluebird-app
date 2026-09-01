@@ -278,6 +278,7 @@ export default function QueueStatusScreen() {
     return {
         entryId: entry.id,
         position: String(entry.position),
+        bringingPet: entry.bringingPet ? '1' : '0',
         flightId: entry.flightId,
         from: flight?.fromAirport ?? '',
         to: flight?.toAirport ?? '',

@@ -23,11 +23,13 @@ export default function InternationalNoticeScreen() {
   const params = useLocalSearchParams<{
     flightId: string; fromCity: string; toCity: string;
     from: string; to: string; useLinePass?: string; passengers?: string;
-    feeUsd?: string; flightStatus?: string;
+    feeUsd?: string; flightStatus?: string; bringingPet?: string; petFeeAcknowledged?: string;
   }>();
   const { flightId } = params;
   const passengers = Math.max(1, parseInt(params.passengers ?? '1', 10) || 1);
   const useLinePass = params.useLinePass === '1';
+  const bringingPet = params.bringingPet === '1';
+  const petFeeAcknowledged = params.petFeeAcknowledged === '1';
   const fee = parseInt(params.feeUsd ?? '1000', 10) || 1000;
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
@@ -69,7 +71,11 @@ export default function InternationalNoticeScreen() {
           queryClient.invalidateQueries({ queryKey: [`/api/flights/${flightId}/my-status`] });
           const nav = () => router.replace({
             pathname: '/flight/confirmed',
-            params: useLinePass ? { ...params, passUsed: '1' } : params,
+            params: {
+              ...params,
+              ...(useLinePass ? { passUsed: '1' } : {}),
+              petFeeUsd: bringingPet ? '500' : '0',
+            },
           });
           if (useLinePass) {
             // Let the applying animation resolve before landing on confirmed.
@@ -115,7 +121,9 @@ export default function InternationalNoticeScreen() {
     if (!flightId || joinMutation.isPending) return;
     setJoinError(null);
     if (useLinePass) setOverlayPhase('applying');
-    joinMutation.mutate({ data: { flightId, useLinePass, passengers, acceptIntlFee: true } });
+    joinMutation.mutate({
+      data: { flightId, useLinePass, passengers, acceptIntlFee: true, bringingPet, petFeeAcknowledged },
+    });
   };
 
   const handleOverlayDone = () => {

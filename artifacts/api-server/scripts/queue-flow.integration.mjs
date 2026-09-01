@@ -3,7 +3,31 @@
 // server-side international-fee enforcement for Base members.
 //
 // Run with the API server up (development):  pnpm run test:queue-flow
+import { pool } from "@workspace/db";
 const BASE = process.env.API_BASE_URL || `https://${process.env.REPLIT_DEV_DOMAIN}/api`;
+const fixtureSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const domesticFixtureId = `queue-flow-domestic-${fixtureSuffix}`;
+const intlFixtureId = `queue-flow-intl-${fixtureSuffix}`;
+const seatFreedFixtureId = `queue-flow-seat-freed-${fixtureSuffix}`;
+
+async function main() {
+await pool.query(`DELETE FROM trips WHERE flight_id LIKE 'queue-flow-%'`);
+await pool.query(`DELETE FROM queue_entries WHERE flight_id LIKE 'queue-flow-%'`);
+await pool.query(`DELETE FROM flights WHERE id LIKE 'queue-flow-%'`);
+await pool.query(
+  `INSERT INTO flights (
+     id, from_airport, from_city, to_airport, to_city, aircraft_type,
+     aircraft_capacity, departure_date, departure_time, duration,
+     seats_available, international, international_fee_usd, status
+   ) VALUES
+     ($1, 'BFI', 'Seattle', 'PDX', 'Portland', 'Citation Latitude',
+      20, '2099-01-01', '12:00', '0h 45m', 20, false, 0, 'available'),
+     ($2, 'BFI', 'Seattle', 'YVR', 'Vancouver', 'Citation Latitude',
+      10, '2099-01-01', '14:00', '0h 55m', 10, true, 1000, 'available'),
+     ($3, 'BFI', 'Seattle', 'GEG', 'Spokane', 'Citation Latitude',
+      2, '2099-01-01', '16:00', '1h 00m', 2, false, 0, 'available')`,
+  [domesticFixtureId, intlFixtureId, seatFreedFixtureId],
+);
 
 let failures = 0;
 function check(name, cond, detail = "") {
@@ -27,54 +51,84 @@ async function api(method, path, { token, body } = {}) {
 
 // Creates a fresh member through the phone + SMS PIN flow (dev only: the
 // demo code rides in the request-code response in lieu of a real SMS).
-async function makeVerifiedUser(tag) {
+async function makeVerifiedUser(tag, tier = "plus") {
   const phone = `+1206${String(Math.floor(Math.random() * 10000000)).padStart(7, "0")}`;
   const reqCode = await api("POST", "/auth/request-code", { body: { phone } });
   if (reqCode.status !== 200 || !reqCode.json?.demoCode) throw new Error(`request-code failed: ${reqCode.status}`);
   const ver = await api("POST", "/auth/verify-code", { body: { phone, code: reqCode.json.demoCode } });
   if (ver.status !== 200) throw new Error(`verify-code failed: ${ver.status}`);
-  return { token: ver.json.token, phone };
+  let token = ver.json?.token;
+  if (ver.json?.outcome === "registration_required") {
+    const registration = await api("POST", "/auth/complete-registration", {
+      body: {
+        registrationGrant: ver.json.registrationGrant,
+        firstName: "Queue",
+        lastName: "Tester",
+        email: `queue-${tag}-${fixtureSuffix}@example.test`,
+      },
+    });
+    if (registration.status !== 200) {
+      throw new Error(`complete-registration failed: ${registration.status} ${JSON.stringify(registration.json)}`);
+    }
+    token = registration.json?.token;
+  }
+  if (!token) throw new Error("Authentication did not return a token");
+  const upgrade = await api("POST", "/membership/upgrade", { token, body: { tier } });
+  if (upgrade.status !== 200) {
+    throw new Error(`membership upgrade failed: ${upgrade.status} ${JSON.stringify(upgrade.json)}`);
+  }
+  return { token, phone };
 }
 
 const flights = (await api("GET", "/flights")).json;
-const intlFlight = flights.find((f) => f.international);
+const intlFlight = flights.find((f) => f.id === intlFixtureId);
 const domestic = flights.filter((f) => !f.international);
 
 // ── 1. N members join normally, on a flight with an empty queue ─────────────
-// Pick a domestic flight whose queue is currently empty (first probe join
-// lands at position 1) so the test is idempotent across runs.
+// Use a uniquely named fixture flight so accumulated demo queues from prior
+// runs cannot change positions or block automatic confirmation.
 const N = 3;
 const members = [];
 for (let i = 0; i < N; i++) members.push(await makeVerifiedUser(`m${i}`));
 
-let flight = null;
-let firstJoin = null;
-for (const candidate of [...domestic].reverse()) {
-  const probe = await api("POST", "/queue/join", { token: members[0].token, body: { flightId: candidate.id } });
-  if (probe.status === 201 && probe.json.position === 1) { flight = candidate; firstJoin = probe; break; }
-  if (probe.status === 201) await api("DELETE", `/queue/${probe.json.id}`, { token: members[0].token });
-}
-if (!flight) { console.error("No domestic flight with an empty queue available"); process.exit(1); }
+const flight = flights.find((candidate) => candidate.id === domesticFixtureId);
+if (!flight) throw new Error("Queue-flow domestic fixture was not returned by /flights");
+const firstJoin = await api("POST", "/queue/join", {
+  token: members[0].token,
+  body: { flightId: flight.id, bringingPet: true, petFeeAcknowledged: true },
+});
 console.log(`Flight under test: ${flight.fromAirport} → ${flight.toAirport} (${flight.id})`);
 
 for (const [i, m] of members.entries()) {
-  const join = i === 0 ? firstJoin : await api("POST", "/queue/join", { token: m.token, body: { flightId: flight.id } });
+  const join = i === 0 ? firstJoin : await api("POST", "/queue/join", {
+    token: m.token,
+    body: i === 2
+      ? { flightId: flight.id, bringingPet: true, petFeeAcknowledged: true }
+      : { flightId: flight.id, bringingPet: false },
+  });
   check(`member ${i + 1} joins at position ${i + 1}`, join.status === 201 && join.json.position === i + 1,
     JSON.stringify(join.json));
   check(`member ${i + 1} totalInQueue === ${i + 1}`, join.json?.totalInQueue === i + 1,
     `got ${join.json?.totalInQueue}`);
 }
+check("waiting pet entry stores the conditional acknowledgement",
+  firstJoin.json?.bringingPet === true && firstJoin.json?.petFeeAcknowledged === true,
+  JSON.stringify(firstJoin.json));
+const waitingPetTrips = await api("GET", "/trips", { token: members[0].token });
+check("waiting pet entry has no trip or applied cleaning fee",
+  !waitingPetTrips.json?.some?.((t) => t.flightId === flight.id), JSON.stringify(waitingPetTrips.json));
 
 // ── 2. Skip-the-Line join with N existing entries: atomic instant win ────────
 const vip = await makeVerifiedUser("vip");
-const vipJoin = await api("POST", "/queue/join", { token: vip.token, body: { flightId: flight.id, useLinePass: true } });
+const vipJoin = await api("POST", "/queue/join", { token: vip.token, body: { flightId: flight.id, useLinePass: true, bringingPet: true, petFeeAcknowledged: true } });
 check("pass join returns a CONFIRMED entry (atomic instant win)",
   vipJoin.status === 201 && vipJoin.json.status === "confirmed", JSON.stringify(vipJoin.json));
 check("pass join returns the created trip", vipJoin.json?.trip?.status === "upcoming", JSON.stringify(vipJoin.json?.trip));
+check("instant pet award applies the $500 cleaning fee", vipJoin.json?.trip?.cleaningFeeUsd === 500, JSON.stringify(vipJoin.json?.trip));
 check(`pass join totalInQueue === ${N} (confirmed entry is not waiting)`, vipJoin.json?.totalInQueue === N,
   `got ${vipJoin.json?.totalInQueue}`);
 const vipMe = await api("GET", "/auth/me", { token: vip.token });
-check("pass join consumed exactly one pass", vipMe.json?.linePassCount === 1, `got ${vipMe.json?.linePassCount}`);
+check("pass join consumed exactly one pass", vipMe.json?.linePassCount === 4, `got ${vipMe.json?.linePassCount}`);
 const m0Status = await api("GET", "/queue/status", { token: members[0].token });
 const m0Entry = m0Status.json?.find?.((e) => e.flightId === flight.id && e.status === "waiting");
 check("waiting queue unaffected — first member still position 1", m0Entry?.position === 1, JSON.stringify(m0Entry));
@@ -86,6 +140,8 @@ const usePass = await api("POST", `/queue/${m2Entry.id}/use-pass`, { token: memb
 check("use-pass confirms the entry atomically", usePass.status === 200 && usePass.json?.status === "confirmed",
   JSON.stringify(usePass.json));
 check("use-pass returns the created trip", usePass.json?.trip?.status === "upcoming", "");
+check("existing pet entry awarded with a pass applies the $500 cleaning fee",
+  usePass.json?.trip?.cleaningFeeUsd === 500, JSON.stringify(usePass.json?.trip));
 check("use-pass decrements pass balance", typeof usePass.json?.linePassCount === "number", "");
 
 // ── 4. Auto-confirmation at the decision moment ──────────────────────────────
@@ -108,6 +164,8 @@ check("front member is auto-confirmed by the queue engine", !!autoConfirmed, "ti
 const trips = await api("GET", "/trips", { token: members[0].token });
 check("auto-confirmation created an upcoming trip",
   trips.json?.some?.((t) => t.flightId === flight.id && t.status === "upcoming"), JSON.stringify(trips.json));
+check("automatic pet award applies the $500 cleaning fee",
+  trips.json?.some?.((t) => t.flightId === flight.id && t.cleaningFeeUsd === 500), JSON.stringify(trips.json));
 const notifs = await api("GET", "/notifications", { token: members[0].token });
 check("auto-confirmation sent a flight_confirmed notification",
   notifs.json?.some?.((n) => n.type === "flight_confirmed"), "");
@@ -128,7 +186,7 @@ if (m1Now?.status === "waiting") {
 } else {
   // m1 already auto-confirmed — exercise cancel with a fresh member instead.
   const canceller = await makeVerifiedUser("canceller");
-  const j = await api("POST", "/queue/join", { token: canceller.token, body: { flightId: flight.id } });
+    const j = await api("POST", "/queue/join", { token: canceller.token, body: { flightId: flight.id, bringingPet: false } });
   if (j.status === 201) {
     const cancel = await api("DELETE", `/queue/${j.json.id}`, { token: canceller.token });
     check("cancel succeeds", cancel.status === 200 && cancel.json?.success === true, JSON.stringify(cancel.json));
@@ -148,7 +206,7 @@ if (m1Now?.status === "waiting") {
     // Skip-the-Line join confirms atomically, filling the flight to capacity
     // without any manual confirm step.
     const probe = await api("POST", "/queue/join", {
-      token: filler.token, body: { flightId: candidate.id, passengers: candidate.seatsAvailable, useLinePass: true },
+      token: filler.token, body: { flightId: candidate.id, passengers: candidate.seatsAvailable, useLinePass: true, bringingPet: false },
     });
     if (probe.status === 201 && probe.json.status === "confirmed") { fullFlight = candidate; break; }
     if (probe.status === 201) await api("DELETE", `/queue/${probe.json.id}`, { token: filler.token });
@@ -157,7 +215,7 @@ if (m1Now?.status === "waiting") {
     const loser = await makeVerifiedUser("loser");
     const balBefore = (await api("GET", "/auth/me", { token: loser.token })).json?.linePassCount;
     const failJoin = await api("POST", "/queue/join", {
-      token: loser.token, body: { flightId: fullFlight.id, useLinePass: true },
+      token: loser.token, body: { flightId: fullFlight.id, useLinePass: true, bringingPet: false },
     });
     check("pass join on a full flight is rejected", failJoin.status === 400, JSON.stringify(failJoin.json));
     const balAfter = (await api("GET", "/auth/me", { token: loser.token })).json?.linePassCount;
@@ -170,14 +228,82 @@ if (m1Now?.status === "waiting") {
 
 // ── 6. International fee enforcement for Base members ────────────────────────
 if (intlFlight) {
-  const base = await makeVerifiedUser("intl");
-  const noFee = await api("POST", "/queue/join", { token: base.token, body: { flightId: intlFlight.id } });
+  const base = await makeVerifiedUser("intl", "base");
+  const noFee = await api("POST", "/queue/join", { token: base.token, body: { flightId: intlFlight.id, bringingPet: false } });
   check("base member rejected on intl flight without fee acceptance", noFee.status === 400, JSON.stringify(noFee.json));
   const withFee = await api("POST", "/queue/join", {
-    token: base.token, body: { flightId: intlFlight.id, acceptIntlFee: true },
+    token: base.token, body: { flightId: intlFlight.id, acceptIntlFee: true, bringingPet: false },
   });
   check("base member joins intl flight with fee accepted", withFee.status === 201 && withFee.json?.intlFeeAccepted === true,
     JSON.stringify(withFee.json));
+}
+
+// ── 6b. Pet acknowledgement and waiting lifecycle ─────────────────────────────
+{
+  const petMember = await makeVerifiedUser("pet");
+  const rejected = await api("POST", "/queue/join", {
+    token: petMember.token, body: { flightId: flight.id, bringingPet: true },
+  });
+  check("pet join is rejected without cleaning-fee acknowledgement", rejected.status === 400, JSON.stringify(rejected.json));
+
+  const petJoin = await api("POST", "/queue/join", {
+    token: petMember.token,
+    body: { flightId: flight.id, bringingPet: true, petFeeAcknowledged: true },
+  });
+  if (petJoin.status === 201) {
+    check("waiting pet entry persists choice and acknowledgement",
+      petJoin.json?.status === "waiting" && petJoin.json?.bringingPet === true && petJoin.json?.petFeeAcknowledged === true,
+      JSON.stringify(petJoin.json));
+    const waitingTrips = await api("GET", "/trips", { token: petMember.token });
+    check("waiting pet join creates no cleaning fee or trip",
+      !waitingTrips.json?.some?.((t) => t.flightId === flight.id), JSON.stringify(waitingTrips.json));
+  } else {
+    console.log("  (skipped waiting pet lifecycle — flight no longer joinable)");
+  }
+}
+
+// ── 6c. A cancellation can award the waiting pet entry immediately ────────────
+{
+  const holder = await makeVerifiedUser("seat-holder");
+  const petWaiter = await makeVerifiedUser("seat-freed-pet");
+  const holderJoin = await api("POST", "/queue/join", {
+    token: holder.token,
+    body: { flightId: seatFreedFixtureId, bringingPet: false, useLinePass: true },
+  });
+  check("seat-freed fixture starts with a confirmed booking",
+    holderJoin.status === 201 && holderJoin.json?.trip?.status === "upcoming",
+    JSON.stringify(holderJoin.json));
+  const petWaiting = await api("POST", "/queue/join", {
+    token: petWaiter.token,
+    body: { flightId: seatFreedFixtureId, bringingPet: true, petFeeAcknowledged: true },
+  });
+  check("pet member waits behind the confirmed booking",
+    petWaiting.status === 201 && petWaiting.json?.status === "waiting",
+    JSON.stringify(petWaiting.json));
+  if (petWaiting.status === 201 && holderJoin.json?.trip?.id) {
+    await pool.query(
+      `UPDATE queue_entries SET created_at = NOW() - INTERVAL '2 minutes' WHERE id = $1`,
+      [petWaiting.json.id],
+    );
+    const cancellation = await api("POST", `/trips/${holderJoin.json.trip.id}/cancel`, {
+      token: holder.token,
+    });
+    check("cancelling the booking succeeds", cancellation.status === 200, JSON.stringify(cancellation.json));
+    const promotedStatus = await api("GET", "/queue/status", { token: petWaiter.token });
+    check("seat-freed promotion confirms the waiting pet entry",
+      promotedStatus.json?.some?.((entry) => entry.id === petWaiting.json.id && entry.status === "confirmed"),
+      JSON.stringify(promotedStatus.json));
+    const promotedTrips = await api("GET", "/trips", { token: petWaiter.token });
+    check("seat-freed pet award applies the $500 cleaning fee",
+      promotedTrips.json?.some?.((trip) => trip.flightId === seatFreedFixtureId && trip.cleaningFeeUsd === 500),
+      JSON.stringify(promotedTrips.json));
+    const promotedNotifications = await api("GET", "/notifications", { token: petWaiter.token });
+    check("seat-freed pet award clearly confirms the fee",
+      promotedNotifications.json?.some?.((notification) =>
+        notification.type === "flight_confirmed" &&
+        notification.body?.includes("$500 pet cleaning fee now applies")),
+      JSON.stringify(promotedNotifications.json));
+  }
 }
 
 // ── 7. buy-pass increments the balance ───────────────────────────────────────
@@ -187,5 +313,17 @@ const buy = await api("POST", "/membership/buy-pass", { token: buyer.token });
 check("buy-pass increments balance by 1", buy.status === 200 && buy.json?.linePassCount === (before ?? 0) + 1,
   `before=${before} after=${buy.json?.linePassCount}`);
 
+await pool.query(`DELETE FROM trips WHERE flight_id IN ($1, $2, $3)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId]);
+await pool.query(`DELETE FROM queue_entries WHERE flight_id IN ($1, $2, $3)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId]);
+await pool.query(`DELETE FROM flights WHERE id IN ($1, $2, $3)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId]);
+await pool.end();
+
 if (failures > 0) { console.error(`\n${failures} check(s) FAILED`); process.exit(1); }
 console.log("\nAll queue-flow checks passed.");
+}
+
+main().catch(async (error) => {
+  console.error(error);
+  await pool.end().catch(() => {});
+  process.exit(1);
+});

@@ -16,4 +16,8 @@ export interface JoinQueueRequest {
   passengers?: number;
   /** Base member accepted the one-time international fee for this flight (demo charge — recorded, never billed). */
   acceptIntlFee?: boolean;
+  /** Whether the member will travel with a pet. */
+  bringingPet: boolean;
+  /** Member acknowledged the conditional $500 cleaning fee. */
+  petFeeAcknowledged?: boolean;
 }

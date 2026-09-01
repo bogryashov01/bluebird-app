@@ -19,7 +19,6 @@ import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPas
 const POLICY_ITEMS = [
   'Flights may be cancelled or changed due to operational requirements.',
   'Baggage restrictions apply based on aircraft type and available space.',
-  'Pet policies apply — please confirm your pet meets carrier requirements.',
 ];
 
 // "Before you join the queue" — policy acknowledgment step of the join flow.
@@ -39,8 +38,10 @@ export default function JoinQueueAcknowledgeScreen() {
   const isInternational = params.international === '1';
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
-  const [checked, setChecked] = useState([false, false, false]);
+  const [checked, setChecked] = useState([false, false]);
   const [punctualityChecked, setPunctualityChecked] = useState(false);
+  const [bringingPet, setBringingPet] = useState<boolean | null>(null);
+  const [petFeeAcknowledged, setPetFeeAcknowledged] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   // Set when the server rejects the join because the flight is gone — drives
   // the full-screen "no longer available" state instead of an inline error.
@@ -88,7 +89,11 @@ export default function JoinQueueAcknowledgeScreen() {
           queryClient.invalidateQueries({ queryKey: [`/api/flights/${flightId}/my-status`] });
           const nav = () => router.replace({
             pathname: '/flight/confirmed',
-            params: useLinePass ? { ...params, passUsed: '1' } : params,
+            params: {
+              ...params,
+              ...(useLinePass ? { passUsed: '1' } : {}),
+              petFeeUsd: bringingPet ? '500' : '0',
+            },
           });
           if (useLinePass) {
             // Let the applying animation resolve before landing on confirmed.
@@ -139,7 +144,8 @@ export default function JoinQueueAcknowledgeScreen() {
     },
   });
 
-  const allChecked = checked.every(Boolean) && punctualityChecked;
+  const petComplete = bringingPet !== null && (!bringingPet || petFeeAcknowledged);
+  const allChecked = checked.every(Boolean) && punctualityChecked && petComplete;
   const needsIntlNotice = isInternational && user?.membershipTier === 'base';
 
   const handleContinue = () => {
@@ -151,11 +157,20 @@ export default function JoinQueueAcknowledgeScreen() {
     }
     setJoinError(null);
     if (needsIntlNotice) {
-      router.push({ pathname: '/queue/intl-notice', params });
+      router.push({
+        pathname: '/queue/intl-notice',
+        params: {
+          ...params,
+          bringingPet: bringingPet ? '1' : '0',
+          petFeeAcknowledged: petFeeAcknowledged ? '1' : '0',
+        },
+      });
       return;
     }
     if (useLinePass) setOverlayPhase('applying');
-    joinMutation.mutate({ data: { flightId, useLinePass, passengers } });
+    joinMutation.mutate({
+      data: { flightId, useLinePass, passengers, bringingPet: bringingPet === true, petFeeAcknowledged },
+    });
   };
 
   const handleOverlayDone = () => {
@@ -229,6 +244,57 @@ export default function JoinQueueAcknowledgeScreen() {
           </View>
         </TouchableOpacity>
 
+        <View style={[styles.petCard, { backgroundColor: colors.surface, borderColor: bringingPet !== null ? colors.primary : colors.border }]}>
+          <View style={styles.punctualityHeader}>
+            <Feather name="heart" size={16} color={colors.primary} />
+            <Text style={[styles.punctualityTitle, { color: colors.textOnSurface }]}>Bringing a pet?</Text>
+          </View>
+          <View style={styles.choiceRow} accessibilityRole="radiogroup">
+            {([true, false] as const).map((value) => {
+              const selected = bringingPet === value;
+              return (
+                <TouchableOpacity
+                  key={String(value)}
+                  style={[
+                    styles.choiceButton,
+                    { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primary + '14' : colors.surface },
+                  ]}
+                  onPress={() => {
+                    setBringingPet(value);
+                    if (!value) setPetFeeAcknowledged(false);
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  testID={`bringing-pet-${value ? 'yes' : 'no'}`}
+                >
+                  <Text style={[styles.choiceText, { color: selected ? colors.primary : colors.textOnSurface }]}>
+                    {value ? 'Yes' : 'No'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {bringingPet && (
+            <TouchableOpacity
+              style={styles.punctualityRow}
+              onPress={() => setPetFeeAcknowledged((value) => !value)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: petFeeAcknowledged }}
+              testID="pet-fee-acknowledgement"
+            >
+              <View style={[
+                styles.checkbox,
+                { borderColor: petFeeAcknowledged ? colors.primary : colors.border, backgroundColor: petFeeAcknowledged ? colors.primary : 'transparent' },
+              ]}>
+                {petFeeAcknowledged && <Feather name="check" size={14} color={colors.primaryForeground} />}
+              </View>
+              <Text style={[styles.checkText, { color: colors.textOnSurface }]}>
+                A $500 cleaning fee will be applied to your travel if this flight is awarded to you.
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
         <Text style={[styles.legal, { color: colors.mutedForegroundLight }]}>
           By continuing, you acknowledge and accept these terms for this flight.
         </Text>
@@ -281,6 +347,15 @@ const styles = StyleSheet.create({
     borderRadius: 14, padding: 16, borderWidth: 1.5, gap: 12, marginTop: 4,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
   },
+  petCard: {
+    borderRadius: 14, padding: 16, borderWidth: 1.5, gap: 12, marginTop: 4,
+  },
+  choiceRow: { flexDirection: 'row', gap: 10 },
+  choiceButton: {
+    flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  choiceText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   punctualityHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   punctualityTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   punctualityRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },

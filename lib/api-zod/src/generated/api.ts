@@ -299,7 +299,9 @@ export const JoinQueueBody = zod.object({
   "flightId": zod.string(),
   "useLinePass": zod.boolean().optional(),
   "passengers": zod.number().min(1).max(joinQueueBodyPassengersMax).default(joinQueueBodyPassengersDefault),
-  "acceptIntlFee": zod.boolean().optional().describe('Base member accepted the one-time international fee for this flight (demo charge — recorded, never billed).\n')
+  "acceptIntlFee": zod.boolean().optional().describe('Base member accepted the one-time international fee for this flight (demo charge — recorded, never billed).\n'),
+  "bringingPet": zod.boolean().describe('Whether the member will travel with a pet.'),
+  "petFeeAcknowledged": zod.boolean().optional().describe('Member acknowledged the conditional $500 cleaning fee.')
 })
 
 export const JoinQueueResponse = zod.object({
@@ -340,7 +342,9 @@ export const JoinQueueResponse = zod.object({
   "from": zod.number().optional().describe('Previous position (moved events only).'),
   "to": zod.number().optional().describe('New position (moved events only).'),
   "at": zod.string().describe('UTC ISO-8601 timestamp of the event.')
-})).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.')
+})).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.'),
+  "bringingPet": zod.boolean(),
+  "petFeeAcknowledged": zod.boolean()
 })
 
 
@@ -385,7 +389,9 @@ export const GetQueueStatusResponseItem = zod.object({
   "from": zod.number().optional().describe('Previous position (moved events only).'),
   "to": zod.number().optional().describe('New position (moved events only).'),
   "at": zod.string().describe('UTC ISO-8601 timestamp of the event.')
-})).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.')
+})).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.'),
+  "bringingPet": zod.boolean(),
+  "petFeeAcknowledged": zod.boolean()
 })
 export const GetQueueStatusResponse = zod.array(GetQueueStatusResponseItem)
 
@@ -447,7 +453,9 @@ export const UseLinePassOnQueueEntryResponse = zod.object({
   "from": zod.number().optional().describe('Previous position (moved events only).'),
   "to": zod.number().optional().describe('New position (moved events only).'),
   "at": zod.string().describe('UTC ISO-8601 timestamp of the event.')
-})).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.')
+})).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.'),
+  "bringingPet": zod.boolean(),
+  "petFeeAcknowledged": zod.boolean()
 }).and(zod.object({
   "linePassCount": zod.number().describe('The user\'s remaining Skip the Line pass balance after use'),
   "alreadyConfirmed": zod.boolean().optional().describe('True when the entry was already confirmed before the pass was applied — no pass was consumed')
@@ -494,7 +502,8 @@ export const CancelTripResponse = zod.object({
   "createdAt": zod.string()
 }).optional(),
   "status": zod.enum(['upcoming', 'completed', 'cancelled']),
-  "bookedAt": zod.string()
+  "bookedAt": zod.string(),
+  "cleaningFeeUsd": zod.number().describe('Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero.')
 }).optional()
 })
 
@@ -531,7 +540,8 @@ export const ListTripsResponseItem = zod.object({
   "createdAt": zod.string()
 }).optional(),
   "status": zod.enum(['upcoming', 'completed', 'cancelled']),
-  "bookedAt": zod.string()
+  "bookedAt": zod.string(),
+  "cleaningFeeUsd": zod.number().describe('Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero.')
 })
 export const ListTripsResponse = zod.array(ListTripsResponseItem)
 

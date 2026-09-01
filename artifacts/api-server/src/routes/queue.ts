@@ -8,6 +8,7 @@ import { authMiddleware } from "../middlewares/auth";
 import { flightAcceptsQueueActions } from "../lib/departure";
 
 const router = Router();
+const PET_CLEANING_FEE_USD = 500;
 
 function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
@@ -28,11 +29,26 @@ const movedEventAppendSql = sql`coalesce(${queueEntriesTable.movementHistory}, '
 router.post("/join", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
 
-  const { flightId, useLinePass, passengers: passengersRaw, acceptIntlFee } = req.body;
+  const {
+    flightId,
+    useLinePass,
+    passengers: passengersRaw,
+    acceptIntlFee,
+    bringingPet,
+    petFeeAcknowledged,
+  } = req.body;
   const passengers = Math.max(1, Math.min(10, parseInt(passengersRaw ?? "1", 10) || 1));
 
   if (!flightId) {
     return res.status(400).json({ error: "Flight ID is required" });
+  }
+  if (typeof bringingPet !== "boolean") {
+    return res.status(400).json({ error: "Please choose whether you are bringing a pet" });
+  }
+  if (bringingPet && petFeeAcknowledged !== true) {
+    return res.status(400).json({
+      error: "You must acknowledge the $500 cleaning fee before joining with a pet",
+    });
   }
 
   const client = await pool.connect();
@@ -167,6 +183,8 @@ router.post("/join", authMiddleware, async (req, res) => {
         passengers,
         usedLinePass: !!useLinePass,
         intlFeeAccepted: feeApplies && !!acceptIntlFee,
+        bringingPet,
+        petFeeAcknowledged: bringingPet && petFeeAcknowledged === true,
         movementHistory: [{ type: "joined", position, at: new Date().toISOString() }],
       })
       .returning();
@@ -175,7 +193,13 @@ router.post("/join", authMiddleware, async (req, res) => {
     if (useLinePass) {
       [trip] = await txDb
         .insert(tripsTable)
-        .values({ id: makeId(), userId, flightId: String(flightId), status: "upcoming" })
+        .values({
+          id: makeId(),
+          userId,
+          flightId: String(flightId),
+          status: "upcoming",
+          cleaningFeeUsd: bringingPet ? PET_CLEANING_FEE_USD : 0,
+        })
         .returning();
     }
 
@@ -185,7 +209,7 @@ router.post("/join", authMiddleware, async (req, res) => {
       userId,
       title: useLinePass ? "Flight confirmed!" : "Added to queue",
       body: useLinePass
-        ? `Skip the Line pass used — your seat on ${flight.fromCity} → ${flight.toCity} is confirmed.`
+        ? `Skip the Line pass used — your seat on ${flight.fromCity} → ${flight.toCity} is confirmed.${bringingPet ? ` The $${PET_CLEANING_FEE_USD} pet cleaning fee now applies.` : ""}`
         : `You're #${position} in the queue for ${flight.fromCity} → ${flight.toCity}`,
       type: useLinePass ? "flight_confirmed" : "queue_update",
     });
@@ -524,7 +548,13 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
     // 6. Create the upcoming trip
     const [trip] = await txDb
       .insert(tripsTable)
-      .values({ id: makeId(), userId, flightId: entry.flightId, status: "upcoming" })
+      .values({
+        id: makeId(),
+        userId,
+        flightId: entry.flightId,
+        status: "upcoming",
+        cleaningFeeUsd: entry.bringingPet ? PET_CLEANING_FEE_USD : 0,
+      })
       .returning();
 
     // 7. Notify the member
@@ -533,7 +563,7 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
       userId,
       title: "Flight confirmed!",
       body: flight
-        ? `Skip the Line pass used — your seat on ${flight.fromCity} → ${flight.toCity} is confirmed.`
+        ? `Skip the Line pass used — your seat on ${flight.fromCity} → ${flight.toCity} is confirmed.${entry.bringingPet ? ` The $${PET_CLEANING_FEE_USD} pet cleaning fee now applies.` : ""}`
         : "Skip the Line pass used — your seat is confirmed.",
       type: "flight_confirmed",
     });

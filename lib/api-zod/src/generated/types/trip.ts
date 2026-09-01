@@ -14,4 +14,6 @@ export interface Trip {
   flight?: Flight;
   status: TripStatus;
   bookedAt: string;
+  /** Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero. */
+  cleaningFeeUsd: number;
 }

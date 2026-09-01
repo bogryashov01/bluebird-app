@@ -12,7 +12,7 @@
     "test:migration-flow": "node scripts/migration-flow.integration.mjs",
     "test:airport-catalog": "pnpm exec esbuild scripts/airport-catalog.integration.mjs --bundle --platform=node --format=esm --outfile=scripts/.airport-catalog.test.mjs && node scripts/.airport-catalog.test.mjs; status=$?; rm -f scripts/.airport-catalog.test.mjs; exit $status",
     "test:sms-provider": "node scripts/sms-provider.integration.mjs",
-    "test:queue-flow": "node scripts/queue-flow.integration.mjs",
+    "test:queue-flow": "pnpm exec esbuild scripts/queue-flow.integration.mjs --bundle --platform=node --format=cjs --outfile=scripts/.queue-flow.test.cjs && node scripts/.queue-flow.test.cjs; status=$?; rm -f scripts/.queue-flow.test.cjs; exit $status",
     "test:seed-restoration": "pnpm exec esbuild scripts/seed-restoration.integration.mjs --bundle --platform=node --format=cjs --outfile=scripts/.seed-restoration.test.cjs && NODE_ENV=production node scripts/.seed-restoration.test.cjs; status=$?; rm -f scripts/.seed-restoration.test.cjs; exit $status"
   },
   "dependencies": {

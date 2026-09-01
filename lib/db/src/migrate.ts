@@ -193,6 +193,8 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS passengers INTEGER NOT NULL DEFAULT 1;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS front_notified_at TIMESTAMPTZ;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS intl_fee_accepted BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS bringing_pet BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS pet_fee_acknowledged BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS movement_history JSONB NOT NULL DEFAULT '[]'::jsonb;
 
     CREATE TABLE IF NOT EXISTS trips (
@@ -200,8 +202,10 @@ export async function ensureSchema(): Promise<void> {
       user_id    TEXT        NOT NULL REFERENCES users(id),
       flight_id  TEXT        NOT NULL REFERENCES flights(id),
       status     TEXT        NOT NULL DEFAULT 'upcoming',
+      cleaning_fee_usd INTEGER NOT NULL DEFAULT 0,
       booked_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS cleaning_fee_usd INTEGER NOT NULL DEFAULT 0;
 
     CREATE TABLE IF NOT EXISTS revoked_tokens (
       token_hash TEXT        PRIMARY KEY,

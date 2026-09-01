@@ -27,7 +27,7 @@ export default function SkipLinePassScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
-    entryId?: string; position?: string;
+        entryId?: string; position?: string; bringingPet?: string;
     from?: string; to?: string; fromCity?: string; toCity?: string;
     departureDate?: string; departureTime?: string; duration?: string;
     aircraftType?: string; flightId?: string;
@@ -56,7 +56,7 @@ export default function SkipLinePassScreen() {
     }
     router.replace({
       pathname: '/flight/confirmed',
-      params: { ...params, passUsed: '1' },
+      params: { ...params, passUsed: '1', petFeeUsd: params.bringingPet === '1' ? '500' : '0' },
     });
   };
 

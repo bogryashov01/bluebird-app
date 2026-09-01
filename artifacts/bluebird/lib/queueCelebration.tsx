@@ -62,6 +62,7 @@ export function observeQueueEntries(entries: QueueEntry[], queryClient: QueryCli
       duration: flight?.duration ?? '',
       aircraftType: flight?.aircraftType ?? '',
       flightId: flipped.flightId ?? '',
+      petFeeUsd: flipped.bringingPet ? '500' : '0',
     },
   });
 }

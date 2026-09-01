@@ -234,6 +234,10 @@ export interface JoinQueueRequest {
   passengers?: number;
   /** Base member accepted the one-time international fee for this flight (demo charge — recorded, never billed). */
   acceptIntlFee?: boolean;
+  /** Whether the member will travel with a pet. */
+  bringingPet: boolean;
+  /** Member acknowledged the conditional $500 cleaning fee. */
+  petFeeAcknowledged?: boolean;
 }
 
 export interface CancelQueueResponse {
@@ -280,6 +284,8 @@ export interface QueueEntry {
   createdAt: string;
   /** Append-only movement log — a 'joined' event recorded at insert time plus a 'moved' event for each position improvement. */
   movementHistory?: QueueMovementEvent[];
+  bringingPet: boolean;
+  petFeeAcknowledged: boolean;
 }
 
 export type UseLinePassResponse = QueueEntry & {
@@ -321,6 +327,8 @@ export interface Trip {
   flight?: Flight;
   status: TripStatus;
   bookedAt: string;
+  /** Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero. */
+  cleaningFeeUsd: number;
 }
 
 export interface CancelBookingResponse {

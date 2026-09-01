@@ -38,6 +38,7 @@ const FREE_SEAT_PROBABILITY = 0.2; // chance per tick a full flight frees a seat
 // never pass through this path. The mobile queue-status screen's "Decision
 // in" countdown mirrors this value; keep them in sync.
 export const REAL_MEMBER_MIN_WAIT_MS = 60_000;
+const PET_CLEANING_FEE_USD = 500;
 
 export const SIM_USER_PREFIX = "sim-user-";
 
@@ -256,12 +257,13 @@ async function advanceFlightQueue(
         userId: front.userId,
         flightId,
         status: "upcoming",
+        cleaningFeeUsd: front.bringingPet ? PET_CLEANING_FEE_USD : 0,
       });
       await txDb.insert(notificationsTable).values({
         id: makeId(),
         userId: front.userId,
         title: "Flight confirmed! ✈️",
-        body: `Your seat on ${flight.fromCity} → ${flight.toCity} is confirmed — no action needed. See you on board.`,
+        body: `Your seat on ${flight.fromCity} → ${flight.toCity} is confirmed — no action needed.${front.bringingPet ? ` The $${PET_CLEANING_FEE_USD} pet cleaning fee now applies.` : " See you on board."}`,
         type: "flight_confirmed",
       });
       await notifyNewFront(txDb, flightId, flight);
@@ -416,12 +418,13 @@ export async function promoteFrontAfterSeatFreed(
     userId: front.userId,
     flightId,
     status: "upcoming",
+    cleaningFeeUsd: front.bringingPet ? PET_CLEANING_FEE_USD : 0,
   });
   await txDb.insert(notificationsTable).values({
     id: makeId(),
     userId: front.userId,
     title: "Flight confirmed! ✈️",
-    body: `Your seat on ${flight.fromCity} → ${flight.toCity} is confirmed — no action needed. See you on board.`,
+    body: `Your seat on ${flight.fromCity} → ${flight.toCity} is confirmed — no action needed.${front.bringingPet ? ` The $${PET_CLEANING_FEE_USD} pet cleaning fee now applies.` : " See you on board."}`,
     type: "flight_confirmed",
   });
   await notifyNewFront(txDb, flightId, flight);

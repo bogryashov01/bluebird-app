@@ -37,9 +37,10 @@ export default function FlightConfirmedScreen() {
   const params = useLocalSearchParams<{
     from?: string; to?: string; fromCity?: string; toCity?: string;
     departureTime?: string; duration?: string; aircraftType?: string;
-    departureDate?: string; passUsed?: string; flightId?: string;
+    departureDate?: string; passUsed?: string; flightId?: string; petFeeUsd?: string;
   }>();
   const passUsed = params.passUsed === '1';
+  const petFeeApplies = params.petFeeUsd === '500';
   const [celebrating, setCelebrating] = React.useState(passUsed);
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -136,6 +137,15 @@ export default function FlightConfirmedScreen() {
           ))}
         </View>
 
+        {petFeeApplies && (
+          <View style={[styles.feeNotice, { backgroundColor: colors.primary + '1F', borderColor: colors.primary + '59' }]}>
+            <Feather name="info" size={16} color={colors.primary} />
+            <Text style={[styles.feeNoticeText, { color: colors.textOnBrand }]}>
+              Your flight was awarded. The $500 pet cleaning fee now applies to this trip.
+            </Text>
+          </View>
+        )}
+
         {/* Actions */}
         <View style={styles.actionRow}>
           {[
@@ -174,6 +184,11 @@ const styles = StyleSheet.create({
   timelineTime: { fontFamily: 'Inter_500Medium', fontSize: 13, marginTop: 2 },
   timelineLine: { flex: 1, height: StyleSheet.hairlineWidth },
   nextSteps: { alignSelf: 'stretch', gap: 10, borderRadius: 16, padding: 16 },
+  feeNotice: {
+    alignSelf: 'stretch', flexDirection: 'row', gap: 10, alignItems: 'flex-start',
+    borderRadius: 14, borderWidth: 1, padding: 14,
+  },
+  feeNoticeText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 13.5, lineHeight: 19 },
   nextStepsTitle: { fontFamily: 'Inter_700Bold', fontSize: 14, marginBottom: 2 },
   stepRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   stepText: { fontFamily: 'Inter_400Regular', fontSize: 14 },

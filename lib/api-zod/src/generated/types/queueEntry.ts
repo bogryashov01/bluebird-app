@@ -19,4 +19,6 @@ export interface QueueEntry {
   createdAt: string;
   /** Append-only movement log — a 'joined' event recorded at insert time plus a 'moved' event for each position improvement. */
   movementHistory?: QueueMovementEvent[];
+  bringingPet: boolean;
+  petFeeAcknowledged: boolean;
 }
