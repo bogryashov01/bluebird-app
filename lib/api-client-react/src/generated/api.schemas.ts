@@ -47,10 +47,36 @@ export interface ConciergeHistoryMessage {
   role: ConciergeHistoryMessageRole;
   content: string;
   createdAt: string;
+  requiresHumanFollowUp: boolean;
+  callbackRequested: boolean;
 }
 
 export interface ConciergeReply {
   reply: string;
+  assistantMessageId: string;
+  requiresHumanFollowUp: boolean;
+}
+
+export interface ConciergeCallbackInput {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  assistantMessageId: string;
+}
+
+export type ConciergeCallbackConfirmationStatus = typeof ConciergeCallbackConfirmationStatus[keyof typeof ConciergeCallbackConfirmationStatus];
+
+
+export const ConciergeCallbackConfirmationStatus = {
+  requested: 'requested',
+} as const;
+
+export interface ConciergeCallbackConfirmation {
+  id: string;
+  status: ConciergeCallbackConfirmationStatus;
+  created: boolean;
+  message: string;
 }
 
 export interface ErrorResponse {

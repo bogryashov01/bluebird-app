@@ -12,4 +12,6 @@ export interface ConciergeHistoryMessage {
   role: ConciergeHistoryMessageRole;
   content: string;
   createdAt: string;
+  requiresHumanFollowUp: boolean;
+  callbackRequested: boolean;
 }

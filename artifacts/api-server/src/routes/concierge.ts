@@ -1,27 +1,29 @@
 import { Router } from "express";
 import OpenAI from "openai";
-import { ConciergeChatBody } from "@workspace/api-zod";
+import { ConciergeChatBody, RequestConciergeCallbackBody } from "@workspace/api-zod";
 import { db } from "@workspace/db";
-import { usersTable, conciergeMessagesTable } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { usersTable, conciergeMessagesTable, conciergeCallbackRequestsTable } from "@workspace/db/schema";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { authMiddleware } from "../middlewares/auth";
-import { getMockReply, SYSTEM_PROMPT } from "../lib/concierge-guidance";
+import { getMockReply, parseModelReply, SYSTEM_PROMPT } from "../lib/concierge-guidance";
 
 const router = Router();
 
-// Persist a user/assistant exchange. Best-effort: a storage hiccup must not
-// break the chat reply the member is waiting on.
-async function persistExchange(userId: string, userText: string, assistantText: string) {
+// Persist a user/assistant exchange before returning it so any escalation action
+// always references durable conversation context.
+async function persistExchange(userId: string, userText: string, assistantText: string, requiresHumanFollowUp: boolean) {
+  const assistantMessageId = randomUUID();
   try {
     // Stagger timestamps so the user message always sorts before the reply.
     const now = Date.now();
     await db.insert(conciergeMessagesTable).values([
       { id: randomUUID(), userId, role: "user", content: userText, createdAt: new Date(now) },
-      { id: randomUUID(), userId, role: "assistant", content: assistantText, createdAt: new Date(now + 1) },
+      { id: assistantMessageId, userId, role: "assistant", content: assistantText, requiresHumanFollowUp, createdAt: new Date(now + 1) },
     ]);
-  } catch {
-    // best-effort
+    return assistantMessageId;
+  } catch (err) {
+    throw err;
   }
 }
 
@@ -60,9 +62,11 @@ router.post("/chat", authMiddleware, async (req, res) => {
   const ai = getClient();
   if (!ai) {
     // No AI key configured — serve mock replies so the concierge stays usable.
-    const reply = getMockReply(lastUserMessage?.content ?? "");
-    if (lastUserMessage) await persistExchange(userId, lastUserMessage.content, reply);
-    return res.json({ reply });
+    const guided = getMockReply(lastUserMessage?.content ?? "");
+    const assistantMessageId = lastUserMessage
+      ? await persistExchange(userId, lastUserMessage.content, guided.reply, guided.requiresHumanFollowUp)
+      : randomUUID();
+    return res.json({ ...guided, assistantMessageId });
   }
 
   // Personalize with the member's first name and tier when available.
@@ -87,12 +91,15 @@ router.post("/chat", authMiddleware, async (req, res) => {
         ...parsed.data.messages.map((m) => ({ role: m.role, content: m.content })),
       ],
     });
-    const reply = completion.choices[0]?.message?.content?.trim();
-    if (!reply) {
+    const rawReply = completion.choices[0]?.message?.content?.trim();
+    if (!rawReply) {
       return res.status(503).json({ error: "The concierge could not generate a reply" });
     }
-    if (lastUserMessage) await persistExchange(userId, lastUserMessage.content, reply);
-    return res.json({ reply });
+    const guided = parseModelReply(rawReply);
+    const assistantMessageId = lastUserMessage
+      ? await persistExchange(userId, lastUserMessage.content, guided.reply, guided.requiresHumanFollowUp)
+      : randomUUID();
+    return res.json({ ...guided, assistantMessageId });
   } catch (err) {
     req.log?.error?.({ err }, "concierge chat failed");
     return res.status(503).json({ error: "The concierge is temporarily unavailable" });
@@ -111,6 +118,10 @@ router.get("/history", authMiddleware, async (req, res) => {
     .where(eq(conciergeMessagesTable.userId, userId))
     .orderBy(desc(conciergeMessagesTable.createdAt))
     .limit(limit);
+  const callbacks = await db.select({ assistantMessageId: conciergeCallbackRequestsTable.assistantMessageId })
+    .from(conciergeCallbackRequestsTable)
+    .where(eq(conciergeCallbackRequestsTable.userId, userId));
+  const callbackMessageIds = new Set(callbacks.map((callback) => callback.assistantMessageId));
 
   return res.json(
     rows.reverse().map((m) => ({
@@ -118,8 +129,61 @@ router.get("/history", authMiddleware, async (req, res) => {
       role: m.role,
       content: m.content,
       createdAt: m.createdAt.toISOString(),
+      requiresHumanFollowUp: m.requiresHumanFollowUp,
+      callbackRequested: callbackMessageIds.has(m.id),
     })),
   );
+});
+
+router.post("/callback-requests", authMiddleware, async (req, res) => {
+  const parsed = RequestConciergeCallbackBody.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid callback request" });
+  const userId = (req as any).userId as string;
+  const [message] = await db.select().from(conciergeMessagesTable).where(and(
+    eq(conciergeMessagesTable.id, parsed.data.assistantMessageId),
+    eq(conciergeMessagesTable.userId, userId),
+    eq(conciergeMessagesTable.role, "assistant"),
+    eq(conciergeMessagesTable.requiresHumanFollowUp, true),
+  ));
+  if (!message) return res.status(404).json({ error: "Escalated concierge reply not found" });
+
+  const existing = await db.select().from(conciergeCallbackRequestsTable).where(and(
+    eq(conciergeCallbackRequestsTable.userId, userId),
+    eq(conciergeCallbackRequestsTable.assistantMessageId, message.id),
+  ));
+  if (existing[0]) return res.json({ id: existing[0].id, status: "requested", created: false, message: "Your callback request is already with our Concierge team." });
+
+  // Anchor the context query inside PostgreSQL so timestamp precision is
+  // preserved and older replies remain requestable after any number of newer
+  // messages. ID is the deterministic tie-breaker for equal timestamps.
+  const contextRows = (await db.select().from(conciergeMessagesTable)
+    .where(and(
+      eq(conciergeMessagesTable.userId, userId),
+      sql`(
+        ${conciergeMessagesTable.createdAt} < (
+          SELECT created_at FROM concierge_messages WHERE id = ${message.id}
+        )
+        OR (
+          ${conciergeMessagesTable.createdAt} = (
+            SELECT created_at FROM concierge_messages WHERE id = ${message.id}
+          )
+          AND ${conciergeMessagesTable.id} <= ${message.id}
+        )
+      )`,
+    ))
+    .orderBy(desc(conciergeMessagesTable.createdAt), desc(conciergeMessagesTable.id))
+    .limit(20)).reverse();
+  const id = randomUUID();
+  await db.insert(conciergeCallbackRequestsTable).values({
+    id, userId, assistantMessageId: message.id,
+    conversationContext: contextRows.map((row) => ({ role: row.role, content: row.content })),
+  }).onConflictDoNothing();
+  const [stored] = await db.select().from(conciergeCallbackRequestsTable).where(and(
+    eq(conciergeCallbackRequestsTable.userId, userId),
+    eq(conciergeCallbackRequestsTable.assistantMessageId, message.id),
+  ));
+  if (!stored) return res.status(503).json({ error: "The callback request could not be saved" });
+  return res.json({ id: stored.id, status: "requested", created: stored.id === id, message: "Your callback request is with our Concierge team. A team member will contact you." });
 });
 
 export default router;

@@ -1,15 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TextInput, ScrollView, Linking,
-  TouchableOpacity, Platform, ActivityIndicator, Alert,
+  View, Text, StyleSheet, FlatList, TextInput, ScrollView,
+  TouchableOpacity, Platform, ActivityIndicator,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
-import { useConciergeChat, useGetConciergeHistory } from '@workspace/api-client-react';
+import { useConciergeChat, useGetConciergeHistory, useRequestConciergeCallback } from '@workspace/api-client-react';
 import * as Haptics from 'expo-haptics';
 
 interface Message {
@@ -18,18 +17,19 @@ interface Message {
   text: string;
   timestamp: Date;
   isError?: boolean;
+  requiresHumanFollowUp?: boolean;
+  callbackState?: 'pending' | 'success' | 'error';
 }
 
 // How many prior messages to send as conversation context (API allows 40).
 const HISTORY_LIMIT = 20;
-
-const CONCIERGE_PHONE = '+18005550137';
 
 const TOPICS = [
   { label: 'Baggage', question: 'What is the baggage policy?' },
   { label: 'Pet Policy', question: 'What is the pet policy?' },
   { label: 'Airport Directions', question: 'How do I get directions to my departure airport?' },
   { label: 'FBOs', question: 'What are FBOs and which ones do you use?' },
+  { label: 'Flight Questions', question: 'What should I know about Bluebird flights?' },
   { label: 'Membership', question: 'Tell me about membership tiers.' },
   { label: 'Queue System', question: 'How does the queue system work?' },
 ];
@@ -46,8 +46,6 @@ export default function ConciergeScreen() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  // Web-only inline fallback: Alert buttons are no-ops on react-native-web.
-  const [showCallFallback, setShowCallFallback] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
 
@@ -63,6 +61,8 @@ export default function ConciergeScreen() {
       role: m.role,
       text: m.content,
       timestamp: new Date(m.createdAt),
+      requiresHumanFollowUp: m.requiresHumanFollowUp,
+      callbackState: m.callbackRequested ? 'success' : undefined,
     }));
     if (past.length > 0) {
       setMessages(prev => [...past, ...prev]);
@@ -71,7 +71,7 @@ export default function ConciergeScreen() {
         {
           id: 'welcome',
           role: 'assistant' as const,
-          text: `Hi ${user?.name?.split(' ')[0] ?? 'there'} — I'm your AI Concierge. Ask me about baggage, pets, FBOs, airports or your membership.`,
+          text: `Hi ${user?.name?.split(' ')[0] ?? 'there'} — I'm your AI Concierge. Ask me about baggage, pets, FBOs, directions, flights, membership, or queues.`,
           timestamp: new Date(),
         },
         ...prev,
@@ -80,6 +80,7 @@ export default function ConciergeScreen() {
   }, [historyQuery.isSuccess, historyQuery.data, user?.name]);
 
   const chatMutation = useConciergeChat();
+  const callbackMutation = useRequestConciergeCallback();
   const isTyping = chatMutation.isPending;
 
   const sendMessage = async (rawText: string) => {
@@ -99,7 +100,13 @@ export default function ConciergeScreen() {
 
     try {
       const result = await chatMutation.mutateAsync({ data: { messages: history } });
-      const assistantMsg: Message = { id: makeId(), role: 'assistant', text: result.reply, timestamp: new Date() };
+      const assistantMsg: Message = {
+        id: result.assistantMessageId,
+        role: 'assistant',
+        text: result.reply,
+        timestamp: new Date(),
+        requiresHumanFollowUp: result.requiresHumanFollowUp,
+      };
       setMessages(prev => [...prev, assistantMsg]);
     } catch {
       const errorMsg: Message = {
@@ -119,25 +126,17 @@ export default function ConciergeScreen() {
     sendMessage(input);
   };
 
-  const handleCallConcierge = () => {
+  const requestCallback = async (messageId: string) => {
+    const current = messages.find((message) => message.id === messageId);
+    if (!current?.requiresHumanFollowUp || current.callbackState === 'pending' || current.callbackState === 'success') return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    if (Platform.OS === 'web') {
-      // Alert.alert buttons are no-ops on react-native-web — show an inline
-      // fallback with a tappable phone link instead.
-      setShowCallFallback(true);
-      return;
+    setMessages((prev) => prev.map((message) => message.id === messageId ? { ...message, callbackState: 'pending' } : message));
+    try {
+      await callbackMutation.mutateAsync({ data: { assistantMessageId: messageId } });
+      setMessages((prev) => prev.map((message) => message.id === messageId ? { ...message, callbackState: 'success' } : message));
+    } catch {
+      setMessages((prev) => prev.map((message) => message.id === messageId ? { ...message, callbackState: 'error' } : message));
     }
-    Alert.alert(
-      'Call Concierge',
-      'Connect with a live concierge now?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Call',
-          onPress: () => Linking.openURL(`tel:${CONCIERGE_PHONE}`).catch(() => {}),
-        },
-      ],
-    );
   };
 
   const assistantBubbleBg = colors.scheme === 'dark' ? colors.secondary : colors.muted;
@@ -164,19 +163,52 @@ export default function ConciergeScreen() {
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         renderItem={({ item }) => (
           <View style={[styles.messageRow, item.role === 'user' && styles.messageRowUser]}>
-            <View style={[
-              styles.bubble,
-              item.role === 'user'
-                ? [styles.bubbleUser, { backgroundColor: colors.primary }]
-                : [styles.bubbleAssistant, { backgroundColor: assistantBubbleBg }],
-            ]}>
-              <Text style={[
-                styles.bubbleText,
-                {
-                  color: item.role === 'user' ? colors.primaryForeground : colors.foreground,
-                  fontFamily: 'Inter_400Regular',
-                },
-              ]}>{item.text}</Text>
+            <View style={styles.messageBlock}>
+              <View style={[
+                styles.bubble,
+                item.role === 'user'
+                  ? [styles.bubbleUser, { backgroundColor: colors.primary }]
+                  : [styles.bubbleAssistant, { backgroundColor: assistantBubbleBg }],
+              ]}>
+                <Text style={[
+                  styles.bubbleText,
+                  {
+                    color: item.role === 'user' ? colors.primaryForeground : colors.foreground,
+                    fontFamily: 'Inter_400Regular',
+                  },
+                ]}>{item.text}</Text>
+              </View>
+              {item.role === 'assistant' && item.requiresHumanFollowUp && (
+                <View style={styles.callbackArea}>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Request a callback from the Concierge team"
+                    style={[
+                      styles.callbackButton,
+                      { backgroundColor: colors.primary },
+                      (item.callbackState === 'pending' || item.callbackState === 'success') && styles.callbackButtonDisabled,
+                    ]}
+                    disabled={item.callbackState === 'pending' || item.callbackState === 'success'}
+                    onPress={() => requestCallback(item.id)}
+                  >
+                    {item.callbackState === 'pending'
+                      ? <ActivityIndicator size="small" color={colors.primaryForeground} />
+                      : <Text style={[styles.callbackButtonText, { color: colors.primaryForeground, fontFamily: 'Inter_600SemiBold' }]}>
+                          {item.callbackState === 'success' ? 'Callback Requested' : item.callbackState === 'error' ? 'Retry Callback Request' : 'Request a Callback'}
+                        </Text>}
+                  </TouchableOpacity>
+                  {item.callbackState === 'success' && (
+                    <Text accessibilityRole="alert" style={[styles.callbackStatus, { color: colors.success }]}>
+                      Your request is with our Concierge team. A team member will contact you.
+                    </Text>
+                  )}
+                  {item.callbackState === 'error' && (
+                    <Text accessibilityRole="alert" style={[styles.callbackStatus, { color: colors.destructive }]}>
+                      We couldn’t submit your request. Please try again.
+                    </Text>
+                  )}
+                </View>
+              )}
             </View>
           </View>
         )}
@@ -211,47 +243,6 @@ export default function ConciergeScreen() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-
-            {/* Escalation banner */}
-            <LinearGradient
-              colors={[colors.backgroundMid, colors.primary]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.banner}
-            >
-              <View style={styles.bannerTextBlock}>
-                <Text style={[styles.bannerTitle, { color: colors.textOnBrand, fontFamily: 'Inter_600SemiBold' }]}>
-                  Need a human?
-                </Text>
-                <Text style={[styles.bannerSubtitle, { color: 'rgba(255,255,255,0.75)', fontFamily: 'Inter_400Regular' }]}>
-                  Escalate to a live concierge anytime.
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.bannerBtn}
-                onPress={handleCallConcierge}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.bannerBtnText, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>
-                  Call Concierge
-                </Text>
-              </TouchableOpacity>
-            </LinearGradient>
-
-            {showCallFallback && (
-              <View style={[styles.callFallback, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Feather name="phone" size={14} color={colors.primary} />
-                <Text style={[styles.callFallbackText, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}>
-                  Reach a live concierge at{' '}
-                  <Text
-                    style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold' }}
-                    onPress={() => Linking.openURL(`tel:${CONCIERGE_PHONE}`).catch(() => {})}
-                  >
-                    {CONCIERGE_PHONE}
-                  </Text>
-                </Text>
-              </View>
-            )}
           </View>
         }
       />
@@ -289,7 +280,8 @@ const styles = StyleSheet.create({
   messageList: { padding: 16, gap: 12 },
   messageRow: { flexDirection: 'row' },
   messageRowUser: { flexDirection: 'row-reverse' },
-  bubble: { maxWidth: '82%', paddingHorizontal: 14, paddingVertical: 11 },
+  messageBlock: { maxWidth: '82%', gap: 8 },
+  bubble: { paddingHorizontal: 14, paddingVertical: 11 },
   bubbleAssistant: {
     borderRadius: 18,
     borderBottomLeftRadius: 6,
@@ -310,34 +302,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   chipText: { fontSize: 13 },
-  banner: {
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  bannerTextBlock: { flex: 1 },
-  bannerTitle: { fontSize: 14.5 },
-  bannerSubtitle: { fontSize: 12, marginTop: 2, lineHeight: 16 },
-  bannerBtn: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  bannerBtnText: { fontSize: 13 },
-  callFallback: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  callFallbackText: { fontSize: 13, flex: 1 },
+  callbackArea: { gap: 6, alignItems: 'flex-start' },
+  callbackButton: { minHeight: 42, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 10, justifyContent: 'center' },
+  callbackButtonDisabled: { opacity: 0.7 },
+  callbackButtonText: { fontSize: 13 },
+  callbackStatus: { fontSize: 12, lineHeight: 17, fontFamily: 'Inter_400Regular' },
   inputBar: { flexDirection: 'row', gap: 10, paddingHorizontal: 12, paddingTop: 12, borderTopWidth: 1 },
   inputField: {
     flex: 1, height: 44, borderRadius: 22,

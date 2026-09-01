@@ -28,6 +28,8 @@ import type {
   CancelQueueResponse,
   ChangeMembershipRequest,
   CompleteRegistrationRequest,
+  ConciergeCallbackConfirmation,
+  ConciergeCallbackInput,
   ConciergeChatRequest,
   ConciergeHistoryMessage,
   ConciergeReply,
@@ -2305,3 +2307,80 @@ export function useGetConciergeHistory<TData = Awaited<ReturnType<typeof getConc
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
+
+
+export const getRequestConciergeCallbackUrl = () => {
+
+
+
+
+  return `/api/concierge/callback-requests`
+}
+
+/**
+ * @summary Request human follow-up for an escalated concierge reply
+ */
+export const requestConciergeCallback = async (conciergeCallbackInput: ConciergeCallbackInput, options?: Parameters<typeof customFetch>[1]): Promise<ConciergeCallbackConfirmation> => {
+
+  return customFetch<ConciergeCallbackConfirmation>(getRequestConciergeCallbackUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(conciergeCallbackInput)
+  }
+);}
+
+
+
+
+
+export const getRequestConciergeCallbackMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestConciergeCallback>>, TError,{data: BodyType<ConciergeCallbackInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestConciergeCallback>>, TError,{data: BodyType<ConciergeCallbackInput>}, TContext> => {
+
+const mutationKey = ['requestConciergeCallback'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestConciergeCallback>>, {data: BodyType<ConciergeCallbackInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestConciergeCallback(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestConciergeCallbackMutationResult = NonNullable<Awaited<ReturnType<typeof requestConciergeCallback>>>
+    export type RequestConciergeCallbackMutationBody = BodyType<ConciergeCallbackInput>
+    export type RequestConciergeCallbackMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Request human follow-up for an escalated concierge reply
+ */
+export const useRequestConciergeCallback = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestConciergeCallback>>, TError,{data: BodyType<ConciergeCallbackInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestConciergeCallback>>,
+        TError,
+        {data: BodyType<ConciergeCallbackInput>},
+        TContext
+      > => {
+      return useMutation(getRequestConciergeCallbackMutationOptions(options));
+    }

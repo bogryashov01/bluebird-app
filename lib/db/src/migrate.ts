@@ -249,7 +249,19 @@ export async function ensureSchema(): Promise<void> {
       user_id    TEXT        NOT NULL REFERENCES users(id),
       role       TEXT        NOT NULL,
       content    TEXT        NOT NULL,
+      requires_human_follow_up BOOLEAN NOT NULL DEFAULT false,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE concierge_messages ADD COLUMN IF NOT EXISTS requires_human_follow_up BOOLEAN NOT NULL DEFAULT false;
+
+    CREATE TABLE IF NOT EXISTS concierge_callback_requests (
+      id                   TEXT        PRIMARY KEY,
+      user_id              TEXT        NOT NULL REFERENCES users(id),
+      assistant_message_id TEXT        NOT NULL REFERENCES concierge_messages(id),
+      conversation_context JSONB       NOT NULL,
+      status               TEXT        NOT NULL DEFAULT 'requested',
+      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT concierge_callback_user_message_unique UNIQUE (user_id, assistant_message_id)
     );
 
     CREATE TABLE IF NOT EXISTS notifications (

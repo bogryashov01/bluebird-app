@@ -1,8 +1,10 @@
 export const BAGGAGE_POLICY =
   "The baggage allowance is 25 kg per passenger, subject to aircraft capacity and operational limitations.";
 
+export type GuidedReply = { reply: string; requiresHumanFollowUp: boolean };
+
 export const MOCK_RESPONSES: Record<string, string> = {
-  default: "I'm here to help with your Bluebird experience. Ask me about flights, membership, or anything else!",
+  default: "I can help with baggage, pets, FBO information, airport directions, flights, membership, and queue questions. What would you like to know?",
   flight: "Empty leg flights are repositioning trips available to Bluebird members at no cost. Browse the Discover tab to see current available flights and join a queue.",
   membership: "Bluebird offers Base, Plus, and Concierge tiers. Plus members ($995/month) get 5 Skip the Line passes per month, while Concierge members enjoy unlimited passes and 24/7 AI support.",
   queue: "The queue system lets you request a seat on any available empty leg flight. Skip the Line passes move you to the front of the queue instantly.",
@@ -11,16 +13,35 @@ export const MOCK_RESPONSES: Record<string, string> = {
   international: "International empty leg flights require a valid passport. Bluebird currently operates domestic US routes, with international access available on Plus membership.",
   luggage: BAGGAGE_POLICY,
   baggage: BAGGAGE_POLICY,
+  pet: "Pets may travel when the aircraft and operator permit it. Add your pet when joining the flight queue so any applicable cleaning fee and requirements are shown before you confirm.",
+  fbo: "An FBO is the private terminal used for your departure. Check the flight details for the departure FBO; the exact location and arrival instructions appear there when available.",
+  direction: "Open your flight details and use the listed departure airport and FBO for directions. Confirm the FBO rather than navigating only to the main commercial terminal.",
   cancel: "Cancellations: You can leave a queue at any time without penalty. Skip the Line passes are not refunded if a flight is cancelled by the operator.",
   help: "I can help with: flight information, queue system, membership perks, referrals, luggage policies, and general aviation questions. What would you like to know?",
 };
 
-export function getMockReply(text: string): string {
+export function getMockReply(text: string): GuidedReply {
   const lower = text.toLowerCase();
-  for (const [key, response] of Object.entries(MOCK_RESPONSES)) {
-    if (key !== "default" && lower.includes(key)) return response;
+  const needsHuman = /\b(safety|emergency|danger|medical|stranded|charged twice|billing dispute|account locked|custom flight|complaint)\b/i.test(lower);
+  if (needsHuman) {
+    return {
+      reply: "This needs personal follow-up from our Concierge team. A Concierge team member will contact you after you request a callback below.",
+      requiresHumanFollowUp: true,
+    };
   }
-  return MOCK_RESPONSES.default;
+  for (const [key, response] of Object.entries(MOCK_RESPONSES)) {
+    if (key !== "default" && lower.includes(key)) return { reply: response, requiresHumanFollowUp: false };
+  }
+  return { reply: MOCK_RESPONSES.default, requiresHumanFollowUp: false };
+}
+
+export function parseModelReply(raw: string): GuidedReply {
+  const lines = raw.trim().split("\n");
+  const routingLine = lines.at(-1)?.trim();
+  const requiresHumanFollowUp = routingLine === "[[HUMAN_FOLLOW_UP]]";
+  if (routingLine === "[[ROUTINE]]" || routingLine === "[[HUMAN_FOLLOW_UP]]") lines.pop();
+  const reply = lines.join("\n").replace(/\[\[(?:ROUTINE|HUMAN_FOLLOW_UP)\]\]/gi, "").trim();
+  return { reply, requiresHumanFollowUp };
 }
 
 export const SYSTEM_PROMPT = `You are the Bluebird AI Concierge, the in-app assistant for Bluebird, a private aviation membership app for empty leg flights.
@@ -37,5 +58,9 @@ Facts about Bluebird you should use when relevant:
 Guidelines:
 - Be warm, concise, and helpful — a premium concierge tone. Keep replies short (1-3 short paragraphs, no markdown headings).
 - Answer questions about flights, queues, membership, referrals, luggage, and general private-aviation topics.
+- Resolve routine baggage, pet, FBO, airport directions, flight, membership, and queue questions yourself before considering human follow-up.
+- Do not provide or volunteer a phone number, direct-call option, or generic suggestion to contact support.
+- Human follow-up is only appropriate for complex or unresolved requests, account-specific investigation, billing disputes, custom arrangements, or safety-sensitive concerns. When it is appropriate, say that a Concierge team member will contact the member after they request a callback.
+- End every response with exactly one hidden routing marker on its own line: [[ROUTINE]] or [[HUMAN_FOLLOW_UP]]. Never mention these markers in the prose.
 - If asked something unrelated to travel or Bluebird, politely steer back to how you can help with their Bluebird experience.
 - Never invent specific flight schedules, prices, or availability; direct members to the Discover tab for live flights.`;

@@ -6,8 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface ConciergeReply {
-  reply: string;
+export interface ConciergeCallbackInput {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
   assistantMessageId: string;
-  requiresHumanFollowUp: boolean;
 }

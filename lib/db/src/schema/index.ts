@@ -135,8 +135,20 @@ export const conciergeMessagesTable = pgTable("concierge_messages", {
   userId: text("user_id").notNull().references(() => usersTable.id),
   role: text("role").notNull(), // 'user' | 'assistant'
   content: text("content").notNull(),
+  requiresHumanFollowUp: boolean("requires_human_follow_up").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+export const conciergeCallbackRequestsTable = pgTable("concierge_callback_requests", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => usersTable.id),
+  assistantMessageId: text("assistant_message_id").notNull().references(() => conciergeMessagesTable.id),
+  conversationContext: jsonb("conversation_context").$type<Array<{ role: string; content: string }>>().notNull(),
+  status: text("status").notNull().default("requested"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("concierge_callback_user_message_unique").on(table.userId, table.assistantMessageId),
+]);
 
 // Pending SMS sign-in codes, keyed by normalized phone number. Only the
 // SHA-256 hash of the 6-digit code is stored; codes expire, are single-use,
@@ -182,3 +194,4 @@ export type RevokedToken = typeof revokedTokensTable.$inferSelect;
 export type LoginCode = typeof loginCodesTable.$inferSelect;
 export type RegistrationGrant = typeof registrationGrantsTable.$inferSelect;
 export type ConciergeMessage = typeof conciergeMessagesTable.$inferSelect;
+export type ConciergeCallbackRequest = typeof conciergeCallbackRequestsTable.$inferSelect;

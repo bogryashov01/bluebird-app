@@ -25,6 +25,7 @@ export const conciergeChatBodyMessagesItemContentMax = 4000;
 export const conciergeChatBodyMessagesMax = 40;
 export const getConciergeHistoryQueryLimitDefault = 50;
 export const getConciergeHistoryQueryLimitMax = 100;
+export const requestConciergeCallbackBodyAssistantMessageIdMax = 100;
 
 
 /**
@@ -891,7 +892,9 @@ export const ConciergeChatBody = zod.object({
 })
 
 export const ConciergeChatResponse = zod.object({
-  "reply": zod.string()
+  "reply": zod.string(),
+  "assistantMessageId": zod.string(),
+  "requiresHumanFollowUp": zod.boolean()
 })
 
 
@@ -909,6 +912,26 @@ export const GetConciergeHistoryResponseItem = zod.object({
   "id": zod.string(),
   "role": zod.enum(['user', 'assistant']),
   "content": zod.string(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "requiresHumanFollowUp": zod.boolean(),
+  "callbackRequested": zod.boolean()
 })
 export const GetConciergeHistoryResponse = zod.array(GetConciergeHistoryResponseItem)
+
+
+/**
+ * @summary Request human follow-up for an escalated concierge reply
+ */
+
+
+
+export const RequestConciergeCallbackBody = zod.object({
+  "assistantMessageId": zod.string().min(1).max(requestConciergeCallbackBodyAssistantMessageIdMax)
+})
+
+export const RequestConciergeCallbackResponse = zod.object({
+  "id": zod.string(),
+  "status": zod.enum(['requested']),
+  "created": zod.boolean(),
+  "message": zod.string()
+})
