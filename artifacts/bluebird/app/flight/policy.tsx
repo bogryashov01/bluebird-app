@@ -27,7 +27,7 @@ const POLICY_SECTIONS = [
   },
   {
     title: 'Luggage & Capacity',
-    body: 'Luggage is subject to the aircraft\'s weight and space limitations. Each aircraft type has different capacity constraints. Bluebird will communicate specific luggage allowances upon flight confirmation.',
+    body: 'The baggage allowance is 25 kg per passenger. Aircraft capacity and operational limitations may reduce the amount that can be carried on a specific flight.',
   },
 ];
 

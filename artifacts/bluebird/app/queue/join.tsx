@@ -18,7 +18,7 @@ import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPas
 
 const POLICY_ITEMS = [
   'Flights may be cancelled or changed due to operational requirements.',
-  'Baggage restrictions apply based on aircraft type and available space.',
+  'Baggage allowance is 25 kg per passenger, subject to aircraft capacity and operational limitations.',
 ];
 
 // "Before you join the queue" — policy acknowledgment step of the join flow.

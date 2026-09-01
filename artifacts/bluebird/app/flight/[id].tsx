@@ -62,7 +62,6 @@ function infoTiles(f: any) {
 const AMENITY_PILLS = [
   { label: 'WiFi',    value: 'Onboard' },
   { label: 'Pets',    value: 'Welcome' },
-  { label: 'Baggage', value: '2 per seat' },
 ];
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -431,7 +430,7 @@ export default function FlightDetailScreen() {
           ))}
         </View>
 
-        {/* ── Compact amenity pills (WiFi / Pets / Baggage) ── */}
+        {/* ── Compact amenity pills (WiFi / Pets) ── */}
         <View style={styles.pillRow}>
           {AMENITY_PILLS.map((p) => (
             <View key={p.label} style={[styles.pill, { backgroundColor: colors.surface }]}>
@@ -439,6 +438,14 @@ export default function FlightDetailScreen() {
               <Text style={[styles.pillValue, { color: colors.textOnSurface }]}>{p.value}</Text>
             </View>
           ))}
+        </View>
+
+        <View style={[styles.baggageCard, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.baggageLabel, { color: colors.mutedForegroundLight }]}>BAGGAGE ALLOWANCE</Text>
+          <Text style={[styles.baggageValue, { color: colors.textOnSurface }]}>25 kg per passenger</Text>
+          <Text style={[styles.baggageNotice, { color: colors.mutedForegroundLight }]}>
+            Subject to aircraft capacity and operational limitations.
+          </Text>
         </View>
 
         {/* ── FBO departure card ── */}
@@ -570,6 +577,15 @@ const styles = StyleSheet.create({
   },
   pillLabel: { fontFamily: 'Inter_500Medium', fontSize: 11 },
   pillValue: { fontFamily: 'Inter_600SemiBold', fontSize: 13, marginTop: 2 },
+
+  baggageCard: {
+    marginHorizontal: 16, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18,
+    marginBottom: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
+  },
+  baggageLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 1, marginBottom: 4 },
+  baggageValue: { fontFamily: 'Inter_700Bold', fontSize: 18 },
+  baggageNotice: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17, marginTop: 4 },
 
   // Dark FBO departure card
   fboCard: {
