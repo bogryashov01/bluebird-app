@@ -22,8 +22,6 @@ export interface Membership {
   totalSavedUsd: number;
   /** Total completed Bluebird flights across the member's account lifetime */
   lifetimeCompletedFlights: number;
-  /** Dollar balance earned from the referral program */
-  referralBalanceUsd: number;
   /** The tier's annual flight allowance */
   annualFlightAllowance: number;
   /** Completed flights in the current calendar year */

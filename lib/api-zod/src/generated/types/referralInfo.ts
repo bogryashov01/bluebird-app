@@ -9,8 +9,8 @@ import type { InvitedFriend } from './invitedFriend';
 
 export interface ReferralInfo {
   code: string;
-  totalReferrals: number;
-  earnedPasses: number;
-  pendingPasses: number;
+  referralUrl: string;
+  rewardPassesPerPerson: number;
+  successfulReferrals: number;
   invited: InvitedFriend[];
 }

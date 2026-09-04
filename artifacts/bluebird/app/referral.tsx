@@ -1,26 +1,14 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, Share, Platform, Linking, Alert,
+  ActivityIndicator, Share, Platform, Linking, Alert, ImageBackground,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import { useGetReferral } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
-
-// Deterministic 6x6 pattern derived from the referral link so the
-// QR-style graphic "encodes" the user's link.
-function qrCells(seed: string): boolean[] {
-  let h = 2166136261;
-  const cells: boolean[] = [];
-  for (let i = 0; i < 36; i++) {
-    h ^= seed.charCodeAt(i % Math.max(seed.length, 1)) + i;
-    h = Math.imul(h, 16777619) >>> 0;
-    cells.push((h & 3) < 2);
-  }
-  return cells;
-}
 
 function shortName(full: string): string {
   const parts = full.trim().split(/\s+/);
@@ -41,16 +29,18 @@ export default function ReferralScreen() {
   const insets = useSafeAreaInsets();
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { data: referral, isLoading } = useGetReferral({});
+  const { data: referral, isLoading, error } = useGetReferral({});
   const ref = referral as any;
   const [copied, setCopied] = useState(false);
 
   const referralCode = typeof ref?.code === 'string' ? ref.code.trim() : '';
-  const link = referralCode
-    ? `https://bluebird.com/join?ref=${encodeURIComponent(referralCode)}`
-    : '';
+  const link = typeof ref?.referralUrl === 'string'
+    ? ref.referralUrl
+    : referralCode
+      ? `https://bluebird.co/join/${encodeURIComponent(referralCode)}`
+      : '';
   const shareMessage = link
-    ? `Join Bluebird — private aviation for everyone. Use my referral link to get started: ${link}`
+    ? `Join me on Bluebird. When you join successfully, we’ll each get 1 Skip the Line Pass: ${link}`
     : '';
 
   const requireLink = () => {
@@ -104,7 +94,7 @@ export default function ReferralScreen() {
   const handleEmail = async () => {
     if (!requireLink()) return;
     await openReferralUrl(
-      `mailto:?subject=${encodeURIComponent('Join me on Bluebird')}&body=${encodeURIComponent(shareMessage)}`,
+      `mailto:?subject=${encodeURIComponent('1 Skip the Line Pass for each of us')}&body=${encodeURIComponent(shareMessage)}`,
       'Email',
       'No email app is available. You can copy your referral link instead.',
     );
@@ -115,7 +105,7 @@ export default function ReferralScreen() {
     try {
       if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share({
-          title: 'Join Bluebird',
+          title: '1 Skip the Line Pass for each of us',
           text: shareMessage,
           url: link,
         });
@@ -125,7 +115,7 @@ export default function ReferralScreen() {
       await Share.share(
         Platform.OS === 'ios'
           ? { message: shareMessage, url: link }
-          : { message: shareMessage, title: 'Join Bluebird' },
+          : { message: shareMessage, title: '1 Skip the Line Pass for each of us' },
       );
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return;
@@ -144,34 +134,73 @@ export default function ReferralScreen() {
     );
   }
 
-  const invited: { name: string; status: string }[] = ref?.invited ?? [];
-  const cells = qrCells(link || 'bluebird');
+  if (error) {
+    const membershipRequired = (error as any)?.response?.data?.code === 'MEMBERSHIP_REQUIRED';
+    return (
+      <View style={[styles.centered, styles.errorState, { backgroundColor: colors.offWhite }]}>
+        <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>
+          {membershipRequired ? 'Membership unlocks referrals' : 'Referral details unavailable'}
+        </Text>
+        <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
+          {membershipRequired
+            ? 'Join Bluebird to invite friends and receive one Skip the Line Pass each.'
+            : 'We could not load your referral details. Please try again in a moment.'}
+        </Text>
+        {membershipRequired ? (
+          <TouchableOpacity
+            style={[styles.joinButton, { backgroundColor: colors.primary }]}
+            onPress={() => router.push('/membership/join' as any)}
+          >
+            <Text style={[styles.joinButtonText, { color: colors.primaryForeground }]}>See membership plans</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    );
+  }
 
+  const invited: { name: string; status: string }[] = ref?.invited ?? [];
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.offWhite }}
       contentContainerStyle={[styles.content, { paddingBottom: bottomPad + 24 }]}
     >
-      <Text style={[styles.headline, { color: colors.textOnSurface }]}>Invite your friends.{'\n'}Help them save.</Text>
+      <Text style={[styles.headline, { color: colors.textOnSurface }]}>A faster way to fly,{'\n'}for both of you.</Text>
       <Text style={[styles.subcopy, { color: colors.mutedForegroundLight }]}>
-        Share your personal link and help friends save on private aviation. Earn rewards together when they become members.
+        When your friend joins Bluebird successfully, you’ll each receive one Skip the Line Pass.
       </Text>
 
-      {/* QR-style graphic */}
-      <View style={[styles.qr, { backgroundColor: colors.backgroundMid }]}>
-        {cells.map((on, i) => (
-          <View key={i} style={[styles.qrCell, on && { backgroundColor: colors.primaryForeground }]} />
-        ))}
-      </View>
+      <ImageBackground
+        source={require('../assets/images/hero-aircraft.jpg')}
+        style={styles.previewCard}
+        imageStyle={styles.previewImage}
+        accessibilityLabel="Bluebird aircraft referral preview"
+      >
+        <View style={styles.previewOverlay}>
+          <View style={[styles.previewShade, { backgroundColor: colors.backgroundMid }]} />
+          <Text style={[styles.previewBrand, { color: colors.primaryForeground }]}>BLUEBIRD</Text>
+          <View style={styles.previewCopy}>
+            <Text style={[styles.previewTitle, { color: colors.primaryForeground }]}>Skip the line together.</Text>
+            <Text style={[styles.previewBody, { color: colors.primaryForeground }]}>
+              You get 1 pass. I get 1 pass.{'\n'}Our next flight gets closer.
+            </Text>
+          </View>
+          <View style={[styles.passBadge, { backgroundColor: colors.primary }]}>
+            <Text style={[styles.passBadgeText, { color: colors.primaryForeground }]}>1 PASS EACH</Text>
+          </View>
+        </View>
+      </ImageBackground>
 
       {/* Code card */}
-      <View style={[styles.codeCard, { backgroundColor: colors.surface, shadowColor: '#0A1128' }]}>
-        <Text style={[styles.code, { color: colors.textOnSurface }]} numberOfLines={1}>
-          {link || 'Referral link unavailable'}
-        </Text>
+      <View style={[styles.codeCard, { backgroundColor: colors.surface, shadowColor: colors.backgroundMid }]}>
+        <View style={styles.codeCopy}>
+          <Text style={[styles.codeLabel, { color: colors.mutedForegroundLight }]}>YOUR REFERRAL CODE</Text>
+          <Text style={[styles.code, { color: colors.textOnSurface }]} numberOfLines={1}>
+            {referralCode || 'Unavailable'}
+          </Text>
+        </View>
         <TouchableOpacity
           testID="copy-referral-link"
-          accessibilityLabel="Copy referral link"
+          accessibilityLabel="Copy referral code and link"
           style={[styles.copyPill, { backgroundColor: colors.primary + '14' }]}
           onPress={handleCopy}
           activeOpacity={0.7}
@@ -206,7 +235,7 @@ export default function ReferralScreen() {
         <Text style={[styles.invitedTitle, { color: colors.textOnSurface }]}>Invited ({invited.length})</Text>
         {invited.length === 0 ? (
           <Text style={[styles.emptyText, { color: colors.mutedForegroundLight }]}>
-            No one has used your code yet. Share it to start earning rewards.
+             No one has joined with your code yet. Share it so you can both receive a pass.
           </Text>
         ) : (
           invited.map((friend, i) => (
@@ -228,6 +257,11 @@ export default function ReferralScreen() {
 
 const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  errorState: { paddingHorizontal: 28 },
+  errorTitle: { fontFamily: 'Inter_700Bold', fontSize: 23, textAlign: 'center', marginBottom: 8 },
+  errorBody: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21, textAlign: 'center' },
+  joinButton: { marginTop: 20, borderRadius: 999, paddingVertical: 14, paddingHorizontal: 22 },
+  joinButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   content: { paddingTop: 40, paddingHorizontal: 22, alignItems: 'center', gap: 16 },
   headline: {
     fontFamily: 'Inter_700Bold', fontSize: 25, lineHeight: 31,
@@ -237,14 +271,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21,
     textAlign: 'center',
   },
-  qr: {
-    width: 150, height: 150, borderRadius: 20,
-    padding: 16, flexDirection: 'row', flexWrap: 'wrap',
+  previewCard: { width: '100%', height: 250 },
+  previewImage: { borderRadius: 24 },
+  previewOverlay: {
+    flex: 1, borderRadius: 24, padding: 20,
+    justifyContent: 'space-between', overflow: 'hidden',
   },
-  qrCell: {
-    width: (150 - 32 - 5 * 4) / 6, height: (150 - 32 - 5 * 4) / 6,
-    marginRight: 4, marginBottom: 4,
-  },
+  previewShade: { ...StyleSheet.absoluteFillObject, opacity: 0.62 },
+  previewBrand: { fontFamily: 'Inter_700Bold', fontSize: 12, letterSpacing: 2.4 },
+  previewCopy: { marginTop: 'auto', marginBottom: 18 },
+  previewTitle: { fontFamily: 'Inter_700Bold', fontSize: 25, lineHeight: 30, letterSpacing: -0.5 },
+  previewBody: { fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 19, marginTop: 8 },
+  passBadge: { alignSelf: 'flex-start', borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12 },
+  passBadgeText: { fontFamily: 'Inter_700Bold', fontSize: 11, letterSpacing: 1.1 },
   codeCard: {
     width: '100%', borderRadius: 16, padding: 16,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -252,9 +291,10 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   code: {
-    flex: 1, fontFamily: 'Inter_700Bold', fontSize: 17,
-    letterSpacing: 0.5,
+    fontFamily: 'Inter_700Bold', fontSize: 20, letterSpacing: 1.2,
   },
+  codeCopy: { flex: 1 },
+  codeLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 1.1, marginBottom: 4 },
   copyPill: {
     paddingVertical: 8,
     paddingHorizontal: 12, borderRadius: 999,

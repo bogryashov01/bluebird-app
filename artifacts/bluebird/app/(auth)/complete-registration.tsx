@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
@@ -22,6 +22,8 @@ export default function CompleteRegistrationScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const queryClient = useQueryClient();
+  const params = useLocalSearchParams<{ referralCode?: string }>();
+  const referralCode = typeof params.referralCode === 'string' ? params.referralCode.trim().toUpperCase() : '';
   const { signIn, pendingRegistrationGrant, setPendingRegistrationGrant } = useAuth();
   const registrationGrant = pendingRegistrationGrant ?? '';
   const [firstName, setFirstName] = useState('');
@@ -37,6 +39,22 @@ export default function CompleteRegistrationScreen() {
       onSuccess: async (data) => {
         await signIn(data.token, data.user as any);
         queryClient.clear();
+        if (data.referralFeedback) {
+          const messages = {
+            reward_granted: 'Your Skip the Line Pass is ready. Your friend received one too.',
+            invalid_code: 'That referral code is not valid, so no passes were added.',
+            self_referral: 'You cannot use your own referral code, so no passes were added.',
+            already_used: 'This account has already used a referral code, so no additional passes were added.',
+          } as const;
+          const message = messages[data.referralFeedback as keyof typeof messages];
+          if (message) {
+            if (Platform.OS === 'web') window.alert(`Account created\n\n${message}`);
+            else {
+              const { Alert } = await import('react-native');
+              Alert.alert('Account created', message);
+            }
+          }
+        }
         router.replace('/(auth)/welcome-tour');
       },
       onError: (err: any) => {
@@ -63,13 +81,17 @@ export default function CompleteRegistrationScreen() {
         firstName: trimmedFirst,
         lastName: trimmedLast,
         email: normalizedEmail,
+        ...(referralCode ? { referralCode } : {}),
       },
     });
   };
 
   const restartVerification = () => {
     setPendingRegistrationGrant(null);
-    router.replace('/(auth)/phone');
+    router.replace({
+      pathname: '/(auth)/phone',
+      params: referralCode ? { referralCode } : {},
+    });
   };
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;

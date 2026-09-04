@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
-import { usersTable, notificationsTable, revokedTokensTable, loginCodesTable, registrationGrantsTable } from "@workspace/db/schema";
+import { usersTable, notificationsTable, referralRewardsTable, revokedTokensTable, loginCodesTable, registrationGrantsTable } from "@workspace/db/schema";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { activeSmsProvider, sendSms } from "../lib/sms";
 import jwt from "jsonwebtoken";
@@ -34,7 +34,8 @@ export function normalizePhone(raw: unknown): string | null {
 }
 
 function makeReferralCode(name: string): string {
-  return (name.replace(/\s+/g, "").toUpperCase().slice(0, 4) + Math.random().toString(36).slice(2, 6).toUpperCase());
+  const prefix = name.replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, 4).padEnd(4, "X");
+  return prefix + crypto.randomBytes(5).toString("hex").slice(0, 6).toUpperCase();
 }
 
 function sanitizeUser<T extends Record<string, unknown>>(user: T) {
@@ -125,6 +126,7 @@ router.post("/request-code", async (req, res) => {
 router.post("/verify-code", async (req, res) => {
   const phone = normalizePhone(req.body?.phone);
   const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
+  const referralCode = typeof req.body?.referralCode === "string" ? req.body.referralCode.trim().toUpperCase() : "";
   if (!phone) {
     return res.status(400).json({ error: "Enter a valid phone number" });
   }
@@ -202,8 +204,24 @@ router.post("/verify-code", async (req, res) => {
     }
 
     const [freshUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
+    let referralFeedback: "invalid_code" | "self_referral" | "already_used" | undefined;
+    if (referralCode) {
+      const matches = await db
+        .select({ id: usersTable.id, membershipTier: usersTable.membershipTier })
+        .from(usersTable)
+        .where(eq(usersTable.referralCode, referralCode));
+      if (matches.length !== 1) referralFeedback = "invalid_code";
+      else if (matches[0].id === user.id) referralFeedback = "self_referral";
+      else if (matches[0].membershipTier === "none") referralFeedback = "invalid_code";
+      else referralFeedback = "already_used";
+    }
     const token = signToken(user.id);
-    return res.json({ outcome: "signed_in", token, user: sanitizeUser(freshUser ?? user) });
+    return res.json({
+      outcome: "signed_in",
+      token,
+      user: sanitizeUser(freshUser ?? user),
+      ...(referralFeedback ? { referralFeedback } : {}),
+    });
   } catch (err) {
     return res.status(500).json({ error: "Sign in failed" });
   }
@@ -214,6 +232,7 @@ router.post("/complete-registration", async (req, res) => {
   const firstName = typeof req.body?.firstName === "string" ? req.body.firstName.trim() : "";
   const lastName = typeof req.body?.lastName === "string" ? req.body.lastName.trim() : "";
   const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const referralCode = typeof req.body?.referralCode === "string" ? req.body.referralCode.trim().toUpperCase() : "";
   if (!registrationGrant) return res.status(401).json({ error: "Phone verification expired. Request a new code." });
   if (firstName.length < 1 || firstName.length > 40) return res.status(400).json({ error: "Enter your first name" });
   if (lastName.length < 1 || lastName.length > 40) return res.status(400).json({ error: "Enter your last name" });
@@ -242,15 +261,78 @@ router.post("/complete-registration", async (req, res) => {
 
       const name = `${firstName} ${lastName}`;
       const userId = makeId();
+      let newReferralCode = "";
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const candidate = makeReferralCode(name);
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${candidate}))`);
+        const [collision] = await tx
+          .select({ id: usersTable.id })
+          .from(usersTable)
+          .where(eq(usersTable.referralCode, candidate));
+        if (!collision) {
+          newReferralCode = candidate;
+          break;
+        }
+      }
+      if (!newReferralCode) throw new Error("Could not allocate a unique referral code");
+      let inviter: typeof usersTable.$inferSelect | undefined;
+      let referralFeedback: "reward_granted" | "invalid_code" | "self_referral" | "already_used" | undefined;
+      if (referralCode) {
+        const matches = await tx.select().from(usersTable).where(eq(usersTable.referralCode, referralCode));
+        inviter = matches.length === 1 && matches[0].membershipTier !== "none" ? matches[0] : undefined;
+        if (!inviter) referralFeedback = "invalid_code";
+        else if (inviter.phone === grant.phone || inviter.email?.toLowerCase() === email) {
+          inviter = undefined;
+          referralFeedback = "self_referral";
+        }
+      }
       const [user] = await tx.insert(usersTable).values({
         id: userId,
         name,
         phone: grant.phone,
         email,
         membershipTier: "none",
-        referralCode: makeReferralCode(name),
-        linePassCount: 0,
+        referralCode: newReferralCode,
+        referredBy: inviter?.referralCode,
+        linePassCount: inviter ? 1 : 0,
       }).returning();
+      if (inviter) {
+        const [reward] = await tx
+          .insert(referralRewardsTable)
+          .values({
+            id: makeId(),
+            inviterUserId: inviter.id,
+            friendUserId: user.id,
+            referralCode: inviter.referralCode,
+          })
+          .onConflictDoNothing({ target: referralRewardsTable.friendUserId })
+          .returning();
+        if (reward) {
+          await tx
+            .update(usersTable)
+            .set({ linePassCount: sql`${usersTable.linePassCount} + 1` })
+            .where(eq(usersTable.id, inviter.id));
+          await tx.insert(notificationsTable).values([
+            {
+              id: makeId(),
+              userId: inviter.id,
+              title: "Your referral joined",
+              body: `${name} joined Bluebird. Your Skip the Line Pass is ready.`,
+              type: "referral",
+            },
+            {
+              id: makeId(),
+              userId,
+              title: "Referral pass added",
+              body: "You and your friend each received one Skip the Line Pass.",
+              type: "referral",
+            },
+          ]);
+          referralFeedback = "reward_granted";
+        } else {
+          referralFeedback = "already_used";
+        }
+      }
       await tx.insert(notificationsTable).values({
         id: makeId(),
         userId,
@@ -258,10 +340,14 @@ router.post("/complete-registration", async (req, res) => {
         body: "Your account is ready. Browse available empty legs — join Bluebird to queue for a seat.",
         type: "system",
       });
-      return { status: 200 as const, user };
+      return { status: 200 as const, user, referralFeedback };
     });
     if (result.status !== 200) return res.status(result.status).json({ error: result.error });
-    return res.json({ token: signToken(result.user.id), user: sanitizeUser(result.user) });
+    return res.json({
+      token: signToken(result.user.id),
+      user: sanitizeUser(result.user),
+      ...(result.referralFeedback ? { referralFeedback: result.referralFeedback } : {}),
+    });
   } catch (err) {
     return res.status(500).json({ error: "Could not create your account. Please try again." });
   }

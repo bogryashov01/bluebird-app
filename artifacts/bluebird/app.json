@@ -14,9 +14,30 @@
       "backgroundColor": "#0A1128"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "associatedDomains": [
+        "applinks:bluebird.co"
+      ]
     },
-    "android": {},
+    "android": {
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "bluebird.co",
+              "pathPrefix": "/join/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },

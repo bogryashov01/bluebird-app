@@ -127,6 +127,50 @@ export async function ensureSchema(): Promise<void> {
       WHERE phone IS NULL OR phone = '';
     ALTER TABLE users ALTER COLUMN phone SET NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS users_phone_unique ON users (phone);
+    -- Referral links identify exactly one inviter. Preserve the oldest owner
+    -- of a legacy duplicate and deterministically re-key later duplicates
+    -- before enforcing uniqueness.
+    DO $$
+    DECLARE
+      r RECORD;
+      candidate TEXT;
+      salt INTEGER;
+    BEGIN
+      FOR r IN
+        SELECT id, name
+        FROM (
+          SELECT id, name, row_number() OVER (
+            PARTITION BY referral_code ORDER BY created_at, id
+          ) AS duplicate_number
+          FROM users
+        ) duplicates
+        WHERE duplicate_number > 1
+      LOOP
+        salt := 0;
+        LOOP
+          candidate :=
+            upper(left(regexp_replace(r.name, '[^A-Za-z0-9]', '', 'g'), 4))
+            || upper(substr(md5(r.id || ':' || salt::text), 1, 8));
+          EXIT WHEN NOT EXISTS (
+            SELECT 1 FROM users WHERE referral_code = candidate
+          );
+          salt := salt + 1;
+        END LOOP;
+        UPDATE users SET referral_code = candidate WHERE id = r.id;
+      END LOOP;
+    END $$;
+    CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_unique
+      ON users (referral_code);
+
+    CREATE TABLE IF NOT EXISTS referral_rewards (
+      id              TEXT        PRIMARY KEY,
+      inviter_user_id TEXT        NOT NULL REFERENCES users(id),
+      friend_user_id  TEXT        NOT NULL REFERENCES users(id),
+      referral_code   TEXT        NOT NULL,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS referral_rewards_friend_unique
+      ON referral_rewards (friend_user_id);
 
     CREATE TABLE IF NOT EXISTS login_codes (
       phone        TEXT        PRIMARY KEY,

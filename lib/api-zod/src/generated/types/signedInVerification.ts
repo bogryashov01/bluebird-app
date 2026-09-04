@@ -6,10 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { SignedInVerificationOutcome } from './signedInVerificationOutcome';
+import type { SignedInVerificationReferralFeedback } from './signedInVerificationReferralFeedback';
 import type { User } from './user';
 
 export interface SignedInVerification {
   outcome: SignedInVerificationOutcome;
   token: string;
   user: User;
+  /** Explains why an existing account did not receive another referral reward. */
+  referralFeedback?: SignedInVerificationReferralFeedback;
 }

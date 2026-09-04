@@ -9,6 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:auth-flow": "node scripts/auth-flow.integration.mjs",
+    "test:referral-flow": "node scripts/referral-flow.integration.mjs",
     "test:migration-flow": "node scripts/migration-flow.integration.mjs",
     "test:airport-catalog": "pnpm exec esbuild scripts/airport-catalog.integration.mjs --bundle --platform=node --format=esm --outfile=scripts/.airport-catalog.test.mjs && node scripts/.airport-catalog.test.mjs; status=$?; rm -f scripts/.airport-catalog.test.mjs; exit $status",
     "test:sms-provider": "node scripts/sms-provider.integration.mjs",

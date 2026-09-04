@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Platform,
 } from 'react-native';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -30,6 +30,8 @@ function formatPhoneInput(raw: string): string {
 export default function PhoneScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const params = useLocalSearchParams<{ referralCode?: string }>();
+  const referralCode = typeof params.referralCode === 'string' ? params.referralCode : '';
   const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +45,7 @@ export default function PhoneScreen() {
             // Demo: the raw code stands in for a delivered SMS.
             demoCode: data.demoCode ?? '',
             cooldown: String(data.resendCooldownSeconds ?? 30),
+            referralCode,
           },
         });
       },

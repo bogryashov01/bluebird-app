@@ -11,4 +11,6 @@ export interface CompleteRegistrationRequest {
   firstName: string;
   lastName: string;
   email: string;
+  /** Optional member referral code carried from a /join/{code} link. */
+  referralCode?: string;
 }

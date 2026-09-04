@@ -717,6 +717,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReferralInfo"
+        "403":
+          description: A Bluebird membership is required to access and share a referral link (code MEMBERSHIP_REQUIRED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /notifications:
     get:
@@ -992,6 +998,9 @@ components:
         code:
           type: string
           description: The 6-digit SMS code.
+        referralCode:
+          type: string
+          description: Optional referral code carried from a /join/{code} link.
       required:
         - phone
         - code
@@ -1016,6 +1025,10 @@ components:
           type: string
         user:
           $ref: "#/components/schemas/User"
+        referralFeedback:
+          type: string
+          enum: [invalid_code, self_referral, already_used]
+          description: Explains why an existing account did not receive another referral reward.
       required:
         - outcome
         - token
@@ -1048,6 +1061,9 @@ components:
           type: string
         email:
           type: string
+        referralCode:
+          type: string
+          description: Optional member referral code carried from a /join/{code} link.
       required:
         - registrationGrant
         - firstName
@@ -1061,6 +1077,10 @@ components:
           type: string
         user:
           $ref: "#/components/schemas/User"
+        referralFeedback:
+          type: string
+          enum: [reward_granted, invalid_code, self_referral, already_used]
+          description: Outcome of optional referral attribution during registration.
       required:
         - token
         - user
@@ -1585,9 +1605,6 @@ components:
         lifetimeCompletedFlights:
           type: number
           description: Total completed Bluebird flights across the member's account lifetime
-        referralBalanceUsd:
-          type: number
-          description: Dollar balance earned from the referral program
         annualFlightAllowance:
           type: number
           description: The tier's annual flight allowance
@@ -1600,7 +1617,6 @@ components:
         - features
         - totalSavedUsd
         - lifetimeCompletedFlights
-        - referralBalanceUsd
         - annualFlightAllowance
         - flightsThisYear
 
@@ -1640,11 +1656,11 @@ components:
       properties:
         code:
           type: string
-        totalReferrals:
+        referralUrl:
+          type: string
+        rewardPassesPerPerson:
           type: number
-        earnedPasses:
-          type: number
-        pendingPasses:
+        successfulReferrals:
           type: number
         invited:
           type: array
@@ -1652,9 +1668,9 @@ components:
             $ref: "#/components/schemas/InvitedFriend"
       required:
         - code
-        - totalReferrals
-        - earnedPasses
-        - pendingPasses
+        - referralUrl
+        - rewardPassesPerPerson
+        - successfulReferrals
         - invited
 
     InvitedFriend:

@@ -5,9 +5,12 @@
  * Bluebird private aviation API
  * OpenAPI spec version: 0.1.0
  */
+import type { AuthResponseReferralFeedback } from './authResponseReferralFeedback';
 import type { User } from './user';
 
 export interface AuthResponse {
   token: string;
   user: User;
+  /** Outcome of optional referral attribution during registration. */
+  referralFeedback?: AuthResponseReferralFeedback;
 }

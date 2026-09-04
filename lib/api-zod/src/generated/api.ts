@@ -57,7 +57,8 @@ export const RequestLoginCodeResponse = zod.object({
  */
 export const VerifyLoginCodeBody = zod.object({
   "phone": zod.string(),
-  "code": zod.string().describe('The 6-digit SMS code.')
+  "code": zod.string().describe('The 6-digit SMS code.'),
+  "referralCode": zod.string().optional().describe('Optional referral code carried from a \/join\/{code} link.')
 })
 
 export const VerifyLoginCodeResponse = zod.union([zod.object({
@@ -73,7 +74,8 @@ export const VerifyLoginCodeResponse = zod.union([zod.object({
   "referralCode": zod.string(),
   "homeAirports": zod.array(zod.string()),
   "createdAt": zod.string()
-})
+}),
+  "referralFeedback": zod.enum(['invalid_code', 'self_referral', 'already_used']).optional().describe('Explains why an existing account did not receive another referral reward.')
 }),zod.object({
   "outcome": zod.enum(['registration_required']),
   "registrationGrant": zod.string().describe('Short-lived single-use credential returned only when registration is required.'),
@@ -88,7 +90,8 @@ export const CompletePhoneRegistrationBody = zod.object({
   "registrationGrant": zod.string(),
   "firstName": zod.string(),
   "lastName": zod.string(),
-  "email": zod.string()
+  "email": zod.string(),
+  "referralCode": zod.string().optional().describe('Optional member referral code carried from a \/join\/{code} link.')
 })
 
 export const CompletePhoneRegistrationResponse = zod.object({
@@ -103,7 +106,8 @@ export const CompletePhoneRegistrationResponse = zod.object({
   "referralCode": zod.string(),
   "homeAirports": zod.array(zod.string()),
   "createdAt": zod.string()
-})
+}),
+  "referralFeedback": zod.enum(['reward_granted', 'invalid_code', 'self_referral', 'already_used']).optional().describe('Outcome of optional referral attribution during registration.')
 })
 
 
@@ -134,6 +138,7 @@ export const GetMeResponse = zod.object({
 /**
  * @summary Update current user's profile
  */
+
 
 
 export const UpdateMeBody = zod.object({
@@ -318,6 +323,7 @@ export const GetFlightMyStatusResponse = zod.object({
 /**
  * @summary Join queue for a flight
  */
+
 
 
 export const JoinQueueBody = zod.object({
@@ -641,6 +647,8 @@ export const GetTripManifestParams = zod.object({
 })
 
 
+
+
 export const GetTripManifestResponse = zod.object({
   "tripId": zod.string(),
   "requiredCount": zod.number(),
@@ -672,6 +680,15 @@ export const SaveTripManifestParams = zod.object({
 })
 
 
+
+
+
+
+
+
+
+
+
 export const SaveTripManifestBody = zod.object({
   "passengers": zod.array(zod.object({
   "passengerOrder": zod.number().min(1).multipleOf(saveTripManifestBodyPassengersItemPassengerOrderMultipleOf),
@@ -684,6 +701,8 @@ export const SaveTripManifestBody = zod.object({
   "passportExpirationDate": zod.string().regex(saveTripManifestBodyPassengersItemPassportExpirationDateRegExp).nullish()
 })).min(1).max(saveTripManifestBodyPassengersMax)
 })
+
+
 
 
 export const SaveTripManifestResponse = zod.object({
@@ -715,6 +734,8 @@ export const SaveTripManifestResponse = zod.object({
 export const SubmitTripManifestParams = zod.object({
   "id": zod.coerce.string()
 })
+
+
 
 
 export const SubmitTripManifestResponse = zod.object({
@@ -757,7 +778,6 @@ export const GetMembershipResponse = zod.object({
   "features": zod.array(zod.string()),
   "totalSavedUsd": zod.number().describe('Estimated private-flight value received through completed Bluebird trips, calculated as the sum of each completed flight\'s charter value (priceUsd). This is not cash, referral credit, or a withdrawable balance.\n'),
   "lifetimeCompletedFlights": zod.number().describe('Total completed Bluebird flights across the member\'s account lifetime'),
-  "referralBalanceUsd": zod.number().describe('Dollar balance earned from the referral program'),
   "annualFlightAllowance": zod.number().describe('The tier\'s annual flight allowance'),
   "flightsThisYear": zod.number().describe('Completed flights in the current calendar year')
 })
@@ -784,7 +804,6 @@ export const UpgradeMembershipResponse = zod.object({
   "features": zod.array(zod.string()),
   "totalSavedUsd": zod.number().describe('Estimated private-flight value received through completed Bluebird trips, calculated as the sum of each completed flight\'s charter value (priceUsd). This is not cash, referral credit, or a withdrawable balance.\n'),
   "lifetimeCompletedFlights": zod.number().describe('Total completed Bluebird flights across the member\'s account lifetime'),
-  "referralBalanceUsd": zod.number().describe('Dollar balance earned from the referral program'),
   "annualFlightAllowance": zod.number().describe('The tier\'s annual flight allowance'),
   "flightsThisYear": zod.number().describe('Completed flights in the current calendar year')
 })
@@ -820,7 +839,6 @@ export const ChangeMembershipResponse = zod.object({
   "features": zod.array(zod.string()),
   "totalSavedUsd": zod.number().describe('Estimated private-flight value received through completed Bluebird trips, calculated as the sum of each completed flight\'s charter value (priceUsd). This is not cash, referral credit, or a withdrawable balance.\n'),
   "lifetimeCompletedFlights": zod.number().describe('Total completed Bluebird flights across the member\'s account lifetime'),
-  "referralBalanceUsd": zod.number().describe('Dollar balance earned from the referral program'),
   "annualFlightAllowance": zod.number().describe('The tier\'s annual flight allowance'),
   "flightsThisYear": zod.number().describe('Completed flights in the current calendar year')
 })
@@ -831,9 +849,9 @@ export const ChangeMembershipResponse = zod.object({
  */
 export const GetReferralResponse = zod.object({
   "code": zod.string(),
-  "totalReferrals": zod.number(),
-  "earnedPasses": zod.number(),
-  "pendingPasses": zod.number(),
+  "referralUrl": zod.string(),
+  "rewardPassesPerPerson": zod.number(),
+  "successfulReferrals": zod.number(),
   "invited": zod.array(zod.object({
   "name": zod.string(),
   "status": zod.enum(['joined', 'pending'])
@@ -877,6 +895,8 @@ export const MarkNotificationReadResponse = zod.object({
  */
 
 
+
+
 export const ConciergeChatBody = zod.object({
   "messages": zod.array(zod.object({
   "role": zod.enum(['user', 'assistant']),
@@ -894,6 +914,7 @@ export const ConciergeChatResponse = zod.object({
 /**
  * @summary Load the caller's recent concierge conversation history
  */
+
 
 
 export const GetConciergeHistoryQueryParams = zod.object({

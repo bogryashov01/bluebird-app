@@ -108,6 +108,8 @@ export interface VerifyCodeRequest {
   phone: string;
   /** The 6-digit SMS code. */
   code: string;
+  /** Optional referral code carried from a /join/{code} link. */
+  referralCode?: string;
 }
 
 export type SignedInVerificationOutcome = typeof SignedInVerificationOutcome[keyof typeof SignedInVerificationOutcome];
@@ -143,10 +145,24 @@ export interface User {
   createdAt: string;
 }
 
+/**
+ * Explains why an existing account did not receive another referral reward.
+ */
+export type SignedInVerificationReferralFeedback = typeof SignedInVerificationReferralFeedback[keyof typeof SignedInVerificationReferralFeedback];
+
+
+export const SignedInVerificationReferralFeedback = {
+  invalid_code: 'invalid_code',
+  self_referral: 'self_referral',
+  already_used: 'already_used',
+} as const;
+
 export interface SignedInVerification {
   outcome: SignedInVerificationOutcome;
   token: string;
   user: User;
+  /** Explains why an existing account did not receive another referral reward. */
+  referralFeedback?: SignedInVerificationReferralFeedback;
 }
 
 export type RegistrationRequiredVerificationOutcome = typeof RegistrationRequiredVerificationOutcome[keyof typeof RegistrationRequiredVerificationOutcome];
@@ -170,11 +186,28 @@ export interface CompleteRegistrationRequest {
   firstName: string;
   lastName: string;
   email: string;
+  /** Optional member referral code carried from a /join/{code} link. */
+  referralCode?: string;
 }
+
+/**
+ * Outcome of optional referral attribution during registration.
+ */
+export type AuthResponseReferralFeedback = typeof AuthResponseReferralFeedback[keyof typeof AuthResponseReferralFeedback];
+
+
+export const AuthResponseReferralFeedback = {
+  reward_granted: 'reward_granted',
+  invalid_code: 'invalid_code',
+  self_referral: 'self_referral',
+  already_used: 'already_used',
+} as const;
 
 export interface AuthResponse {
   token: string;
   user: User;
+  /** Outcome of optional referral attribution during registration. */
+  referralFeedback?: AuthResponseReferralFeedback;
 }
 
 export interface UpdateMeRequest {
@@ -502,8 +535,6 @@ export interface Membership {
   totalSavedUsd: number;
   /** Total completed Bluebird flights across the member's account lifetime */
   lifetimeCompletedFlights: number;
-  /** Dollar balance earned from the referral program */
-  referralBalanceUsd: number;
   /** The tier's annual flight allowance */
   annualFlightAllowance: number;
   /** Completed flights in the current calendar year */
@@ -572,9 +603,9 @@ export interface InvitedFriend {
 
 export interface ReferralInfo {
   code: string;
-  totalReferrals: number;
-  earnedPasses: number;
-  pendingPasses: number;
+  referralUrl: string;
+  rewardPassesPerPerson: number;
+  successfulReferrals: number;
   invited: InvitedFriend[];
 }
 

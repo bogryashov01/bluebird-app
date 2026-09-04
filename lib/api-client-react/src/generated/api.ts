@@ -1967,7 +1967,7 @@ export const getGetReferralQueryKey = () => {
     }
 
 
-export const getGetReferralQueryOptions = <TData = Awaited<ReturnType<typeof getReferral>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReferral>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetReferralQueryOptions = <TData = Awaited<ReturnType<typeof getReferral>>, TError = ErrorType<ErrorResponse>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReferral>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -1986,14 +1986,14 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetReferralQueryResult = NonNullable<Awaited<ReturnType<typeof getReferral>>>
-export type GetReferralQueryError = ErrorType<unknown>
+export type GetReferralQueryError = ErrorType<ErrorResponse>
 
 
 /**
  * @summary Get referral info
  */
 
-export function useGetReferral<TData = Awaited<ReturnType<typeof getReferral>>, TError = ErrorType<unknown>>(
+export function useGetReferral<TData = Awaited<ReturnType<typeof getReferral>>, TError = ErrorType<ErrorResponse>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReferral>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {

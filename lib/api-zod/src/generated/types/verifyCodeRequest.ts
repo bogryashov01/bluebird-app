@@ -10,4 +10,6 @@ export interface VerifyCodeRequest {
   phone: string;
   /** The 6-digit SMS code. */
   code: string;
+  /** Optional referral code carried from a /join/{code} link. */
+  referralCode?: string;
 }

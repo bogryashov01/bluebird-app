@@ -51,10 +51,7 @@ function renewalDate(): string {
 // Annual flight allowance per tier (calendar year).
 const ANNUAL_FLIGHT_ALLOWANCE: Record<string, number> = { base: 10, plus: 20, concierge: 40 };
 
-// Referral earnings expressed as dollars ($150 credit per joined referral).
-const REFERRAL_CREDIT_USD = 150;
-
-async function membershipStats(user: { id: string; referralCode: string }) {
+async function membershipStats(user: { id: string }) {
   const completed = await db
     .select({ priceUsd: flightsTable.priceUsd, departureDate: flightsTable.departureDate, bookedAt: tripsTable.bookedAt })
     .from(tripsTable)
@@ -69,16 +66,10 @@ async function membershipStats(user: { id: string; referralCode: string }) {
     (t) => (t.departureDate ?? "").startsWith(year) || t.bookedAt.getFullYear().toString() === year
   ).length;
 
-  const [{ count: referrals }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(usersTable)
-    .where(eq(usersTable.referredBy, user.referralCode));
-
   return {
     totalSavedUsd,
     lifetimeCompletedFlights,
     flightsThisYear,
-    referralBalanceUsd: referrals * REFERRAL_CREDIT_USD,
   };
 }
 

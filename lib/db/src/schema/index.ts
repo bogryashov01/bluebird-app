@@ -18,7 +18,19 @@ export const usersTable = pgTable("users", {
   homeAirport: text("home_airport"),
   homeAirports: text("home_airports").array().notNull().default([]),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("users_referral_code_unique").on(table.referralCode),
+]);
+
+export const referralRewardsTable = pgTable("referral_rewards", {
+  id: text("id").primaryKey(),
+  inviterUserId: text("inviter_user_id").notNull().references(() => usersTable.id),
+  friendUserId: text("friend_user_id").notNull().references(() => usersTable.id),
+  referralCode: text("referral_code").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("referral_rewards_friend_unique").on(table.friendUserId),
+]);
 
 export const flightsTable = pgTable("flights", {
   id: text("id").primaryKey(),
@@ -194,5 +206,6 @@ export type Notification = typeof notificationsTable.$inferSelect;
 export type RevokedToken = typeof revokedTokensTable.$inferSelect;
 export type LoginCode = typeof loginCodesTable.$inferSelect;
 export type RegistrationGrant = typeof registrationGrantsTable.$inferSelect;
+export type ReferralReward = typeof referralRewardsTable.$inferSelect;
 export type ConciergeMessage = typeof conciergeMessagesTable.$inferSelect;
 export type ConciergeCallbackRequest = typeof conciergeCallbackRequestsTable.$inferSelect;
