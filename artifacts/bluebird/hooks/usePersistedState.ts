@@ -7,17 +7,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  */
 export function usePersistedState<T>(key: string, initialValue: T) {
   const [state, setState] = React.useState<T>(initialValue);
-  const [hydrated, setHydrated] = React.useState(false);
+  const [hydratedKey, setHydratedKey] = React.useState<string | null>(null);
+  const initialValueRef = React.useRef(initialValue);
+  initialValueRef.current = initialValue;
 
   React.useEffect(() => {
     let cancelled = false;
+    setHydratedKey(null);
     AsyncStorage.getItem(key)
       .then((raw) => {
-        if (!cancelled && raw != null) setState(JSON.parse(raw) as T);
+        if (cancelled) return;
+        setState(raw != null ? JSON.parse(raw) as T : initialValueRef.current);
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) setState(initialValueRef.current);
+      })
       .finally(() => {
-        if (!cancelled) setHydrated(true);
+        if (!cancelled) setHydratedKey(key);
       });
     return () => {
       cancelled = true;
@@ -25,9 +31,9 @@ export function usePersistedState<T>(key: string, initialValue: T) {
   }, [key]);
 
   React.useEffect(() => {
-    if (!hydrated) return;
+    if (hydratedKey !== key) return;
     AsyncStorage.setItem(key, JSON.stringify(state)).catch(() => {});
-  }, [key, state, hydrated]);
+  }, [key, state, hydratedKey]);
 
-  return [state, setState, hydrated] as const;
+  return [state, setState, hydratedKey === key] as const;
 }

@@ -1,10 +1,11 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { usePersistedState } from '@/hooks/usePersistedState';
+import { useAuth } from '@/context/AuthContext';
 
 interface MockContact {
   id: string;
@@ -26,9 +27,21 @@ const INITIAL_CONTACTS: MockContact[] = [
 export default function ConnectContactsScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const [contacts, setContacts] = usePersistedState<MockContact[]>('bluebird.contacts', INITIAL_CONTACTS);
+  const { user } = useAuth();
+  const [contacts, setContacts, hydrated] = usePersistedState<MockContact[]>(
+    `bluebird.contacts.${user?.id ?? 'signed-out'}`,
+    INITIAL_CONTACTS,
+  );
 
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
+
+  if (!hydrated) {
+    return (
+      <View style={[styles.loading, { backgroundColor: colors.offWhite }]}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
 
   const invite = (id: string) =>
     setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'invited' } : c)));
@@ -105,6 +118,7 @@ export default function ConnectContactsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: 16, paddingTop: 20 },
   intro: { fontFamily: 'Inter_400Regular', fontSize: 13.5, lineHeight: 19, marginBottom: 20 },
   sectionLabel: {

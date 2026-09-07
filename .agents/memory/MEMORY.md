@@ -13,3 +13,4 @@
 - [Stale composite TS builds](stale-ts-builds.md) — phantom missing-export/field type errors mean stale lib dist; run `tsc -b lib/*` before believing them.
 - [OpenAPI email format](openapi-email-format.md) — avoid `format: email` until generated Zod and the installed Zod major agree; keep runtime validation server-side.
 - [Airport preference catalog](airport-preference-catalog.md) — legacy preference backfills must use the same canonical allowlist as account validation.
+- [Account-scoped prototype state](account-scoped-prototype-state.md) — key local demo state by member and gate controls until that exact key hydrates.

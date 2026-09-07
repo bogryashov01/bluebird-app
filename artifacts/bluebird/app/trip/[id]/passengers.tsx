@@ -66,7 +66,10 @@ export default function PassengerListScreen() {
   const payload = () => passengers.map(({ weightText, ...passenger }) => ({
     ...passenger, weightKg: weightText ? Number(weightText) : null,
   }));
-  const handleSave = () => save.mutate({ id: id!, data: { passengers: payload() } });
+  const submitted = !!data?.submittedAt;
+  const handleSave = () => {
+    if (!submitted) save.mutate({ id: id!, data: { passengers: payload() } });
+  };
   const handleSubmit = () => submit.mutate({ id: id! });
   const pending = save.isPending || submit.isPending;
 
@@ -92,7 +95,7 @@ export default function PassengerListScreen() {
           <Text style={[styles.heading, { color: colors.textOnBrand }]}>Passenger Information</Text>
           <Text style={[styles.progress, { color: colors.paleBlueFaint }]}>{completedCount} of {data.requiredCount} completed</Text>
           <View style={[styles.track, { backgroundColor: colors.mutedOnBrand }]}>
-            <View style={[styles.fill, { backgroundColor: colors.primary, width: `${(completedCount / data.requiredCount) * 100}%` }]} />
+             <View style={[styles.fill, { backgroundColor: colors.primary, width: `${data.requiredCount > 0 ? Math.min((completedCount / data.requiredCount) * 100, 100) : 0}%` }]} />
           </View>
         </View>
         {passengers.map((passenger, index) => (
@@ -105,17 +108,17 @@ export default function PassengerListScreen() {
               <Feather name={complete(passenger) ? 'check-circle' : 'circle'} size={20} color={complete(passenger) ? colors.success : colors.mutedForeground} />
             </View>
             <View style={styles.row}>
-              <Field label="First name" value={passenger.firstName} onChangeText={(v: string) => update(index, 'firstName', v)} colors={colors} />
-              <Field label="Last name" value={passenger.lastName} onChangeText={(v: string) => update(index, 'lastName', v)} colors={colors} />
+               <Field editable={!submitted} label="First name" value={passenger.firstName} onChangeText={(v: string) => update(index, 'firstName', v)} colors={colors} />
+               <Field editable={!submitted} label="Last name" value={passenger.lastName} onChangeText={(v: string) => update(index, 'lastName', v)} colors={colors} />
             </View>
-            <Field label="Weight (kg)" value={passenger.weightText} onChangeText={(v: string) => update(index, 'weightText', v.replace(/[^0-9]/g, ''))} keyboardType="number-pad" colors={colors} />
+             <Field editable={!submitted} label="Weight (kg)" value={passenger.weightText} onChangeText={(v: string) => update(index, 'weightText', v.replace(/[^0-9]/g, ''))} keyboardType="number-pad" colors={colors} />
             {data.international && <>
-              <Field label="Passport number" value={passenger.passportNumber ?? ''} onChangeText={(v: string) => update(index, 'passportNumber', v)} autoCapitalize="characters" colors={colors} />
+               <Field editable={!submitted} label="Passport number" value={passenger.passportNumber ?? ''} onChangeText={(v: string) => update(index, 'passportNumber', v)} autoCapitalize="characters" colors={colors} />
               <View style={styles.row}>
-                <Field label="Issuing country" value={passenger.issuingCountry ?? ''} onChangeText={(v: string) => update(index, 'issuingCountry', v)} colors={colors} />
-                <Field label="Nationality" value={passenger.nationality ?? ''} onChangeText={(v: string) => update(index, 'nationality', v)} colors={colors} />
+                 <Field editable={!submitted} label="Issuing country" value={passenger.issuingCountry ?? ''} onChangeText={(v: string) => update(index, 'issuingCountry', v)} colors={colors} />
+                 <Field editable={!submitted} label="Nationality" value={passenger.nationality ?? ''} onChangeText={(v: string) => update(index, 'nationality', v)} colors={colors} />
               </View>
-              <Field label="Passport expiration (YYYY-MM-DD)" value={passenger.passportExpirationDate ?? ''} onChangeText={(v: string) => update(index, 'passportExpirationDate', v)} keyboardType="numbers-and-punctuation" colors={colors} />
+               <Field editable={!submitted} label="Passport expiration (YYYY-MM-DD)" value={passenger.passportExpirationDate ?? ''} onChangeText={(v: string) => update(index, 'passportExpirationDate', v)} keyboardType="numbers-and-punctuation" colors={colors} />
             </>}
           </View>
         ))}
@@ -123,10 +126,10 @@ export default function PassengerListScreen() {
       <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.separator, paddingBottom: (Platform.OS === 'web' ? 34 : insets.bottom) + 12 }]}>
         {!!feedback && <Text style={[styles.feedback, { color: feedback.includes('Unable') ? colors.destructive : colors.success }]}>{feedback}</Text>}
         <View style={styles.footerRow}>
-          <TouchableOpacity testID="save-passenger-list" disabled={pending} style={[styles.secondary, { borderColor: colors.border }]} onPress={handleSave}>
-            <Text style={[styles.secondaryText, { color: colors.foreground }]}>Save</Text>
+           <TouchableOpacity testID="save-passenger-list" disabled={pending || submitted} style={[styles.secondary, { borderColor: colors.border }, submitted && styles.disabled]} onPress={handleSave}>
+             <Text style={[styles.secondaryText, { color: colors.foreground }]}>{submitted ? 'Saved' : 'Save'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity testID="submit-passenger-list" disabled={!allComplete || pending} style={[styles.primary, { backgroundColor: colors.primary }, (!allComplete || pending) && styles.disabled]} onPress={handleSubmit}>
+           <TouchableOpacity testID="submit-passenger-list" disabled={!allComplete || pending || submitted} style={[styles.primary, { backgroundColor: colors.primary }, (!allComplete || pending || submitted) && styles.disabled]} onPress={handleSubmit}>
             {pending ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.primaryText, { color: colors.primaryForeground }]}>{data.submittedAt ? 'Submitted' : data.version ? 'Submit Updated List' : 'Submit Passenger List'}</Text>}
           </TouchableOpacity>
         </View>

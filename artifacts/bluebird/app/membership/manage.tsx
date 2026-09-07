@@ -27,7 +27,7 @@ export default function ManagePlanScreen() {
   const queryClient = useQueryClient();
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { data: membership, isLoading } = useGetMembership({});
+  const { data: membership, isLoading, isError, refetch } = useGetMembership({});
   const mem = membership as any;
 
   const [confirming, setConfirming] = React.useState<PendingAction | null>(null);
@@ -47,10 +47,21 @@ export default function ManagePlanScreen() {
     },
   });
 
-  if (isLoading || !mem) {
+  if (isLoading) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.offWhite }]}>
         <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
+  if (isError || !mem) {
+    return (
+      <View style={[styles.centered, styles.errorState, { backgroundColor: colors.offWhite }]}>
+        <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>Could not load your plan</Text>
+        <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>Check your connection and try again.</Text>
+        <TouchableOpacity style={[styles.retryBtn, { backgroundColor: colors.primary }]} onPress={() => refetch()}>
+          <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -224,6 +235,11 @@ export default function ManagePlanScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  errorState: { paddingHorizontal: 28 },
+  errorTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 18, textAlign: 'center' },
+  errorBody: { fontFamily: 'Inter_400Regular', fontSize: 14, textAlign: 'center', marginTop: 6 },
+  retryBtn: { borderRadius: 999, paddingHorizontal: 22, paddingVertical: 11, marginTop: 16 },
+  retryText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   scroll: { paddingHorizontal: 16, paddingTop: 16 },
 
   planCard: { borderRadius: 24, padding: 22, marginBottom: 22 },

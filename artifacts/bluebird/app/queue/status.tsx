@@ -199,7 +199,7 @@ export default function QueueStatusScreen() {
   // API returns waiting + confirmed entries for the member. Poll so the
   // screen flips to the confirmed state on its own when the queue engine
   // auto-confirms the seat — no tap required.
-  const { data: queueEntries, isLoading, refetch } = useGetQueueStatus({
+  const { data: queueEntries, isLoading, isError, refetch } = useGetQueueStatus({
     query: { enabled: !!user, refetchInterval: 10_000 },
   });
   const allEntries = (queueEntries as QueueEntry[]) ?? [];
@@ -311,7 +311,13 @@ export default function QueueStatusScreen() {
         <View style={styles.centered}>
           <ActivityIndicator color={colors.primary} size="large" />
         </View>
-      ) : !hasAny ? (
+       ) : isError ? (
+         <View style={styles.empty}>
+           <Text style={[styles.emptyTitle, { color: colors.textOnSurface }]}>Could not load your queues</Text>
+           <Text style={[styles.emptyBody, { color: colors.mutedForegroundLight }]}>Check your connection and try again.</Text>
+           <SecondaryButton label="Try Again" onPress={() => refetch()} backgroundColor={colors.primary} textColor={colors.primaryForeground} style={styles.browseBtn} />
+         </View>
+       ) : !hasAny ? (
         <View style={styles.empty}>
           <Text style={[styles.emptyTitle, { color: colors.textOnSurface }]}>No active queues</Text>
           <Text style={[styles.emptyBody, { color: colors.mutedForegroundLight }]}>

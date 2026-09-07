@@ -26,7 +26,7 @@ function AppearanceSheet({ visible, onClose }: { visible: boolean; onClose: () =
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.sheetBackdrop} onPress={onClose}>
-        <Pressable style={[styles.sheet, { backgroundColor: colors.surface }]} onPress={() => {}}>
+        <Pressable style={[styles.sheet, { backgroundColor: colors.surface }]} onPress={(event) => event.stopPropagation()}>
           <Text style={[styles.sheetTitle, { color: colors.textOnSurface }]}>Appearance</Text>
           {THEME_OPTIONS.map((opt, i) => {
             const active = preference === opt.value;

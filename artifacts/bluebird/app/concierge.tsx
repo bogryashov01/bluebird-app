@@ -153,6 +153,14 @@ export default function ConciergeScreen() {
           <ActivityIndicator color={colors.primary} />
         </View>
       )}
+      {historyQuery.isError && (
+        <View style={styles.historyError}>
+          <Text style={[styles.callbackStatus, { color: colors.destructive }]}>Could not load earlier messages.</Text>
+          <TouchableOpacity onPress={() => historyQuery.refetch()}>
+            <Text style={[styles.retryText, { color: colors.primary }]}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -277,6 +285,8 @@ export default function ConciergeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   historyLoading: { paddingTop: 24, alignItems: 'center' },
+  historyError: { paddingHorizontal: 16, paddingTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  retryText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
   messageList: { padding: 16, gap: 12 },
   messageRow: { flexDirection: 'row' },
   messageRowUser: { flexDirection: 'row-reverse' },

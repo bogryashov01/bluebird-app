@@ -47,12 +47,8 @@ function TripCard({ flight, badge, badgeBlue, onPress, colors, onCancel, cancell
   manifestProgress?: string;
   onManifest?: () => void;
 }) {
-  return (
-    <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.card }]}
-      activeOpacity={0.85}
-      onPress={onPress}
-    >
+  const mainContent = (
+    <>
       <Image source={aircraftImage(flight.aircraftType)} style={styles.cardImage} resizeMode="cover" />
       <View style={styles.cardBadgeWrap}>
         <View style={[
@@ -69,31 +65,46 @@ function TripCard({ flight, badge, badgeBlue, onPress, colors, onCancel, cancell
         <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
           {flight.aircraftType} · {fmtDate(flight.departureDate, flight.departureTime)}
         </Text>
-        {manifestProgress && onManifest && (
-          <TouchableOpacity testID="trip-passenger-list" style={[styles.manifestRow, { backgroundColor: colors.muted }]} onPress={onManifest}>
-            <View>
-              <Text style={[styles.manifestTitle, { color: colors.foreground }]}>Passenger Information</Text>
-              <Text style={[styles.manifestMeta, { color: colors.mutedForeground }]}>{manifestProgress}</Text>
-            </View>
-            <Text style={[styles.manifestChevron, { color: colors.primary }]}>›</Text>
-          </TouchableOpacity>
-        )}
-        {onCancel && (
-          <TouchableOpacity
-            style={[styles.cancelBtn, { borderColor: colors.border }, cancelling && { opacity: 0.6 }]}
-            onPress={onCancel}
-            disabled={cancelling}
-            activeOpacity={0.75}
-          >
-            {cancelling ? (
-              <ActivityIndicator size="small" color={colors.mutedForeground} />
-            ) : (
-              <Text style={[styles.cancelBtnText, { color: colors.mutedForeground }]}>Cancel booking</Text>
-            )}
-          </TouchableOpacity>
-        )}
       </View>
-    </TouchableOpacity>
+    </>
+  );
+  return (
+    <View style={[styles.card, { backgroundColor: colors.card }]}>
+      {onPress ? (
+        <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
+          {mainContent}
+        </TouchableOpacity>
+      ) : (
+        <View>{mainContent}</View>
+      )}
+      {((manifestProgress && onManifest) || onCancel) && (
+        <View style={styles.cardActions}>
+          {manifestProgress && onManifest && (
+            <TouchableOpacity testID="trip-passenger-list" style={[styles.manifestRow, { backgroundColor: colors.muted }]} onPress={onManifest}>
+              <View>
+                <Text style={[styles.manifestTitle, { color: colors.foreground }]}>Passenger Information</Text>
+                <Text style={[styles.manifestMeta, { color: colors.mutedForeground }]}>{manifestProgress}</Text>
+              </View>
+              <Text style={[styles.manifestChevron, { color: colors.primary }]}>›</Text>
+            </TouchableOpacity>
+          )}
+          {onCancel && (
+            <TouchableOpacity
+              style={[styles.cancelBtn, { borderColor: colors.border }, cancelling && { opacity: 0.6 }]}
+              onPress={onCancel}
+              disabled={cancelling}
+              activeOpacity={0.75}
+            >
+              {cancelling ? (
+                <ActivityIndicator size="small" color={colors.mutedForeground} />
+              ) : (
+                <Text style={[styles.cancelBtnText, { color: colors.mutedForeground }]}>Cancel booking</Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -108,10 +119,10 @@ export default function TripsScreen() {
   const topPad = Platform.OS === 'web' ? 40 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { data: trips, isLoading: tripsLoading } = useListTrips({
+  const { data: trips, isLoading: tripsLoading, isError: tripsError, refetch: refetchTrips } = useListTrips({
     query: { enabled: !!user },
   });
-  const { data: queueEntries, isLoading: queueLoading } = useGetQueueStatus({
+  const { data: queueEntries, isLoading: queueLoading, isError: queueError, refetch: refetchQueue } = useGetQueueStatus({
     query: { enabled: !!user },
   });
 
@@ -180,6 +191,17 @@ export default function TripsScreen() {
       return (
         <View style={styles.centered}>
           <ActivityIndicator color={colors.primary} size="large" />
+        </View>
+      );
+    }
+    if (tripsError || queueError) {
+      return (
+        <View style={styles.empty}>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Could not load your trips</Text>
+          <Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>Check your connection and try again.</Text>
+          <TouchableOpacity style={[styles.discoverBtn, { backgroundColor: colors.primary }]} onPress={() => { refetchTrips(); refetchQueue(); }}>
+            <Text style={[styles.discoverBtnText, { color: colors.primaryForeground }]}>Try Again</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -406,6 +428,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   cardBody: { paddingVertical: 14, paddingHorizontal: 16 },
+  cardActions: { paddingHorizontal: 16, paddingBottom: 14 },
   cardRoute: {
     fontSize: 17,
     marginBottom: 2,
@@ -414,7 +437,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   cancelBtn: {
-    marginTop: 12,
+    marginTop: 10,
     borderWidth: 1,
     borderRadius: 12,
     paddingVertical: 10,
@@ -426,7 +449,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   manifestRow: {
-    marginTop: 12, padding: 12, borderRadius: 14, flexDirection: 'row',
+    padding: 12, borderRadius: 14, flexDirection: 'row',
     alignItems: 'center', justifyContent: 'space-between',
   },
   manifestTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },

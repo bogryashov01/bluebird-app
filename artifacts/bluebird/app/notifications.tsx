@@ -14,13 +14,15 @@ import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
 import { SettingsGroup } from '@/components/SettingsGroup';
 import { notificationRoute } from '@/lib/notificationRoute';
+import { usePersistedState } from '@/hooks/usePersistedState';
 
 // ── Toggle pill ───────────────────────────────────────────────────────────────
-function Toggle({ value, onToggle, activeColor, trackOff, knobColor }: { value: boolean; onToggle: () => void; activeColor: string; trackOff: string; knobColor: string }) {
+function Toggle({ value, onToggle, activeColor, trackOff, knobColor, disabled = false }: { value: boolean; onToggle: () => void; activeColor: string; trackOff: string; knobColor: string; disabled?: boolean }) {
   return (
     <TouchableOpacity
-      style={[styles.toggle, { backgroundColor: value ? activeColor : trackOff }]}
+      style={[styles.toggle, { backgroundColor: value ? activeColor : trackOff }, disabled && styles.toggleDisabled]}
       onPress={onToggle}
+      disabled={disabled}
       activeOpacity={0.8}
     >
       <View style={[styles.toggleKnob, { backgroundColor: knobColor, transform: [{ translateX: value ? 18 : 2 }] }]} />
@@ -53,12 +55,13 @@ export default function NotificationsScreen() {
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const [toggles, setToggles] = useState(TOGGLE_DEFAULTS);
+  const preferenceKey = `bluebird.notificationPreferences.${user?.id ?? 'signed-out'}`;
+  const [toggles, setToggles, togglesHydrated] = usePersistedState(preferenceKey, TOGGLE_DEFAULTS);
   const flip = (key: keyof typeof TOGGLE_DEFAULTS) =>
     setToggles((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const notificationsKey = getListNotificationsQueryKey();
-  const { data: notifData, isLoading, refetch } = useListNotifications({
+  const { data: notifData, isLoading, isError, refetch } = useListNotifications({
     query: {
       refetchInterval: 15000,
       refetchIntervalInBackground: false,
@@ -149,7 +152,7 @@ export default function NotificationsScreen() {
             <View key={key}>
               <View style={styles.toggleRow}>
                 <Text style={[styles.toggleLabel, { color: colors.textOnSurface }]}>{label}</Text>
-                <Toggle value={toggles[key]} onToggle={() => flip(key)} activeColor={colors.primary} trackOff={colors.muted} knobColor={colors.primaryForeground} />
+                 <Toggle disabled={!togglesHydrated} value={toggles[key]} onToggle={() => flip(key)} activeColor={colors.primary} trackOff={colors.muted} knobColor={colors.primaryForeground} />
               </View>
               {i < arr.length - 1 && <View style={[styles.sep, { backgroundColor: colors.separator }]} />}
             </View>
@@ -166,7 +169,7 @@ export default function NotificationsScreen() {
             <View key={key}>
               <View style={styles.toggleRow}>
                 <Text style={[styles.toggleLabel, { color: colors.textOnSurface }]}>{label}</Text>
-                <Toggle value={toggles[key]} onToggle={() => flip(key)} activeColor={colors.primary} trackOff={colors.muted} knobColor={colors.primaryForeground} />
+                 <Toggle disabled={!togglesHydrated} value={toggles[key]} onToggle={() => flip(key)} activeColor={colors.primary} trackOff={colors.muted} knobColor={colors.primaryForeground} />
               </View>
               {i < arr.length - 1 && <View style={[styles.sep, { backgroundColor: colors.separator }]} />}
             </View>
@@ -178,8 +181,15 @@ export default function NotificationsScreen() {
           RECENT ACTIVITY
         </Text>
 
-        {isLoading ? (
+        {!togglesHydrated || isLoading ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
+        ) : isError ? (
+          <View style={styles.emptyWrap}>
+            <Text style={[styles.emptyText, { color: colors.mutedForegroundLight }]}>Could not load notifications</Text>
+            <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={() => refetch()}>
+              <Text style={[styles.retryText, { color: colors.textOnSurface }]}>Try again</Text>
+            </TouchableOpacity>
+          </View>
         ) : notifications.length === 0 ? (
           <View style={styles.emptyWrap}>
             <Text style={[styles.emptyText, { color: colors.mutedForegroundLight }]}>No notifications yet</Text>
@@ -259,6 +269,7 @@ const styles = StyleSheet.create({
     width: 44, height: 26, borderRadius: 13,
     justifyContent: 'center', overflow: 'hidden',
   },
+  toggleDisabled: { opacity: 0.55 },
   toggleKnob: {
     width: 22, height: 22, borderRadius: 11,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowRadius: 3, shadowOpacity: 0.15, elevation: 2,
@@ -281,4 +292,6 @@ const styles = StyleSheet.create({
 
   emptyWrap: { paddingVertical: 32, alignItems: 'center' },
   emptyText: { fontFamily: 'Inter_400Regular', fontSize: 14 },
+  retryBtn: { marginTop: 12, borderWidth: 1, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 9 },
+  retryText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
 });
