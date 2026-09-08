@@ -52,6 +52,8 @@ export * from './passenger';
 export * from './passengerInput';
 export * from './passengerManifest';
 export * from './passengerManifestDeliveryStatus';
+export * from './petManifest';
+export * from './petManifestInput';
 export * from './queueEntry';
 export * from './queueEntryStatus';
 export * from './queueMovementEvent';

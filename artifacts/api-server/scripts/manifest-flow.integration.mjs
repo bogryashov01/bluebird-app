@@ -7,16 +7,21 @@ const ids = {
   owner: `manifest-owner-${suffix}`,
   other: `manifest-other-${suffix}`,
   domestic: `manifest-domestic-${suffix}`,
-  international: `manifest-international-${suffix}`,
+  petFlight: `manifest-pet-${suffix}`,
   waiting: `manifest-waiting-${suffix}`,
   trip: `manifest-trip-${suffix}`,
-  intlTrip: `manifest-intl-trip-${suffix}`,
+  petTrip: `manifest-pet-trip-${suffix}`,
 };
-const token = (userId) => jwt.sign({ userId }, process.env.JWT_SECRET || "bluebird-dev-only-secret", { expiresIn: "1h" });
+const token = (userId) => jwt.sign(
+  { userId },
+  process.env.JWT_SECRET || "bluebird-dev-only-secret",
+  { expiresIn: "1h" },
+);
 let failures = 0;
 const check = (name, condition, detail = "") => condition
   ? console.log(`  ✓ ${name}`)
   : (failures++, console.error(`  ✗ ${name} ${detail}`));
+
 async function api(method, path, auth, body) {
   const response = await fetch(`${BASE}${path}`, {
     method,
@@ -30,81 +35,124 @@ async function main() {
   try {
     await pool.query(`INSERT INTO users (id,name,phone,email,membership_tier,referral_code) VALUES
       ($1,'Manifest Owner',$2,$3,'plus','MOWNER'),($4,'Other Member',$5,$6,'plus','MOTHER')`,
-      [ids.owner, `+1888${Math.floor(Math.random()*1e7).toString().padStart(7,"0")}`, `${ids.owner}@test.invalid`,
-       ids.other, `+1877${Math.floor(Math.random()*1e7).toString().padStart(7,"0")}`, `${ids.other}@test.invalid`]);
+      [ids.owner, `+1888${Math.floor(Math.random() * 1e7).toString().padStart(7, "0")}`, `${ids.owner}@test.invalid`,
+       ids.other, `+1877${Math.floor(Math.random() * 1e7).toString().padStart(7, "0")}`, `${ids.other}@test.invalid`]);
     await pool.query(`INSERT INTO flights
       (id,from_airport,from_city,to_airport,to_city,aircraft_type,aircraft_capacity,departure_date,departure_time,duration,seats_available,international,status)
       VALUES ($1,'DAL','Dallas','AUS','Austin','Citation',6,'2099-06-01','09:00','1h',6,false,'available'),
              ($2,'JFK','New York','NAS','Nassau','Citation',6,'2099-06-02','09:00','3h',6,true,'available')`,
-      [ids.domestic, ids.international]);
-    await pool.query(`INSERT INTO queue_entries (id,user_id,flight_id,position,status,passengers)
-      VALUES ($1,$2,$3,1,'confirmed',2),($4,$2,$5,1,'confirmed',1),($6,$2,$3,2,'waiting',1)`,
-      [`qe-dom-${suffix}`, ids.owner, ids.domestic, `qe-intl-${suffix}`, ids.international, ids.waiting]);
-    await pool.query(`INSERT INTO trips (id,user_id,flight_id,status) VALUES
-      ($1,$2,$3,'upcoming'),($4,$2,$5,'upcoming')`,
-      [ids.trip, ids.owner, ids.domestic, ids.intlTrip, ids.international]);
+      [ids.domestic, ids.petFlight]);
+    await pool.query(`INSERT INTO queue_entries
+      (id,user_id,flight_id,position,status,passengers,bringing_pet,pet_fee_acknowledged)
+      VALUES ($1,$2,$3,1,'confirmed',2,false,false),
+             ($4,$2,$5,1,'confirmed',1,true,true),
+             ($6,$2,$3,2,'waiting',1,false,false)`,
+      [`qe-dom-${suffix}`, ids.owner, ids.domestic, `qe-pet-${suffix}`, ids.petFlight, ids.waiting]);
+    await pool.query(`INSERT INTO trips (id,user_id,flight_id,status,cleaning_fee_usd) VALUES
+      ($1,$2,$3,'upcoming',0),($4,$2,$5,'upcoming',500)`,
+      [ids.trip, ids.owner, ids.domestic, ids.petTrip, ids.petFlight]);
 
     const ownerToken = token(ids.owner);
     const otherToken = token(ids.other);
     const get = await api("GET", `/trips/${ids.trip}/manifest`, ownerToken);
-    check("confirmed owner receives booked passenger slots", get.status === 200 && get.json.requiredCount === 2 && get.json.passengers.length === 2, JSON.stringify(get.json));
+    check(
+      "confirmed owner starts with a primary traveler and reserved-seat limit",
+      get.status === 200 && get.json.requiredCount === 2 && get.json.passengers.length === 1,
+      JSON.stringify(get.json),
+    );
     check("another member cannot access the manifest", (await api("GET", `/trips/${ids.trip}/manifest`, otherToken)).status === 404);
-    const wrongCount = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, { passengers: [get.json.passengers[0]] });
-    check("booked count is enforced", wrongCount.status === 400, JSON.stringify(wrongCount.json));
-    const fractionalOrder = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
+    check("another member cannot save the manifest", (await api("PUT", `/trips/${ids.trip}/manifest`, otherToken, {
+      passengers: [{ passengerOrder: 1, firstName: "Other", lastName: "Member", dateOfBirth: "1980-01-01" }],
+    })).status === 404);
+    check("another member cannot submit the manifest", (await api("POST", `/trips/${ids.trip}/manifest/submit`, otherToken)).status === 404);
+
+    const tooMany = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
       passengers: [
-        { passengerOrder: 1.5, firstName: "Bad", lastName: "Slot", weightKg: 60 },
-        { passengerOrder: 2, firstName: "Good", lastName: "Slot", weightKg: 60 },
+        { passengerOrder: 1, firstName: "One", lastName: "Traveler", dateOfBirth: "1980-01-01" },
+        { passengerOrder: 2, firstName: "Two", lastName: "Traveler", dateOfBirth: "1981-01-01" },
+        { passengerOrder: 3, firstName: "Three", lastName: "Traveler", dateOfBirth: "1982-01-01" },
       ],
     });
-    check("fractional passenger slots are rejected", fractionalOrder.status === 400, JSON.stringify(fractionalOrder.json));
+    check("roster cannot exceed reserved seats", tooMany.status === 400, JSON.stringify(tooMany.json));
+
+    const invalidCalendar = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
+      passengers: [{ passengerOrder: 1, firstName: "Ada", lastName: "Lovelace", dateOfBirth: "1980-02-30" }],
+    });
+    check("nonexistent birth date remains incomplete", invalidCalendar.status === 200 && invalidCalendar.json.isComplete === false);
+    const futureBirth = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
+      passengers: [{ passengerOrder: 1, firstName: "Ada", lastName: "Lovelace", dateOfBirth: "2098-01-01" }],
+    });
+    check("future birth date remains incomplete", futureBirth.status === 200 && futureBirth.json.isComplete === false);
+    check("invalid birth date cannot submit", (await api("POST", `/trips/${ids.trip}/manifest/submit`, ownerToken)).status === 400);
 
     const domestic = [
-      { passengerOrder: 1, firstName: "Ada", lastName: "Lovelace", weightKg: 61 },
-      { passengerOrder: 2, firstName: "Grace", lastName: "Hopper", weightKg: 64 },
+      {
+        passengerOrder: 1,
+        firstName: "Ada",
+        lastName: "Lovelace",
+        dateOfBirth: "1980-12-10",
+        passportNumber: "MUST-NOT-PERSIST",
+        nationality: "MUST-NOT-PERSIST",
+      },
+      { passengerOrder: 2, firstName: "Grace", lastName: "Hopper", dateOfBirth: "1975-12-09" },
     ];
     const saved = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, { passengers: domestic });
-    check("complete domestic manifest persists", saved.status === 200 && saved.json.completedCount === 2);
+    check("complete traveler roster persists", saved.status === 200 && saved.json.completedCount === 2 && saved.json.isComplete);
+    const restored = await api("GET", `/trips/${ids.trip}/manifest`, ownerToken);
+    check("saved names and birth dates are restored", restored.json.passengers[1].lastName === "Hopper" && restored.json.passengers[0].dateOfBirth === "1980-12-10");
+    check("passport attributes are excluded from manifest responses", !/passport|nationality|issuingCountry/i.test(JSON.stringify(restored.json)), JSON.stringify(restored.json));
+
     const submit1 = await api("POST", `/trips/${ids.trip}/manifest/submit`, ownerToken);
     const submit2 = await api("POST", `/trips/${ids.trip}/manifest/submit`, ownerToken);
     check("unchanged submission is idempotent", submit1.json.version === 1 && submit2.json.version === 1);
-    const [{ count: firstUpdates }] = (await pool.query(`SELECT count(*)::int count FROM manifest_operational_updates WHERE trip_id=$1`, [ids.trip])).rows;
-    check("only one operational update is recorded", firstUpdates === 1);
+    const updates = (await pool.query(
+      `SELECT body FROM manifest_operational_updates WHERE trip_id=$1 ORDER BY version`,
+      [ids.trip],
+    )).rows;
+    check("only one operational update is recorded", updates.length === 1);
+    check("operations output includes names and birth dates", /Ada Lovelace; Date of birth 1980-12-10/.test(updates[0].body));
+    check("operations output excludes passport attributes", !/passport|nationality|issuing country|MUST-NOT-PERSIST/i.test(updates[0].body), updates[0].body);
 
-    domestic[1].weightKg = 65;
-    const changed = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, { passengers: domestic });
-    check("changed manifest becomes ready for resubmission", changed.status === 200 && !changed.json.submittedAt && changed.json.version === 1);
+    const shortened = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
+      passengers: [domestic[0]],
+    });
+    check("an editable roster may remove an additional traveler", shortened.status === 200 && shortened.json.passengers.length === 1 && shortened.json.isComplete);
+    check("changed manifest becomes ready for resubmission", !shortened.json.submittedAt && shortened.json.version === 1);
     const resubmitted = await api("POST", `/trips/${ids.trip}/manifest/submit`, ownerToken);
-    check("updated manifest creates next version", resubmitted.json.version === 2 && resubmitted.json.operationsNotified === true);
+    check("updated roster creates the next submission version", resubmitted.json.version === 2 && resubmitted.json.operationsNotified === true);
 
-    const intlIncomplete = await api("PUT", `/trips/${ids.intlTrip}/manifest`, ownerToken, {
-      passengers: [{ passengerOrder: 1, firstName: "Amelia", lastName: "Earhart", weightKg: 58 }],
+    const petIncomplete = await api("PUT", `/trips/${ids.petTrip}/manifest`, ownerToken, {
+      passengers: [{ passengerOrder: 1, firstName: "Amelia", lastName: "Earhart", dateOfBirth: "1977-07-24" }],
+      pet: { weightLb: 42, crateLengthIn: 36 },
     });
-    check("international traveler without passport stays incomplete", intlIncomplete.status === 200 && intlIncomplete.json.isComplete === false);
-    check("incomplete international manifest cannot submit", (await api("POST", `/trips/${ids.intlTrip}/manifest/submit`, ownerToken)).status === 400);
-    const invalidCalendar = await api("PUT", `/trips/${ids.intlTrip}/manifest`, ownerToken, {
-      passengers: [{ passengerOrder: 1, firstName: "Amelia", lastName: "Earhart", weightKg: 58,
-        passportNumber: "P12345", issuingCountry: "United States", nationality: "American", passportExpirationDate: "2098-02-30" }],
+    check("partial pet details persist but remain incomplete", petIncomplete.status === 200 && !petIncomplete.json.isComplete && petIncomplete.json.pet.weightLb === 42);
+    const petRestored = await api("GET", `/trips/${ids.petTrip}/manifest`, ownerToken);
+    check("pet summary availability is tied to the booking", petRestored.json.bringingPet === true && petRestored.json.pet.crateLengthIn === 36);
+    const petComplete = await api("PUT", `/trips/${ids.petTrip}/manifest`, ownerToken, {
+      passengers: [{ passengerOrder: 1, firstName: "Amelia", lastName: "Earhart", dateOfBirth: "1977-07-24" }],
+      pet: { weightLb: 42, crateLengthIn: 36, crateWidthIn: 24, crateHeightIn: 26 },
     });
-    check("nonexistent passport expiration date stays incomplete", invalidCalendar.json.isComplete === false);
-    const invalidStatus = await api("GET", `/flights/${ids.international}/my-status`, ownerToken);
-    check("flight detail progress also rejects nonexistent expiration dates",
-      invalidStatus.json?.manifest?.isComplete === false, JSON.stringify(invalidStatus.json));
-    const intlComplete = await api("PUT", `/trips/${ids.intlTrip}/manifest`, ownerToken, {
-      passengers: [{ passengerOrder: 1, firstName: "Amelia", lastName: "Earhart", weightKg: 58,
-        passportNumber: "P12345", issuingCountry: "United States", nationality: "American", passportExpirationDate: "2098-01-01" }],
-    });
-    check("international passport fields satisfy validation", intlComplete.json.isComplete === true);
+    check("valid pet weight and crate dimensions complete the manifest", petComplete.status === 200 && petComplete.json.isComplete);
+    await api("POST", `/trips/${ids.petTrip}/manifest/submit`, ownerToken);
+    const [{ body: petOutput }] = (await pool.query(
+      `SELECT body FROM manifest_operational_updates WHERE trip_id=$1`,
+      [ids.petTrip],
+    )).rows;
+    check("operations output includes the pet summary", /Pet: 42 lb; Crate 36 × 24 × 26 in/.test(petOutput), petOutput);
   } finally {
-    await pool.query(`DELETE FROM manifest_operational_updates WHERE trip_id IN ($1,$2)`, [ids.trip, ids.intlTrip]).catch(() => {});
-    await pool.query(`DELETE FROM trip_passengers WHERE trip_id IN ($1,$2)`, [ids.trip, ids.intlTrip]).catch(() => {});
-    await pool.query(`DELETE FROM trips WHERE id IN ($1,$2)`, [ids.trip, ids.intlTrip]).catch(() => {});
+    await pool.query(`DELETE FROM manifest_operational_updates WHERE trip_id IN ($1,$2)`, [ids.trip, ids.petTrip]).catch(() => {});
+    await pool.query(`DELETE FROM trip_passengers WHERE trip_id IN ($1,$2)`, [ids.trip, ids.petTrip]).catch(() => {});
+    await pool.query(`DELETE FROM trips WHERE id IN ($1,$2)`, [ids.trip, ids.petTrip]).catch(() => {});
     await pool.query(`DELETE FROM queue_entries WHERE id LIKE $1`, [`%${suffix}`]).catch(() => {});
-    await pool.query(`DELETE FROM flights WHERE id IN ($1,$2)`, [ids.domestic, ids.international]).catch(() => {});
+    await pool.query(`DELETE FROM flights WHERE id IN ($1,$2)`, [ids.domestic, ids.petFlight]).catch(() => {});
     await pool.query(`DELETE FROM users WHERE id IN ($1,$2)`, [ids.owner, ids.other]).catch(() => {});
     await pool.end();
   }
   if (failures) process.exit(1);
   console.log("\nAll manifest-flow checks passed.");
 }
-main().catch((error) => { console.error(error); process.exit(1); });
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

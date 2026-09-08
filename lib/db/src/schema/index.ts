@@ -96,6 +96,10 @@ export const tripsTable = pgTable("trips", {
   flightId: text("flight_id").notNull().references(() => flightsTable.id),
   status: text("status").notNull().default("upcoming"),
   cleaningFeeUsd: integer("cleaning_fee_usd").notNull().default(0),
+  petWeightLb: integer("pet_weight_lb"),
+  petCrateLengthIn: integer("pet_crate_length_in"),
+  petCrateWidthIn: integer("pet_crate_width_in"),
+  petCrateHeightIn: integer("pet_crate_height_in"),
   bookedAt: timestamp("booked_at").notNull().defaultNow(),
   manifestVersion: integer("manifest_version").notNull().default(0),
   manifestSubmittedAt: timestamp("manifest_submitted_at"),
@@ -108,16 +112,11 @@ export const tripPassengersTable = pgTable("trip_passengers", {
   passengerOrder: integer("passenger_order").notNull(),
   firstName: text("first_name").notNull().default(""),
   lastName: text("last_name").notNull().default(""),
-  weightKg: integer("weight_kg"),
-  passportNumber: text("passport_number"),
-  issuingCountry: text("issuing_country"),
-  nationality: text("nationality"),
-  passportExpirationDate: text("passport_expiration_date"),
+  dateOfBirth: text("date_of_birth"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [
   uniqueIndex("trip_passengers_trip_order_unique").on(table.tripId, table.passengerOrder),
   check("trip_passengers_order_positive", sql`${table.passengerOrder} > 0`),
-  check("trip_passengers_weight_positive", sql`${table.weightKg} IS NULL OR ${table.weightKg} > 0`),
 ]);
 
 export const manifestOperationalUpdatesTable = pgTable("manifest_operational_updates", {

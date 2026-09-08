@@ -14,13 +14,16 @@ export const joinQueueBodyPassengersMax = 10;
 export const saveTripManifestBodyPassengersItemPassengerOrderMultipleOf = 1;
 export const saveTripManifestBodyPassengersItemFirstNameMax = 100;
 export const saveTripManifestBodyPassengersItemLastNameMax = 100;
-export const saveTripManifestBodyPassengersItemWeightKgMax = 500;
-export const saveTripManifestBodyPassengersItemWeightKgMultipleOf = 1;
-export const saveTripManifestBodyPassengersItemPassportNumberMax = 100;
-export const saveTripManifestBodyPassengersItemIssuingCountryMax = 100;
-export const saveTripManifestBodyPassengersItemNationalityMax = 100;
-export const saveTripManifestBodyPassengersItemPassportExpirationDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const saveTripManifestBodyPassengersItemDateOfBirthRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 export const saveTripManifestBodyPassengersMax = 10;
+export const saveTripManifestBodyPetWeightLbMax = 500;
+export const saveTripManifestBodyPetWeightLbMultipleOf = 1;
+export const saveTripManifestBodyPetCrateLengthInMax = 200;
+export const saveTripManifestBodyPetCrateLengthInMultipleOf = 1;
+export const saveTripManifestBodyPetCrateWidthInMax = 200;
+export const saveTripManifestBodyPetCrateWidthInMultipleOf = 1;
+export const saveTripManifestBodyPetCrateHeightInMax = 200;
+export const saveTripManifestBodyPetCrateHeightInMultipleOf = 1;
 export const conciergeChatBodyMessagesItemContentMax = 4000;
 export const conciergeChatBodyMessagesMax = 40;
 export const getConciergeHistoryQueryLimitDefault = 50;
@@ -655,15 +658,18 @@ export const GetTripManifestResponse = zod.object({
   "completedCount": zod.number(),
   "isComplete": zod.boolean(),
   "international": zod.boolean(),
+  "bringingPet": zod.boolean(),
+  "pet": zod.object({
+  "weightLb": zod.number().nullable(),
+  "crateLengthIn": zod.number().nullable(),
+  "crateWidthIn": zod.number().nullable(),
+  "crateHeightIn": zod.number().nullable()
+}).nullish(),
   "passengers": zod.array(zod.object({
   "passengerOrder": zod.number().min(1),
   "firstName": zod.string(),
   "lastName": zod.string(),
-  "weightKg": zod.number().nullish(),
-  "passportNumber": zod.string().nullish(),
-  "issuingCountry": zod.string().nullish(),
-  "nationality": zod.string().nullish(),
-  "passportExpirationDate": zod.string().nullish()
+  "dateOfBirth": zod.string().nullish()
 })),
   "version": zod.number(),
   "submittedAt": zod.string().nullish(),
@@ -694,12 +700,14 @@ export const SaveTripManifestBody = zod.object({
   "passengerOrder": zod.number().min(1).multipleOf(saveTripManifestBodyPassengersItemPassengerOrderMultipleOf),
   "firstName": zod.string().max(saveTripManifestBodyPassengersItemFirstNameMax),
   "lastName": zod.string().max(saveTripManifestBodyPassengersItemLastNameMax),
-  "weightKg": zod.number().min(1).max(saveTripManifestBodyPassengersItemWeightKgMax).multipleOf(saveTripManifestBodyPassengersItemWeightKgMultipleOf).nullish(),
-  "passportNumber": zod.string().max(saveTripManifestBodyPassengersItemPassportNumberMax).nullish(),
-  "issuingCountry": zod.string().max(saveTripManifestBodyPassengersItemIssuingCountryMax).nullish(),
-  "nationality": zod.string().max(saveTripManifestBodyPassengersItemNationalityMax).nullish(),
-  "passportExpirationDate": zod.string().regex(saveTripManifestBodyPassengersItemPassportExpirationDateRegExp).nullish()
-})).min(1).max(saveTripManifestBodyPassengersMax)
+  "dateOfBirth": zod.string().regex(saveTripManifestBodyPassengersItemDateOfBirthRegExp).nullish()
+})).min(1).max(saveTripManifestBodyPassengersMax),
+  "pet": zod.object({
+  "weightLb": zod.number().min(1).max(saveTripManifestBodyPetWeightLbMax).multipleOf(saveTripManifestBodyPetWeightLbMultipleOf).nullish(),
+  "crateLengthIn": zod.number().min(1).max(saveTripManifestBodyPetCrateLengthInMax).multipleOf(saveTripManifestBodyPetCrateLengthInMultipleOf).nullish(),
+  "crateWidthIn": zod.number().min(1).max(saveTripManifestBodyPetCrateWidthInMax).multipleOf(saveTripManifestBodyPetCrateWidthInMultipleOf).nullish(),
+  "crateHeightIn": zod.number().min(1).max(saveTripManifestBodyPetCrateHeightInMax).multipleOf(saveTripManifestBodyPetCrateHeightInMultipleOf).nullish()
+}).optional()
 })
 
 
@@ -711,15 +719,18 @@ export const SaveTripManifestResponse = zod.object({
   "completedCount": zod.number(),
   "isComplete": zod.boolean(),
   "international": zod.boolean(),
+  "bringingPet": zod.boolean(),
+  "pet": zod.object({
+  "weightLb": zod.number().nullable(),
+  "crateLengthIn": zod.number().nullable(),
+  "crateWidthIn": zod.number().nullable(),
+  "crateHeightIn": zod.number().nullable()
+}).nullish(),
   "passengers": zod.array(zod.object({
   "passengerOrder": zod.number().min(1),
   "firstName": zod.string(),
   "lastName": zod.string(),
-  "weightKg": zod.number().nullish(),
-  "passportNumber": zod.string().nullish(),
-  "issuingCountry": zod.string().nullish(),
-  "nationality": zod.string().nullish(),
-  "passportExpirationDate": zod.string().nullish()
+  "dateOfBirth": zod.string().nullish()
 })),
   "version": zod.number(),
   "submittedAt": zod.string().nullish(),
@@ -744,15 +755,18 @@ export const SubmitTripManifestResponse = zod.object({
   "completedCount": zod.number(),
   "isComplete": zod.boolean(),
   "international": zod.boolean(),
+  "bringingPet": zod.boolean(),
+  "pet": zod.object({
+  "weightLb": zod.number().nullable(),
+  "crateLengthIn": zod.number().nullable(),
+  "crateWidthIn": zod.number().nullable(),
+  "crateHeightIn": zod.number().nullable()
+}).nullish(),
   "passengers": zod.array(zod.object({
   "passengerOrder": zod.number().min(1),
   "firstName": zod.string(),
   "lastName": zod.string(),
-  "weightKg": zod.number().nullish(),
-  "passportNumber": zod.string().nullish(),
-  "issuingCountry": zod.string().nullish(),
-  "nationality": zod.string().nullish(),
-  "passportExpirationDate": zod.string().nullish()
+  "dateOfBirth": zod.string().nullish()
 })),
   "version": zod.number(),
   "submittedAt": zod.string().nullish(),

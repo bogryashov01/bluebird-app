@@ -67,32 +67,32 @@ function dateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function flightManifestProgress(trip: any, entry: any, international: boolean) {
+async function flightManifestProgress(trip: any, entry: any, _international: boolean) {
   const passengers = await db.select().from(tripPassengersTable)
     .where(eq(tripPassengersTable.tripId, trip.id));
   const complete = passengers.filter((passenger) =>
-    !!passenger.firstName.trim() && !!passenger.lastName.trim() && Number(passenger.weightKg) > 0 &&
-    (!international || (
-      !!passenger.passportNumber?.trim() && !!passenger.issuingCountry?.trim() &&
-      !!passenger.nationality?.trim() && validFutureDate(passenger.passportExpirationDate)
-    ))
+    !!passenger.firstName.trim() && !!passenger.lastName.trim() && validPastDate(passenger.dateOfBirth)
   ).length;
+  const petComplete = !entry.bringingPet || [
+    trip.petWeightLb, trip.petCrateLengthIn, trip.petCrateWidthIn, trip.petCrateHeightIn,
+  ].every((value) => Number.isInteger(value) && value > 0);
   return {
     requiredCount: entry.passengers,
     completedCount: complete,
-    isComplete: complete === entry.passengers,
+    isComplete: passengers.length > 0 && passengers.length <= entry.passengers &&
+      complete === passengers.length && petComplete,
     version: trip.manifestVersion,
     submittedAt: trip.manifestSubmittedAt?.toISOString?.() ?? null,
     deliveryStatus: trip.manifestDeliveryStatus ?? null,
   };
 }
 
-function validFutureDate(value: unknown): boolean {
+function validPastDate(value: unknown): boolean {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(date.valueOf()) &&
     date.toISOString().slice(0, 10) === value &&
-    date > new Date();
+    date < new Date();
 }
 
 // GET /flights/airports (public — onboarding airport picker)

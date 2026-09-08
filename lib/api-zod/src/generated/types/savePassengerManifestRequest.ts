@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PassengerInput } from './passengerInput';
+import type { PetManifestInput } from './petManifestInput';
 
 export interface SavePassengerManifestRequest {
   /**
@@ -13,4 +14,5 @@ export interface SavePassengerManifestRequest {
      * @maxItems 10
      */
   passengers: PassengerInput[];
+  pet?: PetManifestInput;
 }

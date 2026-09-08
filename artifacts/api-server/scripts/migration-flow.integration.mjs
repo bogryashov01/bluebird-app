@@ -72,6 +72,30 @@ await pool.query(`
 let firstRunOk = true, secondRunOk = true;
 try { await pool.query(migrationSql); } catch (e) { firstRunOk = false; console.error(e.message); }
 check("migration succeeds on a legacy database", firstRunOk);
+await pool.query(`
+  INSERT INTO flights
+    (id, from_airport, from_city, to_airport, to_city, aircraft_type, aircraft_capacity,
+     departure_date, departure_time, duration, seats_available)
+  VALUES ('legacy-manifest-flight', 'DAL', 'Dallas', 'AUS', 'Austin', 'Citation', 6,
+          '2099-01-01', '09:00', '1h', 6);
+  INSERT INTO trips (id, user_id, flight_id)
+  VALUES ('legacy-manifest-trip', 'u1', 'legacy-manifest-flight');
+  ALTER TABLE trip_passengers ADD COLUMN weight_kg INTEGER;
+  ALTER TABLE trip_passengers ADD COLUMN passport_number TEXT;
+  ALTER TABLE trip_passengers ADD COLUMN issuing_country TEXT;
+  ALTER TABLE trip_passengers ADD COLUMN nationality TEXT;
+  ALTER TABLE trip_passengers ADD COLUMN passport_expiration_date TEXT;
+  INSERT INTO trip_passengers
+    (id, trip_id, passenger_order, first_name, last_name, weight_kg, passport_number,
+     issuing_country, nationality, passport_expiration_date)
+  VALUES ('legacy-passenger', 'legacy-manifest-trip', 1, 'Legacy', 'Traveler', 70,
+          'SECRET-PASSPORT', 'United States', 'American', '2099-01-01');
+  INSERT INTO manifest_operational_updates
+    (id, trip_id, version, recipient, subject, body, delivery_status)
+  VALUES ('legacy-update', 'legacy-manifest-trip', 1, 'ops@test.invalid', 'Legacy',
+          E'Passenger 1: Legacy Traveler; 70 kg; Passport SECRET-PASSPORT; Issuing country United States; Nationality American; Expires 2099-01-01\\nSafe footer',
+          'demo_recorded');
+`);
 try { await pool.query(migrationSql); } catch (e) { secondRunOk = false; console.error(e.message); }
 check("migration is idempotent (second run clean)", secondRunOk);
 
@@ -146,6 +170,23 @@ const registrationGrants = Number((await pool.query(`
   SELECT count(*)::int AS n FROM information_schema.tables
   WHERE table_schema = '${SCHEMA}' AND table_name = 'registration_grants'`)).rows[0].n);
 check("registration_grants table created", registrationGrants === 1);
+
+const passengerCols = (await pool.query(`
+  SELECT column_name FROM information_schema.columns
+  WHERE table_schema = '${SCHEMA}' AND table_name = 'trip_passengers'`)).rows.map((row) => row.column_name);
+check("legacy passenger weight and passport columns are dropped",
+  !passengerCols.some((column) => [
+    "weight_kg", "passport_number", "issuing_country", "nationality", "passport_expiration_date",
+  ].includes(column)));
+check("date of birth column is present", passengerCols.includes("date_of_birth"));
+const legacyBody = (await pool.query(`
+  SELECT body FROM manifest_operational_updates WHERE id = 'legacy-update'`)).rows[0]?.body ?? "";
+check("historical operations output is redacted",
+  !/passport|issuing country|nationality|expires|SECRET-PASSPORT/i.test(legacyBody),
+  legacyBody);
+check("redaction preserves non-sensitive operational content",
+  legacyBody.includes("Passenger 1: Legacy Traveler; 70 kg") && legacyBody.includes("Safe footer"),
+  legacyBody);
 
 await admin.query(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE;`);
 await pool.end();

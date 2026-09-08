@@ -42,49 +42,48 @@ async function eligibleManifestTrip(tripId: string, userId: string, database: an
   return { trip, flight, entry };
 }
 
-function passengerComplete(passenger: any, international: boolean): boolean {
-  const core = !!passenger.firstName?.trim() && !!passenger.lastName?.trim() && Number(passenger.weightKg) > 0;
-  return core && (!international || (
-    !!passenger.passportNumber?.trim() &&
-    !!passenger.issuingCountry?.trim() &&
-    !!passenger.nationality?.trim() &&
-    validFutureDate(passenger.passportExpirationDate)
-  ));
+function passengerComplete(passenger: any): boolean {
+  return !!passenger.firstName?.trim() && !!passenger.lastName?.trim() && validPastDate(passenger.dateOfBirth);
 }
 
-function validFutureDate(value: unknown): boolean {
+function validPastDate(value: unknown): boolean {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(date.valueOf()) &&
     date.toISOString().slice(0, 10) === value &&
-    date > new Date();
+    date < new Date();
 }
 
-async function manifestResponse(trip: any, flight: any, requiredCount: number, database: any = db) {
+async function manifestResponse(trip: any, flight: any, entry: any, database: any = db) {
+  const requiredCount = entry.passengers;
   const stored = await database.select().from(tripPassengersTable)
     .where(eq(tripPassengersTable.tripId, trip.id))
     .orderBy(asc(tripPassengersTable.passengerOrder));
-  const byOrder = new Map(stored.map((passenger: any) => [passenger.passengerOrder, passenger]));
-  const passengers = Array.from({ length: requiredCount }, (_, index) => {
-    const passenger: any = byOrder.get(index + 1);
-    return {
-      passengerOrder: index + 1,
-      firstName: passenger?.firstName ?? "",
-      lastName: passenger?.lastName ?? "",
-      weightKg: passenger?.weightKg ?? null,
-      passportNumber: passenger?.passportNumber ?? null,
-      issuingCountry: passenger?.issuingCountry ?? null,
-      nationality: passenger?.nationality ?? null,
-      passportExpirationDate: passenger?.passportExpirationDate ?? null,
-    };
-  });
-  const completedCount = passengers.filter((passenger) => passengerComplete(passenger, flight.international)).length;
+  const passengers = (stored.length ? stored : [{ passengerOrder: 1, firstName: "", lastName: "", dateOfBirth: null }])
+    .map((passenger: any) => ({
+      passengerOrder: passenger.passengerOrder,
+      firstName: passenger.firstName,
+      lastName: passenger.lastName,
+      dateOfBirth: passenger.dateOfBirth ?? null,
+    }));
+  const completedCount = passengers.filter(passengerComplete).length;
+  const bringingPet = !!entry.bringingPet;
+  const pet = bringingPet ? {
+    weightLb: trip.petWeightLb,
+    crateLengthIn: trip.petCrateLengthIn,
+    crateWidthIn: trip.petCrateWidthIn,
+    crateHeightIn: trip.petCrateHeightIn,
+  } : null;
+  const petComplete = !bringingPet || Object.values(pet!).every((value) => Number.isInteger(value) && Number(value) > 0);
   return {
     tripId: trip.id,
     requiredCount,
     completedCount,
-    isComplete: completedCount === requiredCount,
+    isComplete: passengers.length > 0 && passengers.length <= requiredCount &&
+      completedCount === passengers.length && petComplete,
     international: flight.international,
+    bringingPet,
+    pet,
     passengers,
     version: trip.manifestVersion,
     submittedAt: trip.manifestSubmittedAt?.toISOString?.() ?? null,
@@ -108,7 +107,7 @@ router.get("/", authMiddleware, async (req, res) => {
           eq(queueEntriesTable.status, "confirmed"),
         ));
         const manifest = trip.status === "upcoming" && entry && flight
-          ? await manifestResponse(trip, flight, entry.passengers)
+          ? await manifestResponse(trip, flight, entry)
           : null;
         return {
           ...trip,
@@ -134,7 +133,7 @@ router.get("/:id/manifest", authMiddleware, async (req, res) => {
   const result = await eligibleManifestTrip(String(req.params.id), (req as any).userId);
   if (result.error === "not_found") return res.status(404).json({ error: "Trip not found" });
   if (result.error === "ineligible") return res.status(409).json({ error: "Passenger lists are only available for confirmed upcoming trips" });
-  return res.json(await manifestResponse(result.trip, result.flight, result.entry.passengers));
+  return res.json(await manifestResponse(result.trip, result.flight, result.entry));
 });
 
 router.put("/:id/manifest", authMiddleware, async (req, res) => {
@@ -151,11 +150,16 @@ router.put("/:id/manifest", authMiddleware, async (req, res) => {
     if (result.error === "ineligible") { await client.query("ROLLBACK"); return res.status(409).json({ error: "Passenger lists are only available for confirmed upcoming trips" }); }
     const passengers = parsed.data.passengers;
     const orders = passengers.map((passenger) => passenger.passengerOrder);
-    if (passengers.length !== result.entry.passengers || new Set(orders).size !== orders.length ||
+    if (passengers.length < 1 || passengers.length > result.entry.passengers || new Set(orders).size !== orders.length ||
       orders.some((order) => !Number.isInteger(order) || order < 1 || order > result.entry.passengers) ||
-      passengers.some((passenger) => passenger.weightKg != null && !Number.isInteger(passenger.weightKg))) {
+      orders.slice().sort((a, b) => a - b).some((order, index) => order !== index + 1)) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ error: `Exactly ${result.entry.passengers} passenger slots are required` });
+      return res.status(400).json({ error: `Between 1 and ${result.entry.passengers} travelers are allowed` });
+    }
+    const pet = parsed.data.pet;
+    if (!result.entry.bringingPet && pet) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Pet details are not applicable to this booking" });
     }
     const previous = await txDb.select().from(tripPassengersTable)
       .where(eq(tripPassengersTable.tripId, result.trip.id))
@@ -163,27 +167,32 @@ router.put("/:id/manifest", authMiddleware, async (req, res) => {
     const normalized = passengers.sort((a, b) => a.passengerOrder - b.passengerOrder);
     const comparable = (rows: any[]) => JSON.stringify(rows.map((p) => ({
       passengerOrder: p.passengerOrder, firstName: p.firstName.trim(), lastName: p.lastName.trim(),
-      weightKg: p.weightKg ?? null, passportNumber: p.passportNumber?.trim() || null,
-      issuingCountry: p.issuingCountry?.trim() || null, nationality: p.nationality?.trim() || null,
-      passportExpirationDate: p.passportExpirationDate || null,
+      dateOfBirth: p.dateOfBirth || null,
     })));
-    const changed = comparable(previous) !== comparable(normalized);
+    const previousPet = {
+      weightLb: result.trip.petWeightLb, crateLengthIn: result.trip.petCrateLengthIn,
+      crateWidthIn: result.trip.petCrateWidthIn, crateHeightIn: result.trip.petCrateHeightIn,
+    };
+    const changed = comparable(previous) !== comparable(normalized) ||
+      JSON.stringify(result.entry.bringingPet ? previousPet : null) !== JSON.stringify(pet ?? null);
     await txDb.delete(tripPassengersTable).where(eq(tripPassengersTable.tripId, result.trip.id));
     await txDb.insert(tripPassengersTable).values(normalized.map((passenger) => ({
       id: makeId(), tripId: result.trip.id, passengerOrder: passenger.passengerOrder,
       firstName: passenger.firstName.trim(), lastName: passenger.lastName.trim(),
-      weightKg: passenger.weightKg ?? null, passportNumber: passenger.passportNumber?.trim() || null,
-      issuingCountry: passenger.issuingCountry?.trim() || null, nationality: passenger.nationality?.trim() || null,
-      passportExpirationDate: passenger.passportExpirationDate || null,
+      dateOfBirth: passenger.dateOfBirth || null,
     })));
     let trip = result.trip;
-    if (changed && result.trip.manifestSubmittedAt) {
-      [trip] = await txDb.update(tripsTable).set({
-        manifestSubmittedAt: null, manifestDeliveryStatus: null,
-      }).where(eq(tripsTable.id, result.trip.id)).returning();
-    }
+    [trip] = await txDb.update(tripsTable).set({
+      petWeightLb: pet?.weightLb ?? null,
+      petCrateLengthIn: pet?.crateLengthIn ?? null,
+      petCrateWidthIn: pet?.crateWidthIn ?? null,
+      petCrateHeightIn: pet?.crateHeightIn ?? null,
+      ...(changed && result.trip.manifestSubmittedAt
+        ? { manifestSubmittedAt: null, manifestDeliveryStatus: null }
+        : {}),
+    }).where(eq(tripsTable.id, result.trip.id)).returning();
     await client.query("COMMIT");
-    return res.json(await manifestResponse(trip, result.flight, result.entry.passengers));
+    return res.json(await manifestResponse(trip, result.flight, result.entry));
   } catch {
     await client.query("ROLLBACK").catch(() => {});
     return res.status(500).json({ error: "Failed to save passenger list" });
@@ -200,7 +209,7 @@ router.post("/:id/manifest/submit", authMiddleware, async (req, res) => {
     const result = await eligibleManifestTrip(String(req.params.id), userId, txDb);
     if (result.error === "not_found") { await client.query("ROLLBACK"); return res.status(404).json({ error: "Trip not found" }); }
     if (result.error === "ineligible") { await client.query("ROLLBACK"); return res.status(409).json({ error: "Passenger lists are only available for confirmed upcoming trips" }); }
-    const manifest = await manifestResponse(result.trip, result.flight, result.entry.passengers, txDb);
+    const manifest = await manifestResponse(result.trip, result.flight, result.entry, txDb);
     if (!manifest.isComplete) { await client.query("ROLLBACK"); return res.status(400).json({ error: "Complete every required traveler field before submitting" }); }
     if (result.trip.manifestSubmittedAt) {
       await client.query("ROLLBACK");
@@ -211,10 +220,12 @@ router.post("/:id/manifest/submit", authMiddleware, async (req, res) => {
     const body = [
       `Trip: ${result.trip.id}`,
       `Flight: ${result.flight.fromAirport} → ${result.flight.toAirport} on ${result.flight.departureDate} at ${result.flight.departureTime}`,
-      ...manifest.passengers.map((passenger) =>
-        `Passenger ${passenger.passengerOrder}: ${passenger.firstName} ${passenger.lastName}; ${passenger.weightKg} kg` +
-        (result.flight.international ? `; Passport ${passenger.passportNumber}; Issuing country ${passenger.issuingCountry}; Nationality ${passenger.nationality}; Expires ${passenger.passportExpirationDate}` : "")
+      ...manifest.passengers.map((passenger: any) =>
+        `Passenger ${passenger.passengerOrder}: ${passenger.firstName} ${passenger.lastName}; Date of birth ${passenger.dateOfBirth}`
       ),
+      ...(manifest.pet ? [
+        `Pet: ${manifest.pet.weightLb} lb; Crate ${manifest.pet.crateLengthIn} × ${manifest.pet.crateWidthIn} × ${manifest.pet.crateHeightIn} in`,
+      ] : []),
     ].join("\n");
     const deliveryStatus = "demo_recorded";
     await txDb.insert(manifestOperationalUpdatesTable).values({
@@ -225,12 +236,12 @@ router.post("/:id/manifest/submit", authMiddleware, async (req, res) => {
       manifestVersion: version, manifestSubmittedAt: new Date(), manifestDeliveryStatus: deliveryStatus,
     }).where(eq(tripsTable.id, result.trip.id)).returning();
     await client.query("COMMIT");
-    return res.json(await manifestResponse(trip, result.flight, result.entry.passengers));
+    return res.json(await manifestResponse(trip, result.flight, result.entry));
   } catch (err: any) {
     await client.query("ROLLBACK").catch(() => {});
     if (err?.code === "23505") {
       const result = await eligibleManifestTrip(String(req.params.id), userId);
-      if (!result.error) return res.json(await manifestResponse(result.trip, result.flight, result.entry.passengers));
+      if (!result.error) return res.json(await manifestResponse(result.trip, result.flight, result.entry));
     }
     return res.status(500).json({ error: "Failed to submit passenger list" });
   } finally { client.release(); }

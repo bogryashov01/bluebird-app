@@ -11,9 +11,5 @@ export interface Passenger {
   passengerOrder: number;
   firstName: string;
   lastName: string;
-  weightKg?: number | null;
-  passportNumber?: string | null;
-  issuingCountry?: string | null;
-  nationality?: string | null;
-  passportExpirationDate?: string | null;
+  dateOfBirth?: string | null;
 }

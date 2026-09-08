@@ -1452,19 +1452,7 @@ components:
         passengerOrder: { type: number, minimum: 1 }
         firstName: { type: string }
         lastName: { type: string }
-        weightKg:
-          type: number
-          nullable: true
-        passportNumber:
-          type: string
-          nullable: true
-        issuingCountry:
-          type: string
-          nullable: true
-        nationality:
-          type: string
-          nullable: true
-        passportExpirationDate:
+        dateOfBirth:
           type: string
           nullable: true
 
@@ -1475,25 +1463,7 @@ components:
         passengerOrder: { type: number, minimum: 1, multipleOf: 1 }
         firstName: { type: string, maxLength: 100 }
         lastName: { type: string, maxLength: 100 }
-        weightKg:
-          type: number
-          nullable: true
-          minimum: 1
-          maximum: 500
-          multipleOf: 1
-        passportNumber:
-          type: string
-          nullable: true
-          maxLength: 100
-        issuingCountry:
-          type: string
-          nullable: true
-          maxLength: 100
-        nationality:
-          type: string
-          nullable: true
-          maxLength: 100
-        passportExpirationDate:
+        dateOfBirth:
           type: string
           nullable: true
           pattern: "^\\d{4}-\\d{2}-\\d{2}$"
@@ -1508,16 +1478,40 @@ components:
           maxItems: 10
           items:
             $ref: "#/components/schemas/PassengerInput"
+        pet:
+          $ref: "#/components/schemas/PetManifestInput"
+
+    PetManifestInput:
+      type: object
+      properties:
+        weightLb: { type: number, nullable: true, minimum: 1, maximum: 500, multipleOf: 1 }
+        crateLengthIn: { type: number, nullable: true, minimum: 1, maximum: 200, multipleOf: 1 }
+        crateWidthIn: { type: number, nullable: true, minimum: 1, maximum: 200, multipleOf: 1 }
+        crateHeightIn: { type: number, nullable: true, minimum: 1, maximum: 200, multipleOf: 1 }
+
+    PetManifest:
+      type: object
+      required: [weightLb, crateLengthIn, crateWidthIn, crateHeightIn]
+      properties:
+        weightLb: { type: number, nullable: true }
+        crateLengthIn: { type: number, nullable: true }
+        crateWidthIn: { type: number, nullable: true }
+        crateHeightIn: { type: number, nullable: true }
 
     PassengerManifest:
       type: object
-      required: [tripId, requiredCount, completedCount, isComplete, international, passengers, version]
+      required: [tripId, requiredCount, completedCount, isComplete, international, bringingPet, passengers, version]
       properties:
         tripId: { type: string }
         requiredCount: { type: number }
         completedCount: { type: number }
         isComplete: { type: boolean }
         international: { type: boolean }
+        bringingPet: { type: boolean }
+        pet:
+          allOf:
+            - $ref: "#/components/schemas/PetManifest"
+          nullable: true
         passengers:
           type: array
           items:

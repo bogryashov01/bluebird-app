@@ -7,6 +7,7 @@
  */
 import type { Passenger } from './passenger';
 import type { PassengerManifestDeliveryStatus } from './passengerManifestDeliveryStatus';
+import type { PetManifest } from './petManifest';
 
 export interface PassengerManifest {
   tripId: string;
@@ -14,6 +15,8 @@ export interface PassengerManifest {
   completedCount: number;
   isComplete: boolean;
   international: boolean;
+  bringingPet: boolean;
+  pet?: PetManifest | null;
   passengers: Passenger[];
   version: number;
   submittedAt?: string | null;

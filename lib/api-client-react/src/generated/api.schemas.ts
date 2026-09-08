@@ -417,11 +417,7 @@ export interface Passenger {
   passengerOrder: number;
   firstName: string;
   lastName: string;
-  weightKg?: number | null;
-  passportNumber?: string | null;
-  issuingCountry?: string | null;
-  nationality?: string | null;
-  passportExpirationDate?: string | null;
+  dateOfBirth?: string | null;
 }
 
 export interface PassengerInput {
@@ -431,19 +427,31 @@ export interface PassengerInput {
   firstName: string;
   /** @maxLength 100 */
   lastName: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  dateOfBirth?: string | null;
+}
+
+export interface PetManifestInput {
   /**
      * @minimum 1
      * @maximum 500
      */
-  weightKg?: number | null;
-  /** @maxLength 100 */
-  passportNumber?: string | null;
-  /** @maxLength 100 */
-  issuingCountry?: string | null;
-  /** @maxLength 100 */
-  nationality?: string | null;
-  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
-  passportExpirationDate?: string | null;
+  weightLb?: number | null;
+  /**
+     * @minimum 1
+     * @maximum 200
+     */
+  crateLengthIn?: number | null;
+  /**
+     * @minimum 1
+     * @maximum 200
+     */
+  crateWidthIn?: number | null;
+  /**
+     * @minimum 1
+     * @maximum 200
+     */
+  crateHeightIn?: number | null;
 }
 
 export interface SavePassengerManifestRequest {
@@ -452,6 +460,14 @@ export interface SavePassengerManifestRequest {
      * @maxItems 10
      */
   passengers: PassengerInput[];
+  pet?: PetManifestInput;
+}
+
+export interface PetManifest {
+  weightLb: number | null;
+  crateLengthIn: number | null;
+  crateWidthIn: number | null;
+  crateHeightIn: number | null;
 }
 
 export type PassengerManifestDeliveryStatus = typeof PassengerManifestDeliveryStatus[keyof typeof PassengerManifestDeliveryStatus] | null;
@@ -468,6 +484,8 @@ export interface PassengerManifest {
   completedCount: number;
   isComplete: boolean;
   international: boolean;
+  bringingPet: boolean;
+  pet?: PetManifest | null;
   passengers: Passenger[];
   version: number;
   submittedAt?: string | null;

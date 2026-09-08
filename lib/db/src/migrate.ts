@@ -255,6 +255,10 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE trips ADD COLUMN IF NOT EXISTS manifest_version INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE trips ADD COLUMN IF NOT EXISTS manifest_submitted_at TIMESTAMPTZ;
     ALTER TABLE trips ADD COLUMN IF NOT EXISTS manifest_delivery_status TEXT;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pet_weight_lb INTEGER;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pet_crate_length_in INTEGER;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pet_crate_width_in INTEGER;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pet_crate_height_in INTEGER;
 
     CREATE TABLE IF NOT EXISTS trip_passengers (
       id TEXT PRIMARY KEY,
@@ -262,14 +266,16 @@ export async function ensureSchema(): Promise<void> {
       passenger_order INTEGER NOT NULL CHECK (passenger_order > 0),
       first_name TEXT NOT NULL DEFAULT '',
       last_name TEXT NOT NULL DEFAULT '',
-      weight_kg INTEGER CHECK (weight_kg IS NULL OR weight_kg > 0),
-      passport_number TEXT,
-      issuing_country TEXT,
-      nationality TEXT,
-      passport_expiration_date TEXT,
+      date_of_birth TEXT,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT trip_passengers_trip_order_unique UNIQUE (trip_id, passenger_order)
     );
+    ALTER TABLE trip_passengers ADD COLUMN IF NOT EXISTS date_of_birth TEXT;
+    ALTER TABLE trip_passengers DROP COLUMN IF EXISTS weight_kg;
+    ALTER TABLE trip_passengers DROP COLUMN IF EXISTS passport_number;
+    ALTER TABLE trip_passengers DROP COLUMN IF EXISTS issuing_country;
+    ALTER TABLE trip_passengers DROP COLUMN IF EXISTS nationality;
+    ALTER TABLE trip_passengers DROP COLUMN IF EXISTS passport_expiration_date;
 
     CREATE TABLE IF NOT EXISTS manifest_operational_updates (
       id TEXT PRIMARY KEY,
@@ -282,6 +288,18 @@ export async function ensureSchema(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT manifest_updates_trip_version_unique UNIQUE (trip_id, version)
     );
+    -- Historical demo manifests may have been recorded before passenger
+    -- documents were removed from this flow. Strip every sensitive suffix
+    -- beginning with the first legacy document label while preserving the
+    -- non-sensitive passenger line and submission audit record.
+    UPDATE manifest_operational_updates
+      SET body = regexp_replace(
+        body,
+        E'; (Passport|Issuing country|Nationality|Expires)[^\\n]*',
+        '',
+        'gi'
+      )
+      WHERE body ~* '; (Passport|Issuing country|Nationality|Expires)';
 
     CREATE TABLE IF NOT EXISTS revoked_tokens (
       token_hash TEXT        PRIMARY KEY,

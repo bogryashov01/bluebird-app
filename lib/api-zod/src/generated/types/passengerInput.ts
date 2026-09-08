@@ -13,17 +13,6 @@ export interface PassengerInput {
   firstName: string;
   /** @maxLength 100 */
   lastName: string;
-  /**
-     * @minimum 1
-     * @maximum 500
-     */
-  weightKg?: number | null;
-  /** @maxLength 100 */
-  passportNumber?: string | null;
-  /** @maxLength 100 */
-  issuingCountry?: string | null;
-  /** @maxLength 100 */
-  nationality?: string | null;
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
-  passportExpirationDate?: string | null;
+  dateOfBirth?: string | null;
 }
