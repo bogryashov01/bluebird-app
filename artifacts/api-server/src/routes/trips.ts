@@ -74,12 +74,16 @@ async function manifestResponse(trip: any, flight: any, entry: any, database: an
     crateWidthIn: trip.petCrateWidthIn,
     crateHeightIn: trip.petCrateHeightIn,
   } : null;
-  const petComplete = !bringingPet || Object.values(pet!).every((value) => Number.isInteger(value) && Number(value) > 0);
+  const petComplete = !bringingPet ||
+    (Number(pet!.weightLb) > 0 && Number(pet!.weightLb) <= 500 &&
+      Number(pet!.crateLengthIn) > 0 && Number(pet!.crateLengthIn) <= 200 &&
+      Number(pet!.crateWidthIn) > 0 && Number(pet!.crateWidthIn) <= 200 &&
+      Number(pet!.crateHeightIn) > 0 && Number(pet!.crateHeightIn) <= 200);
   return {
     tripId: trip.id,
     requiredCount,
     completedCount,
-    isComplete: passengers.length > 0 && passengers.length <= requiredCount &&
+    isComplete: passengers.length === requiredCount &&
       completedCount === passengers.length && petComplete,
     international: flight.international,
     bringingPet,

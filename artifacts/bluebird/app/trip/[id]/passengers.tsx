@@ -124,7 +124,7 @@ export default function PassengerListScreen() {
   const updatePet = (field: keyof PetDraft, value: string) => {
     setDirty(true);
     setFeedback('');
-    setPet((current) => ({ ...current, [field]: value.replace(/[^0-9]/g, '') }));
+    setPet((current) => ({ ...current, [field]: formatMeasurementInput(value) }));
   };
   const addPassenger = () => {
     if (!data || passengers.length >= data.requiredCount) return;
@@ -149,10 +149,10 @@ export default function PassengerListScreen() {
   const passengerComplete = (passenger: DraftPassenger) =>
     !!passenger.firstName.trim() && !!passenger.lastName.trim() && validPastDate(passenger.dateOfBirth);
   const completedCount = passengers.filter(passengerComplete).length;
-  const passengersComplete = passengers.length > 0 && completedCount === passengers.length;
+  const passengersComplete = passengers.length === data?.requiredCount && completedCount === passengers.length;
   const validMeasurement = (value: string, maximum: number) => {
     const measurement = Number(value);
-    return Number.isInteger(measurement) && measurement > 0 && measurement <= maximum;
+    return Number.isFinite(measurement) && measurement > 0 && measurement <= maximum;
   };
   const petComplete = !data?.bringingPet ||
     (validMeasurement(pet.weightLb, 500) &&
@@ -334,7 +334,7 @@ export default function PassengerListScreen() {
                 onPress={addPassenger}
               >
                 <Feather name="plus" size={17} color={colors.primary} />
-                <Text style={[styles.addButtonText, { color: colors.primary }]}>Add traveler</Text>
+                <Text style={[styles.addButtonText, { color: colors.primary }]}>+ Add Another Passenger</Text>
                 <Text style={[styles.addLimit, { color: colors.mutedForegroundLight }]}>
                   Up to {data.requiredCount}
                 </Text>
@@ -426,6 +426,12 @@ function validPastDate(value: string | null | undefined) {
 function formatDateInput(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 8);
   return [digits.slice(0, 4), digits.slice(4, 6), digits.slice(6, 8)].filter(Boolean).join('-');
+}
+
+function formatMeasurementInput(value: string) {
+  const normalized = value.replace(/[^0-9.]/g, '');
+  const [whole = '', ...fractionParts] = normalized.split('.');
+  return fractionParts.length ? `${whole}.${fractionParts.join('')}` : whole;
 }
 
 function formatDateOfBirth(value: string) {

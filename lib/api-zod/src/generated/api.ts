@@ -11,23 +11,24 @@ export const updateMeBodyHomeAirportsItemRegExp = new RegExp('^\\s*[A-Za-z]{3,4}
 export const updateMeBodyHomeAirportsMax = 20;
 export const joinQueueBodyTwoPassengersDefault = 1;
 export const joinQueueBodyTwoPassengersMax = 10;
+export const joinQueueBodyTwoPassengersMultipleOf = 1;
 export const joinQueueBodyTwoPetWeightLbsExclusiveMin = 0;
+export const joinQueueBodyTwoPetWeightLbsMax = 500;
 export const joinQueueBodyTwoPetCrateLengthInExclusiveMin = 0;
+export const joinQueueBodyTwoPetCrateLengthInMax = 200;
 export const joinQueueBodyTwoPetCrateWidthInExclusiveMin = 0;
+export const joinQueueBodyTwoPetCrateWidthInMax = 200;
 export const joinQueueBodyTwoPetCrateHeightInExclusiveMin = 0;
+export const joinQueueBodyTwoPetCrateHeightInMax = 200;
 export const saveTripManifestBodyPassengersItemPassengerOrderMultipleOf = 1;
 export const saveTripManifestBodyPassengersItemFirstNameMax = 100;
 export const saveTripManifestBodyPassengersItemLastNameMax = 100;
 export const saveTripManifestBodyPassengersItemDateOfBirthRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 export const saveTripManifestBodyPassengersMax = 10;
 export const saveTripManifestBodyPetWeightLbMax = 500;
-export const saveTripManifestBodyPetWeightLbMultipleOf = 1;
 export const saveTripManifestBodyPetCrateLengthInMax = 200;
-export const saveTripManifestBodyPetCrateLengthInMultipleOf = 1;
 export const saveTripManifestBodyPetCrateWidthInMax = 200;
-export const saveTripManifestBodyPetCrateWidthInMultipleOf = 1;
 export const saveTripManifestBodyPetCrateHeightInMax = 200;
-export const saveTripManifestBodyPetCrateHeightInMultipleOf = 1;
 export const conciergeChatBodyMessagesItemContentMax = 4000;
 export const conciergeChatBodyMessagesMax = 40;
 export const getConciergeHistoryQueryLimitDefault = 50;
@@ -340,14 +341,14 @@ export const GetFlightMyStatusResponse = zod.object({
 export const JoinQueueBody = zod.unknown().and(zod.object({
   "flightId": zod.string(),
   "useLinePass": zod.boolean().optional(),
-  "passengers": zod.number().min(1).max(joinQueueBodyTwoPassengersMax).default(joinQueueBodyTwoPassengersDefault),
+  "passengers": zod.number().min(1).max(joinQueueBodyTwoPassengersMax).multipleOf(joinQueueBodyTwoPassengersMultipleOf).default(joinQueueBodyTwoPassengersDefault),
   "acceptIntlFee": zod.boolean().optional().describe('Base member accepted the one-time international fee for this flight (demo charge — recorded, never billed).\n'),
   "bringingPet": zod.boolean().describe('Whether the member will travel with a pet.'),
   "petFeeAcknowledged": zod.boolean().optional().describe('Member acknowledged that the $500 cleaning fee applies only if the flight is awarded.'),
-  "petWeightLbs": zod.number().gt(joinQueueBodyTwoPetWeightLbsExclusiveMin).optional().describe('Pet weight in pounds; required when bringingPet is true.'),
-  "petCrateLengthIn": zod.number().gt(joinQueueBodyTwoPetCrateLengthInExclusiveMin).optional().describe('Pet crate length in inches; required when bringingPet is true.'),
-  "petCrateWidthIn": zod.number().gt(joinQueueBodyTwoPetCrateWidthInExclusiveMin).optional().describe('Pet crate width in inches; required when bringingPet is true.'),
-  "petCrateHeightIn": zod.number().gt(joinQueueBodyTwoPetCrateHeightInExclusiveMin).optional().describe('Pet crate height in inches; required when bringingPet is true.')
+  "petWeightLbs": zod.number().gt(joinQueueBodyTwoPetWeightLbsExclusiveMin).max(joinQueueBodyTwoPetWeightLbsMax).optional().describe('Pet weight in pounds; required when bringingPet is true.'),
+  "petCrateLengthIn": zod.number().gt(joinQueueBodyTwoPetCrateLengthInExclusiveMin).max(joinQueueBodyTwoPetCrateLengthInMax).optional().describe('Pet crate length in inches; required when bringingPet is true.'),
+  "petCrateWidthIn": zod.number().gt(joinQueueBodyTwoPetCrateWidthInExclusiveMin).max(joinQueueBodyTwoPetCrateWidthInMax).optional().describe('Pet crate width in inches; required when bringingPet is true.'),
+  "petCrateHeightIn": zod.number().gt(joinQueueBodyTwoPetCrateHeightInExclusiveMin).max(joinQueueBodyTwoPetCrateHeightInMax).optional().describe('Pet crate height in inches; required when bringingPet is true.')
 }))
 
 export const JoinQueueResponse = zod.object({
@@ -727,10 +728,10 @@ export const SaveTripManifestBody = zod.object({
   "dateOfBirth": zod.string().regex(saveTripManifestBodyPassengersItemDateOfBirthRegExp).nullish()
 })).min(1).max(saveTripManifestBodyPassengersMax),
   "pet": zod.object({
-  "weightLb": zod.number().min(1).max(saveTripManifestBodyPetWeightLbMax).multipleOf(saveTripManifestBodyPetWeightLbMultipleOf).nullish(),
-  "crateLengthIn": zod.number().min(1).max(saveTripManifestBodyPetCrateLengthInMax).multipleOf(saveTripManifestBodyPetCrateLengthInMultipleOf).nullish(),
-  "crateWidthIn": zod.number().min(1).max(saveTripManifestBodyPetCrateWidthInMax).multipleOf(saveTripManifestBodyPetCrateWidthInMultipleOf).nullish(),
-  "crateHeightIn": zod.number().min(1).max(saveTripManifestBodyPetCrateHeightInMax).multipleOf(saveTripManifestBodyPetCrateHeightInMultipleOf).nullish()
+  "weightLb": zod.number().min(1).max(saveTripManifestBodyPetWeightLbMax).nullish(),
+  "crateLengthIn": zod.number().min(1).max(saveTripManifestBodyPetCrateLengthInMax).nullish(),
+  "crateWidthIn": zod.number().min(1).max(saveTripManifestBodyPetCrateWidthInMax).nullish(),
+  "crateHeightIn": zod.number().min(1).max(saveTripManifestBodyPetCrateHeightInMax).nullish()
 }).optional()
 })
 

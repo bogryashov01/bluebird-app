@@ -259,10 +259,14 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE trips ADD COLUMN IF NOT EXISTS manifest_version INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE trips ADD COLUMN IF NOT EXISTS manifest_submitted_at TIMESTAMPTZ;
     ALTER TABLE trips ADD COLUMN IF NOT EXISTS manifest_delivery_status TEXT;
-    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pet_weight_lb INTEGER;
-    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pet_crate_length_in INTEGER;
-    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pet_crate_width_in INTEGER;
-    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pet_crate_height_in INTEGER;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pet_weight_lb NUMERIC;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pet_crate_length_in NUMERIC;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pet_crate_width_in NUMERIC;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pet_crate_height_in NUMERIC;
+    ALTER TABLE trips ALTER COLUMN pet_weight_lb TYPE NUMERIC USING pet_weight_lb::NUMERIC;
+    ALTER TABLE trips ALTER COLUMN pet_crate_length_in TYPE NUMERIC USING pet_crate_length_in::NUMERIC;
+    ALTER TABLE trips ALTER COLUMN pet_crate_width_in TYPE NUMERIC USING pet_crate_width_in::NUMERIC;
+    ALTER TABLE trips ALTER COLUMN pet_crate_height_in TYPE NUMERIC USING pet_crate_height_in::NUMERIC;
 
     CREATE TABLE IF NOT EXISTS trip_passengers (
       id TEXT PRIMARY KEY,

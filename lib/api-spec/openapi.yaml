@@ -1281,6 +1281,7 @@ components:
           type: boolean
         passengers:
           type: number
+          multipleOf: 1
           minimum: 1
           maximum: 10
           default: 1
@@ -1298,18 +1299,22 @@ components:
         petWeightLbs:
           type: number
           exclusiveMinimum: 0
+          maximum: 500
           description: Pet weight in pounds; required when bringingPet is true.
         petCrateLengthIn:
           type: number
           exclusiveMinimum: 0
+          maximum: 200
           description: Pet crate length in inches; required when bringingPet is true.
         petCrateWidthIn:
           type: number
           exclusiveMinimum: 0
+          maximum: 200
           description: Pet crate width in inches; required when bringingPet is true.
         petCrateHeightIn:
           type: number
           exclusiveMinimum: 0
+          maximum: 200
           description: Pet crate height in inches; required when bringingPet is true.
       required:
         - flightId
@@ -1532,10 +1537,10 @@ components:
     PetManifestInput:
       type: object
       properties:
-        weightLb: { type: number, nullable: true, minimum: 1, maximum: 500, multipleOf: 1 }
-        crateLengthIn: { type: number, nullable: true, minimum: 1, maximum: 200, multipleOf: 1 }
-        crateWidthIn: { type: number, nullable: true, minimum: 1, maximum: 200, multipleOf: 1 }
-        crateHeightIn: { type: number, nullable: true, minimum: 1, maximum: 200, multipleOf: 1 }
+        weightLb: { type: number, nullable: true, minimum: 1, maximum: 500 }
+        crateLengthIn: { type: number, nullable: true, minimum: 1, maximum: 200 }
+        crateWidthIn: { type: number, nullable: true, minimum: 1, maximum: 200 }
+        crateHeightIn: { type: number, nullable: true, minimum: 1, maximum: 200 }
 
     PetManifest:
       type: object

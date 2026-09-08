@@ -41,10 +41,13 @@ router.post("/join", authMiddleware, async (req, res) => {
     petCrateWidthIn: petCrateWidthInRaw,
     petCrateHeightIn: petCrateHeightInRaw,
   } = req.body;
-  const passengers = Math.max(1, Math.min(10, parseInt(passengersRaw ?? "1", 10) || 1));
+  const passengers = Number(passengersRaw ?? 1);
 
   if (!flightId) {
     return res.status(400).json({ error: "Flight ID is required" });
+  }
+  if (!Number.isInteger(passengers) || passengers < 1 || passengers > 10) {
+    return res.status(400).json({ error: "Passengers must be a whole number between 1 and 10" });
   }
   if (typeof bringingPet !== "boolean") {
     return res.status(400).json({ error: "Please choose whether you are bringing a pet" });
@@ -60,12 +63,16 @@ router.post("/join", authMiddleware, async (req, res) => {
     petCrateWidthIn: Number(petCrateWidthInRaw),
     petCrateHeightIn: Number(petCrateHeightInRaw),
   };
-  if (
-    bringingPet &&
-    Object.values(petMeasurements).some((value) => !Number.isFinite(value) || value <= 0)
-  ) {
+  const validPetMeasurement = (value: number, maximum: number) =>
+    Number.isFinite(value) && value > 0 && value <= maximum;
+  if (bringingPet && (
+    !validPetMeasurement(petMeasurements.petWeightLbs, 500) ||
+    !validPetMeasurement(petMeasurements.petCrateLengthIn, 200) ||
+    !validPetMeasurement(petMeasurements.petCrateWidthIn, 200) ||
+    !validPetMeasurement(petMeasurements.petCrateHeightIn, 200)
+  )) {
     return res.status(400).json({
-      error: "Pet weight and all crate dimensions must be positive numbers",
+      error: "Pet weight must be between 1 and 500 lb and crate dimensions between 1 and 200 in",
     });
   }
 
@@ -221,6 +228,10 @@ router.post("/join", authMiddleware, async (req, res) => {
           flightId: String(flightId),
           status: "upcoming",
           cleaningFeeUsd: bringingPet ? PET_CLEANING_FEE_USD : 0,
+          petWeightLb: bringingPet ? petMeasurements.petWeightLbs : null,
+          petCrateLengthIn: bringingPet ? petMeasurements.petCrateLengthIn : null,
+          petCrateWidthIn: bringingPet ? petMeasurements.petCrateWidthIn : null,
+          petCrateHeightIn: bringingPet ? petMeasurements.petCrateHeightIn : null,
         })
         .returning();
     }
@@ -570,6 +581,10 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
         flightId: entry.flightId,
         status: "upcoming",
         cleaningFeeUsd: entry.bringingPet ? PET_CLEANING_FEE_USD : 0,
+        petWeightLb: entry.bringingPet ? Number(entry.petWeightLbs) : null,
+        petCrateLengthIn: entry.bringingPet ? Number(entry.petCrateLengthIn) : null,
+        petCrateWidthIn: entry.bringingPet ? Number(entry.petCrateWidthIn) : null,
+        petCrateHeightIn: entry.bringingPet ? Number(entry.petCrateHeightIn) : null,
       })
       .returning();
 

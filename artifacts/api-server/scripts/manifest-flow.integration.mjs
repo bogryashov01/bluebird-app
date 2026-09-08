@@ -76,11 +76,17 @@ async function main() {
     check("roster cannot exceed reserved seats", tooMany.status === 400, JSON.stringify(tooMany.json));
 
     const invalidCalendar = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
-      passengers: [{ passengerOrder: 1, firstName: "Ada", lastName: "Lovelace", dateOfBirth: "1980-02-30" }],
+      passengers: [
+        { passengerOrder: 1, firstName: "Ada", lastName: "Lovelace", dateOfBirth: "1980-02-30" },
+        { passengerOrder: 2, firstName: "Grace", lastName: "Hopper", dateOfBirth: "1975-12-09" },
+      ],
     });
     check("nonexistent birth date remains incomplete", invalidCalendar.status === 200 && invalidCalendar.json.isComplete === false);
     const futureBirth = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
-      passengers: [{ passengerOrder: 1, firstName: "Ada", lastName: "Lovelace", dateOfBirth: "2098-01-01" }],
+      passengers: [
+        { passengerOrder: 1, firstName: "Ada", lastName: "Lovelace", dateOfBirth: "2098-01-01" },
+        { passengerOrder: 2, firstName: "Grace", lastName: "Hopper", dateOfBirth: "1975-12-09" },
+      ],
     });
     check("future birth date remains incomplete", futureBirth.status === 200 && futureBirth.json.isComplete === false);
     check("invalid birth date cannot submit", (await api("POST", `/trips/${ids.trip}/manifest/submit`, ownerToken)).status === 400);
@@ -116,8 +122,13 @@ async function main() {
     const shortened = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
       passengers: [domestic[0]],
     });
-    check("an editable roster may remove an additional traveler", shortened.status === 200 && shortened.json.passengers.length === 1 && shortened.json.isComplete);
-    check("changed manifest becomes ready for resubmission", !shortened.json.submittedAt && shortened.json.version === 1);
+    check("an editable roster may remove an additional traveler without becoming complete",
+      shortened.status === 200 && shortened.json.passengers.length === 1 && !shortened.json.isComplete);
+    check("changed incomplete manifest becomes unsubmitted", !shortened.json.submittedAt && shortened.json.version === 1);
+    check("a shortened roster cannot be submitted", (await api("POST", `/trips/${ids.trip}/manifest/submit`, ownerToken)).status === 400);
+    const revised = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
+      passengers: [domestic[0], { ...domestic[1], firstName: "Amazing" }],
+    });
     const resubmitted = await api("POST", `/trips/${ids.trip}/manifest/submit`, ownerToken);
     check("updated roster creates the next submission version", resubmitted.json.version === 2 && resubmitted.json.operationsNotified === true);
 

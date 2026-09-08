@@ -300,21 +300,25 @@ export type JoinQueueRequest = unknown & {
   petFeeAcknowledged?: boolean;
   /**
      * Pet weight in pounds; required when bringingPet is true.
+     * @maximum 500
      * @exclusiveMinimum 0
      */
   petWeightLbs?: number;
   /**
      * Pet crate length in inches; required when bringingPet is true.
+     * @maximum 200
      * @exclusiveMinimum 0
      */
   petCrateLengthIn?: number;
   /**
      * Pet crate width in inches; required when bringingPet is true.
+     * @maximum 200
      * @exclusiveMinimum 0
      */
   petCrateWidthIn?: number;
   /**
      * Pet crate height in inches; required when bringingPet is true.
+     * @maximum 200
      * @exclusiveMinimum 0
      */
   petCrateHeightIn?: number;

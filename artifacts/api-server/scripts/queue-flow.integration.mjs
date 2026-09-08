@@ -132,6 +132,10 @@ check("pass join returns a CONFIRMED entry (atomic instant win)",
   vipJoin.status === 201 && vipJoin.json.status === "confirmed", JSON.stringify(vipJoin.json));
 check("pass join returns the created trip", vipJoin.json?.trip?.status === "upcoming", JSON.stringify(vipJoin.json?.trip));
 check("instant pet award applies the $500 cleaning fee", vipJoin.json?.trip?.cleaningFeeUsd === 500, JSON.stringify(vipJoin.json?.trip));
+check("instant pet award carries weight and crate details into the trip",
+  vipJoin.json?.trip?.petWeightLb === 12 && vipJoin.json?.trip?.petCrateLengthIn === 24 &&
+  vipJoin.json?.trip?.petCrateWidthIn === 16 && vipJoin.json?.trip?.petCrateHeightIn === 18,
+  JSON.stringify(vipJoin.json?.trip));
 check(`pass join totalInQueue === ${N} (confirmed entry is not waiting)`, vipJoin.json?.totalInQueue === N,
   `got ${vipJoin.json?.totalInQueue}`);
 const vipMe = await api("GET", "/auth/me", { token: vip.token });
@@ -149,6 +153,10 @@ check("use-pass confirms the entry atomically", usePass.status === 200 && usePas
 check("use-pass returns the created trip", usePass.json?.trip?.status === "upcoming", "");
 check("existing pet entry awarded with a pass applies the $500 cleaning fee",
   usePass.json?.trip?.cleaningFeeUsd === 500, JSON.stringify(usePass.json?.trip));
+check("existing pet entry awarded with a pass carries its crate details",
+  usePass.json?.trip?.petWeightLb === 18 && usePass.json?.trip?.petCrateLengthIn === 28 &&
+  usePass.json?.trip?.petCrateWidthIn === 18 && usePass.json?.trip?.petCrateHeightIn === 20,
+  JSON.stringify(usePass.json?.trip));
 check("use-pass decrements pass balance", typeof usePass.json?.linePassCount === "number", "");
 
 // ── 3b. Position #1 can redeem, and competing submissions stay safe ──────────
@@ -209,6 +217,10 @@ check("auto-confirmation created an upcoming trip",
   trips.json?.some?.((t) => t.flightId === flight.id && t.status === "upcoming"), JSON.stringify(trips.json));
 check("automatic pet award applies the $500 cleaning fee",
   trips.json?.some?.((t) => t.flightId === flight.id && t.cleaningFeeUsd === 500), JSON.stringify(trips.json));
+check("automatic pet award preserves decimal weight and crate details",
+  trips.json?.some?.((t) => t.flightId === flight.id && t.petWeightLb === 24.5 &&
+    t.petCrateLengthIn === 30 && t.petCrateWidthIn === 20 && t.petCrateHeightIn === 22),
+  JSON.stringify(trips.json));
 const notifs = await api("GET", "/notifications", { token: members[0].token });
 check("auto-confirmation sent a flight_confirmed notification",
   notifs.json?.some?.((n) => n.type === "flight_confirmed"), "");
@@ -366,6 +378,11 @@ if (intlFlight) {
     const promotedTrips = await api("GET", "/trips", { token: petWaiter.token });
     check("seat-freed pet award applies the $500 cleaning fee",
       promotedTrips.json?.some?.((trip) => trip.flightId === seatFreedFixtureId && trip.cleaningFeeUsd === 500),
+      JSON.stringify(promotedTrips.json));
+    check("seat-freed pet award preserves weight and crate details",
+      promotedTrips.json?.some?.((trip) => trip.flightId === seatFreedFixtureId &&
+        trip.petWeightLb === 20 && trip.petCrateLengthIn === 28 &&
+        trip.petCrateWidthIn === 19 && trip.petCrateHeightIn === 21),
       JSON.stringify(promotedTrips.json));
     const promotedNotifications = await api("GET", "/notifications", { token: petWaiter.token });
     check("seat-freed pet award clearly confirms the fee",
