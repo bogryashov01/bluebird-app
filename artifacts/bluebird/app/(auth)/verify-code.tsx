@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Platform, Pressable, Alert,
+  ActivityIndicator, Platform, Pressable, Alert, Image,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -129,6 +129,12 @@ export default function VerifyCodeScreen() {
         <Feather name="arrow-left" size={20} color={colors.mutedOnBrand} />
       </TouchableOpacity>
 
+      <Image
+        source={require('@/assets/images/bluebird-logo-white.png')}
+        style={styles.logo}
+        resizeMode="contain"
+      />
+
       <Text style={[styles.title, { color: colors.textOnBrand }]}>Enter the code</Text>
       <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>
         We texted a 6-digit code to{'\n'}
@@ -221,6 +227,7 @@ export default function VerifyCodeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 24 },
   backBtn: { marginTop: 8, marginBottom: 24, width: 36, height: 36, justifyContent: 'center' },
+  logo: { width: 112, height: 25, marginBottom: 28 },
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', marginBottom: 8 },
   subtitle: { fontSize: 15, fontFamily: 'Inter_400Regular', lineHeight: 22, marginBottom: 32 },
   boxesWrap: { marginBottom: 16 },

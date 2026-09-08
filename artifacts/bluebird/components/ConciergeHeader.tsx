@@ -48,7 +48,7 @@ export function ConciergeHeader({ navigation, back }: ConciergeHeaderProps) {
         )}
         <View style={[styles.avatar, { backgroundColor: colors.backgroundMid }]}>
           <Image
-            source={require('@/assets/images/bluebird-logo-white.png')}
+            source={require('@/assets/images/bluebird-bird-mark.png')}
             style={styles.avatarLogo}
             resizeMode="contain"
           />
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  avatarLogo: { width: 24, height: 24 },
+  avatarLogo: { width: 30, height: 30 },
   titleBlock: { flex: 1, justifyContent: 'center' },
   title: {
     fontFamily: 'Inter_600SemiBold',

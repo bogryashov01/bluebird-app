@@ -182,7 +182,7 @@ export function PassCelebration({ onDone }: Props) {
         <View style={styles.birdWrap}>
           <Animated.View style={[styles.glow, { backgroundColor: colors.primary }, glowStyle]} />
           <Animated.Image
-            source={require('@/assets/images/bluebird-logo-white.png')}
+            source={require('@/assets/images/bluebird-bird-mark.png')}
             style={[styles.bird, birdStyle]}
             resizeMode="contain"
           />

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Platform,
+  ActivityIndicator, Platform, Image,
 } from 'react-native';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -80,10 +80,11 @@ export default function PhoneScreen() {
           <Feather name="arrow-left" size={20} color={colors.mutedOnBrand} />
         </TouchableOpacity>
 
-        <View style={styles.logoRow}>
-          <Feather name="send" size={20} color={colors.primary} style={{ transform: [{ rotate: '-45deg' }] }} />
-          <Text style={[styles.logoText, { color: colors.textOnBrand }]}>Bluebird</Text>
-        </View>
+        <Image
+          source={require('@/assets/images/bluebird-logo-white.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
 
         <Text style={[styles.title, { color: colors.textOnBrand }]}>Enter your phone number</Text>
         <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>
@@ -139,8 +140,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { paddingHorizontal: 24 },
   backBtn: { marginTop: 8, marginBottom: 24, width: 36, height: 36, justifyContent: 'center' },
-  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 32 },
-  logoText: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
+  logo: { width: 112, height: 25, marginBottom: 32 },
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', marginBottom: 8 },
   subtitle: { fontSize: 15, fontFamily: 'Inter_400Regular', marginBottom: 36, lineHeight: 22 },
   fieldGroup: { gap: 6, marginBottom: 24 },

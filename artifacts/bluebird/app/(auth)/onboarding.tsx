@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 import { useListAirports, useUpdateMe } from '@workspace/api-client-react';
 import { AirportMultiSelect } from '@/components/AirportMultiSelect';
 import { useAuth } from '@/context/AuthContext';
@@ -44,8 +43,8 @@ export default function OnboardingScreen() {
     <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad }]}>
       <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.header}>
-        <View style={[styles.logoCircle, { backgroundColor: colors.primary }]}>
-          <Feather name="send" size={21} color={colors.primaryForeground} style={{ transform: [{ rotate: '-45deg' }] }} />
+        <View style={styles.logoCircle}>
+          <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.logoMark} resizeMode="contain" />
         </View>
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.textOnBrand }]}>Where do you fly from?</Text>
@@ -81,6 +80,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 12,
   },
   logoCircle: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
+  logoMark: { width: 38, height: 38 },
   headerText: { flex: 1 },
   title: { fontSize: 24, lineHeight: 29, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
   subtitle: { fontSize: 13, lineHeight: 18, fontFamily: 'Inter_400Regular', marginTop: 3 },

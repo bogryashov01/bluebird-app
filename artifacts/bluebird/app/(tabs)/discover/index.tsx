@@ -112,10 +112,11 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
       {/* Logo + concierge */}
       <View style={[styles.topBar, { paddingTop: topPad + 24 }]}>
         <View style={styles.logoRow}>
-          <Image source={require('@/assets/images/icon.png')} style={styles.logoImg} />
-          <Text style={[styles.logoText, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
-            Bluebird
-          </Text>
+          <Image
+            source={require('@/assets/images/bluebird-bird-mark.png')}
+            style={styles.logoImg}
+            resizeMode="contain"
+          />
         </View>
         <TouchableOpacity
           style={[styles.conciergeBtn, { backgroundColor: colors.card }]}
@@ -423,8 +424,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingBottom: 18,
   },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  logoImg: { width: 26, height: 26, borderRadius: 6 },
-  logoText: { fontSize: 17, letterSpacing: -0.3 },
+  logoImg: { width: 40, height: 31 },
   conciergeBtn: {
     width: 38, height: 38, borderRadius: 19,
     alignItems: 'center', justifyContent: 'center',

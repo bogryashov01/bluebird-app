@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(6,11,31,0.25)',
   },
-  logo: { position: 'absolute', left: 24, width: 44, height: 44 },
+  logo: { position: 'absolute', left: 24, width: 120, height: 27 },
   sheet: { flex: 1, paddingHorizontal: 28, paddingTop: 28 },
   sheetTitle: {
     fontSize: 28,

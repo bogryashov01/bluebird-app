@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
+  Image,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -44,6 +45,11 @@ export default function AirportSummaryScreen() {
         >
           <Feather name="arrow-left" size={18} color={colors.foreground} />
         </TouchableOpacity>
+        <Image
+          source={require('@/assets/images/bluebird-logo-white.png')}
+          style={styles.headerLogo}
+          resizeMode="contain"
+        />
         <TouchableOpacity onPress={() => router.replace('/(auth)/onboarding')} activeOpacity={0.8}>
           <Text style={[styles.changeText, { color: colors.primary }]}>Change airport</Text>
         </TouchableOpacity>
@@ -178,6 +184,7 @@ const styles = StyleSheet.create({
     width: 38, height: 38, borderRadius: 19, borderWidth: 1,
     justifyContent: 'center', alignItems: 'center',
   },
+  headerLogo: { position: 'absolute', left: '50%', bottom: 15, width: 100, height: 22, marginLeft: -50 },
   changeText: { fontSize: 14, fontFamily: 'Inter_500Medium' },
   headline: { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 20 },
   overline: {

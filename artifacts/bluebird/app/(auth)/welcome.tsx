@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Image } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,7 +20,7 @@ export default function WelcomeScreen() {
 
       <View style={styles.content}>
         <View style={[styles.logoCircle, { backgroundColor: colors.primary + '1A' }]}>
-          <Feather name="send" size={30} color={colors.primary} style={{ transform: [{ rotate: '-45deg' }] }} />
+          <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.logoMark} resizeMode="contain" />
         </View>
 
         <Text style={[styles.title, { color: colors.textOnBrand }]}>Welcome to Bluebird</Text>
@@ -58,6 +58,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', alignSelf: 'center',
     marginBottom: 20,
   },
+  logoMark: { width: 48, height: 48 },
   title: {
     fontSize: 26, fontFamily: 'Inter_700Bold',
     textAlign: 'center', letterSpacing: -0.4,

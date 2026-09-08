@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Platform,
   StyleSheet,
   Text,
@@ -112,10 +113,11 @@ export default function CompleteRegistrationScreen() {
           <Feather name="arrow-left" size={20} color={colors.mutedOnBrand} />
         </TouchableOpacity>
 
-        <View style={styles.logoRow}>
-          <Feather name="send" size={20} color={colors.primary} style={styles.logoIcon} />
-          <Text style={[styles.logoText, { color: colors.textOnBrand }]}>Bluebird</Text>
-        </View>
+        <Image
+          source={require('@/assets/images/bluebird-logo-white.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
 
         <Text style={[styles.title, { color: colors.textOnBrand }]}>Finish creating your account</Text>
         <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>
@@ -221,9 +223,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { paddingHorizontal: 24 },
   backBtn: { marginTop: 8, marginBottom: 24, width: 36, height: 36, justifyContent: 'center' },
-  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 28 },
-  logoIcon: { transform: [{ rotate: '-45deg' }] },
-  logoText: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
+  logo: { width: 112, height: 25, marginBottom: 28 },
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', marginBottom: 8 },
   subtitle: { fontSize: 15, fontFamily: 'Inter_400Regular', marginBottom: 30, lineHeight: 22 },
   nameRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
