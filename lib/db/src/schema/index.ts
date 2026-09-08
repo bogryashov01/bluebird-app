@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, integer, timestamp, jsonb, uniqueIndex, check } from "drizzle-orm/pg-core";
+import { pgTable, text, boolean, integer, numeric, timestamp, jsonb, uniqueIndex, check } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -73,6 +73,10 @@ export const queueEntriesTable = pgTable("queue_entries", {
   intlFeeAccepted: boolean("intl_fee_accepted").notNull().default(false),
   bringingPet: boolean("bringing_pet").notNull().default(false),
   petFeeAcknowledged: boolean("pet_fee_acknowledged").notNull().default(false),
+  petWeightLbs: numeric("pet_weight_lbs", { mode: "number" }),
+  petCrateLengthIn: numeric("pet_crate_length_in", { mode: "number" }),
+  petCrateWidthIn: numeric("pet_crate_width_in", { mode: "number" }),
+  petCrateHeightIn: numeric("pet_crate_height_in", { mode: "number" }),
   // Set when this entry reaches the front of the queue and is notified that a
   // seat is ready; starts the 30-minute acceptance window.
   frontNotifiedAt: timestamp("front_notified_at"),
@@ -84,7 +88,12 @@ export const queueEntriesTable = pgTable("queue_entries", {
     .notNull()
     .default([]),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => [
+  check("queue_entries_pet_weight_positive", sql`${table.petWeightLbs} IS NULL OR ${table.petWeightLbs} > 0`),
+  check("queue_entries_pet_crate_length_positive", sql`${table.petCrateLengthIn} IS NULL OR ${table.petCrateLengthIn} > 0`),
+  check("queue_entries_pet_crate_width_positive", sql`${table.petCrateWidthIn} IS NULL OR ${table.petCrateWidthIn} > 0`),
+  check("queue_entries_pet_crate_height_positive", sql`${table.petCrateHeightIn} IS NULL OR ${table.petCrateHeightIn} > 0`),
+]);
 
 export type QueueMovementEvent =
   | { type: "joined"; position: number; at: string }

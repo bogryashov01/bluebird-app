@@ -1294,10 +1294,38 @@ components:
           description: Whether the member will travel with a pet.
         petFeeAcknowledged:
           type: boolean
-          description: Member acknowledged the conditional $500 cleaning fee.
+          description: Member acknowledged that the $500 cleaning fee applies only if the flight is awarded.
+        petWeightLbs:
+          type: number
+          exclusiveMinimum: 0
+          description: Pet weight in pounds; required when bringingPet is true.
+        petCrateLengthIn:
+          type: number
+          exclusiveMinimum: 0
+          description: Pet crate length in inches; required when bringingPet is true.
+        petCrateWidthIn:
+          type: number
+          exclusiveMinimum: 0
+          description: Pet crate width in inches; required when bringingPet is true.
+        petCrateHeightIn:
+          type: number
+          exclusiveMinimum: 0
+          description: Pet crate height in inches; required when bringingPet is true.
       required:
         - flightId
         - bringingPet
+      allOf:
+        - if:
+            properties:
+              bringingPet:
+                const: true
+          then:
+            required:
+              - petFeeAcknowledged
+              - petWeightLbs
+              - petCrateLengthIn
+              - petCrateWidthIn
+              - petCrateHeightIn
 
     CancelQueueResponse:
       type: object
@@ -1336,6 +1364,22 @@ components:
           type: boolean
         petFeeAcknowledged:
           type: boolean
+        petWeightLbs:
+          type: number
+          nullable: true
+          description: Pet weight in pounds.
+        petCrateLengthIn:
+          type: number
+          nullable: true
+          description: Pet crate length in inches.
+        petCrateWidthIn:
+          type: number
+          nullable: true
+          description: Pet crate width in inches.
+        petCrateHeightIn:
+          type: number
+          nullable: true
+          description: Pet crate height in inches.
       required:
         - id
         - flightId
@@ -1345,6 +1389,10 @@ components:
         - createdAt
         - bringingPet
         - petFeeAcknowledged
+        - petWeightLbs
+        - petCrateLengthIn
+        - petCrateWidthIn
+        - petCrateHeightIn
     QueueMovementEvent:
       type: object
       properties:

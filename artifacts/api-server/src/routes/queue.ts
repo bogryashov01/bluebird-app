@@ -36,6 +36,10 @@ router.post("/join", authMiddleware, async (req, res) => {
     acceptIntlFee,
     bringingPet,
     petFeeAcknowledged,
+    petWeightLbs: petWeightLbsRaw,
+    petCrateLengthIn: petCrateLengthInRaw,
+    petCrateWidthIn: petCrateWidthInRaw,
+    petCrateHeightIn: petCrateHeightInRaw,
   } = req.body;
   const passengers = Math.max(1, Math.min(10, parseInt(passengersRaw ?? "1", 10) || 1));
 
@@ -48,6 +52,20 @@ router.post("/join", authMiddleware, async (req, res) => {
   if (bringingPet && petFeeAcknowledged !== true) {
     return res.status(400).json({
       error: "You must acknowledge the $500 cleaning fee before joining with a pet",
+    });
+  }
+  const petMeasurements = {
+    petWeightLbs: Number(petWeightLbsRaw),
+    petCrateLengthIn: Number(petCrateLengthInRaw),
+    petCrateWidthIn: Number(petCrateWidthInRaw),
+    petCrateHeightIn: Number(petCrateHeightInRaw),
+  };
+  if (
+    bringingPet &&
+    Object.values(petMeasurements).some((value) => !Number.isFinite(value) || value <= 0)
+  ) {
+    return res.status(400).json({
+      error: "Pet weight and all crate dimensions must be positive numbers",
     });
   }
 
@@ -185,6 +203,10 @@ router.post("/join", authMiddleware, async (req, res) => {
         intlFeeAccepted: feeApplies && !!acceptIntlFee,
         bringingPet,
         petFeeAcknowledged: bringingPet && petFeeAcknowledged === true,
+        petWeightLbs: bringingPet ? petMeasurements.petWeightLbs : null,
+        petCrateLengthIn: bringingPet ? petMeasurements.petCrateLengthIn : null,
+        petCrateWidthIn: bringingPet ? petMeasurements.petCrateWidthIn : null,
+        petCrateHeightIn: bringingPet ? petMeasurements.petCrateHeightIn : null,
         movementHistory: [{ type: "joined", position, at: new Date().toISOString() }],
       })
       .returning();

@@ -6,7 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface JoinQueueRequest {
+export type JoinQueueRequest = unknown & {
   flightId: string;
   useLinePass?: boolean;
   /**
@@ -18,6 +18,26 @@ export interface JoinQueueRequest {
   acceptIntlFee?: boolean;
   /** Whether the member will travel with a pet. */
   bringingPet: boolean;
-  /** Member acknowledged the conditional $500 cleaning fee. */
+  /** Member acknowledged that the $500 cleaning fee applies only if the flight is awarded. */
   petFeeAcknowledged?: boolean;
-}
+  /**
+     * Pet weight in pounds; required when bringingPet is true.
+     * @exclusiveMinimum 0
+     */
+  petWeightLbs?: number;
+  /**
+     * Pet crate length in inches; required when bringingPet is true.
+     * @exclusiveMinimum 0
+     */
+  petCrateLengthIn?: number;
+  /**
+     * Pet crate width in inches; required when bringingPet is true.
+     * @exclusiveMinimum 0
+     */
+  petCrateWidthIn?: number;
+  /**
+     * Pet crate height in inches; required when bringingPet is true.
+     * @exclusiveMinimum 0
+     */
+  petCrateHeightIn?: number;
+};

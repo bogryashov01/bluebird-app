@@ -9,8 +9,12 @@ import * as zod from 'zod';
 
 export const updateMeBodyHomeAirportsItemRegExp = new RegExp('^\\s*[A-Za-z]{3,4}\\s*$');
 export const updateMeBodyHomeAirportsMax = 20;
-export const joinQueueBodyPassengersDefault = 1;
-export const joinQueueBodyPassengersMax = 10;
+export const joinQueueBodyTwoPassengersDefault = 1;
+export const joinQueueBodyTwoPassengersMax = 10;
+export const joinQueueBodyTwoPetWeightLbsExclusiveMin = 0;
+export const joinQueueBodyTwoPetCrateLengthInExclusiveMin = 0;
+export const joinQueueBodyTwoPetCrateWidthInExclusiveMin = 0;
+export const joinQueueBodyTwoPetCrateHeightInExclusiveMin = 0;
 export const saveTripManifestBodyPassengersItemPassengerOrderMultipleOf = 1;
 export const saveTripManifestBodyPassengersItemFirstNameMax = 100;
 export const saveTripManifestBodyPassengersItemLastNameMax = 100;
@@ -329,14 +333,22 @@ export const GetFlightMyStatusResponse = zod.object({
 
 
 
-export const JoinQueueBody = zod.object({
+
+
+
+
+export const JoinQueueBody = zod.unknown().and(zod.object({
   "flightId": zod.string(),
   "useLinePass": zod.boolean().optional(),
-  "passengers": zod.number().min(1).max(joinQueueBodyPassengersMax).default(joinQueueBodyPassengersDefault),
+  "passengers": zod.number().min(1).max(joinQueueBodyTwoPassengersMax).default(joinQueueBodyTwoPassengersDefault),
   "acceptIntlFee": zod.boolean().optional().describe('Base member accepted the one-time international fee for this flight (demo charge — recorded, never billed).\n'),
   "bringingPet": zod.boolean().describe('Whether the member will travel with a pet.'),
-  "petFeeAcknowledged": zod.boolean().optional().describe('Member acknowledged the conditional $500 cleaning fee.')
-})
+  "petFeeAcknowledged": zod.boolean().optional().describe('Member acknowledged that the $500 cleaning fee applies only if the flight is awarded.'),
+  "petWeightLbs": zod.number().gt(joinQueueBodyTwoPetWeightLbsExclusiveMin).optional().describe('Pet weight in pounds; required when bringingPet is true.'),
+  "petCrateLengthIn": zod.number().gt(joinQueueBodyTwoPetCrateLengthInExclusiveMin).optional().describe('Pet crate length in inches; required when bringingPet is true.'),
+  "petCrateWidthIn": zod.number().gt(joinQueueBodyTwoPetCrateWidthInExclusiveMin).optional().describe('Pet crate width in inches; required when bringingPet is true.'),
+  "petCrateHeightIn": zod.number().gt(joinQueueBodyTwoPetCrateHeightInExclusiveMin).optional().describe('Pet crate height in inches; required when bringingPet is true.')
+}))
 
 export const JoinQueueResponse = zod.object({
   "id": zod.string(),
@@ -379,7 +391,11 @@ export const JoinQueueResponse = zod.object({
   "at": zod.string().describe('UTC ISO-8601 timestamp of the event.')
 })).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.'),
   "bringingPet": zod.boolean(),
-  "petFeeAcknowledged": zod.boolean()
+  "petFeeAcknowledged": zod.boolean(),
+  "petWeightLbs": zod.number().nullable().describe('Pet weight in pounds.'),
+  "petCrateLengthIn": zod.number().nullable().describe('Pet crate length in inches.'),
+  "petCrateWidthIn": zod.number().nullable().describe('Pet crate width in inches.'),
+  "petCrateHeightIn": zod.number().nullable().describe('Pet crate height in inches.')
 })
 
 
@@ -427,7 +443,11 @@ export const GetQueueStatusResponseItem = zod.object({
   "at": zod.string().describe('UTC ISO-8601 timestamp of the event.')
 })).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.'),
   "bringingPet": zod.boolean(),
-  "petFeeAcknowledged": zod.boolean()
+  "petFeeAcknowledged": zod.boolean(),
+  "petWeightLbs": zod.number().nullable().describe('Pet weight in pounds.'),
+  "petCrateLengthIn": zod.number().nullable().describe('Pet crate length in inches.'),
+  "petCrateWidthIn": zod.number().nullable().describe('Pet crate width in inches.'),
+  "petCrateHeightIn": zod.number().nullable().describe('Pet crate height in inches.')
 })
 export const GetQueueStatusResponse = zod.array(GetQueueStatusResponseItem)
 
@@ -492,7 +512,11 @@ export const UseLinePassOnQueueEntryResponse = zod.object({
   "at": zod.string().describe('UTC ISO-8601 timestamp of the event.')
 })).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.'),
   "bringingPet": zod.boolean(),
-  "petFeeAcknowledged": zod.boolean()
+  "petFeeAcknowledged": zod.boolean(),
+  "petWeightLbs": zod.number().nullable().describe('Pet weight in pounds.'),
+  "petCrateLengthIn": zod.number().nullable().describe('Pet crate length in inches.'),
+  "petCrateWidthIn": zod.number().nullable().describe('Pet crate width in inches.'),
+  "petCrateHeightIn": zod.number().nullable().describe('Pet crate height in inches.')
 }).and(zod.object({
   "linePassCount": zod.number().describe('The user\'s remaining Skip the Line pass balance after use'),
   "alreadyConfirmed": zod.boolean().optional().describe('True when the entry was already confirmed before the pass was applied — no pass was consumed'),

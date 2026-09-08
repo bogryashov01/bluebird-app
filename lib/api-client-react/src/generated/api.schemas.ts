@@ -284,7 +284,7 @@ export interface AirportSummary {
   recentFlights: Flight[];
 }
 
-export interface JoinQueueRequest {
+export type JoinQueueRequest = unknown & {
   flightId: string;
   useLinePass?: boolean;
   /**
@@ -296,9 +296,29 @@ export interface JoinQueueRequest {
   acceptIntlFee?: boolean;
   /** Whether the member will travel with a pet. */
   bringingPet: boolean;
-  /** Member acknowledged the conditional $500 cleaning fee. */
+  /** Member acknowledged that the $500 cleaning fee applies only if the flight is awarded. */
   petFeeAcknowledged?: boolean;
-}
+  /**
+     * Pet weight in pounds; required when bringingPet is true.
+     * @exclusiveMinimum 0
+     */
+  petWeightLbs?: number;
+  /**
+     * Pet crate length in inches; required when bringingPet is true.
+     * @exclusiveMinimum 0
+     */
+  petCrateLengthIn?: number;
+  /**
+     * Pet crate width in inches; required when bringingPet is true.
+     * @exclusiveMinimum 0
+     */
+  petCrateWidthIn?: number;
+  /**
+     * Pet crate height in inches; required when bringingPet is true.
+     * @exclusiveMinimum 0
+     */
+  petCrateHeightIn?: number;
+};
 
 export interface CancelQueueResponse {
   success: boolean;
@@ -346,6 +366,14 @@ export interface QueueEntry {
   movementHistory?: QueueMovementEvent[];
   bringingPet: boolean;
   petFeeAcknowledged: boolean;
+  /** Pet weight in pounds. */
+  petWeightLbs: number | null;
+  /** Pet crate length in inches. */
+  petCrateLengthIn: number | null;
+  /** Pet crate width in inches. */
+  petCrateWidthIn: number | null;
+  /** Pet crate height in inches. */
+  petCrateHeightIn: number | null;
 }
 
 export type TripStatus = typeof TripStatus[keyof typeof TripStatus];

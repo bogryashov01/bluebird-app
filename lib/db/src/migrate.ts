@@ -241,6 +241,10 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS intl_fee_accepted BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS bringing_pet BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS pet_fee_acknowledged BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS pet_weight_lbs NUMERIC;
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS pet_crate_length_in NUMERIC;
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS pet_crate_width_in NUMERIC;
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS pet_crate_height_in NUMERIC;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS movement_history JSONB NOT NULL DEFAULT '[]'::jsonb;
 
     CREATE TABLE IF NOT EXISTS trips (

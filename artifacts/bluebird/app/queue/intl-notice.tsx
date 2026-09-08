@@ -24,12 +24,19 @@ export default function InternationalNoticeScreen() {
     flightId: string; fromCity: string; toCity: string;
     from: string; to: string; useLinePass?: string; passengers?: string;
     feeUsd?: string; flightStatus?: string; bringingPet?: string; petFeeAcknowledged?: string;
+    petWeightLbs?: string; petCrateLengthIn?: string; petCrateWidthIn?: string; petCrateHeightIn?: string;
   }>();
   const { flightId } = params;
   const passengers = Math.max(1, parseInt(params.passengers ?? '1', 10) || 1);
   const useLinePass = params.useLinePass === '1';
   const bringingPet = params.bringingPet === '1';
   const petFeeAcknowledged = params.petFeeAcknowledged === '1';
+  const petMeasurements = bringingPet ? {
+    petWeightLbs: Number(params.petWeightLbs),
+    petCrateLengthIn: Number(params.petCrateLengthIn),
+    petCrateWidthIn: Number(params.petCrateWidthIn),
+    petCrateHeightIn: Number(params.petCrateHeightIn),
+  } : {};
   const fee = parseInt(params.feeUsd ?? '1000', 10) || 1000;
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
@@ -122,7 +129,7 @@ export default function InternationalNoticeScreen() {
     setJoinError(null);
     if (useLinePass) setOverlayPhase('applying');
     joinMutation.mutate({
-      data: { flightId, useLinePass, passengers, acceptIntlFee: true, bringingPet, petFeeAcknowledged },
+      data: { flightId, useLinePass, passengers, acceptIntlFee: true, bringingPet, petFeeAcknowledged, ...petMeasurements },
     });
   };
 

@@ -21,4 +21,12 @@ export interface QueueEntry {
   movementHistory?: QueueMovementEvent[];
   bringingPet: boolean;
   petFeeAcknowledged: boolean;
+  /** Pet weight in pounds. */
+  petWeightLbs: number | null;
+  /** Pet crate length in inches. */
+  petCrateLengthIn: number | null;
+  /** Pet crate width in inches. */
+  petCrateWidthIn: number | null;
+  /** Pet crate height in inches. */
+  petCrateHeightIn: number | null;
 }
