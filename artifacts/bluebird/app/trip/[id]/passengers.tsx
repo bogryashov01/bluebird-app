@@ -23,7 +23,10 @@ import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
 import { prefillPrimaryPassenger } from '@/lib/passenger-name';
 import { MAX_OCCUPANTS, maxPassengersForBooking } from '@/lib/passengerCapacity';
-type DraftPassenger = Passenger & { dateOfBirth: string };
+type DraftPassenger = Omit<Passenger, 'dateOfBirth' | 'weightKg'> & {
+  dateOfBirth: string;
+  weightKg: string;
+};
 type PetDraft = {
   weightLb: string;
   crateLengthIn: string;
@@ -92,6 +95,7 @@ export default function PassengerListScreen() {
     const restoredPassengers = data.passengers.map((passenger) => ({
       ...passenger,
       dateOfBirth: passenger.dateOfBirth ?? '',
+      weightKg: passenger.weightKg == null ? '' : String(passenger.weightKg),
     }));
     setPassengers(identityChanged
       ? prefillPrimaryPassenger(restoredPassengers, user?.name)
@@ -163,6 +167,7 @@ export default function PassengerListScreen() {
       firstName: '',
       lastName: '',
       dateOfBirth: '',
+      weightKg: '',
     }]);
     setDirty(true);
     setFeedback('');
@@ -180,14 +185,17 @@ export default function PassengerListScreen() {
     setFeedback('');
   };
 
-  const passengerComplete = (passenger: DraftPassenger) =>
-    !!passenger.firstName.trim() && !!passenger.lastName.trim() && validPastDate(passenger.dateOfBirth);
-  const completedCount = passengers.filter(passengerComplete).length;
-  const passengersComplete = passengers.length === data?.requiredCount && completedCount === passengers.length;
   const validMeasurement = (value: string, maximum: number) => {
     const measurement = Number(value);
     return Number.isFinite(measurement) && measurement > 0 && measurement <= maximum;
   };
+  const passengerComplete = (passenger: DraftPassenger) =>
+    !!passenger.firstName.trim() &&
+    !!passenger.lastName.trim() &&
+    validPastDate(passenger.dateOfBirth) &&
+    validMeasurement(passenger.weightKg, 500);
+  const completedCount = passengers.filter(passengerComplete).length;
+  const passengersComplete = passengers.length === data?.requiredCount && completedCount === passengers.length;
   const petComplete = !data?.bringingPet ||
     (validMeasurement(pet.weightLb, 500) &&
       validMeasurement(pet.crateLengthIn, 200) &&
@@ -201,6 +209,7 @@ export default function PassengerListScreen() {
       firstName: passenger.firstName,
       lastName: passenger.lastName,
       dateOfBirth: passenger.dateOfBirth || null,
+      weightKg: optionalMeasurement(passenger.weightKg),
     })),
     ...(data?.bringingPet ? {
       pet: {
@@ -284,6 +293,9 @@ export default function PassengerListScreen() {
                     <Text style={[styles.summaryDetail, { color: colors.mutedForegroundLight }]}>
                       Date of birth · {formatDateOfBirth(passenger.dateOfBirth)}
                     </Text>
+                    <Text style={[styles.summaryDetail, { color: colors.mutedForegroundLight }]}>
+                      Weight · {passenger.weightKg} kg
+                    </Text>
                   </View>
                 </View>
               ))}
@@ -359,6 +371,19 @@ export default function PassengerListScreen() {
                 {!!passenger.dateOfBirth && !validPastDate(passenger.dateOfBirth) && (
                   <Text style={[styles.validation, { color: colors.destructive }]}>Enter a valid date in the past.</Text>
                 )}
+                <Field
+                  label="Weight (kg)"
+                  testID={`passenger-${index + 1}-weight-kg`}
+                  value={passenger.weightKg}
+                  onChangeText={(value: string) => updatePassenger(index, 'weightKg', formatMeasurementInput(value))}
+                  keyboardType="decimal-pad"
+                  colors={colors}
+                />
+                <Text style={[styles.validation, { color: colors.destructive }]}>
+                  {passenger.weightKg
+                    ? !validMeasurement(passenger.weightKg, 500) && 'Weight must be between 1 and 500 kg.'
+                    : 'Weight is required (1–500 kg).'}
+                </Text>
               </View>
             ))}
             {editingSection !== 'pet' && canAddPassenger && (

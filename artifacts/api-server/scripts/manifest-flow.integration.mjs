@@ -73,34 +73,50 @@ async function main() {
     );
     check("another member cannot access the manifest", (await api("GET", `/trips/${ids.trip}/manifest`, otherToken)).status === 404);
     check("another member cannot save the manifest", (await api("PUT", `/trips/${ids.trip}/manifest`, otherToken, {
-      passengers: [{ passengerOrder: 1, firstName: "Other", lastName: "Member", dateOfBirth: "1980-01-01" }],
+      passengers: [{ passengerOrder: 1, firstName: "Other", lastName: "Member", dateOfBirth: "1980-01-01", weightKg: 70 }],
     })).status === 404);
     check("another member cannot submit the manifest", (await api("POST", `/trips/${ids.trip}/manifest/submit`, otherToken)).status === 404);
 
     const tooMany = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
       passengers: [
-        { passengerOrder: 1, firstName: "One", lastName: "Traveler", dateOfBirth: "1980-01-01" },
-        { passengerOrder: 2, firstName: "Two", lastName: "Traveler", dateOfBirth: "1981-01-01" },
-        { passengerOrder: 3, firstName: "Three", lastName: "Traveler", dateOfBirth: "1982-01-01" },
+        { passengerOrder: 1, firstName: "One", lastName: "Traveler", dateOfBirth: "1980-01-01", weightKg: 70 },
+        { passengerOrder: 2, firstName: "Two", lastName: "Traveler", dateOfBirth: "1981-01-01", weightKg: 71 },
+        { passengerOrder: 3, firstName: "Three", lastName: "Traveler", dateOfBirth: "1982-01-01", weightKg: 72 },
       ],
     });
     check("roster cannot exceed reserved seats", tooMany.status === 400, JSON.stringify(tooMany.json));
 
     const invalidCalendar = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
       passengers: [
-        { passengerOrder: 1, firstName: "Ada", lastName: "Lovelace", dateOfBirth: "1980-02-30" },
-        { passengerOrder: 2, firstName: "Grace", lastName: "Hopper", dateOfBirth: "1975-12-09" },
+        { passengerOrder: 1, firstName: "Ada", lastName: "Lovelace", dateOfBirth: "1980-02-30", weightKg: 70 },
+        { passengerOrder: 2, firstName: "Grace", lastName: "Hopper", dateOfBirth: "1975-12-09", weightKg: 65 },
       ],
     });
     check("nonexistent birth date remains incomplete", invalidCalendar.status === 200 && invalidCalendar.json.isComplete === false);
     const futureBirth = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
       passengers: [
-        { passengerOrder: 1, firstName: "Ada", lastName: "Lovelace", dateOfBirth: "2098-01-01" },
-        { passengerOrder: 2, firstName: "Grace", lastName: "Hopper", dateOfBirth: "1975-12-09" },
+        { passengerOrder: 1, firstName: "Ada", lastName: "Lovelace", dateOfBirth: "2098-01-01", weightKg: 70 },
+        { passengerOrder: 2, firstName: "Grace", lastName: "Hopper", dateOfBirth: "1975-12-09", weightKg: 65 },
       ],
     });
     check("future birth date remains incomplete", futureBirth.status === 200 && futureBirth.json.isComplete === false);
     check("invalid birth date cannot submit", (await api("POST", `/trips/${ids.trip}/manifest/submit`, ownerToken)).status === 400);
+
+    const missingWeight = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
+      passengers: [
+        { passengerOrder: 1, firstName: "Ada", lastName: "Lovelace", dateOfBirth: "1980-12-10" },
+        { passengerOrder: 2, firstName: "Grace", lastName: "Hopper", dateOfBirth: "1975-12-09", weightKg: 65 },
+      ],
+    });
+    check("missing passenger weight remains incomplete",
+      missingWeight.status === 200 && missingWeight.json.completedCount === 1 && !missingWeight.json.isComplete);
+    const invalidWeight = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
+      passengers: [
+        { passengerOrder: 1, firstName: "Ada", lastName: "Lovelace", dateOfBirth: "1980-12-10", weightKg: 0 },
+        { passengerOrder: 2, firstName: "Grace", lastName: "Hopper", dateOfBirth: "1975-12-09", weightKg: 501 },
+      ],
+    });
+    check("out-of-range passenger weights are rejected", invalidWeight.status === 400);
 
     const domestic = [
       {
@@ -108,15 +124,19 @@ async function main() {
         firstName: "Ada",
         lastName: "Lovelace",
         dateOfBirth: "1980-12-10",
+        weightKg: 70,
         passportNumber: "MUST-NOT-PERSIST",
         nationality: "MUST-NOT-PERSIST",
       },
-      { passengerOrder: 2, firstName: "Grace", lastName: "Hopper", dateOfBirth: "1975-12-09" },
+      { passengerOrder: 2, firstName: "Grace", lastName: "Hopper", dateOfBirth: "1975-12-09", weightKg: 65 },
     ];
     const saved = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, { passengers: domestic });
     check("complete traveler roster persists", saved.status === 200 && saved.json.completedCount === 2 && saved.json.isComplete);
     const restored = await api("GET", `/trips/${ids.trip}/manifest`, ownerToken);
-    check("saved names and birth dates are restored", restored.json.passengers[1].lastName === "Hopper" && restored.json.passengers[0].dateOfBirth === "1980-12-10");
+    check("saved names, birth dates, and weights are restored",
+      restored.json.passengers[1].lastName === "Hopper" &&
+      restored.json.passengers[0].dateOfBirth === "1980-12-10" &&
+      restored.json.passengers[0].weightKg === 70);
     check("passport attributes are excluded from manifest responses", !/passport|nationality|issuingCountry/i.test(JSON.stringify(restored.json)), JSON.stringify(restored.json));
 
     const submit1 = await api("POST", `/trips/${ids.trip}/manifest/submit`, ownerToken);
@@ -127,31 +147,40 @@ async function main() {
       [ids.trip],
     )).rows;
     check("only one operational update is recorded", updates.length === 1);
-    check("operations output includes names and birth dates", /Ada Lovelace; Date of birth 1980-12-10/.test(updates[0].body));
+    check("operations output includes names, birth dates, and weights", /Ada Lovelace; Date of birth 1980-12-10; Weight 70 kg/.test(updates[0].body));
     check("operations output excludes passport attributes", !/passport|nationality|issuing country|MUST-NOT-PERSIST/i.test(updates[0].body), updates[0].body);
+
+    const weightEdit = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
+      passengers: [{ ...domestic[0], weightKg: 71 }, domestic[1]],
+    });
+    check("weight-only edits make a submitted manifest eligible for resubmission",
+      weightEdit.status === 200 && weightEdit.json.version === 1 && !weightEdit.json.submittedAt);
+    const weightResubmitted = await api("POST", `/trips/${ids.trip}/manifest/submit`, ownerToken);
+    check("weight-only edit creates the next submission version",
+      weightResubmitted.json.version === 2 && weightResubmitted.json.operationsNotified === true);
 
     const shortened = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
       passengers: [domestic[0]],
     });
     check("an editable roster may remove an additional traveler without becoming complete",
       shortened.status === 200 && shortened.json.passengers.length === 1 && !shortened.json.isComplete);
-    check("changed incomplete manifest becomes unsubmitted", !shortened.json.submittedAt && shortened.json.version === 1);
+    check("changed incomplete manifest becomes unsubmitted", !shortened.json.submittedAt && shortened.json.version === 2);
     check("a shortened roster cannot be submitted", (await api("POST", `/trips/${ids.trip}/manifest/submit`, ownerToken)).status === 400);
     const revised = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
       passengers: [domestic[0], { ...domestic[1], firstName: "Amazing" }],
     });
     const resubmitted = await api("POST", `/trips/${ids.trip}/manifest/submit`, ownerToken);
-    check("updated roster creates the next submission version", resubmitted.json.version === 2 && resubmitted.json.operationsNotified === true);
+    check("updated roster creates the next submission version", resubmitted.json.version === 3 && resubmitted.json.operationsNotified === true);
 
     const petIncomplete = await api("PUT", `/trips/${ids.petTrip}/manifest`, ownerToken, {
-      passengers: [{ passengerOrder: 1, firstName: "Amelia", lastName: "Earhart", dateOfBirth: "1977-07-24" }],
+      passengers: [{ passengerOrder: 1, firstName: "Amelia", lastName: "Earhart", dateOfBirth: "1977-07-24", weightKg: 55 }],
       pet: { weightLb: 42, crateLengthIn: 36 },
     });
     check("partial pet details persist but remain incomplete", petIncomplete.status === 200 && !petIncomplete.json.isComplete && petIncomplete.json.pet.weightLb === 42);
     const petRestored = await api("GET", `/trips/${ids.petTrip}/manifest`, ownerToken);
     check("pet summary availability is tied to the booking", petRestored.json.bringingPet === true && petRestored.json.pet.crateLengthIn === 36);
     const petComplete = await api("PUT", `/trips/${ids.petTrip}/manifest`, ownerToken, {
-      passengers: [{ passengerOrder: 1, firstName: "Amelia", lastName: "Earhart", dateOfBirth: "1977-07-24" }],
+      passengers: [{ passengerOrder: 1, firstName: "Amelia", lastName: "Earhart", dateOfBirth: "1977-07-24", weightKg: 55 }],
       pet: { weightLb: 42, crateLengthIn: 36, crateWidthIn: 24, crateHeightIn: 26 },
     });
     check("valid pet weight and crate dimensions complete the manifest", petComplete.status === 200 && petComplete.json.isComplete);
@@ -167,6 +196,7 @@ async function main() {
       firstName: `Human${index + 1}`,
       lastName: "Limit",
       dateOfBirth: `198${index}-01-01`,
+      weightKg: 60 + index,
     }));
     const maxHuman = await api("PUT", `/trips/${ids.maxHumanTrip}/manifest`, ownerToken, {
       passengers: sixHumans,
@@ -201,6 +231,7 @@ async function main() {
       firstName: "Human7",
       lastName: "Limit",
       dateOfBirth: "1987-01-01",
+      weightKg: 67,
     }];
     const sevenPassengerManifest = await api("PUT", `/trips/${ids.maxHumanTrip}/manifest`, ownerToken, {
       passengers: sevenHumans,

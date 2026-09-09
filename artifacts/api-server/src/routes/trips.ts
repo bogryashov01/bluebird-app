@@ -44,7 +44,10 @@ async function eligibleManifestTrip(tripId: string, userId: string, database: an
 }
 
 function passengerComplete(passenger: any): boolean {
-  return !!passenger.firstName?.trim() && !!passenger.lastName?.trim() && validPastDate(passenger.dateOfBirth);
+  return !!passenger.firstName?.trim() &&
+    !!passenger.lastName?.trim() &&
+    validPastDate(passenger.dateOfBirth) &&
+    validWeightKg(passenger.weightKg);
 }
 
 function validPastDate(value: unknown): boolean {
@@ -55,17 +58,22 @@ function validPastDate(value: unknown): boolean {
     date < new Date();
 }
 
+function validWeightKg(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 500;
+}
+
 async function manifestResponse(trip: any, flight: any, entry: any, database: any = db) {
   const requiredCount = entry.passengers;
   const stored = await database.select().from(tripPassengersTable)
     .where(eq(tripPassengersTable.tripId, trip.id))
     .orderBy(asc(tripPassengersTable.passengerOrder));
-  const passengers = (stored.length ? stored : [{ passengerOrder: 1, firstName: "", lastName: "", dateOfBirth: null }])
+  const passengers = (stored.length ? stored : [{ passengerOrder: 1, firstName: "", lastName: "", dateOfBirth: null, weightKg: null }])
     .map((passenger: any) => ({
       passengerOrder: passenger.passengerOrder,
       firstName: passenger.firstName,
       lastName: passenger.lastName,
       dateOfBirth: passenger.dateOfBirth ?? null,
+      weightKg: passenger.weightKg ?? null,
     }));
   const completedCount = passengers.filter(passengerComplete).length;
   const bringingPet = !!entry.bringingPet;
@@ -180,6 +188,7 @@ router.put("/:id/manifest", authMiddleware, async (req, res) => {
     const comparable = (rows: any[]) => JSON.stringify(rows.map((p) => ({
       passengerOrder: p.passengerOrder, firstName: p.firstName.trim(), lastName: p.lastName.trim(),
       dateOfBirth: p.dateOfBirth || null,
+      weightKg: p.weightKg ?? null,
     })));
     const previousPet = {
       weightLb: result.trip.petWeightLb, crateLengthIn: result.trip.petCrateLengthIn,
@@ -192,6 +201,7 @@ router.put("/:id/manifest", authMiddleware, async (req, res) => {
       id: makeId(), tripId: result.trip.id, passengerOrder: passenger.passengerOrder,
       firstName: passenger.firstName.trim(), lastName: passenger.lastName.trim(),
       dateOfBirth: passenger.dateOfBirth || null,
+      weightKg: passenger.weightKg ?? null,
     })));
     let trip = result.trip;
     [trip] = await txDb.update(tripsTable).set({
@@ -233,7 +243,7 @@ router.post("/:id/manifest/submit", authMiddleware, async (req, res) => {
       `Trip: ${result.trip.id}`,
       `Flight: ${result.flight.fromAirport} → ${result.flight.toAirport} on ${result.flight.departureDate} at ${result.flight.departureTime}`,
       ...manifest.passengers.map((passenger: any) =>
-        `Passenger ${passenger.passengerOrder}: ${passenger.firstName} ${passenger.lastName}; Date of birth ${passenger.dateOfBirth}`
+        `Passenger ${passenger.passengerOrder}: ${passenger.firstName} ${passenger.lastName}; Date of birth ${passenger.dateOfBirth}; Weight ${passenger.weightKg} kg`
       ),
       ...(manifest.pet ? [
         `Pet: ${manifest.pet.weightLb} lb; Crate ${manifest.pet.crateLengthIn} × ${manifest.pet.crateWidthIn} × ${manifest.pet.crateHeightIn} in`,

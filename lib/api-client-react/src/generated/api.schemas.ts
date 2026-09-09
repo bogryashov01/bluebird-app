@@ -451,6 +451,11 @@ export interface Passenger {
   firstName: string;
   lastName: string;
   dateOfBirth?: string | null;
+  /**
+     * @minimum 1
+     * @maximum 500
+     */
+  weightKg?: number | null;
 }
 
 export interface PassengerInput {
@@ -462,6 +467,11 @@ export interface PassengerInput {
   lastName: string;
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
   dateOfBirth?: string | null;
+  /**
+     * @minimum 1
+     * @maximum 500
+     */
+  weightKg?: number | null;
 }
 
 export interface PetManifestInput {

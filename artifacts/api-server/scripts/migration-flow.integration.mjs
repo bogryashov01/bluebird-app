@@ -80,7 +80,6 @@ await pool.query(`
           '2099-01-01', '09:00', '1h', 6);
   INSERT INTO trips (id, user_id, flight_id)
   VALUES ('legacy-manifest-trip', 'u1', 'legacy-manifest-flight');
-  ALTER TABLE trip_passengers ADD COLUMN weight_kg INTEGER;
   ALTER TABLE trip_passengers ADD COLUMN passport_number TEXT;
   ALTER TABLE trip_passengers ADD COLUMN issuing_country TEXT;
   ALTER TABLE trip_passengers ADD COLUMN nationality TEXT;
@@ -174,10 +173,14 @@ check("registration_grants table created", registrationGrants === 1);
 const passengerCols = (await pool.query(`
   SELECT column_name FROM information_schema.columns
   WHERE table_schema = '${SCHEMA}' AND table_name = 'trip_passengers'`)).rows.map((row) => row.column_name);
-check("legacy passenger weight and passport columns are dropped",
-  !passengerCols.some((column) => [
-    "weight_kg", "passport_number", "issuing_country", "nationality", "passport_expiration_date",
+check("passenger weight is retained while passport columns are dropped",
+  passengerCols.includes("weight_kg") && !passengerCols.some((column) => [
+    "passport_number", "issuing_country", "nationality", "passport_expiration_date",
   ].includes(column)));
+const legacyPassenger = (await pool.query(
+  `SELECT weight_kg FROM trip_passengers WHERE id = 'legacy-passenger'`,
+)).rows[0];
+check("legacy passenger weight remains available", Number(legacyPassenger?.weight_kg) === 70);
 check("date of birth column is present", passengerCols.includes("date_of_birth"));
 const legacyBody = (await pool.query(`
   SELECT body FROM manifest_operational_updates WHERE id = 'legacy-update'`)).rows[0]?.body ?? "";

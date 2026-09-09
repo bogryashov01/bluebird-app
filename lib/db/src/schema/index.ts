@@ -122,10 +122,12 @@ export const tripPassengersTable = pgTable("trip_passengers", {
   firstName: text("first_name").notNull().default(""),
   lastName: text("last_name").notNull().default(""),
   dateOfBirth: text("date_of_birth"),
+  weightKg: numeric("weight_kg", { mode: "number" }),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [
   uniqueIndex("trip_passengers_trip_order_unique").on(table.tripId, table.passengerOrder),
   check("trip_passengers_order_positive", sql`${table.passengerOrder} > 0`),
+  check("trip_passengers_weight_positive", sql`${table.weightKg} IS NULL OR ${table.weightKg} > 0`),
 ]);
 
 export const manifestOperationalUpdatesTable = pgTable("manifest_operational_updates", {

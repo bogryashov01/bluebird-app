@@ -275,11 +275,31 @@ export async function ensureSchema(): Promise<void> {
       first_name TEXT NOT NULL DEFAULT '',
       last_name TEXT NOT NULL DEFAULT '',
       date_of_birth TEXT,
+      weight_kg NUMERIC,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      CONSTRAINT trip_passengers_trip_order_unique UNIQUE (trip_id, passenger_order)
+      CONSTRAINT trip_passengers_trip_order_unique UNIQUE (trip_id, passenger_order),
+      CONSTRAINT trip_passengers_weight_positive CHECK (weight_kg IS NULL OR weight_kg > 0)
     );
     ALTER TABLE trip_passengers ADD COLUMN IF NOT EXISTS date_of_birth TEXT;
-    ALTER TABLE trip_passengers DROP COLUMN IF EXISTS weight_kg;
+    ALTER TABLE trip_passengers ADD COLUMN IF NOT EXISTS weight_kg NUMERIC;
+    ALTER TABLE trip_passengers ALTER COLUMN weight_kg TYPE NUMERIC USING weight_kg::NUMERIC;
+    UPDATE trip_passengers SET weight_kg = NULL WHERE weight_kg IS NOT NULL AND weight_kg <= 0;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE c.conname = 'trip_passengers_weight_positive'
+          AND t.relname = 'trip_passengers'
+          AND n.nspname = current_schema()
+      ) THEN
+        ALTER TABLE trip_passengers
+          ADD CONSTRAINT trip_passengers_weight_positive
+          CHECK (weight_kg IS NULL OR weight_kg > 0);
+      END IF;
+    END $$;
     ALTER TABLE trip_passengers DROP COLUMN IF EXISTS passport_number;
     ALTER TABLE trip_passengers DROP COLUMN IF EXISTS issuing_country;
     ALTER TABLE trip_passengers DROP COLUMN IF EXISTS nationality;
