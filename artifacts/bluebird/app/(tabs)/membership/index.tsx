@@ -85,10 +85,11 @@ export default function MembershipScreen() {
               style={styles.upgradeCard}
             >
               <Text style={styles.upgradeEyebrow}>JOIN BLUEBIRD</Text>
-              <Text style={styles.upgradeTitle}>Become a member</Text>
+              <Text style={styles.upgradeTitle}>
+                One membership.{'\n'}Unlimited flights.
+              </Text>
               <Text style={styles.upgradeBody}>
-                You can browse every empty-leg flight for free. Join Bluebird to
-                queue for seats, use Skip the Line passes, and fly.
+                You can join any flight, bring up to 5 friends with no additional costs per passenger.
               </Text>
               <View style={[styles.upgradeBtn, { backgroundColor: colors.surface }]}>
                 <Text style={[styles.upgradeBtnText, { color: '#0A1128' }]}>See plans</Text>
