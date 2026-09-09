@@ -15,7 +15,6 @@ import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
 
 // ── Aircraft image matching ────────────────────────────────────────────────────
-import { originalPrice } from '@/lib/pricing';
 const AIRCRAFT_IMAGES = [
   { match: /gulfstream|g280|challenger|falcon/i,  source: require('@/assets/images/aircraft-heavy.jpg') },
   { match: /king air|pilatus|pc-12|turboprop/i,   source: require('@/assets/images/aircraft-turboprop.jpg') },
@@ -166,8 +165,6 @@ export default function FlightDetailScreen() {
   // f is guaranteed non-null below this point
   const f         = flight as any;
   const imgSource = aircraftImage(f.aircraftType);
-  const price     = f.priceUsd ? `$${f.priceUsd.toLocaleString()}` : null;
-  const wasPrice  = originalPrice(f.priceUsd, f.discountPct);
 
   const status = myStatus?.status ?? 'none';
   const canOpenDirections = status === 'confirmed' && !!f.departureFboAddress?.trim();
@@ -422,16 +419,6 @@ export default function FlightDetailScreen() {
         {/* ── Title row ── */}
         <View style={styles.titleRow}>
           <Text style={[styles.aircraftName, { color: colors.textOnSurface }]} numberOfLines={1}>{f.aircraftType}</Text>
-          {price && (
-            <View style={styles.priceCol}>
-              <Text style={[styles.priceText, { color: colors.primary }]}>{price}</Text>
-              {wasPrice && (
-                <Text style={[styles.wasPriceText, { color: colors.mutedForegroundLight }]}>
-                  ${wasPrice.toLocaleString()}
-                </Text>
-              )}
-            </View>
-          )}
         </View>
 
         {/* ── Date · departure line ── */}
@@ -632,13 +619,9 @@ const styles = StyleSheet.create({
 
   // Title row
   titleRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20, marginTop: 8,
   },
-  aircraftName: { fontFamily: 'Inter_700Bold', fontSize: 22, flex: 1, marginRight: 12 },
-  priceCol:    { alignItems: 'flex-end' },
-  priceText:   { fontFamily: 'Inter_700Bold', fontSize: 22 },
-  wasPriceText: { fontFamily: 'Inter_500Medium', fontSize: 13, textDecorationLine: 'line-through', marginTop: 1 },
+  aircraftName: { fontFamily: 'Inter_700Bold', fontSize: 22 },
 
   // Date
   dateText: { fontFamily: 'Inter_400Regular', fontSize: 14, paddingHorizontal: 20, marginTop: 4, marginBottom: 18 },
