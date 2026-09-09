@@ -14,7 +14,7 @@ export type JoinQueueRequest = unknown & {
      * @maximum 10
      */
   passengers?: number;
-  /** Base member accepted the one-time international fee for this flight (demo charge — recorded, never billed). */
+  /** Base member acknowledged the one-time international authorization hold for this flight (demo acknowledgement — never authorized or billed). */
   acceptIntlFee?: boolean;
   /** Whether the member will travel with a pet. */
   bringingPet: boolean;

@@ -342,7 +342,7 @@ export const JoinQueueBody = zod.unknown().and(zod.object({
   "flightId": zod.string(),
   "useLinePass": zod.boolean().optional(),
   "passengers": zod.number().min(1).max(joinQueueBodyTwoPassengersMax).multipleOf(joinQueueBodyTwoPassengersMultipleOf).default(joinQueueBodyTwoPassengersDefault),
-  "acceptIntlFee": zod.boolean().optional().describe('Base member accepted the one-time international fee for this flight (demo charge — recorded, never billed).\n'),
+  "acceptIntlFee": zod.boolean().optional().describe('Base member acknowledged the one-time international authorization hold for this flight (demo acknowledgement — never authorized or billed).\n'),
   "bringingPet": zod.boolean().describe('Whether the member will travel with a pet.'),
   "petFeeAcknowledged": zod.boolean().optional().describe('Member acknowledged that the $500 cleaning fee applies only if the flight is awarded.'),
   "petWeightLbs": zod.number().gt(joinQueueBodyTwoPetWeightLbsExclusiveMin).max(joinQueueBodyTwoPetWeightLbsMax).optional().describe('Pet weight in pounds; required when bringingPet is true.'),

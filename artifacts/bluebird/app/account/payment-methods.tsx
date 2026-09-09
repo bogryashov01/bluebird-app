@@ -9,16 +9,7 @@ import { useColors } from '@/hooks/useColors';
 import { usePersistedState } from '@/hooks/usePersistedState';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
-
-interface MockCard {
-  id: string;
-  brand: CardBrand;
-  last4: string;
-  expiry: string;
-  isDefault: boolean;
-}
-
-type CardBrand = 'Visa' | 'Mastercard' | 'Amex';
+import { INITIAL_CARDS, type CardBrand, type MockCard } from '@/lib/paymentMethods';
 
 interface FormErrors {
   name?: string;
@@ -26,11 +17,6 @@ interface FormErrors {
   expiry?: string;
   cvc?: string;
 }
-
-const INITIAL_CARDS: MockCard[] = [
-  { id: 'c1', brand: 'Visa', last4: '4242', expiry: '08/28', isDefault: true },
-  { id: 'c2', brand: 'Mastercard', last4: '5100', expiry: '11/27', isDefault: false },
-];
 
 const BRAND_COLORS: Record<CardBrand, string> = {
   Visa: '#1A1F71',

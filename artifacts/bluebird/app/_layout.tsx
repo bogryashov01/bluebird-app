@@ -85,6 +85,10 @@ function RootLayoutNav() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="queue/payment-review"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
         name="queue/joined"
         options={{ headerShown: false, gestureEnabled: false }}
       />

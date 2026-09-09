@@ -1288,8 +1288,8 @@ components:
         acceptIntlFee:
           type: boolean
           description: >
-            Base member accepted the one-time international fee for this
-            flight (demo charge — recorded, never billed).
+            Base member acknowledged the one-time international authorization
+            hold for this flight (demo acknowledgement — never authorized or billed).
         bringingPet:
           type: boolean
           description: Whether the member will travel with a pet.

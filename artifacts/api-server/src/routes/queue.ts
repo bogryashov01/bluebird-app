@@ -247,13 +247,13 @@ router.post("/join", authMiddleware, async (req, res) => {
       type: useLinePass ? "flight_confirmed" : "queue_update",
     });
 
-    // 6b. Demo charge note for an accepted international fee (never billed)
+    // 6b. Demo hold note for an accepted international fee (never authorized or billed)
     if (feeApplies && acceptIntlFee) {
       await txDb.insert(notificationsTable).values({
         id: makeId(),
         userId,
-        title: "International fee accepted",
-        body: `A one-time $${flight.internationalFeeUsd.toLocaleString()} international fee applies to ${flight.fromCity} → ${flight.toCity} (demo — no real charge).`,
+        title: "International hold acknowledged",
+        body: `A $${flight.internationalFeeUsd.toLocaleString()} authorization hold is acknowledged for ${flight.fromCity} → ${flight.toCity}. You are charged only if you take the flight; the hold is released if you do not (demo — no real authorization or charge).`,
         type: "queue_update",
       });
     }
