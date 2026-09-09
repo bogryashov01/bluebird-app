@@ -23,11 +23,11 @@ const TOPICS: FaqTopic[] = [
       },
       {
         q: 'What is a Skip the Line pass?',
-        a: 'A Skip the Line pass moves you to the front of a flight queue instantly. Plus members receive 2 per month; Concierge members have unlimited passes.',
+          a: 'A Skip the Line pass moves you to the front of a flight queue instantly. Plus members receive 5 per month, while Family/Corporate members receive 7.',
       },
       {
         q: 'Can I bring guests?',
-        a: 'Plus and Concierge members can add guests when joining a queue, subject to seat availability on the aircraft.',
+          a: 'Base members can bring up to 5 guests, subject to seat availability on the aircraft.',
       },
     ],
   },
@@ -40,11 +40,11 @@ const TOPICS: FaqTopic[] = [
       },
       {
         q: 'When am I billed?',
-        a: 'Membership renews monthly on the date you joined. You can review your renewal date in the Membership tab.',
+          a: 'Membership renews annually on the date you joined. You can review your renewal date in the Membership tab.',
       },
       {
         q: 'Can I cancel anytime?',
-        a: 'Yes. Memberships are month-to-month and can be cancelled at any time; access continues through the end of the billing period.',
+          a: 'Yes. Memberships can be cancelled at any time; access continues through the end of the paid annual period.',
       },
     ],
   },

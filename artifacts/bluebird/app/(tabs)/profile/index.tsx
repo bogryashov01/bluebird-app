@@ -89,7 +89,7 @@ export default function ProfileScreen() {
     none:      'Not a member yet',
     base:      'Base Member',
     plus:      'Plus Member',
-    concierge: 'Concierge Member',
+    concierge: 'Family/Corporate Member',
   }[user?.membershipTier ?? 'base'] ?? 'Base Member';
   const memberSince = user?.createdAt
     ? new Date(user.createdAt).getFullYear()

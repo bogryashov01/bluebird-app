@@ -1,40 +1,13 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useGetMembership, type MembershipPlan } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
-
-// Plan catalog mirrors the server's PLAN_CATALOG / All Plans screen.
-const PLANS = [
-  {
-    id: 'base',
-    label: 'Base',
-    price: '$99 / mo',
-    tagline: 'Get started with private aviation',
-    features: ['Join queue for any flight', 'Flight notifications', 'Community access'],
-    color: '#8896B3',
-  },
-  {
-    id: 'plus',
-    label: 'Plus',
-    price: '$995 / mo',
-    tagline: 'More access, more freedom',
-    features: ['Everything in Base', '5 Skip the Line passes / mo', 'International fees waived'],
-    color: '#1259F2',
-    recommended: true,
-  },
-  {
-    id: 'concierge',
-    label: 'Concierge',
-    price: '$799 / mo',
-    tagline: 'The complete Bluebird experience',
-    features: ['Everything in Plus', 'Unlimited Line passes', 'AI Concierge 24/7'],
-    color: '#F59E0B',
-  },
-];
+import { formatAnnualPrice, TIER_COLORS, TIER_TAGLINES } from '@/lib/membershipPlans';
 
 // Membership-required paywall for non-members: shown when they try to join a
 // queue, use a pass, or buy a pass. Explains that a plan purchase is needed
@@ -45,6 +18,8 @@ export default function MembershipRequiredScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ flightId?: string }>();
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const { data: membership, isLoading, isError, refetch } = useGetMembership({});
+  const plans: MembershipPlan[] = membership?.plans ?? [];
 
   const choosePlan = (tierId: string) => {
     router.push({
@@ -55,6 +30,18 @@ export default function MembershipRequiredScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.offWhite }]}>
+      {isLoading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator color={colors.primary} size="large" />
+        </View>
+      ) : isError ? (
+        <View style={styles.loadingState}>
+          <Text style={[styles.errorText, { color: colors.textOnSurface }]}>Could not load plans.</Text>
+          <TouchableOpacity style={[styles.retryBtn, { backgroundColor: colors.primary }]} onPress={() => refetch()}>
+            <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: botPad + 40 }]}
         showsVerticalScrollIndicator={false}
@@ -68,34 +55,39 @@ export default function MembershipRequiredScreen() {
           Choose a plan to join Bluebird and pick up right where you left off.
         </Text>
 
-        {PLANS.map((plan) => (
+        {plans.map((plan) => {
+          const isRecommended = plan.id === 'plus';
+          const planColor = TIER_COLORS[plan.id];
+          return (
           <View
             key={plan.id}
             style={[
               styles.planCard,
-              { backgroundColor: colors.surface, borderColor: plan.recommended ? colors.primary : colors.border },
-              plan.recommended && { borderWidth: 1.5 },
+              { backgroundColor: colors.surface, borderColor: isRecommended ? colors.primary : colors.border },
+              isRecommended && { borderWidth: 1.5 },
             ]}
           >
-            {plan.recommended && (
+            {isRecommended && (
               <View style={[styles.recommendedPill, { backgroundColor: colors.primary + '1A' }]}>
                 <Text style={[styles.recommendedText, { color: colors.primary }]}>RECOMMENDED</Text>
               </View>
             )}
             <View style={styles.planHeader}>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={[styles.planName, { color: plan.color }]}>{plan.label}</Text>
-                <Text style={[styles.planPrice, { color: colors.mutedForegroundLight }]}>{plan.price}</Text>
+                <Text style={[styles.planName, { color: planColor }]}>{plan.label}</Text>
+                <Text style={[styles.planPrice, { color: colors.mutedForegroundLight }]}>
+                  {formatAnnualPrice(plan.priceAnnualUsd)}
+                </Text>
               </View>
               <TouchableOpacity
-                style={[styles.chooseBtn, { backgroundColor: plan.color }]}
+                style={[styles.chooseBtn, { backgroundColor: planColor }]}
                 onPress={() => choosePlan(plan.id)}
                 activeOpacity={0.8}
               >
                 <Text style={[styles.chooseBtnText, { color: colors.primaryForeground }]}>Choose</Text>
               </TouchableOpacity>
             </View>
-            <Text style={[styles.planTagline, { color: colors.mutedForegroundLight }]}>{plan.tagline}</Text>
+            <Text style={[styles.planTagline, { color: colors.mutedForegroundLight }]}>{TIER_TAGLINES[plan.id]}</Text>
             {plan.features.map((feat) => (
               <View key={feat} style={styles.featureRow}>
                 <Text style={[styles.featureCheck, { color: colors.primary }]}>✓</Text>
@@ -103,18 +95,24 @@ export default function MembershipRequiredScreen() {
               </View>
             ))}
           </View>
-        ))}
+          );
+        })}
 
         <Text style={[styles.demoNote, { color: colors.mutedForegroundLight }]}>
           Demo checkout — no real payment will be charged.
         </Text>
       </ScrollView>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  loadingState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28 },
+  errorText: { fontFamily: 'Inter_500Medium', fontSize: 15, textAlign: 'center' },
+  retryBtn: { borderRadius: 999, paddingHorizontal: 22, paddingVertical: 11, marginTop: 16 },
+  retryText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   scroll: { paddingHorizontal: 16, paddingTop: 20 },
   heroIcon: {
     width: 60, height: 60, borderRadius: 30, alignSelf: 'center',

@@ -1626,8 +1626,9 @@ components:
           enum: [base, plus, concierge]
         label:
           type: string
-        priceMonthlyUsd:
+        priceAnnualUsd:
           type: number
+          description: Annual membership price in US dollars.
         features:
           type: array
           items:
@@ -1635,7 +1636,7 @@ components:
       required:
         - id
         - label
-        - priceMonthlyUsd
+        - priceAnnualUsd
         - features
 
     Membership:

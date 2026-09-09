@@ -6,11 +6,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { getTierLabel } from '@/lib/membershipPlans';
 
 const POSTS = [
   { id: '1', author: 'Sarah M.', tier: 'concierge', time: '2h ago', text: 'Just landed in Aspen after a beautiful DEN → ASP flight. Zero turbulence, stunning views. Bluebird never disappoints. ✈️', likes: 24, comments: 7 },
   { id: '2', author: 'James K.', tier: 'plus', time: '5h ago', text: 'Pro tip: check the Discover tab on Tuesday mornings. Operators usually upload new empty legs for the weekend. Got 3 flights this way!', likes: 47, comments: 12 },
-  { id: '3', author: 'Priya R.', tier: 'concierge', time: '1d ago', text: 'Used my first Skip the Line pass for the JFK → MIA route. Was #1 in queue and confirmed within minutes. The concierge tier is worth every penny.', likes: 31, comments: 9 },
+  { id: '3', author: 'Priya R.', tier: 'concierge', time: '1d ago', text: 'Used my first Skip the Line pass for the JFK → MIA route. Was #1 in queue and confirmed within minutes. The Family/Corporate tier is worth every penny.', likes: 31, comments: 9 },
   { id: '4', author: 'Marcus T.', tier: 'base', time: '2d ago', text: 'New member here! Any tips for someone just starting out on the Base plan? Looking to get my first flight.', likes: 15, comments: 23 },
   { id: '5', author: 'Elena V.', tier: 'plus', time: '3d ago', text: 'The referral program is incredible. Invited 4 friends, got 4 Skip the Line passes. Already used two of them. Community here is fantastic too. 🙌', likes: 56, comments: 18 },
 ];
@@ -53,7 +54,7 @@ export default function CommunityScreen() {
                   <Text style={[styles.authorName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>{item.author}</Text>
                   <View style={[styles.tierBadge, { backgroundColor: TIER_COLORS[item.tier] + '20' }]}>
                     <Text style={[styles.tierBadgeText, { color: TIER_COLORS[item.tier], fontFamily: 'Inter_500Medium' }]}>
-                      {item.tier}
+                       {getTierLabel(item.tier)}
                     </Text>
                   </View>
                 </View>

@@ -10,6 +10,7 @@ import type { MembershipPlanId } from './membershipPlanId';
 export interface MembershipPlan {
   id: MembershipPlanId;
   label: string;
-  priceMonthlyUsd: number;
+  /** Annual membership price in US dollars. */
+  priceAnnualUsd: number;
   features: string[];
 }

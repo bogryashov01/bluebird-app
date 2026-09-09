@@ -11,22 +11,23 @@ const MEMBERSHIP_FEATURES: Record<string, string[]> = {
     "Browse empty leg flights",
     "Join the queue for any flight",
     "Flight notifications",
-    "Member community access",
+    "Unlimited flights",
+    "Bring 5 Guests",
   ],
   plus: [
     "Everything in Base",
     "5 Skip the Line passes / month",
-    "Priority customer support",
+    "Priority Access to flights",
     "International flight access",
-    "Guest pass for one",
   ],
   concierge: [
     "Everything in Plus",
-    "Unlimited Skip the Line passes",
     "AI Concierge 24/7",
     "Dedicated flight coordinator",
-    "First-class lounge access",
     "Custom flight requests",
+    "7 Skip the line passes",
+    "4 Memberships in 1",
+    "Access to charter flight aviation advisors",
   ],
 };
 
@@ -36,16 +37,24 @@ function makeId(): string {
 
 const TIER_ORDER: Record<string, number> = { none: -1, base: 0, plus: 1, concierge: 2 };
 
-// Purchasable plan catalog surfaced to clients (e.g. the non-member
-// membership-required screen). Pricing mirrors the app's plan screens.
+const PLAN_LABELS: Record<string, string> = {
+  base: "Base",
+  plus: "Plus",
+  concierge: "Family/Corporate",
+};
+
+// Purchasable plan catalog surfaced to clients. This is the source of truth
+// for every membership discovery, paywall, checkout, and manage-plan surface.
 const PLAN_CATALOG = [
-  { id: "base" as const, label: "Base", priceMonthlyUsd: 99, features: MEMBERSHIP_FEATURES.base },
-  { id: "plus" as const, label: "Plus", priceMonthlyUsd: 995, features: MEMBERSHIP_FEATURES.plus },
-  { id: "concierge" as const, label: "Concierge", priceMonthlyUsd: 799, features: MEMBERSHIP_FEATURES.concierge },
+  { id: "base" as const, label: PLAN_LABELS.base, priceAnnualUsd: 3995, features: MEMBERSHIP_FEATURES.base },
+  { id: "plus" as const, label: PLAN_LABELS.plus, priceAnnualUsd: 9995, features: MEMBERSHIP_FEATURES.plus },
+  { id: "concierge" as const, label: PLAN_LABELS.concierge, priceAnnualUsd: 13995, features: MEMBERSHIP_FEATURES.concierge },
 ];
 
 function renewalDate(): string {
-  return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const renewal = new Date();
+  renewal.setFullYear(renewal.getFullYear() + 1);
+  return renewal.toISOString().slice(0, 10);
 }
 
 // Annual flight allowance per tier (calendar year).
@@ -133,7 +142,7 @@ router.post("/upgrade", authMiddleware, async (req, res) => {
     }
 
     const wasNonMember = user.membershipTier === "none";
-    const bonusPasses = tier === "base" ? 0 : tier === "plus" ? 5 : 10;
+    const bonusPasses = tier === "base" ? 0 : tier === "plus" ? 5 : 7;
     const [updated] = await db
       .update(usersTable)
       .set({
@@ -145,7 +154,7 @@ router.post("/upgrade", authMiddleware, async (req, res) => {
       .returning();
     if (!updated) return res.status(404).json({ error: "User not found" });
 
-    const label = tier.charAt(0).toUpperCase() + tier.slice(1);
+    const label = PLAN_LABELS[tier];
     await db.insert(notificationsTable).values({
       id: makeId(),
       userId,
@@ -248,7 +257,7 @@ router.post("/change", authMiddleware, async (req, res) => {
       }
       pendingTier = null;
       title = `Plan change reverted`;
-      body = `Your ${user.membershipTier} membership will continue as usual.`;
+      body = `Your ${PLAN_LABELS[user.membershipTier] ?? user.membershipTier} membership will continue as usual.`;
     }
 
     const [updated] = await db

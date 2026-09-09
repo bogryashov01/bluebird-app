@@ -6,18 +6,18 @@ import {
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useGetMembership } from '@workspace/api-client-react';
+import { useGetMembership, type MembershipPlan } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { StatCard } from '@/components/StatCard';
+import { formatAnnualPrice, getTierLabel, TIER_COLORS, TIER_ORDER } from '@/lib/membershipPlans';
 
 // ── Tier config ───────────────────────────────────────────────────────────────
 const TIER_META: Record<string, { label: string; blurb: string }> = {
   base:      { label: 'Base',      blurb: '' },
-  plus:      { label: 'Plus',      blurb: '5 Skip the Line Passes, priority notifications & exclusive flights.' },
-  concierge: { label: 'Concierge', blurb: 'Unlimited Line Passes, AI Concierge 24/7 & custom flight requests.' },
+  plus:      { label: 'Plus',      blurb: '5 Skip the Line Passes, priority access to flights & international access.' },
+  concierge: { label: 'Family/Corporate', blurb: '7 Skip the Line Passes, 4 memberships in 1 & charter flight aviation advisors.' },
 };
-const TIER_ORDER = ['base', 'plus', 'concierge'];
 
 function fmtUsd(n: number) {
   return `$${Math.round(n).toLocaleString('en-US')}`;
@@ -36,10 +36,11 @@ export default function MembershipScreen() {
   const mem = membership;
 
   const currentTier: string = mem?.tier ?? user?.membershipTier ?? 'base';
-  const currentIdx = TIER_ORDER.indexOf(currentTier);
-  const nextTierId = TIER_ORDER[currentIdx + 1];
+  const currentIdx = TIER_ORDER[currentTier] ?? -1;
+  const nextTierId = ['base', 'plus', 'concierge'][currentIdx + 1];
+  const plans: MembershipPlan[] = mem?.plans ?? [];
 
-  const tierLabel = TIER_META[currentTier]?.label ?? currentTier;
+  const tierLabel = getTierLabel(currentTier, plans);
 
   if (isLoading) {
     return (
@@ -97,12 +98,43 @@ export default function MembershipScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
+          <Text style={[styles.becomeMemberTitle, { color: colors.textOnSurface }]}>Become a member</Text>
+          <View style={styles.inlinePlans}>
+            {plans.map((plan) => (
+              <View
+                key={plan.id}
+                style={[styles.inlinePlanCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              >
+                <View style={styles.inlinePlanHeader}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.inlinePlanName, { color: TIER_COLORS[plan.id] }]}>{plan.label}</Text>
+                    <Text style={[styles.inlinePlanPrice, { color: colors.mutedForegroundLight }]}>
+                      {formatAnnualPrice(plan.priceAnnualUsd)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.inlineJoinButton, { backgroundColor: TIER_COLORS[plan.id] }]}
+                    activeOpacity={0.8}
+                    onPress={() => router.push(`/upgrade/${plan.id}` as any)}
+                  >
+                    <Text style={[styles.inlineJoinText, { color: colors.primaryForeground }]}>Join</Text>
+                  </TouchableOpacity>
+                </View>
+                {plan.features.map((feature) => (
+                  <View key={feature} style={styles.inlineFeatureRow}>
+                    <Text style={[styles.inlineFeatureCheck, { color: colors.primary }]}>✓</Text>
+                    <Text style={[styles.inlineFeatureText, { color: colors.textOnSurface }]}>{feature}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.push('/membership/plans' as any)}
             style={styles.plansLink}
           >
-            <Text style={[styles.plansLinkText, { color: colors.mutedForegroundLight }]}>Compare all plans</Text>
+            <Text style={[styles.plansLinkText, { color: colors.mutedForegroundLight }]}>View full plan comparison</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -208,8 +240,8 @@ export default function MembershipScreen() {
               style={styles.upgradeCard}
             >
               <Text style={styles.upgradeEyebrow}>UPGRADE</Text>
-              <Text style={styles.upgradeTitle}>{tierLabel} → {TIER_META[nextTierId].label}</Text>
-              <Text style={styles.upgradeBody}>{TIER_META[nextTierId].blurb}</Text>
+              <Text style={styles.upgradeTitle}>{tierLabel} → {getTierLabel(nextTierId, plans)}</Text>
+              <Text style={styles.upgradeBody}>{TIER_META[nextTierId]?.blurb ?? ''}</Text>
               <View style={[styles.upgradeBtn, { backgroundColor: colors.surface }]}>
                 <Text style={[styles.upgradeBtnText, { color: '#0A1128' }]}>Upgrade Now</Text>
               </View>
@@ -223,9 +255,9 @@ export default function MembershipScreen() {
             style={styles.upgradeCard}
           >
             <Text style={styles.upgradeEyebrow}>ELITE STATUS</Text>
-            <Text style={styles.upgradeTitle}>Concierge</Text>
+            <Text style={styles.upgradeTitle}>Family/Corporate</Text>
             <Text style={styles.upgradeBody}>
-              You're on the highest tier. Enjoy unlimited access and dedicated support.
+              You're on the highest tier. Enjoy 7 Skip the Line passes, family memberships, and dedicated support.
             </Text>
           </LinearGradient>
         )}
@@ -330,6 +362,21 @@ const styles = StyleSheet.create({
 
   plansLink: { alignSelf: 'center', paddingVertical: 14 },
   plansLinkText: { fontFamily: 'Inter_500Medium', fontSize: 13, textDecorationLine: 'underline' },
+
+  becomeMemberTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, marginTop: 22, marginBottom: 10 },
+  inlinePlans: { gap: 12 },
+  inlinePlanCard: {
+    borderRadius: 18, borderWidth: 1, padding: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
+  },
+  inlinePlanHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  inlinePlanName: { fontFamily: 'Inter_700Bold', fontSize: 18 },
+  inlinePlanPrice: { fontFamily: 'Inter_500Medium', fontSize: 13, marginTop: 2 },
+  inlineJoinButton: { borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9 },
+  inlineJoinText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  inlineFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  inlineFeatureCheck: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  inlineFeatureText: { fontFamily: 'Inter_400Regular', fontSize: 13, flex: 1 },
 
   linkCard: {
     borderRadius: 18, overflow: 'hidden', marginTop: 4,

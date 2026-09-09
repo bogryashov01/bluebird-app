@@ -128,7 +128,7 @@ router.post("/join", authMiddleware, async (req, res) => {
     }
 
     // 1b. International-fee enforcement — Base members must explicitly accept
-    //     the fee to join an international flight (Plus/Concierge waive it).
+    //     the fee to join an international flight (Plus/Family/Corporate waive it).
     const feeApplies =
       flight.international && flight.internationalFeeUsd > 0 && member?.membershipTier === "base";
     if (feeApplies && !acceptIntlFee) {

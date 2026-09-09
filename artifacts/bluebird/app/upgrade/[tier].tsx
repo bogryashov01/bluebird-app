@@ -6,42 +6,10 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
-import { useUpgradeMembership } from '@workspace/api-client-react';
+import { useGetMembership, useUpgradeMembership, type MembershipPlan } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
-
-const TIER_INFO: Record<string, {
-  label: string; price: string; priceNum: string; tagline: string;
-  color: string; features: string[]; passes: number;
-}> = {
-  base: {
-    label: 'Base',
-    price: '$99 / mo',
-    priceNum: '$99.00',
-    tagline: 'Get started with private aviation',
-    color: '#8896B3',
-    passes: 0,
-    features: ['Browse empty-leg flights', 'Join queue for any flight', 'Flight notifications', 'Community access'],
-  },
-  plus: {
-    label: 'Plus',
-    price: '$995 / mo',
-    priceNum: '$995.00',
-    tagline: 'More access, more freedom',
-    color: '#1259F2',
-    passes: 5,
-    features: ['Everything in Base', '5 Skip the Line passes / mo', 'Priority notifications & earlier access', 'International fees waived', 'Premium concierge & member events'],
-  },
-  concierge: {
-    label: 'Concierge',
-    price: '$799 / mo',
-    priceNum: '$799.00',
-    tagline: 'The complete Bluebird experience',
-    color: '#F59E0B',
-    passes: 10,
-    features: ['Everything in Plus', 'Unlimited Line passes', 'AI Concierge 24/7', 'Dedicated coordinator', 'Lounge access', 'Custom flights'],
-  },
-};
+import { formatAnnualPrice, formatAnnualTotal, getPlan, TIER_COLORS, TIER_TAGLINES } from '@/lib/membershipPlans';
 
 export default function UpgradeScreen() {
   // returnFlightId: forwarded by the membership-required screen so a
@@ -53,8 +21,20 @@ export default function UpgradeScreen() {
   const queryClient = useQueryClient();
   const [success, setSuccess] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+  const { data: membership, isLoading: membershipLoading } = useGetMembership({});
 
-  const info = TIER_INFO[tier ?? ''];
+  const plan: MembershipPlan | undefined = getPlan(tier, membership?.plans ?? []);
+  const info = plan
+    ? {
+        label: plan.label,
+        price: formatAnnualPrice(plan.priceAnnualUsd),
+        priceNum: formatAnnualTotal(plan.priceAnnualUsd),
+        tagline: TIER_TAGLINES[plan.id],
+        color: TIER_COLORS[plan.id],
+        features: plan.features,
+        passes: plan.id === 'plus' ? 5 : plan.id === 'concierge' ? 7 : 0,
+      }
+    : undefined;
   const wasNonMember = user?.membershipTier === 'none';
 
   const upgradeMutation = useUpgradeMembership({
@@ -70,6 +50,14 @@ export default function UpgradeScreen() {
   });
 
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
+
+  if (membershipLoading) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.offWhite }]}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
 
   if (!info) {
     return (
@@ -141,7 +129,7 @@ export default function UpgradeScreen() {
           </View>
           <View style={[styles.payRow, { borderTopWidth: 1, borderTopColor: colors.separator }]}>
             <Text style={[styles.payLabel, { color: colors.mutedForegroundLight }]}>Billing cycle</Text>
-            <Text style={[styles.payValue, { color: colors.textOnSurface }]}>Monthly</Text>
+              <Text style={[styles.payValue, { color: colors.textOnSurface }]}>Annual</Text>
           </View>
           <View style={[styles.payRow, { borderTopWidth: 1, borderTopColor: colors.separator }]}>
             <Text style={[styles.payLabel, { color: colors.mutedForegroundLight }]}>Due today</Text>
@@ -168,7 +156,7 @@ export default function UpgradeScreen() {
           {upgradeMutation.isPending
             ? <ActivityIndicator color={colors.primaryForeground} />
             : <Text style={[styles.confirmBtnText, { color: colors.primaryForeground }]}>
-                {wasNonMember ? `Join Bluebird — ${info.priceNum}/mo` : `Confirm upgrade — ${info.priceNum}/mo`}
+                {wasNonMember ? `Join Bluebird — ${info.priceNum}/year` : `Confirm upgrade — ${info.priceNum}/year`}
               </Text>}
         </TouchableOpacity>
       </ScrollView>

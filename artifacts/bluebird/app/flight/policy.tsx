@@ -15,7 +15,7 @@ const POLICY_SECTIONS = [
   },
   {
     title: 'Skip the Line Passes',
-    body: 'Skip the Line passes allow Plus and Concierge members to move to the front of the queue for any flight. Passes are non-refundable and expire at the end of each membership cycle.',
+    body: 'Skip the Line passes allow Plus and Family/Corporate members to move to the front of the queue for any flight. Passes are non-refundable and expire at the end of each annual membership cycle.',
   },
   {
     title: 'Flight Modifications',

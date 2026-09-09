@@ -826,7 +826,7 @@ export const GetMembershipResponse = zod.object({
   "plans": zod.array(zod.object({
   "id": zod.enum(['base', 'plus', 'concierge']),
   "label": zod.string(),
-  "priceMonthlyUsd": zod.number(),
+  "priceAnnualUsd": zod.number().describe('Annual membership price in US dollars.'),
   "features": zod.array(zod.string())
 })).optional().describe('Purchasable plan catalog (always present; drives the non-member join screen).'),
   "linePassCount": zod.number(),
@@ -852,7 +852,7 @@ export const UpgradeMembershipResponse = zod.object({
   "plans": zod.array(zod.object({
   "id": zod.enum(['base', 'plus', 'concierge']),
   "label": zod.string(),
-  "priceMonthlyUsd": zod.number(),
+  "priceAnnualUsd": zod.number().describe('Annual membership price in US dollars.'),
   "features": zod.array(zod.string())
 })).optional().describe('Purchasable plan catalog (always present; drives the non-member join screen).'),
   "linePassCount": zod.number(),
@@ -887,7 +887,7 @@ export const ChangeMembershipResponse = zod.object({
   "plans": zod.array(zod.object({
   "id": zod.enum(['base', 'plus', 'concierge']),
   "label": zod.string(),
-  "priceMonthlyUsd": zod.number(),
+  "priceAnnualUsd": zod.number().describe('Annual membership price in US dollars.'),
   "features": zod.array(zod.string())
 })).optional().describe('Purchasable plan catalog (always present; drives the non-member join screen).'),
   "linePassCount": zod.number(),

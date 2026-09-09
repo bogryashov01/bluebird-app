@@ -8,7 +8,7 @@ import { useColors } from '@/hooks/useColors';
 const TERMS_SECTIONS = [
   {
     h: '1. Membership',
-    p: 'Bluebird memberships are personal and non-transferable. Your tier (Base, Plus, or Concierge) determines the features available to you, including queue access, Skip the Line passes, and concierge services. Memberships renew monthly and may be cancelled at any time; access continues through the end of the paid period.',
+    p: 'Bluebird memberships are personal and non-transferable. Your tier (Base, Plus, or Family/Corporate) determines the features available to you, including queue access, Skip the Line passes, and concierge services. Memberships renew annually and may be cancelled at any time; access continues through the end of the paid period.',
   },
   {
     h: '2. Empty-Leg Flights',

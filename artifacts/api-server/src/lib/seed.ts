@@ -21,7 +21,7 @@ const FLIGHT_PRICING: Record<string, { priceUsd: number; discountPct: number; fe
   "TEB-YYZ": { priceUsd: 5600, discountPct: 47, featured: true },
 };
 
-// One-time fee applied to Base members on international routes (Plus/Concierge waive it)
+// One-time fee applied to Base members on international routes (Plus/Family/Corporate waive it)
 const INTL_FEE_USD = 1000;
 
 // ── Flight-details enrichment (aircraft specs, destination weather, FBOs) ──

@@ -6,9 +6,9 @@ export type GuidedReply = { reply: string; requiresHumanFollowUp: boolean };
 export const MOCK_RESPONSES: Record<string, string> = {
   default: "I can help with baggage, pets, FBO information, airport directions, flights, membership, and queue questions. What would you like to know?",
   flight: "Empty leg flights are repositioning trips available to Bluebird members at no cost. Browse the Discover tab to see current available flights and join a queue.",
-  membership: "Bluebird offers Base, Plus, and Concierge tiers. Plus members ($995/month) get 5 Skip the Line passes per month, while Concierge members enjoy unlimited passes and 24/7 AI support.",
+  membership: "Bluebird offers Base, Plus, and Family/Corporate tiers. Base is $3,995/year, Plus is $9,995/year with 5 Skip the Line passes per month and priority access to flights, and Family/Corporate is $13,995/year with 7 passes, 4 memberships in 1, charter flight aviation advisors, and 24/7 AI support.",
   queue: "The queue system lets you request a seat on any available empty leg flight. Skip the Line passes move you to the front of the queue instantly.",
-  pass: "Skip the Line passes are earned through Plus/Concierge membership and referrals. Each pass guarantees you the next available seat on your chosen flight.",
+  pass: "Skip the Line passes are earned through Plus or Family/Corporate membership and referrals. Each pass guarantees you the next available seat on your chosen flight.",
   referral: "Earn 1 Skip the Line pass for every friend who joins Bluebird using your referral code. Find your code in the Referral section of your profile.",
   international: "International empty leg flights require a valid passport. Bluebird currently operates domestic US routes, with international access available on Plus membership.",
   luggage: BAGGAGE_POLICY,
@@ -49,8 +49,8 @@ export const SYSTEM_PROMPT = `You are the Bluebird AI Concierge, the in-app assi
 Facts about Bluebird you should use when relevant:
 - Empty leg flights are repositioning trips offered to Bluebird members at no cost. Members browse them in the Discover tab and join a queue for a seat.
 - Queue system: members request a seat on an available flight and wait in line. Positions are first come, first served. Members can leave a queue at any time without penalty.
-- Skip the Line passes move a member to the front of a queue instantly. Plus members get 5 passes per month; Concierge members get unlimited passes. Passes are also earned via referrals (1 pass per friend who joins with your referral code, found in the Referral section of the profile).
-- Membership tiers: Base (browse flights, join queues, notifications, community), Plus (everything in Base at $995/month, 5 Skip the Line passes/month, priority notifications, premium concierge, international fee waived, guest pass for one), Concierge (everything in Plus, unlimited passes, 24/7 AI concierge, dedicated flight coordinator, first-class lounge access, custom flight requests).
+- Skip the Line passes move a member to the front of a queue instantly. Plus members get 5 passes per month; Family/Corporate members get 7 passes. Passes are also earned via referrals (1 pass per friend who joins with your referral code, found in the Referral section of the profile).
+- Membership tiers: Base ($3,995/year: browse empty-leg flights, join queues, notifications, unlimited flights, bring 5 guests), Plus ($9,995/year: everything in Base, 5 Skip the Line passes/month, priority access to flights, international flight access), Family/Corporate ($13,995/year: everything in Plus, 7 Skip the Line passes, 24/7 AI concierge, dedicated flight coordinator, custom flight requests, 4 memberships in 1, access to charter flight aviation advisors).
 - International empty legs require a valid passport and Plus membership or above; Bluebird primarily operates domestic US routes.
 - ${BAGGAGE_POLICY}
 - Skip the Line passes are not refunded if a flight is cancelled by the operator.

@@ -9,15 +9,16 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { FloatingBackButton } from '@/components/FloatingBackButton';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
-import { useBuyLinePass } from '@workspace/api-client-react';
+import { useBuyLinePass, useGetMembership } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
+import { formatAnnualPrice, getPlan } from '@/lib/membershipPlans';
 
 const PLUS_BULLETS = [
   '5 Skip the Line Passes',
-  'Priority notifications & earlier access',
-  'Premium concierge & member events',
+  'Priority Access to flights',
+  'International flight access',
 ];
 
 // "Skip the Line" purchase screen — buy 1 pass ($2,000 demo checkout) or
@@ -27,6 +28,7 @@ export default function BuyPassScreen() {
   const insets = useSafeAreaInsets();
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
+  const { data: membership } = useGetMembership({});
   const [purchased, setPurchased] = useState(false);
   // Optional originating queue entry (and its flight details) forwarded from
   // Queue Status; when present, a successful purchase lands the member on the
@@ -49,6 +51,7 @@ export default function BuyPassScreen() {
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const plusPlan = getPlan('plus', membership?.plans ?? []);
 
   const buyMutation = useBuyLinePass({
     mutation: {
@@ -136,7 +139,9 @@ export default function BuyPassScreen() {
             <Text style={[styles.recommendedText, { color: colors.primary }]}>RECOMMENDED</Text>
           </View>
           <Text style={[styles.passTitle, { color: colors.textOnSurface }]}>Upgrade to Plus Membership</Text>
-          <Text style={[styles.passSub, { color: colors.mutedForegroundLight }]}>$995/month — includes:</Text>
+           <Text style={[styles.passSub, { color: colors.mutedForegroundLight }]}>
+             {plusPlan ? `${formatAnnualPrice(plusPlan.priceAnnualUsd)} — includes:` : 'Annual Plus membership — includes:'}
+           </Text>
           <View style={styles.bullets}>
             {PLUS_BULLETS.map((b) => (
               <View key={b} style={styles.bulletRow}>

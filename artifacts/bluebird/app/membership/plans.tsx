@@ -5,38 +5,10 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useGetMembership } from '@workspace/api-client-react';
+import { useGetMembership, type MembershipPlan } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
-
-const TIERS = [
-  {
-    id: 'base',
-    label: 'Base',
-    price: '$99 / mo',
-    tagline: 'Get started with private aviation',
-    features: ['Browse empty-leg flights', 'Join queue for any flight', 'Flight notifications', 'Community access'],
-    color: '#8896B3',
-  },
-  {
-    id: 'plus',
-    label: 'Plus',
-    price: '$995 / mo',
-    tagline: 'More access, more freedom',
-    features: ['Everything in Base', '5 Skip the Line passes / mo', 'Priority support', 'International flights', 'Guest pass'],
-    color: '#1259F2',
-  },
-  {
-    id: 'concierge',
-    label: 'Concierge',
-    price: '$799 / mo',
-    tagline: 'The complete Bluebird experience',
-    features: ['Everything in Plus', 'Unlimited Line passes', 'AI Concierge 24/7', 'Dedicated coordinator', 'Lounge access', 'Custom flights'],
-    color: '#F59E0B',
-  },
-];
-
-const TIER_IDX: Record<string, number> = { none: -1, base: 0, plus: 1, concierge: 2 };
+import { formatAnnualPrice, TIER_COLORS, TIER_ORDER } from '@/lib/membershipPlans';
 
 export default function AllPlansScreen() {
   const insets = useSafeAreaInsets();
@@ -47,11 +19,12 @@ export default function AllPlansScreen() {
   const { data: membership, isLoading, isError, refetch } = useGetMembership({});
   const mem = membership as any;
   const currentTier: string = mem?.tier ?? user?.membershipTier ?? 'base';
-  const currentIdx = TIER_IDX[currentTier] ?? 0;
+  const currentIdx = TIER_ORDER[currentTier] ?? 0;
   const isNonMember = currentTier === 'none';
+  const plans: MembershipPlan[] = membership?.plans ?? [];
 
   const handleUpgrade = (tierId: string) => {
-    if (TIER_IDX[tierId] <= currentIdx) return;
+    if (TIER_ORDER[tierId] <= currentIdx) return;
     router.push(`/upgrade/${tierId}` as any);
   };
 
@@ -80,33 +53,36 @@ export default function AllPlansScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: botPad + 40 }]}
         showsVerticalScrollIndicator={false}
       >
-        {TIERS.map((tier) => {
+        {plans.map((tier) => {
           const isCurrent = tier.id === currentTier;
-          const canUpgrade = TIER_IDX[tier.id] > currentIdx;
+          const canUpgrade = TIER_ORDER[tier.id] > currentIdx;
+          const tierColor = TIER_COLORS[tier.id];
           return (
             <View
               key={tier.id}
               style={[
                 styles.tierCard,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-                isCurrent && { borderColor: tier.color, borderWidth: 2 },
+                 { backgroundColor: colors.surface, borderColor: colors.border },
+                 isCurrent && { borderColor: tierColor, borderWidth: 2 },
               ]}
             >
               <View style={styles.tierCardHeader}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={styles.tierNameRow}>
-                    <Text style={[styles.tierName, { color: tier.color }]} numberOfLines={1}>{tier.label}</Text>
+                    <Text style={[styles.tierName, { color: tierColor }]} numberOfLines={1}>{tier.label}</Text>
                     {isCurrent && (
-                      <View style={[styles.currentBadge, { backgroundColor: tier.color + '20' }]}>
-                        <Text style={[styles.currentBadgeText, { color: tier.color }]}>Current</Text>
+                      <View style={[styles.currentBadge, { backgroundColor: tierColor + '20' }]}>
+                        <Text style={[styles.currentBadgeText, { color: tierColor }]}>Current</Text>
                       </View>
                     )}
                   </View>
-                  <Text style={[styles.tierPrice, { color: colors.mutedForegroundLight }]}>{tier.price}</Text>
+                  <Text style={[styles.tierPrice, { color: colors.mutedForegroundLight }]}>
+                    {formatAnnualPrice(tier.priceAnnualUsd)}
+                  </Text>
                 </View>
                 {canUpgrade && (
                   <TouchableOpacity
-                    style={[styles.upgradeSmallBtn, { backgroundColor: tier.color }]}
+                     style={[styles.upgradeSmallBtn, { backgroundColor: tierColor }]}
                     onPress={() => handleUpgrade(tier.id)}
                     activeOpacity={0.8}
                   >
@@ -125,7 +101,7 @@ export default function AllPlansScreen() {
                   </TouchableOpacity>
                 )}
               </View>
-              {tier.features.map((feat, i) => (
+               {tier.features.map((feat, i) => (
                 <View key={feat} style={[
                   styles.featureRow,
                   i === 0 && { borderTopWidth: 1, borderTopColor: colors.separator },

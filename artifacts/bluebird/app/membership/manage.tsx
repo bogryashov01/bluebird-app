@@ -6,15 +6,9 @@ import {
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
-import { useGetMembership, useChangeMembership } from '@workspace/api-client-react';
+import { useGetMembership, useChangeMembership, type MembershipPlan } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
-
-const TIER_META: Record<string, { label: string; price: string; color: string }> = {
-  base:      { label: 'Base',      price: '$99 / mo',  color: '#8896B3' },
-  plus:      { label: 'Plus',      price: '$995 / mo', color: '#1259F2' },
-  concierge: { label: 'Concierge', price: '$799 / mo', color: '#F59E0B' },
-};
-const TIER_IDX: Record<string, number> = { base: 0, plus: 1, concierge: 2 };
+import { formatAnnualPrice, getPlan, getTierLabel, TIER_COLORS, TIER_ORDER } from '@/lib/membershipPlans';
 
 type PendingAction =
   | { action: 'downgrade'; tier: 'base' | 'plus' }
@@ -67,15 +61,25 @@ export default function ManagePlanScreen() {
   }
 
   const currentTier: string = mem.tier ?? 'base';
-  const currentIdx = TIER_IDX[currentTier] ?? 0;
-  const meta = TIER_META[currentTier] ?? TIER_META.base;
+  const plans: MembershipPlan[] = mem.plans ?? [];
+  const currentIdx = TIER_ORDER[currentTier] ?? 0;
+  const currentPlan = getPlan(currentTier, plans);
+  const meta = {
+    label: getTierLabel(currentTier, plans),
+    price: currentPlan ? formatAnnualPrice(currentPlan.priceAnnualUsd) : 'Annual membership',
+    color: TIER_COLORS[currentTier as keyof typeof TIER_COLORS] ?? colors.primary,
+  };
   const renewal: string = mem.renewalDate ?? '';
   const pendingTier: string | undefined = mem.pendingTier;
-  const lowerTiers = Object.keys(TIER_IDX).filter((t) => TIER_IDX[t] < currentIdx);
+  const lowerTiers = Object.keys(TIER_ORDER).filter((t) => TIER_ORDER[t] >= 0 && TIER_ORDER[t] < currentIdx);
 
   const confirmCopy = (a: PendingAction) => {
     if (a.action === 'downgrade') {
-      const t = TIER_META[a.tier];
+      const tPlan = getPlan(a.tier, plans);
+      const t = {
+        label: getTierLabel(a.tier, plans),
+        price: tPlan ? formatAnnualPrice(tPlan.priceAnnualUsd) : 'Annual membership',
+      };
       return {
         title: `Downgrade to ${t.label}?`,
         body: `You'll keep your ${meta.label} benefits until ${renewal}. On that date your plan changes to ${t.label} (${t.price}).`,
@@ -111,7 +115,7 @@ export default function ManagePlanScreen() {
   const pendingLabel = pendingTier === 'cancelled'
     ? `Your membership is set to cancel on ${renewal}.`
     : pendingTier
-      ? `Your plan changes to ${TIER_META[pendingTier]?.label ?? pendingTier} on ${renewal}.`
+      ? `Your plan changes to ${getTierLabel(pendingTier, plans)} on ${renewal}.`
       : null;
 
   return (
@@ -124,7 +128,7 @@ export default function ManagePlanScreen() {
         <View style={[styles.planCard, { backgroundColor: meta.color }]}>
           <Text style={[styles.planLabel, { color: colors.primaryForeground }]}>Bluebird {meta.label}</Text>
           <Text style={[styles.planPrice, { color: colors.primaryForeground + 'E6' }]}>{meta.price}</Text>
-          <Text style={[styles.planSub, { color: colors.primaryForeground + 'BF' }]}>Renews {renewal} · Month-to-month, cancel anytime</Text>
+          <Text style={[styles.planSub, { color: colors.primaryForeground + 'BF' }]}>Renews {renewal} · Annual billing, cancel anytime</Text>
         </View>
 
         {/* Pending change banner */}
@@ -150,7 +154,11 @@ export default function ManagePlanScreen() {
             <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>Move to a lower plan</Text>
             <View style={[styles.card, { backgroundColor: colors.surface }]}>
               {lowerTiers.map((t, i) => {
-                const tm = TIER_META[t];
+                const tierPlan = getPlan(t, plans);
+                const tm = {
+                  label: getTierLabel(t, plans),
+                  price: tierPlan ? formatAnnualPrice(tierPlan.priceAnnualUsd) : 'Annual membership',
+                };
                 return (
                   <TouchableOpacity
                     key={t}
@@ -188,7 +196,7 @@ export default function ManagePlanScreen() {
               </TouchableOpacity>
             </View>
             <Text style={[styles.note, { color: colors.mutedForegroundLight }]}>
-              Memberships are month-to-month. Changes take effect at your next renewal — no partial-month charges.
+              Memberships bill annually. Changes take effect at your next renewal — no partial-year charges.
             </Text>
           </>
         )}
