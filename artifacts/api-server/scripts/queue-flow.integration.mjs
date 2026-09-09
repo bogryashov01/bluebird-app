@@ -125,6 +125,48 @@ const waitingPetTrips = await api("GET", "/trips", { token: members[0].token });
 check("waiting pet entry has no trip or applied cleaning fee",
   !waitingPetTrips.json?.some?.((t) => t.flightId === flight.id), JSON.stringify(waitingPetTrips.json));
 
+const sixHumanMember = await makeVerifiedUser("six-human-cap");
+const sixHumanJoin = await api("POST", "/queue/join", {
+  token: sixHumanMember.token,
+  body: { flightId: flight.id, passengers: 6, bringingPet: false },
+});
+check("six human passengers are allowed without a pet",
+  sixHumanJoin.status === 201 && sixHumanJoin.json?.passengers === 6,
+  JSON.stringify(sixHumanJoin.json));
+
+const fivePetMember = await makeVerifiedUser("five-pet-cap");
+const fivePetJoin = await api("POST", "/queue/join", {
+  token: fivePetMember.token,
+  body: {
+    flightId: flight.id, passengers: 5, bringingPet: true, petFeeAcknowledged: true,
+    petWeightLbs: 20, petCrateLengthIn: 28, petCrateWidthIn: 19, petCrateHeightIn: 21,
+  },
+});
+check("five human passengers plus a pet are allowed",
+  fivePetJoin.status === 201 && fivePetJoin.json?.passengers === 5 && fivePetJoin.json?.bringingPet === true,
+  JSON.stringify(fivePetJoin.json));
+
+const sixPetMember = await makeVerifiedUser("six-pet-cap");
+const sixPetJoin = await api("POST", "/queue/join", {
+  token: sixPetMember.token,
+  body: {
+    flightId: flight.id, passengers: 6, bringingPet: true, petFeeAcknowledged: true,
+    petWeightLbs: 20, petCrateLengthIn: 28, petCrateWidthIn: 19, petCrateHeightIn: 21,
+  },
+});
+check("six human passengers plus a pet are rejected",
+  sixPetJoin.status === 400 && /6 occupants|5 passengers/i.test(sixPetJoin.json?.error ?? ""),
+  JSON.stringify(sixPetJoin.json));
+
+const sevenHumanMember = await makeVerifiedUser("seven-human-cap");
+const sevenHumanJoin = await api("POST", "/queue/join", {
+  token: sevenHumanMember.token,
+  body: { flightId: flight.id, passengers: 7, bringingPet: false },
+});
+check("a seventh passenger is rejected",
+  sevenHumanJoin.status === 400 && /between 1 and 6|6 occupants/i.test(sevenHumanJoin.json?.error ?? ""),
+  JSON.stringify(sevenHumanJoin.json));
+
 // ── 2. Skip-the-Line join with N existing entries: atomic instant win ────────
 const vip = await makeVerifiedUser("vip");
 const vipJoin = await api("POST", "/queue/join", { token: vip.token, body: { flightId: flight.id, useLinePass: true, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 12, petCrateLengthIn: 24, petCrateWidthIn: 16, petCrateHeightIn: 18 } });
@@ -136,7 +178,7 @@ check("instant pet award carries weight and crate details into the trip",
   vipJoin.json?.trip?.petWeightLb === 12 && vipJoin.json?.trip?.petCrateLengthIn === 24 &&
   vipJoin.json?.trip?.petCrateWidthIn === 16 && vipJoin.json?.trip?.petCrateHeightIn === 18,
   JSON.stringify(vipJoin.json?.trip));
-check(`pass join totalInQueue === ${N} (confirmed entry is not waiting)`, vipJoin.json?.totalInQueue === N,
+check(`pass join totalInQueue === ${N + 2} (confirmed entry is not waiting)`, vipJoin.json?.totalInQueue === N + 2,
   `got ${vipJoin.json?.totalInQueue}`);
 const vipMe = await api("GET", "/auth/me", { token: vip.token });
 check("pass join consumed exactly one pass", vipMe.json?.linePassCount === 4, `got ${vipMe.json?.linePassCount}`);

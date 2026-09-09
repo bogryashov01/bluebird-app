@@ -16,6 +16,7 @@ import { authMiddleware } from "../middlewares/auth";
 import { promoteFrontAfterSeatFreed } from "../lib/simulation";
 import { departurePassed, sweepDeparturesSafe } from "../lib/departure";
 import { SaveTripManifestBody } from "@workspace/api-zod";
+import { exceedsPassengerCapacity, passengerCapacityError } from "../lib/passenger-capacity";
 
 const router = Router();
 
@@ -141,6 +142,9 @@ router.get("/:id/manifest", authMiddleware, async (req, res) => {
 });
 
 router.put("/:id/manifest", authMiddleware, async (req, res) => {
+  if (Array.isArray(req.body?.passengers) && req.body.passengers.length > 6) {
+    return res.status(400).json({ error: passengerCapacityError() });
+  }
   const parsed = SaveTripManifestBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid passenger details" });
   const userId = (req as any).userId;
@@ -153,6 +157,10 @@ router.put("/:id/manifest", authMiddleware, async (req, res) => {
     if (result.error === "not_found") { await client.query("ROLLBACK"); return res.status(404).json({ error: "Trip not found" }); }
     if (result.error === "ineligible") { await client.query("ROLLBACK"); return res.status(409).json({ error: "Passenger lists are only available for confirmed upcoming trips" }); }
     const passengers = parsed.data.passengers;
+    if (exceedsPassengerCapacity(passengers.length, result.entry.bringingPet)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: passengerCapacityError() });
+    }
     const orders = passengers.map((passenger) => passenger.passengerOrder);
     if (passengers.length < 1 || passengers.length > result.entry.passengers || new Set(orders).size !== orders.length ||
       orders.some((order) => !Number.isInteger(order) || order < 1 || order > result.entry.passengers) ||

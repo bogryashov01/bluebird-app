@@ -17,6 +17,10 @@ export interface PassengerManifest {
   international: boolean;
   bringingPet: boolean;
   pet?: PetManifest | null;
+  /**
+     * Human passenger roster; a pet, when present, occupies one of the six total occupants.
+     * @maxItems 6
+     */
   passengers: Passenger[];
   version: number;
   submittedAt?: string | null;

@@ -22,7 +22,7 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
 import { prefillPrimaryPassenger } from '@/lib/passenger-name';
-
+import { MAX_OCCUPANTS, maxPassengersForBooking } from '@/lib/passengerCapacity';
 type DraftPassenger = Passenger & { dateOfBirth: string };
 type PetDraft = {
   weightLb: string;
@@ -59,6 +59,15 @@ export default function PassengerListScreen() {
   const resetIdentity = useRef('');
   const reviewAfterSave = useRef(false);
   const manifestIdentity = `${user?.id ?? 'signed-out'}:${id ?? ''}`;
+  const humanPassengerLimit = data
+    ? Math.min(data.requiredCount, maxPassengersForBooking(data.bringingPet))
+    : 0;
+  const canAddPassenger = passengers.length < humanPassengerLimit;
+  const capacityGuidance = data?.bringingPet
+    ? 'A pet counts as one of 6 occupants.'
+    : passengers.length >= (data?.requiredCount ?? 0)
+      ? 'This booking has reached its reserved passenger capacity.'
+      : `Maximum ${MAX_OCCUPANTS} occupants per booking.`;
 
   useEffect(() => {
     const identityChanged = hydratedIdentity !== manifestIdentity;
@@ -147,8 +156,8 @@ export default function PassengerListScreen() {
     setFeedback('');
     setPet((current) => ({ ...current, [field]: formatMeasurementInput(value) }));
   };
-  const addPassenger = () => {
-    if (!data || passengers.length >= data.requiredCount) return;
+  const addPassenger = (returnToEdit = false) => {
+    if (!data || !canAddPassenger) return;
     setPassengers((current) => [...current, {
       passengerOrder: current.length + 1,
       firstName: '',
@@ -157,6 +166,10 @@ export default function PassengerListScreen() {
     }]);
     setDirty(true);
     setFeedback('');
+    if (returnToEdit) {
+      setMode('edit');
+      setEditingSection('passengers');
+    }
   };
   const removePassenger = (index: number) => {
     if (index === 0 || passengers.length === 1) return;
@@ -348,18 +361,23 @@ export default function PassengerListScreen() {
                 )}
               </View>
             ))}
-            {editingSection !== 'pet' && passengers.length < data.requiredCount && (
+            {editingSection !== 'pet' && canAddPassenger && (
               <TouchableOpacity
                 testID="add-passenger"
                 style={[styles.addButton, { borderColor: colors.border }]}
-                onPress={addPassenger}
+                onPress={() => addPassenger()}
               >
                 <Feather name="plus" size={17} color={colors.primary} />
-                <Text style={[styles.addButtonText, { color: colors.primary }]}>+ Add Another Passenger</Text>
+                <Text style={[styles.addButtonText, { color: colors.primary }]}>Add Passenger</Text>
                 <Text style={[styles.addLimit, { color: colors.mutedForegroundLight }]}>
-                  Up to {data.requiredCount}
+                  Up to {humanPassengerLimit} traveler{humanPassengerLimit === 1 ? '' : 's'}
                 </Text>
               </TouchableOpacity>
+            )}
+            {editingSection !== 'pet' && !canAddPassenger && (
+              <Text style={[styles.capacityHint, { color: colors.mutedForegroundLight }]}>
+                {capacityGuidance}
+              </Text>
             )}
             {data.bringingPet && editingSection !== 'passengers' && (
               <View style={[styles.card, { backgroundColor: colors.surface, borderColor: petComplete ? colors.success : colors.border }]}>
@@ -396,6 +414,22 @@ export default function PassengerListScreen() {
         {!!feedback && (
           <Text style={[styles.feedback, { color: feedback.includes('Unable') ? colors.destructive : colors.success }]}>
             {feedback}
+          </Text>
+        )}
+        {mode === 'review' ? (
+          <TouchableOpacity
+            testID="add-passenger-review"
+            disabled={!canAddPassenger || pending}
+            style={[styles.reviewAddButton, { borderColor: colors.primary }, (!canAddPassenger || pending) && styles.disabled]}
+            onPress={() => addPassenger(true)}
+          >
+            <Feather name="plus" size={17} color={colors.primary} />
+            <Text style={[styles.reviewAddButtonText, { color: colors.primary }]}>Add Passenger</Text>
+          </TouchableOpacity>
+        ) : null}
+        {mode === 'review' && !canAddPassenger && (
+          <Text style={[styles.capacityHint, { color: colors.mutedForegroundLight }]}>
+            {capacityGuidance}
           </Text>
         )}
         {mode === 'review' ? (
@@ -514,6 +548,9 @@ const styles = StyleSheet.create({
   addButton: { minHeight: 48, borderWidth: 1, borderStyle: 'dashed', borderRadius: 14, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, marginBottom: 12 },
   addButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   addLimit: { marginLeft: 'auto', fontFamily: 'Inter_400Regular', fontSize: 12 },
+  capacityHint: { fontFamily: 'Inter_500Medium', fontSize: 12, lineHeight: 18, textAlign: 'center', marginBottom: 12 },
+  reviewAddButton: { minHeight: 48, borderWidth: 1, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 },
+  reviewAddButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   reviewCard: { borderRadius: 16, padding: 16, marginBottom: 12 },
   reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   reviewTitle: { fontFamily: 'Inter_700Bold', fontSize: 17 },

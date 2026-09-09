@@ -10,7 +10,7 @@ import * as zod from 'zod';
 export const updateMeBodyHomeAirportsItemRegExp = new RegExp('^\\s*[A-Za-z]{3,4}\\s*$');
 export const updateMeBodyHomeAirportsMax = 20;
 export const joinQueueBodyTwoPassengersDefault = 1;
-export const joinQueueBodyTwoPassengersMax = 10;
+export const joinQueueBodyTwoPassengersMax = 6;
 export const joinQueueBodyTwoPassengersMultipleOf = 1;
 export const joinQueueBodyTwoPetWeightLbsExclusiveMin = 0;
 export const joinQueueBodyTwoPetWeightLbsMax = 500;
@@ -20,15 +20,18 @@ export const joinQueueBodyTwoPetCrateWidthInExclusiveMin = 0;
 export const joinQueueBodyTwoPetCrateWidthInMax = 200;
 export const joinQueueBodyTwoPetCrateHeightInExclusiveMin = 0;
 export const joinQueueBodyTwoPetCrateHeightInMax = 200;
+export const getTripManifestResponsePassengersMax = 6;
 export const saveTripManifestBodyPassengersItemPassengerOrderMultipleOf = 1;
 export const saveTripManifestBodyPassengersItemFirstNameMax = 100;
 export const saveTripManifestBodyPassengersItemLastNameMax = 100;
 export const saveTripManifestBodyPassengersItemDateOfBirthRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
-export const saveTripManifestBodyPassengersMax = 10;
+export const saveTripManifestBodyPassengersMax = 6;
 export const saveTripManifestBodyPetWeightLbMax = 500;
 export const saveTripManifestBodyPetCrateLengthInMax = 200;
 export const saveTripManifestBodyPetCrateWidthInMax = 200;
 export const saveTripManifestBodyPetCrateHeightInMax = 200;
+export const saveTripManifestResponsePassengersMax = 6;
+export const submitTripManifestResponsePassengersMax = 6;
 export const conciergeChatBodyMessagesItemContentMax = 4000;
 export const conciergeChatBodyMessagesMax = 40;
 export const getConciergeHistoryQueryLimitDefault = 50;
@@ -341,7 +344,7 @@ export const GetFlightMyStatusResponse = zod.object({
 export const JoinQueueBody = zod.unknown().and(zod.object({
   "flightId": zod.string(),
   "useLinePass": zod.boolean().optional(),
-  "passengers": zod.number().min(1).max(joinQueueBodyTwoPassengersMax).multipleOf(joinQueueBodyTwoPassengersMultipleOf).default(joinQueueBodyTwoPassengersDefault),
+  "passengers": zod.number().min(1).max(joinQueueBodyTwoPassengersMax).multipleOf(joinQueueBodyTwoPassengersMultipleOf).default(joinQueueBodyTwoPassengersDefault).describe('Number of human passengers. A booking is limited to six total occupants, so a booking with a pet may include at most five passengers.\n'),
   "acceptIntlFee": zod.boolean().optional().describe('Base member acknowledged the one-time international authorization hold for this flight (demo acknowledgement — never authorized or billed).\n'),
   "bringingPet": zod.boolean().describe('Whether the member will travel with a pet.'),
   "petFeeAcknowledged": zod.boolean().optional().describe('Member acknowledged that the $500 cleaning fee applies only if the flight is awarded.'),
@@ -677,6 +680,7 @@ export const GetTripManifestParams = zod.object({
 
 
 
+
 export const GetTripManifestResponse = zod.object({
   "tripId": zod.string(),
   "requiredCount": zod.number(),
@@ -695,7 +699,7 @@ export const GetTripManifestResponse = zod.object({
   "firstName": zod.string(),
   "lastName": zod.string(),
   "dateOfBirth": zod.string().nullish()
-})),
+})).max(getTripManifestResponsePassengersMax).describe('Human passenger roster; a pet, when present, occupies one of the six total occupants.'),
   "version": zod.number(),
   "submittedAt": zod.string().nullish(),
   "deliveryStatus": zod.enum(['delivered', 'demo_recorded']).nullish(),
@@ -726,7 +730,7 @@ export const SaveTripManifestBody = zod.object({
   "firstName": zod.string().max(saveTripManifestBodyPassengersItemFirstNameMax),
   "lastName": zod.string().max(saveTripManifestBodyPassengersItemLastNameMax),
   "dateOfBirth": zod.string().regex(saveTripManifestBodyPassengersItemDateOfBirthRegExp).nullish()
-})).min(1).max(saveTripManifestBodyPassengersMax),
+})).min(1).max(saveTripManifestBodyPassengersMax).describe('Human passenger roster. A booking is limited to six total occupants, so a booking with a pet may include at most five passengers.\n'),
   "pet": zod.object({
   "weightLb": zod.number().min(1).max(saveTripManifestBodyPetWeightLbMax).nullish(),
   "crateLengthIn": zod.number().min(1).max(saveTripManifestBodyPetCrateLengthInMax).nullish(),
@@ -734,6 +738,7 @@ export const SaveTripManifestBody = zod.object({
   "crateHeightIn": zod.number().min(1).max(saveTripManifestBodyPetCrateHeightInMax).nullish()
 }).optional()
 })
+
 
 
 
@@ -756,7 +761,7 @@ export const SaveTripManifestResponse = zod.object({
   "firstName": zod.string(),
   "lastName": zod.string(),
   "dateOfBirth": zod.string().nullish()
-})),
+})).max(saveTripManifestResponsePassengersMax).describe('Human passenger roster; a pet, when present, occupies one of the six total occupants.'),
   "version": zod.number(),
   "submittedAt": zod.string().nullish(),
   "deliveryStatus": zod.enum(['delivered', 'demo_recorded']).nullish(),
@@ -770,6 +775,7 @@ export const SaveTripManifestResponse = zod.object({
 export const SubmitTripManifestParams = zod.object({
   "id": zod.coerce.string()
 })
+
 
 
 
@@ -792,7 +798,7 @@ export const SubmitTripManifestResponse = zod.object({
   "firstName": zod.string(),
   "lastName": zod.string(),
   "dateOfBirth": zod.string().nullish()
-})),
+})).max(submitTripManifestResponsePassengersMax).describe('Human passenger roster; a pet, when present, occupies one of the six total occupants.'),
   "version": zod.number(),
   "submittedAt": zod.string().nullish(),
   "deliveryStatus": zod.enum(['delivered', 'demo_recorded']).nullish(),

@@ -8,9 +8,13 @@ const ids = {
   other: `manifest-other-${suffix}`,
   domestic: `manifest-domestic-${suffix}`,
   petFlight: `manifest-pet-${suffix}`,
+  maxHumanFlight: `manifest-max-human-${suffix}`,
+  maxPetFlight: `manifest-max-pet-${suffix}`,
   waiting: `manifest-waiting-${suffix}`,
   trip: `manifest-trip-${suffix}`,
   petTrip: `manifest-pet-trip-${suffix}`,
+  maxHumanTrip: `manifest-max-human-trip-${suffix}`,
+  maxPetTrip: `manifest-max-pet-trip-${suffix}`,
 };
 const token = (userId) => jwt.sign(
   { userId },
@@ -40,17 +44,24 @@ async function main() {
     await pool.query(`INSERT INTO flights
       (id,from_airport,from_city,to_airport,to_city,aircraft_type,aircraft_capacity,departure_date,departure_time,duration,seats_available,international,status)
       VALUES ($1,'DAL','Dallas','AUS','Austin','Citation',6,'2099-06-01','09:00','1h',6,false,'available'),
-             ($2,'JFK','New York','NAS','Nassau','Citation',6,'2099-06-02','09:00','3h',6,true,'available')`,
-      [ids.domestic, ids.petFlight]);
+             ($2,'JFK','New York','NAS','Nassau','Citation',6,'2099-06-02','09:00','3h',6,true,'available'),
+             ($3,'LAX','Los Angeles','SFO','San Francisco','Citation',6,'2099-06-03','09:00','1h','6',false,'available'),
+             ($4,'LAX','Los Angeles','SEA','Seattle','Citation',6,'2099-06-04','09:00','3h',6,true,'available')`,
+       [ids.domestic, ids.petFlight, ids.maxHumanFlight, ids.maxPetFlight]);
     await pool.query(`INSERT INTO queue_entries
       (id,user_id,flight_id,position,status,passengers,bringing_pet,pet_fee_acknowledged)
       VALUES ($1,$2,$3,1,'confirmed',2,false,false),
              ($4,$2,$5,1,'confirmed',1,true,true),
-             ($6,$2,$3,2,'waiting',1,false,false)`,
-      [`qe-dom-${suffix}`, ids.owner, ids.domestic, `qe-pet-${suffix}`, ids.petFlight, ids.waiting]);
+              ($6,$2,$3,2,'waiting',1,false,false),
+              ($7,$2,$8,1,'confirmed',6,false,false),
+              ($9,$2,$10,1,'confirmed',5,true,true)`,
+       [`qe-dom-${suffix}`, ids.owner, ids.domestic, `qe-pet-${suffix}`, ids.petFlight, ids.waiting,
+        `qe-max-human-${suffix}`, ids.maxHumanFlight, `qe-max-pet-${suffix}`, ids.maxPetFlight]);
     await pool.query(`INSERT INTO trips (id,user_id,flight_id,status,cleaning_fee_usd) VALUES
-      ($1,$2,$3,'upcoming',0),($4,$2,$5,'upcoming',500)`,
-      [ids.trip, ids.owner, ids.domestic, ids.petTrip, ids.petFlight]);
+      ($1,$2,$3,'upcoming',0),($4,$2,$5,'upcoming',500),
+      ($6,$2,$7,'upcoming',0),($8,$2,$9,'upcoming',500)`,
+      [ids.trip, ids.owner, ids.domestic, ids.petTrip, ids.petFlight,
+       ids.maxHumanTrip, ids.maxHumanFlight, ids.maxPetTrip, ids.maxPetFlight]);
 
     const ownerToken = token(ids.owner);
     const otherToken = token(ids.other);
@@ -150,12 +161,59 @@ async function main() {
       [ids.petTrip],
     )).rows;
     check("operations output includes the pet summary", /Pet: 42 lb; Crate 36 × 24 × 26 in/.test(petOutput), petOutput);
+
+    const sixHumans = Array.from({ length: 6 }, (_, index) => ({
+      passengerOrder: index + 1,
+      firstName: `Human${index + 1}`,
+      lastName: "Limit",
+      dateOfBirth: `198${index}-01-01`,
+    }));
+    const maxHuman = await api("PUT", `/trips/${ids.maxHumanTrip}/manifest`, ownerToken, {
+      passengers: sixHumans,
+    });
+    check("six human passengers are allowed without a pet",
+      maxHuman.status === 200 && maxHuman.json.passengers.length === 6 && maxHuman.json.isComplete,
+      JSON.stringify(maxHuman.json));
+    const maxHumanRestored = await api("GET", `/trips/${ids.maxHumanTrip}/manifest`, ownerToken);
+    check("six-human roster persists all passenger names",
+      maxHumanRestored.json.passengers[5]?.firstName === "Human6",
+      JSON.stringify(maxHumanRestored.json));
+
+    const fiveHumans = sixHumans.slice(0, 5);
+    const maxPet = await api("PUT", `/trips/${ids.maxPetTrip}/manifest`, ownerToken, {
+      passengers: fiveHumans,
+      pet: { weightLb: 42, crateLengthIn: 36, crateWidthIn: 24, crateHeightIn: 26 },
+    });
+    check("five human passengers plus a pet are allowed",
+      maxPet.status === 200 && maxPet.json.passengers.length === 5 && maxPet.json.isComplete,
+      JSON.stringify(maxPet.json));
+
+    const sixWithPet = await api("PUT", `/trips/${ids.maxPetTrip}/manifest`, ownerToken, {
+      passengers: sixHumans,
+      pet: { weightLb: 42, crateLengthIn: 36, crateWidthIn: 24, crateHeightIn: 26 },
+    });
+    check("six human passengers plus a pet are rejected",
+      sixWithPet.status === 400 && /6 occupants|5 passengers/i.test(sixWithPet.json?.error ?? ""),
+      JSON.stringify(sixWithPet.json));
+
+    const sevenHumans = [...sixHumans, {
+      passengerOrder: 7,
+      firstName: "Human7",
+      lastName: "Limit",
+      dateOfBirth: "1987-01-01",
+    }];
+    const sevenPassengerManifest = await api("PUT", `/trips/${ids.maxHumanTrip}/manifest`, ownerToken, {
+      passengers: sevenHumans,
+    });
+    check("a seventh passenger is rejected",
+      sevenPassengerManifest.status === 400 && /6 occupants/i.test(sevenPassengerManifest.json?.error ?? ""),
+      JSON.stringify(sevenPassengerManifest.json));
   } finally {
-    await pool.query(`DELETE FROM manifest_operational_updates WHERE trip_id IN ($1,$2)`, [ids.trip, ids.petTrip]).catch(() => {});
-    await pool.query(`DELETE FROM trip_passengers WHERE trip_id IN ($1,$2)`, [ids.trip, ids.petTrip]).catch(() => {});
-    await pool.query(`DELETE FROM trips WHERE id IN ($1,$2)`, [ids.trip, ids.petTrip]).catch(() => {});
+    await pool.query(`DELETE FROM manifest_operational_updates WHERE trip_id IN ($1,$2,$3,$4)`, [ids.trip, ids.petTrip, ids.maxHumanTrip, ids.maxPetTrip]).catch(() => {});
+    await pool.query(`DELETE FROM trip_passengers WHERE trip_id IN ($1,$2,$3,$4)`, [ids.trip, ids.petTrip, ids.maxHumanTrip, ids.maxPetTrip]).catch(() => {});
+    await pool.query(`DELETE FROM trips WHERE id IN ($1,$2,$3,$4)`, [ids.trip, ids.petTrip, ids.maxHumanTrip, ids.maxPetTrip]).catch(() => {});
     await pool.query(`DELETE FROM queue_entries WHERE id LIKE $1`, [`%${suffix}`]).catch(() => {});
-    await pool.query(`DELETE FROM flights WHERE id IN ($1,$2)`, [ids.domestic, ids.petFlight]).catch(() => {});
+    await pool.query(`DELETE FROM flights WHERE id IN ($1,$2,$3,$4)`, [ids.domestic, ids.petFlight, ids.maxHumanFlight, ids.maxPetFlight]).catch(() => {});
     await pool.query(`DELETE FROM users WHERE id IN ($1,$2)`, [ids.owner, ids.other]).catch(() => {});
     await pool.end();
   }

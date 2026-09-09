@@ -10,8 +10,9 @@ export type JoinQueueRequest = unknown & {
   flightId: string;
   useLinePass?: boolean;
   /**
+     * Number of human passengers. A booking is limited to six total occupants, so a booking with a pet may include at most five passengers.
      * @minimum 1
-     * @maximum 10
+     * @maximum 6
      */
   passengers?: number;
   /** Base member acknowledged the one-time international authorization hold for this flight (demo acknowledgement — never authorized or billed). */

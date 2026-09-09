@@ -15,6 +15,7 @@ import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
 
 // ── Aircraft image matching ────────────────────────────────────────────────────
+import { MAX_OCCUPANTS } from '@/lib/passengerCapacity';
 const AIRCRAFT_IMAGES = [
   { match: /gulfstream|g280|challenger|falcon/i,  source: require('@/assets/images/aircraft-heavy.jpg') },
   { match: /king air|pilatus|pc-12|turboprop/i,   source: require('@/assets/images/aircraft-turboprop.jpg') },
@@ -164,6 +165,7 @@ export default function FlightDetailScreen() {
 
   // f is guaranteed non-null below this point
   const f         = flight as any;
+  const passengerLimit = Math.min(f.seatsAvailable, MAX_OCCUPANTS);
   const imgSource = aircraftImage(f.aircraftType);
 
   const status = myStatus?.status ?? 'none';
@@ -512,7 +514,7 @@ export default function FlightDetailScreen() {
           <View style={[styles.stepperCard, { backgroundColor: colors.surface }]}>
             <View style={styles.stepperLeft}>
               <Text style={[styles.stepperTitle, { color: colors.textOnSurface }]}>Passengers</Text>
-              <Text style={[styles.stepperHint, { color: colors.mutedForegroundLight }]}>Max {f.seatsAvailable} seat{f.seatsAvailable !== 1 ? 's' : ''} available</Text>
+              <Text style={[styles.stepperHint, { color: colors.mutedForegroundLight }]}>Up to {passengerLimit} passenger{passengerLimit !== 1 ? 's' : ''} · 6 occupants max</Text>
             </View>
             <View style={styles.stepper}>
               <TouchableOpacity
@@ -524,8 +526,8 @@ export default function FlightDetailScreen() {
               </TouchableOpacity>
               <Text style={[styles.stepCount, { color: colors.textOnSurface }]}>{passengers}</Text>
               <TouchableOpacity
-                style={[styles.stepBtn, { backgroundColor: colors.muted }, passengers >= f.seatsAvailable && styles.stepBtnDisabled]}
-                onPress={() => setPassengers(Math.min(f.seatsAvailable, passengers + 1))}
+                style={[styles.stepBtn, { backgroundColor: colors.muted }, passengers >= passengerLimit && styles.stepBtnDisabled]}
+                onPress={() => setPassengers(Math.min(passengerLimit, passengers + 1))}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.stepBtnText, { color: colors.textOnSurface }]}>+</Text>

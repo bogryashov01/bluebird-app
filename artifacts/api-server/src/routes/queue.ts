@@ -6,6 +6,8 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
 import { flightAcceptsQueueActions } from "../lib/departure";
+import { JoinQueueBody } from "@workspace/api-zod";
+import { exceedsPassengerCapacity, passengerCapacityError } from "../lib/passenger-capacity";
 
 const router = Router();
 const PET_CLEANING_FEE_USD = 500;
@@ -29,6 +31,10 @@ const movedEventAppendSql = sql`coalesce(${queueEntriesTable.movementHistory}, '
 router.post("/join", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
 
+  const parsed = JoinQueueBody.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid queue request" });
+  }
   const {
     flightId,
     useLinePass,
@@ -40,14 +46,25 @@ router.post("/join", authMiddleware, async (req, res) => {
     petCrateLengthIn: petCrateLengthInRaw,
     petCrateWidthIn: petCrateWidthInRaw,
     petCrateHeightIn: petCrateHeightInRaw,
-  } = req.body;
+  } = parsed.data as {
+    flightId: string;
+    useLinePass?: boolean;
+    passengers: number;
+    acceptIntlFee?: boolean;
+    bringingPet: boolean;
+    petFeeAcknowledged?: boolean;
+    petWeightLbs?: number;
+    petCrateLengthIn?: number;
+    petCrateWidthIn?: number;
+    petCrateHeightIn?: number;
+  };
   const passengers = Number(passengersRaw ?? 1);
 
   if (!flightId) {
     return res.status(400).json({ error: "Flight ID is required" });
   }
-  if (!Number.isInteger(passengers) || passengers < 1 || passengers > 10) {
-    return res.status(400).json({ error: "Passengers must be a whole number between 1 and 10" });
+  if (!Number.isInteger(passengers) || exceedsPassengerCapacity(passengers, bringingPet === true)) {
+    return res.status(400).json({ error: passengerCapacityError() });
   }
   if (typeof bringingPet !== "boolean") {
     return res.status(400).json({ error: "Please choose whether you are bringing a pet" });
@@ -145,16 +162,15 @@ router.post("/join", authMiddleware, async (req, res) => {
 
     // 2. Guard against duplicate entry — blocks both waiting AND confirmed entries
     //    so a confirmed user cannot re-join the same flight.
-    const [existing] = await txDb
-      .select({ status: queueEntriesTable.status })
-      .from(queueEntriesTable)
-      .where(
-        and(
-          eq(queueEntriesTable.flightId, String(flightId)),
-          eq(queueEntriesTable.userId, userId),
-          inArray(queueEntriesTable.status, ["waiting", "confirmed"]),
-        ),
-      );
+      const [existing] = await txDb
+        .select({ status: queueEntriesTable.status })
+        .from(queueEntriesTable)
+        .where(
+          and(
+            eq(queueEntriesTable.id, String(req.params.id)),
+            eq(queueEntriesTable.userId, userId),
+          ),
+        );
     if (existing) {
       await client.query("ROLLBACK");
       const msg =
@@ -198,25 +214,14 @@ router.post("/join", authMiddleware, async (req, res) => {
     //    commit together — the pass can never be lost without a confirmed seat
     //    (seat capacity was already enforced in step 1b within this snapshot).
     const [entry] = await txDb
-      .insert(queueEntriesTable)
-      .values({
-        id: makeId(),
-        userId,
-        flightId: String(flightId),
-        position,
-        status: useLinePass ? "confirmed" : "waiting",
-        passengers,
-        usedLinePass: !!useLinePass,
-        intlFeeAccepted: feeApplies && !!acceptIntlFee,
-        bringingPet,
-        petFeeAcknowledged: bringingPet && petFeeAcknowledged === true,
-        petWeightLbs: bringingPet ? petMeasurements.petWeightLbs : null,
-        petCrateLengthIn: bringingPet ? petMeasurements.petCrateLengthIn : null,
-        petCrateWidthIn: bringingPet ? petMeasurements.petCrateWidthIn : null,
-        petCrateHeightIn: bringingPet ? petMeasurements.petCrateHeightIn : null,
-        movementHistory: [{ type: "joined", position, at: new Date().toISOString() }],
-      })
-      .returning();
+      .select()
+      .from(queueEntriesTable)
+      .where(
+        and(
+          eq(queueEntriesTable.id, String(req.params.id)),
+          eq(queueEntriesTable.userId, userId),
+        ),
+      );
 
     let trip: any = null;
     if (useLinePass) {

@@ -10,8 +10,9 @@ import type { PetManifestInput } from './petManifestInput';
 
 export interface SavePassengerManifestRequest {
   /**
+     * Human passenger roster. A booking is limited to six total occupants, so a booking with a pet may include at most five passengers.
      * @minItems 1
-     * @maxItems 10
+     * @maxItems 6
      */
   passengers: PassengerInput[];
   pet?: PetManifestInput;

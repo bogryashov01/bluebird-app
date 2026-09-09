@@ -15,6 +15,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPassOverlay';
+import { MAX_OCCUPANTS } from '@/lib/passengerCapacity';
 
 const POLICY_ITEMS = [
   'Flights may be cancelled or changed due to operational requirements.',
@@ -33,7 +34,7 @@ export default function JoinQueueAcknowledgeScreen() {
     flightStatus?: string;
   }>();
   const { flightId, fromCity, toCity, from, to } = params;
-  const passengers = Math.max(1, parseInt(params.passengers ?? '1', 10) || 1);
+  const passengers = Math.min(MAX_OCCUPANTS, Math.max(1, parseInt(params.passengers ?? '1', 10) || 1));
   const useLinePass = params.useLinePass === '1';
   const isInternational = params.international === '1';
   const { user, updateUser } = useAuth();
@@ -151,7 +152,8 @@ export default function JoinQueueAcknowledgeScreen() {
   const positiveNumber = (value: string) => Number.isFinite(Number(value)) && Number(value) > 0;
   const petDetailsComplete = [petWeightLbs, petCrateLengthIn, petCrateWidthIn, petCrateHeightIn].every(positiveNumber);
   const petComplete = bringingPet !== null && (!bringingPet || (petFeeAcknowledged && petDetailsComplete));
-  const allChecked = checked.every(Boolean) && punctualityChecked && petComplete;
+  const occupantLimitExceeded = bringingPet === true && passengers >= MAX_OCCUPANTS;
+  const allChecked = checked.every(Boolean) && punctualityChecked && petComplete && !occupantLimitExceeded;
   const needsIntlNotice = isInternational && user?.membershipTier === 'base';
 
   const handleContinue = () => {
@@ -367,7 +369,9 @@ export default function JoinQueueAcknowledgeScreen() {
         )}
         {!allChecked && !joinError && (
           <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>
-            Check all items above to continue
+            {occupantLimitExceeded
+              ? 'A pet counts as one occupant, so bookings with a pet may include at most 5 passengers.'
+              : 'Check all items above to continue'}
           </Text>
         )}
         {allChecked && statusLoading && !statusError && !joinError && (

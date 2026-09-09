@@ -1283,8 +1283,12 @@ components:
           type: number
           multipleOf: 1
           minimum: 1
-          maximum: 10
+          maximum: 6
           default: 1
+          description: >
+            Number of human passengers. A booking is limited to six total
+            occupants, so a booking with a pet may include at most five
+            passengers.
         acceptIntlFee:
           type: boolean
           description: >
@@ -1528,7 +1532,11 @@ components:
         passengers:
           type: array
           minItems: 1
-          maxItems: 10
+          maxItems: 6
+          description: >
+            Human passenger roster. A booking is limited to six total
+            occupants, so a booking with a pet may include at most five
+            passengers.
           items:
             $ref: "#/components/schemas/PassengerInput"
         pet:
@@ -1567,6 +1575,8 @@ components:
           nullable: true
         passengers:
           type: array
+          maxItems: 6
+          description: Human passenger roster; a pet, when present, occupies one of the six total occupants.
           items:
             $ref: "#/components/schemas/Passenger"
         version: { type: number }
