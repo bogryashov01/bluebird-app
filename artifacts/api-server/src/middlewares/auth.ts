@@ -5,9 +5,13 @@ import { db } from "@workspace/db";
 import { revokedTokensTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
-const rawSecret = process.env.JWT_SECRET;
+// SESSION_SECRET is the workspace's configured signing secret. Keep
+// JWT_SECRET supported for projects that already publish with that name.
+const rawSecret = process.env.JWT_SECRET ?? process.env.SESSION_SECRET;
 if (!rawSecret && process.env.NODE_ENV !== "development") {
-  throw new Error("JWT_SECRET environment variable is required in non-development environments");
+  throw new Error(
+    "JWT_SECRET or SESSION_SECRET environment variable is required in non-development environments",
+  );
 }
 export const JWT_SECRET = rawSecret ?? "bluebird-dev-only-secret";
 
