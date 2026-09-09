@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
+import { prefillPrimaryPassenger } from '@/lib/passenger-name';
 
 type DraftPassenger = Passenger & { dateOfBirth: string };
 type PetDraft = {
@@ -45,7 +46,7 @@ export default function PassengerListScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const manifestQueryKey = [`/api/trips/${id}/manifest`, user?.id ?? 'signed-out'] as const;
-  const { data, isLoading, isError, error } = useGetTripManifest(id!, {
+  const { data, isLoading, isFetching, isError, error } = useGetTripManifest(id!, {
     query: { enabled: !!id && !!user, queryKey: manifestQueryKey },
   });
   const [passengers, setPassengers] = useState<DraftPassenger[]>([]);
@@ -54,18 +55,38 @@ export default function PassengerListScreen() {
   const [editingSection, setEditingSection] = useState<'passengers' | 'pet' | null>(null);
   const [feedback, setFeedback] = useState('');
   const [dirty, setDirty] = useState(false);
-  const initializedIdentity = useRef('');
+  const [hydratedIdentity, setHydratedIdentity] = useState('');
+  const resetIdentity = useRef('');
   const reviewAfterSave = useRef(false);
   const manifestIdentity = `${user?.id ?? 'signed-out'}:${id ?? ''}`;
 
   useEffect(() => {
-    if (!data || data.tripId !== id) return;
-    const identityChanged = initializedIdentity.current !== manifestIdentity;
-    if (!identityChanged && dirty) return;
-    setPassengers(data.passengers.map((passenger) => ({
+    const identityChanged = hydratedIdentity !== manifestIdentity;
+    if (identityChanged) {
+      // Clear the previous member/trip draft before the new query resolves.
+      // This prevents a cached or in-flight response from briefly exposing
+      // another member's passenger details.
+      if (resetIdentity.current !== manifestIdentity) {
+        resetIdentity.current = manifestIdentity;
+        setPassengers([]);
+        setPet(EMPTY_PET);
+        setMode('edit');
+        setEditingSection(null);
+        setFeedback('');
+        setDirty(false);
+      }
+      if (!data || data.tripId !== id || isFetching) return;
+    } else if (!data || data.tripId !== id || isFetching || dirty) {
+      return;
+    }
+
+    const restoredPassengers = data.passengers.map((passenger) => ({
       ...passenger,
       dateOfBirth: passenger.dateOfBirth ?? '',
-    })));
+    }));
+    setPassengers(identityChanged
+      ? prefillPrimaryPassenger(restoredPassengers, user?.name)
+      : restoredPassengers);
     if (data.pet) {
       setPet({
         weightLb: String(data.pet.weightLb ?? ''),
@@ -79,9 +100,9 @@ export default function PassengerListScreen() {
     if (identityChanged) {
       setMode(data.submittedAt ? 'review' : 'edit');
       setEditingSection(null);
+      setHydratedIdentity(manifestIdentity);
     }
-    initializedIdentity.current = manifestIdentity;
-  }, [data, dirty, manifestIdentity]);
+  }, [data, dirty, hydratedIdentity, id, isFetching, manifestIdentity, user?.name]);
 
   const save = useSaveTripManifest({
     mutation: {

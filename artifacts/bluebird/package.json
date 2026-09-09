@@ -8,7 +8,8 @@
     "build": "node scripts/build.js",
     "serve": "node server/serve.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:airport-selection": "pnpm --filter @workspace/api-server exec esbuild ../bluebird/scripts/airport-selection.integration.mjs --bundle --platform=node --format=esm --outfile=../bluebird/scripts/.airport-selection.test.mjs && node scripts/.airport-selection.test.mjs; status=$?; rm -f scripts/.airport-selection.test.mjs; exit $status"
+    "test:airport-selection": "pnpm --filter @workspace/api-server exec esbuild ../bluebird/scripts/airport-selection.integration.mjs --bundle --platform=node --format=esm --outfile=../bluebird/scripts/.airport-selection.test.mjs && node scripts/.airport-selection.test.mjs; status=$?; rm -f scripts/.airport-selection.test.mjs; exit $status",
+    "test:passenger-name-prefill": "pnpm --filter @workspace/api-server exec esbuild '../bluebird/lib/passenger-name.ts' --bundle --platform=node --format=esm --outfile=../bluebird/scripts/.passenger-name-prefill.test.mjs && node scripts/passenger-name-prefill.integration.mjs; status=$?; rm -f scripts/.passenger-name-prefill.test.mjs; exit $status"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

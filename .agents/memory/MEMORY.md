@@ -14,3 +14,4 @@
 - [OpenAPI email format](openapi-email-format.md) — avoid `format: email` until generated Zod and the installed Zod major agree; keep runtime validation server-side.
 - [Airport preference catalog](airport-preference-catalog.md) — legacy preference backfills must use the same canonical allowlist as account validation.
 - [Account-scoped prototype state](account-scoped-prototype-state.md) — key local demo state by member and gate controls until that exact key hydrates.
+- [Expo route utility placement](expo-route-utility-placement.md) — keep shared non-screen modules outside the Expo Router app tree to avoid false route warnings.
