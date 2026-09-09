@@ -42,8 +42,8 @@ const SLIDES: Slide[] = [
     key: 'access',
     kind: 'photo',
     image: heroImage1,
-    title: 'Private Aviation.\nMade Accessible.',
-    body: 'Bluebird members get access to Empty Leg flights on private jets — up to 75% off, whenever an aircraft is repositioning empty.',
+    title: 'Fly Unlimited.\nEmpty Leg Flights.',
+    body: 'With your membership, you get access to private jet empty flights. One membership price, unlimited flights.',
   },
   {
     key: 'how',
