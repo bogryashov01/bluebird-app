@@ -16,3 +16,4 @@
 - [Account-scoped prototype state](account-scoped-prototype-state.md) — key local demo state by member and gate controls until that exact key hydrates.
 - [Expo route utility placement](expo-route-utility-placement.md) — keep shared non-screen modules outside the Expo Router app tree to avoid false route warnings.
 - [Occupant capacity](occupant-capacity.md) — passenger and pet counts share one six-occupant ceiling; reserved passenger capacity remains the other bound.
+- [Confirmed-only flight metadata](confirmed-flight-metadata.md) — FBO fields stay out of public and waiting-flight payloads; expose them only from confirmed authenticated responses.

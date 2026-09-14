@@ -436,12 +436,21 @@ export const FlightUserStatusStatus = {
   confirmed: 'confirmed',
 } as const;
 
+/**
+ * Departure details disclosed only for an authenticated confirmed flight.
+ */
+export interface ConfirmedFlightDetails {
+  departureFbo?: string | null;
+  departureFboAddress?: string | null;
+}
+
 export interface FlightUserStatus {
   status: FlightUserStatusStatus;
   queueEntryId?: string;
   queuePosition?: number;
   totalInQueue?: number;
   tripId?: string;
+  confirmedFlight?: ConfirmedFlightDetails;
   manifest?: ManifestProgress;
 }
 

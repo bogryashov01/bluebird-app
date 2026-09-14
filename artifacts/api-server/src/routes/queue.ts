@@ -16,6 +16,26 @@ function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 }
 
+// FBO details are disclosed only after a queue entry is confirmed. Queue
+// responses otherwise carry a flight for route context, so strip the assigned
+// departure details from waiting-entry payloads.
+function publicFlight<T extends { departureFbo?: unknown; departureFboAddress?: unknown }>(flight: T) {
+  const {
+    departureFbo: _departureFbo,
+    departureFboAddress: _departureFboAddress,
+    ...safeFlight
+  } = flight;
+  return safeFlight;
+}
+
+function flightForQueueResponse<T extends { departureFbo?: unknown; departureFboAddress?: unknown }>(
+  flight: T | null | undefined,
+  status: string,
+) {
+  if (!flight) return flight ?? null;
+  return status === "confirmed" ? flight : publicFlight(flight);
+}
+
 // Appends a {type:'moved', from, to, at} event to each renumbered row's
 // movement_history in the SAME bulk UPDATE that decrements its position, so
 // the log can never drift from the actual position. Timestamps are UTC ISO.
@@ -277,7 +297,12 @@ router.post("/join", authMiddleware, async (req, res) => {
 
     await client.query("COMMIT");
 
-    return res.status(201).json({ ...entry, flight, totalInQueue: Number(totalAfterInsert), trip });
+    return res.status(201).json({
+      ...entry,
+      flight: flightForQueueResponse(flight, entry.status),
+      totalInQueue: Number(totalAfterInsert),
+      trip,
+    });
   } catch (err: any) {
     await client.query("ROLLBACK").catch(() => {});
     // Postgres serialization failure — client should retry
@@ -317,7 +342,11 @@ router.get("/status", authMiddleware, async (req, res) => {
           .from(queueEntriesTable)
           .where(and(eq(queueEntriesTable.flightId, entry.flightId), eq(queueEntriesTable.status, "waiting")));
 
-        return { ...entry, flight, totalInQueue: Number(totalInQueue) };
+        return {
+          ...entry,
+          flight: flightForQueueResponse(flight, entry.status),
+          totalInQueue: Number(totalInQueue),
+        };
       })
     );
 
@@ -488,7 +517,7 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
       await client.query("ROLLBACK");
       return res.json({
         ...entry,
-        flight: confirmedFlight ?? null,
+        flight: flightForQueueResponse(confirmedFlight, "confirmed"),
         totalInQueue: Number(waitingCount),
         linePassCount: me?.linePassCount ?? 0,
         alreadyConfirmed: true,
@@ -613,7 +642,7 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
 
     return res.json({
       ...updated[0],
-      flight: flight ?? null,
+      flight: flightForQueueResponse(flight, "confirmed"),
       totalInQueue: Number(totalInQueue),
       linePassCount,
       trip,

@@ -86,7 +86,11 @@ export default function FlightDetailScreen() {
     data: myStatus,
     isLoading: statusLoading,
   } = useGetFlightMyStatus(id!, {
-    query: { enabled: !!user && !!id },
+    query: {
+      enabled: !!user && !!id,
+      refetchInterval: user ? 10_000 : false,
+      refetchOnMount: 'always',
+    },
   });
 
   const topPad  = Platform.OS === 'web' ? 60 : insets.top;
@@ -169,10 +173,15 @@ export default function FlightDetailScreen() {
   const imgSource = aircraftImage(f.aircraftType);
 
   const status = myStatus?.status ?? 'none';
-  const canOpenDirections = status === 'confirmed' && !!f.departureFboAddress?.trim();
+  // Public flight responses intentionally omit FBO details. A confirmed
+  // member receives them only from the authenticated status response.
+  const confirmedFbo = status === 'confirmed' ? myStatus?.confirmedFlight : undefined;
+  const departureFbo = confirmedFbo?.departureFbo ?? null;
+  const departureFboAddress = confirmedFbo?.departureFboAddress ?? null;
+  const canOpenDirections = status === 'confirmed' && !!departureFboAddress?.trim();
 
   const showMapError = () => {
-    const message = `We couldn't open maps. Search for this address instead:\n\n${f.departureFboAddress}`;
+    const message = `We couldn't open maps. Search for this address instead:\n\n${departureFboAddress}`;
     if (Platform.OS === 'web') {
       if (typeof window !== 'undefined') window.alert(message);
     } else {
@@ -182,7 +191,7 @@ export default function FlightDetailScreen() {
 
   const openDirections = async (service: 'apple' | 'google') => {
     setDirectionsOpen(false);
-    const address = f.departureFboAddress?.trim();
+    const address = departureFboAddress?.trim();
     if (!address) return;
     const destination = encodeURIComponent(address.replace(/\n/g, ', '));
     const url = service === 'apple'
@@ -478,14 +487,14 @@ export default function FlightDetailScreen() {
         </View>
 
         {/* ── FBO departure card ── */}
-        {!!f.departureFbo && (
+        {!!departureFbo && (
           <TouchableOpacity
             style={[styles.fboCard, { backgroundColor: colors.backgroundMid }]}
             disabled={!canOpenDirections}
             onPress={() => setDirectionsOpen(true)}
             activeOpacity={0.78}
             accessibilityRole={canOpenDirections ? 'button' : undefined}
-            accessibilityLabel={canOpenDirections ? `Get directions to ${f.departureFbo}` : undefined}
+            accessibilityLabel={canOpenDirections ? `Get directions to ${departureFbo}` : undefined}
             accessibilityHint={canOpenDirections ? 'Choose Apple Maps or Google Maps' : undefined}
             testID={canOpenDirections ? 'departure-fbo-directions' : undefined}
           >
@@ -494,12 +503,12 @@ export default function FlightDetailScreen() {
               {canOpenDirections && <Feather name="navigation" size={19} color={colors.textOnBrand} />}
             </View>
             <Text style={[styles.fboValue, { color: colors.textOnBrand }]}>
-              {f.departureFbo} — {f.fromAirport}
+              {departureFbo} — {f.fromAirport}
             </Text>
             {canOpenDirections && (
               <>
                 <Text style={[styles.fboAddress, { color: colors.mutedOnBrand }]}>
-                  {f.departureFboAddress}
+                  {departureFboAddress}
                 </Text>
                 <Text style={[styles.fboAction, { color: colors.textOnBrand }]}>Get directions</Text>
               </>
@@ -547,7 +556,12 @@ export default function FlightDetailScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      <Modal visible={directionsOpen} transparent animationType="fade" onRequestClose={() => setDirectionsOpen(false)}>
+      <Modal
+        visible={directionsOpen && canOpenDirections && !!departureFbo}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDirectionsOpen(false)}
+      >
         <Pressable
           style={[styles.modalBackdrop, { backgroundColor: colors.backgroundMid + 'B8', paddingBottom: botPad + 12 }]}
           onPress={() => setDirectionsOpen(false)}
@@ -556,7 +570,7 @@ export default function FlightDetailScreen() {
             <View style={styles.mapSheetHeader}>
               <View style={styles.mapSheetTitleGroup}>
                 <Text style={[styles.mapSheetTitle, { color: colors.textOnSurface }]}>Open directions</Text>
-                <Text style={[styles.mapSheetAddress, { color: colors.mutedForegroundLight }]}>{f.departureFboAddress}</Text>
+                <Text style={[styles.mapSheetAddress, { color: colors.mutedForegroundLight }]}>{departureFboAddress}</Text>
               </View>
               <TouchableOpacity
                 onPress={() => setDirectionsOpen(false)}

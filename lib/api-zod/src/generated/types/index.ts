@@ -28,6 +28,7 @@ export * from './conciergeChatRequest';
 export * from './conciergeHistoryMessage';
 export * from './conciergeHistoryMessageRole';
 export * from './conciergeReply';
+export * from './confirmedFlightDetails';
 export * from './errorResponse';
 export * from './flight';
 export * from './flightStatus';

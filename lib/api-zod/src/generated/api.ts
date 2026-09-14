@@ -324,6 +324,10 @@ export const GetFlightMyStatusResponse = zod.object({
   "queuePosition": zod.number().optional(),
   "totalInQueue": zod.number().optional(),
   "tripId": zod.string().optional(),
+  "confirmedFlight": zod.object({
+  "departureFbo": zod.string().nullish(),
+  "departureFboAddress": zod.string().nullish()
+}).optional().describe('Departure details disclosed only for an authenticated confirmed flight.'),
   "manifest": zod.object({
   "requiredCount": zod.number(),
   "completedCount": zod.number(),

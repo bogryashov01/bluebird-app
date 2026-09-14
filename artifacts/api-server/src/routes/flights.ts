@@ -33,6 +33,25 @@ function withDerivedSeats<T extends { id: string; seatsAvailable: number }>(
   return { ...flight, seatsAvailable: remaining };
 }
 
+// FBO details are assigned flight data, but they are only disclosed through
+// an authenticated confirmed-flight response. Keep them out of every public
+// flight shape, including nested airport-summary results.
+function publicFlight<T extends { departureFbo?: unknown; departureFboAddress?: unknown }>(flight: T) {
+  const {
+    departureFbo: _departureFbo,
+    departureFboAddress: _departureFboAddress,
+    ...safeFlight
+  } = flight;
+  return safeFlight;
+}
+
+function confirmedFlightDetails(flight: { departureFbo?: string | null; departureFboAddress?: string | null }) {
+  return {
+    departureFbo: flight.departureFbo ?? null,
+    departureFboAddress: flight.departureFboAddress ?? null,
+  };
+}
+
 // GET /flights (public — members can browse before signing in)
 router.get("/", async (req, res) => {
   try {
@@ -49,7 +68,7 @@ router.get("/", async (req, res) => {
       query.orderBy(flightsTable.departureDate),
       confirmedPaxByFlight(),
     ]);
-    return res.json(flights.map((f) => withDerivedSeats(f, paxMap)));
+    return res.json(flights.map((f) => publicFlight(withDerivedSeats(f, paxMap))));
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch flights" });
   }
@@ -173,7 +192,7 @@ router.get("/airports/:code/summary", async (req, res) => {
       },
       flightCount30d: last30.length,
       topDestinations,
-      recentFlights,
+      recentFlights: recentFlights.map(publicFlight),
     });
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch airport summary" });
@@ -191,7 +210,7 @@ router.get("/:id", async (req, res) => {
     if (!flight) {
       return res.status(404).json({ error: "Flight not found" });
     }
-    return res.json(withDerivedSeats(flight, paxMap));
+    return res.json(publicFlight(withDerivedSeats(flight, paxMap)));
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch flight" });
   }
@@ -247,6 +266,7 @@ router.get("/:id/my-status", authMiddleware, async (req, res) => {
           status: "confirmed",
           queueEntryId: entry?.id ?? null,
           tripId: activeTrip.id,
+          confirmedFlight: confirmedFlightDetails(flight),
         });
       }
     }
@@ -285,6 +305,7 @@ router.get("/:id/my-status", authMiddleware, async (req, res) => {
       status: "confirmed",
       queueEntryId: entry.id,
       tripId: trip?.id ?? null,
+      confirmedFlight: confirmedFlightDetails(flight),
       manifest: trip ? await flightManifestProgress(trip, entry, flight.international) : undefined,
     });
   } catch (err) {

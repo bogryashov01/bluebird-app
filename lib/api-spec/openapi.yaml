@@ -1455,10 +1455,23 @@ components:
           type: number
         tripId:
           type: string
+        confirmedFlight:
+          $ref: "#/components/schemas/ConfirmedFlightDetails"
         manifest:
           $ref: "#/components/schemas/ManifestProgress"
       required:
         - status
+
+    ConfirmedFlightDetails:
+      type: object
+      description: Departure details disclosed only for an authenticated confirmed flight.
+      properties:
+        departureFbo:
+          type: string
+          nullable: true
+        departureFboAddress:
+          type: string
+          nullable: true
 
     Trip:
       type: object

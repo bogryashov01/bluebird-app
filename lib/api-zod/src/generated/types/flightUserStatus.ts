@@ -5,6 +5,7 @@
  * Bluebird private aviation API
  * OpenAPI spec version: 0.1.0
  */
+import type { ConfirmedFlightDetails } from './confirmedFlightDetails';
 import type { FlightUserStatusStatus } from './flightUserStatusStatus';
 import type { ManifestProgress } from './manifestProgress';
 
@@ -14,5 +15,6 @@ export interface FlightUserStatus {
   queuePosition?: number;
   totalInQueue?: number;
   tripId?: string;
+  confirmedFlight?: ConfirmedFlightDetails;
   manifest?: ManifestProgress;
 }
