@@ -306,19 +306,19 @@ export type JoinQueueRequest = unknown & {
      */
   petWeightLbs?: number;
   /**
-     * Pet crate length in inches; required when bringingPet is true.
+     * Pet crate length in inches; optional at queue join and collected later in the passenger manifest.
      * @maximum 200
      * @exclusiveMinimum 0
      */
   petCrateLengthIn?: number;
   /**
-     * Pet crate width in inches; required when bringingPet is true.
+     * Pet crate width in inches; optional at queue join and collected later in the passenger manifest.
      * @maximum 200
      * @exclusiveMinimum 0
      */
   petCrateWidthIn?: number;
   /**
-     * Pet crate height in inches; required when bringingPet is true.
+     * Pet crate height in inches; optional at queue join and collected later in the passenger manifest.
      * @maximum 200
      * @exclusiveMinimum 0
      */

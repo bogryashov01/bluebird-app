@@ -18,7 +18,7 @@ const ids = {
 };
 const token = (userId) => jwt.sign(
   { userId },
-  process.env.JWT_SECRET || "bluebird-dev-only-secret",
+  process.env.JWT_SECRET || process.env.SESSION_SECRET || "bluebird-dev-only-secret",
   { expiresIn: "1h" },
 );
 let failures = 0;

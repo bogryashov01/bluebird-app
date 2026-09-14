@@ -155,7 +155,6 @@ export const GetMeResponse = zod.object({
  */
 
 
-
 export const UpdateMeBody = zod.object({
   "name": zod.string().optional(),
   "email": zod.string().optional(),
@@ -344,11 +343,6 @@ export const GetFlightMyStatusResponse = zod.object({
  */
 
 
-
-
-
-
-
 export const JoinQueueBody = zod.unknown().and(zod.object({
   "flightId": zod.string(),
   "useLinePass": zod.boolean().optional(),
@@ -357,9 +351,9 @@ export const JoinQueueBody = zod.unknown().and(zod.object({
   "bringingPet": zod.boolean().describe('Whether the member will travel with a pet.'),
   "petFeeAcknowledged": zod.boolean().optional().describe('Member acknowledged that the $500 cleaning fee applies only if the flight is awarded.'),
   "petWeightLbs": zod.number().gt(joinQueueBodyTwoPetWeightLbsExclusiveMin).max(joinQueueBodyTwoPetWeightLbsMax).optional().describe('Pet weight in pounds; required when bringingPet is true.'),
-  "petCrateLengthIn": zod.number().gt(joinQueueBodyTwoPetCrateLengthInExclusiveMin).max(joinQueueBodyTwoPetCrateLengthInMax).optional().describe('Pet crate length in inches; required when bringingPet is true.'),
-  "petCrateWidthIn": zod.number().gt(joinQueueBodyTwoPetCrateWidthInExclusiveMin).max(joinQueueBodyTwoPetCrateWidthInMax).optional().describe('Pet crate width in inches; required when bringingPet is true.'),
-  "petCrateHeightIn": zod.number().gt(joinQueueBodyTwoPetCrateHeightInExclusiveMin).max(joinQueueBodyTwoPetCrateHeightInMax).optional().describe('Pet crate height in inches; required when bringingPet is true.')
+  "petCrateLengthIn": zod.number().gt(joinQueueBodyTwoPetCrateLengthInExclusiveMin).max(joinQueueBodyTwoPetCrateLengthInMax).optional().describe('Pet crate length in inches; optional at queue join and collected later in the passenger manifest.'),
+  "petCrateWidthIn": zod.number().gt(joinQueueBodyTwoPetCrateWidthInExclusiveMin).max(joinQueueBodyTwoPetCrateWidthInMax).optional().describe('Pet crate width in inches; optional at queue join and collected later in the passenger manifest.'),
+  "petCrateHeightIn": zod.number().gt(joinQueueBodyTwoPetCrateHeightInExclusiveMin).max(joinQueueBodyTwoPetCrateHeightInMax).optional().describe('Pet crate height in inches; optional at queue join and collected later in the passenger manifest.')
 }))
 
 export const JoinQueueResponse = zod.object({
@@ -686,10 +680,6 @@ export const GetTripManifestParams = zod.object({
 })
 
 
-
-
-
-
 export const GetTripManifestResponse = zod.object({
   "tripId": zod.string(),
   "requiredCount": zod.number(),
@@ -725,16 +715,6 @@ export const SaveTripManifestParams = zod.object({
 })
 
 
-
-
-
-
-
-
-
-
-
-
 export const SaveTripManifestBody = zod.object({
   "passengers": zod.array(zod.object({
   "passengerOrder": zod.number().min(1).multipleOf(saveTripManifestBodyPassengersItemPassengerOrderMultipleOf),
@@ -750,10 +730,6 @@ export const SaveTripManifestBody = zod.object({
   "crateHeightIn": zod.number().min(1).max(saveTripManifestBodyPetCrateHeightInMax).nullish()
 }).optional()
 })
-
-
-
-
 
 
 export const SaveTripManifestResponse = zod.object({
@@ -789,10 +765,6 @@ export const SaveTripManifestResponse = zod.object({
 export const SubmitTripManifestParams = zod.object({
   "id": zod.coerce.string()
 })
-
-
-
-
 
 
 export const SubmitTripManifestResponse = zod.object({
@@ -956,8 +928,6 @@ export const MarkNotificationReadResponse = zod.object({
  */
 
 
-
-
 export const ConciergeChatBody = zod.object({
   "messages": zod.array(zod.object({
   "role": zod.enum(['user', 'assistant']),
@@ -975,7 +945,6 @@ export const ConciergeChatResponse = zod.object({
 /**
  * @summary Load the caller's recent concierge conversation history
  */
-
 
 
 export const GetConciergeHistoryQueryParams = zod.object({
@@ -996,7 +965,6 @@ export const GetConciergeHistoryResponse = zod.array(GetConciergeHistoryResponse
 /**
  * @summary Request human follow-up for an escalated concierge reply
  */
-
 
 
 export const RequestConciergeCallbackBody = zod.object({

@@ -1309,17 +1309,17 @@ components:
           type: number
           exclusiveMinimum: 0
           maximum: 200
-          description: Pet crate length in inches; required when bringingPet is true.
+          description: Pet crate length in inches; optional at queue join and collected later in the passenger manifest.
         petCrateWidthIn:
           type: number
           exclusiveMinimum: 0
           maximum: 200
-          description: Pet crate width in inches; required when bringingPet is true.
+          description: Pet crate width in inches; optional at queue join and collected later in the passenger manifest.
         petCrateHeightIn:
           type: number
           exclusiveMinimum: 0
           maximum: 200
-          description: Pet crate height in inches; required when bringingPet is true.
+          description: Pet crate height in inches; optional at queue join and collected later in the passenger manifest.
       required:
         - flightId
         - bringingPet
@@ -1332,9 +1332,6 @@ components:
             required:
               - petFeeAcknowledged
               - petWeightLbs
-              - petCrateLengthIn
-              - petCrateWidthIn
-              - petCrateHeightIn
 
     CancelQueueResponse:
       type: object

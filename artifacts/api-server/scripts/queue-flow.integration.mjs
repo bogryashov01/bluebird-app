@@ -98,7 +98,7 @@ const flight = flights.find((candidate) => candidate.id === domesticFixtureId);
 if (!flight) throw new Error("Queue-flow domestic fixture was not returned by /flights");
 const firstJoin = await api("POST", "/queue/join", {
   token: members[0].token,
-  body: { flightId: flight.id, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 24.5, petCrateLengthIn: 30, petCrateWidthIn: 20, petCrateHeightIn: 22 },
+  body: { flightId: flight.id, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 24.5 },
 });
 console.log(`Flight under test: ${flight.fromAirport} → ${flight.toAirport} (${flight.id})`);
 
@@ -106,7 +106,7 @@ for (const [i, m] of members.entries()) {
   const join = i === 0 ? firstJoin : await api("POST", "/queue/join", {
     token: m.token,
     body: i === 2
-      ? { flightId: flight.id, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 18, petCrateLengthIn: 28, petCrateWidthIn: 18, petCrateHeightIn: 20 }
+      ? { flightId: flight.id, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 18 }
       : { flightId: flight.id, bringingPet: false },
   });
   check(`member ${i + 1} joins at position ${i + 1}`, join.status === 201 && join.json.position === i + 1,
@@ -117,9 +117,9 @@ for (const [i, m] of members.entries()) {
 check("waiting pet entry stores the conditional acknowledgement",
   firstJoin.json?.bringingPet === true && firstJoin.json?.petFeeAcknowledged === true,
   JSON.stringify(firstJoin.json));
-check("waiting pet entry stores normalized weight and crate dimensions",
-  firstJoin.json?.petWeightLbs === 24.5 && firstJoin.json?.petCrateLengthIn === 30 &&
-  firstJoin.json?.petCrateWidthIn === 20 && firstJoin.json?.petCrateHeightIn === 22,
+check("waiting pet entry stores weight and null crate dimensions",
+  firstJoin.json?.petWeightLbs === 24.5 && firstJoin.json?.petCrateLengthIn === null &&
+  firstJoin.json?.petCrateWidthIn === null && firstJoin.json?.petCrateHeightIn === null,
   JSON.stringify(firstJoin.json));
 const waitingPetTrips = await api("GET", "/trips", { token: members[0].token });
 check("waiting pet entry has no trip or applied cleaning fee",
@@ -137,10 +137,7 @@ check("six human passengers are allowed without a pet",
 const fivePetMember = await makeVerifiedUser("five-pet-cap");
 const fivePetJoin = await api("POST", "/queue/join", {
   token: fivePetMember.token,
-  body: {
-    flightId: flight.id, passengers: 5, bringingPet: true, petFeeAcknowledged: true,
-    petWeightLbs: 20, petCrateLengthIn: 28, petCrateWidthIn: 19, petCrateHeightIn: 21,
-  },
+  body: { flightId: flight.id, passengers: 5, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 20 },
 });
 check("five human passengers plus a pet are allowed",
   fivePetJoin.status === 201 && fivePetJoin.json?.passengers === 5 && fivePetJoin.json?.bringingPet === true,
@@ -164,19 +161,19 @@ const sevenHumanJoin = await api("POST", "/queue/join", {
   body: { flightId: flight.id, passengers: 7, bringingPet: false },
 });
 check("a seventh passenger is rejected",
-  sevenHumanJoin.status === 400 && /between 1 and 6|6 occupants/i.test(sevenHumanJoin.json?.error ?? ""),
+  sevenHumanJoin.status === 400 && /between 1 and 6|6 occupants|invalid queue request/i.test(sevenHumanJoin.json?.error ?? ""),
   JSON.stringify(sevenHumanJoin.json));
 
 // ── 2. Skip-the-Line join with N existing entries: atomic instant win ────────
 const vip = await makeVerifiedUser("vip");
-const vipJoin = await api("POST", "/queue/join", { token: vip.token, body: { flightId: flight.id, useLinePass: true, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 12, petCrateLengthIn: 24, petCrateWidthIn: 16, petCrateHeightIn: 18 } });
+const vipJoin = await api("POST", "/queue/join", { token: vip.token, body: { flightId: flight.id, useLinePass: true, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 12 } });
 check("pass join returns a CONFIRMED entry (atomic instant win)",
   vipJoin.status === 201 && vipJoin.json.status === "confirmed", JSON.stringify(vipJoin.json));
 check("pass join returns the created trip", vipJoin.json?.trip?.status === "upcoming", JSON.stringify(vipJoin.json?.trip));
 check("instant pet award applies the $500 cleaning fee", vipJoin.json?.trip?.cleaningFeeUsd === 500, JSON.stringify(vipJoin.json?.trip));
-check("instant pet award carries weight and crate details into the trip",
-  vipJoin.json?.trip?.petWeightLb === 12 && vipJoin.json?.trip?.petCrateLengthIn === 24 &&
-  vipJoin.json?.trip?.petCrateWidthIn === 16 && vipJoin.json?.trip?.petCrateHeightIn === 18,
+check("instant pet award carries weight and null crate details into the trip",
+  vipJoin.json?.trip?.petWeightLb === 12 && vipJoin.json?.trip?.petCrateLengthIn === null &&
+  vipJoin.json?.trip?.petCrateWidthIn === null && vipJoin.json?.trip?.petCrateHeightIn === null,
   JSON.stringify(vipJoin.json?.trip));
 check(`pass join totalInQueue === ${N + 2} (confirmed entry is not waiting)`, vipJoin.json?.totalInQueue === N + 2,
   `got ${vipJoin.json?.totalInQueue}`);
@@ -195,9 +192,9 @@ check("use-pass confirms the entry atomically", usePass.status === 200 && usePas
 check("use-pass returns the created trip", usePass.json?.trip?.status === "upcoming", "");
 check("existing pet entry awarded with a pass applies the $500 cleaning fee",
   usePass.json?.trip?.cleaningFeeUsd === 500, JSON.stringify(usePass.json?.trip));
-check("existing pet entry awarded with a pass carries its crate details",
-  usePass.json?.trip?.petWeightLb === 18 && usePass.json?.trip?.petCrateLengthIn === 28 &&
-  usePass.json?.trip?.petCrateWidthIn === 18 && usePass.json?.trip?.petCrateHeightIn === 20,
+check("existing pet entry awarded with a pass carries weight and null crate details",
+  usePass.json?.trip?.petWeightLb === 18 && usePass.json?.trip?.petCrateLengthIn === null &&
+  usePass.json?.trip?.petCrateWidthIn === null && usePass.json?.trip?.petCrateHeightIn === null,
   JSON.stringify(usePass.json?.trip));
 check("use-pass decrements pass balance", typeof usePass.json?.linePassCount === "number", "");
 
@@ -259,9 +256,9 @@ check("auto-confirmation created an upcoming trip",
   trips.json?.some?.((t) => t.flightId === flight.id && t.status === "upcoming"), JSON.stringify(trips.json));
 check("automatic pet award applies the $500 cleaning fee",
   trips.json?.some?.((t) => t.flightId === flight.id && t.cleaningFeeUsd === 500), JSON.stringify(trips.json));
-check("automatic pet award preserves decimal weight and crate details",
+check("automatic pet award preserves decimal weight and null crate details",
   trips.json?.some?.((t) => t.flightId === flight.id && t.petWeightLb === 24.5 &&
-    t.petCrateLengthIn === 30 && t.petCrateWidthIn === 20 && t.petCrateHeightIn === 22),
+    t.petCrateLengthIn === null && t.petCrateWidthIn === null && t.petCrateHeightIn === null),
   JSON.stringify(trips.json));
 const notifs = await api("GET", "/notifications", { token: members[0].token });
 check("auto-confirmation sent a flight_confirmed notification",
@@ -335,18 +332,15 @@ if (intlFlight) {
       acceptIntlFee: true,
       bringingPet: true,
       petFeeAcknowledged: true,
-      petWeightLbs: 16.5,
-      petCrateLengthIn: 26,
-      petCrateWidthIn: 18,
-      petCrateHeightIn: 19,
+       petWeightLbs: 16.5,
     },
   });
   check("base member joins intl flight with fee accepted", withFee.status === 201 && withFee.json?.intlFeeAccepted === true,
     JSON.stringify(withFee.json));
-  check("international-fee join retains pet details and acknowledgement",
+  check("international-fee join retains pet weight, null crate details, and acknowledgement",
     withFee.json?.bringingPet === true && withFee.json?.petFeeAcknowledged === true &&
-    withFee.json?.petWeightLbs === 16.5 && withFee.json?.petCrateLengthIn === 26 &&
-    withFee.json?.petCrateWidthIn === 18 && withFee.json?.petCrateHeightIn === 19,
+     withFee.json?.petWeightLbs === 16.5 && withFee.json?.petCrateLengthIn === null &&
+     withFee.json?.petCrateWidthIn === null && withFee.json?.petCrateHeightIn === null,
     JSON.stringify(withFee.json));
   const intlWaitingTrips = await api("GET", "/trips", { token: base.token });
   check("waiting international pet join creates no cleaning fee or trip",
@@ -364,15 +358,15 @@ if (intlFlight) {
   const missingDetails = await api("POST", "/queue/join", {
     token: petMember.token, body: { flightId: flight.id, bringingPet: true, petFeeAcknowledged: true },
   });
-  check("pet join is rejected without weight and crate dimensions", missingDetails.status === 400, JSON.stringify(missingDetails.json));
+  check("pet join is rejected without weight", missingDetails.status === 400, JSON.stringify(missingDetails.json));
   const invalidDetails = await api("POST", "/queue/join", {
-    token: petMember.token, body: { flightId: flight.id, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 0, petCrateLengthIn: 20, petCrateWidthIn: -1, petCrateHeightIn: 20 },
+    token: petMember.token, body: { flightId: flight.id, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 0 },
   });
   check("pet join is rejected with non-positive measurements", invalidDetails.status === 400, JSON.stringify(invalidDetails.json));
 
   const petJoin = await api("POST", "/queue/join", {
     token: petMember.token,
-    body: { flightId: flight.id, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 14.5, petCrateLengthIn: 24, petCrateWidthIn: 17, petCrateHeightIn: 19 },
+    body: { flightId: flight.id, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 14.5 },
   });
   if (petJoin.status === 201) {
     check("waiting pet entry persists choice and acknowledgement",
@@ -399,7 +393,7 @@ if (intlFlight) {
     JSON.stringify(holderJoin.json));
   const petWaiting = await api("POST", "/queue/join", {
     token: petWaiter.token,
-    body: { flightId: seatFreedFixtureId, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 20, petCrateLengthIn: 28, petCrateWidthIn: 19, petCrateHeightIn: 21 },
+    body: { flightId: seatFreedFixtureId, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 20 },
   });
   check("pet member waits behind the confirmed booking",
     petWaiting.status === 201 && petWaiting.json?.status === "waiting",
@@ -421,10 +415,10 @@ if (intlFlight) {
     check("seat-freed pet award applies the $500 cleaning fee",
       promotedTrips.json?.some?.((trip) => trip.flightId === seatFreedFixtureId && trip.cleaningFeeUsd === 500),
       JSON.stringify(promotedTrips.json));
-    check("seat-freed pet award preserves weight and crate details",
+    check("seat-freed pet award preserves weight and null crate details",
       promotedTrips.json?.some?.((trip) => trip.flightId === seatFreedFixtureId &&
-        trip.petWeightLb === 20 && trip.petCrateLengthIn === 28 &&
-        trip.petCrateWidthIn === 19 && trip.petCrateHeightIn === 21),
+        trip.petWeightLb === 20 && trip.petCrateLengthIn === null &&
+        trip.petCrateWidthIn === null && trip.petCrateHeightIn === null),
       JSON.stringify(promotedTrips.json));
     const promotedNotifications = await api("GET", "/notifications", { token: petWaiter.token });
     check("seat-freed pet award clearly confirms the fee",

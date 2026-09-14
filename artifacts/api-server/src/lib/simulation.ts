@@ -258,10 +258,10 @@ async function advanceFlightQueue(
         flightId,
         status: "upcoming",
         cleaningFeeUsd: front.bringingPet ? PET_CLEANING_FEE_USD : 0,
-        petWeightLb: front.bringingPet ? Number(front.petWeightLbs) : null,
-        petCrateLengthIn: front.bringingPet ? Number(front.petCrateLengthIn) : null,
-        petCrateWidthIn: front.bringingPet ? Number(front.petCrateWidthIn) : null,
-        petCrateHeightIn: front.bringingPet ? Number(front.petCrateHeightIn) : null,
+        petWeightLb: front.bringingPet ? front.petWeightLbs : null,
+        petCrateLengthIn: front.bringingPet ? front.petCrateLengthIn : null,
+        petCrateWidthIn: front.bringingPet ? front.petCrateWidthIn : null,
+        petCrateHeightIn: front.bringingPet ? front.petCrateHeightIn : null,
       });
       await txDb.insert(notificationsTable).values({
         id: makeId(),
@@ -423,10 +423,10 @@ export async function promoteFrontAfterSeatFreed(
     flightId,
     status: "upcoming",
     cleaningFeeUsd: front.bringingPet ? PET_CLEANING_FEE_USD : 0,
-    petWeightLb: front.bringingPet ? Number(front.petWeightLbs) : null,
-    petCrateLengthIn: front.bringingPet ? Number(front.petCrateLengthIn) : null,
-    petCrateWidthIn: front.bringingPet ? Number(front.petCrateWidthIn) : null,
-    petCrateHeightIn: front.bringingPet ? Number(front.petCrateHeightIn) : null,
+    petWeightLb: front.bringingPet ? front.petWeightLbs : null,
+    petCrateLengthIn: front.bringingPet ? front.petCrateLengthIn : null,
+    petCrateWidthIn: front.bringingPet ? front.petCrateWidthIn : null,
+    petCrateHeightIn: front.bringingPet ? front.petCrateHeightIn : null,
   });
   await txDb.insert(notificationsTable).values({
     id: makeId(),

@@ -44,9 +44,6 @@ export default function JoinQueueAcknowledgeScreen() {
   const [bringingPet, setBringingPet] = useState<boolean | null>(null);
   const [petFeeAcknowledged, setPetFeeAcknowledged] = useState(false);
   const [petWeightLbs, setPetWeightLbs] = useState('');
-  const [petCrateLengthIn, setPetCrateLengthIn] = useState('');
-  const [petCrateWidthIn, setPetCrateWidthIn] = useState('');
-  const [petCrateHeightIn, setPetCrateHeightIn] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
   // Set when the server rejects the join because the flight is gone — drives
   // the full-screen "no longer available" state instead of an inline error.
@@ -150,8 +147,7 @@ export default function JoinQueueAcknowledgeScreen() {
   });
 
   const positiveNumber = (value: string) => Number.isFinite(Number(value)) && Number(value) > 0;
-  const petDetailsComplete = [petWeightLbs, petCrateLengthIn, petCrateWidthIn, petCrateHeightIn].every(positiveNumber);
-  const petComplete = bringingPet !== null && (!bringingPet || (petFeeAcknowledged && petDetailsComplete));
+  const petComplete = bringingPet !== null && (!bringingPet || (petFeeAcknowledged && positiveNumber(petWeightLbs)));
   const occupantLimitExceeded = bringingPet === true && passengers >= MAX_OCCUPANTS;
   const allChecked = checked.every(Boolean) && punctualityChecked && petComplete && !occupantLimitExceeded;
   const needsIntlNotice = isInternational && user?.membershipTier === 'base';
@@ -172,9 +168,6 @@ export default function JoinQueueAcknowledgeScreen() {
           bringingPet: bringingPet ? '1' : '0',
           petFeeAcknowledged: petFeeAcknowledged ? '1' : '0',
           petWeightLbs,
-          petCrateLengthIn,
-          petCrateWidthIn,
-          petCrateHeightIn,
         },
       });
       return;
@@ -186,9 +179,6 @@ export default function JoinQueueAcknowledgeScreen() {
         petFeeAcknowledged: bringingPet === true && petFeeAcknowledged,
         ...(bringingPet ? {
           petWeightLbs: Number(petWeightLbs),
-          petCrateLengthIn: Number(petCrateLengthIn),
-          petCrateWidthIn: Number(petCrateWidthIn),
-          petCrateHeightIn: Number(petCrateHeightIn),
         } : {}),
       },
     });
@@ -308,30 +298,6 @@ export default function JoinQueueAcknowledgeScreen() {
                 style={[styles.measurementInput, { color: colors.textOnSurface, borderColor: colors.border, backgroundColor: colors.offWhite }]}
                 testID="pet-weight-lbs"
               />
-              <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Crate dimensions (inches)</Text>
-              <View style={styles.dimensionsRow}>
-                {[
-                  ['Length', petCrateLengthIn, setPetCrateLengthIn, 'pet-crate-length-in'],
-                  ['Width', petCrateWidthIn, setPetCrateWidthIn, 'pet-crate-width-in'],
-                  ['Height', petCrateHeightIn, setPetCrateHeightIn, 'pet-crate-height-in'],
-                ].map(([label, value, setter, testID], index) => (
-                  <React.Fragment key={String(label)}>
-                    {index > 0 && <Text style={[styles.multiply, { color: colors.mutedForegroundLight }]}>×</Text>}
-                    <View style={styles.dimensionField}>
-                      <TextInput
-                        value={value as string}
-                        onChangeText={setter as (text: string) => void}
-                        keyboardType="decimal-pad"
-                        placeholder={String(label)}
-                        placeholderTextColor={colors.mutedForegroundLight}
-                        style={[styles.measurementInput, styles.dimensionInput, { color: colors.textOnSurface, borderColor: colors.border, backgroundColor: colors.offWhite }]}
-                        testID={testID as string}
-                      />
-                      <Text style={[styles.unit, { color: colors.mutedForegroundLight }]}>in</Text>
-                    </View>
-                  </React.Fragment>
-                ))}
-              </View>
             </View>
           )}
           {bringingPet && (
@@ -425,11 +391,6 @@ const styles = StyleSheet.create({
     minHeight: 44, borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 12,
     fontFamily: 'Inter_500Medium', fontSize: 14,
   },
-  dimensionsRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  dimensionField: { flex: 1, position: 'relative' },
-  dimensionInput: { paddingRight: 25, paddingHorizontal: 8 },
-  unit: { position: 'absolute', right: 7, top: 14, fontFamily: 'Inter_500Medium', fontSize: 11 },
-  multiply: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   punctualityHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   punctualityTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   punctualityRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },

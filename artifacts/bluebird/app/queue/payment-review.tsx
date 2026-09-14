@@ -24,8 +24,7 @@ type PaymentReviewParams = {
   flightStatus?: string; departureDate?: string; departureTime?: string;
   duration?: string; aircraftType?: string; international?: string;
   bringingPet?: string; petFeeAcknowledged?: string;
-  petWeightLbs?: string; petCrateLengthIn?: string;
-  petCrateWidthIn?: string; petCrateHeightIn?: string;
+  petWeightLbs?: string;
 };
 
 export default function InternationalPaymentReviewScreen() {
@@ -62,9 +61,6 @@ export default function InternationalPaymentReviewScreen() {
 
   const petMeasurements = bringingPet ? {
     petWeightLbs: Number(params.petWeightLbs),
-    petCrateLengthIn: Number(params.petCrateLengthIn),
-    petCrateWidthIn: Number(params.petCrateWidthIn),
-    petCrateHeightIn: Number(params.petCrateHeightIn),
   } : {};
 
   const joinMutation = useJoinQueue({

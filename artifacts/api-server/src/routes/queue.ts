@@ -95,21 +95,18 @@ router.post("/join", authMiddleware, async (req, res) => {
     });
   }
   const petMeasurements = {
-    petWeightLbs: Number(petWeightLbsRaw),
-    petCrateLengthIn: Number(petCrateLengthInRaw),
-    petCrateWidthIn: Number(petCrateWidthInRaw),
-    petCrateHeightIn: Number(petCrateHeightInRaw),
+    petWeightLbs: petWeightLbsRaw ?? null,
+    petCrateLengthIn: petCrateLengthInRaw ?? null,
+    petCrateWidthIn: petCrateWidthInRaw ?? null,
+    petCrateHeightIn: petCrateHeightInRaw ?? null,
   };
-  const validPetMeasurement = (value: number, maximum: number) =>
-    Number.isFinite(value) && value > 0 && value <= maximum;
+  const validPetMeasurement = (value: number | null | undefined, maximum: number) =>
+    value !== null && value !== undefined && Number.isFinite(value) && value > 0 && value <= maximum;
   if (bringingPet && (
-    !validPetMeasurement(petMeasurements.petWeightLbs, 500) ||
-    !validPetMeasurement(petMeasurements.petCrateLengthIn, 200) ||
-    !validPetMeasurement(petMeasurements.petCrateWidthIn, 200) ||
-    !validPetMeasurement(petMeasurements.petCrateHeightIn, 200)
+    !validPetMeasurement(petMeasurements.petWeightLbs, 500)
   )) {
     return res.status(400).json({
-      error: "Pet weight must be between 1 and 500 lb and crate dimensions between 1 and 200 in",
+      error: "Pet weight must be between 1 and 500 lb",
     });
   }
 
@@ -122,7 +119,7 @@ router.post("/join", authMiddleware, async (req, res) => {
     const [flight] = await txDb
       .select()
       .from(flightsTable)
-      .where(eq(flightsTable.id, String(flightId)));
+      .where(eq(flightsTable.id, entry.flightId));
     if (!flight) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Flight not found" });
@@ -615,10 +612,10 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
         flightId: entry.flightId,
         status: "upcoming",
         cleaningFeeUsd: entry.bringingPet ? PET_CLEANING_FEE_USD : 0,
-        petWeightLb: entry.bringingPet ? Number(entry.petWeightLbs) : null,
-        petCrateLengthIn: entry.bringingPet ? Number(entry.petCrateLengthIn) : null,
-        petCrateWidthIn: entry.bringingPet ? Number(entry.petCrateWidthIn) : null,
-        petCrateHeightIn: entry.bringingPet ? Number(entry.petCrateHeightIn) : null,
+        petWeightLb: entry.bringingPet ? entry.petWeightLbs : null,
+        petCrateLengthIn: entry.bringingPet ? entry.petCrateLengthIn : null,
+        petCrateWidthIn: entry.bringingPet ? entry.petCrateWidthIn : null,
+        petCrateHeightIn: entry.bringingPet ? entry.petCrateHeightIn : null,
       })
       .returning();
 

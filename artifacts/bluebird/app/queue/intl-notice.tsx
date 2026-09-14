@@ -21,7 +21,7 @@ export default function InternationalNoticeScreen() {
     flightId: string; fromCity: string; toCity: string;
     from: string; to: string; useLinePass?: string; passengers?: string;
     feeUsd?: string; flightStatus?: string; bringingPet?: string; petFeeAcknowledged?: string;
-    petWeightLbs?: string; petCrateLengthIn?: string; petCrateWidthIn?: string; petCrateHeightIn?: string;
+    petWeightLbs?: string;
   }>();
   const { flightId } = params;
   const passengers = Math.min(MAX_OCCUPANTS, Math.max(1, parseInt(params.passengers ?? '1', 10) || 1));
@@ -49,9 +49,6 @@ export default function InternationalNoticeScreen() {
         petFeeAcknowledged: params.petFeeAcknowledged === '1' ? '1' : '0',
         ...(bringingPet ? {
           petWeightLbs: params.petWeightLbs ?? '',
-          petCrateLengthIn: params.petCrateLengthIn ?? '',
-          petCrateWidthIn: params.petCrateWidthIn ?? '',
-          petCrateHeightIn: params.petCrateHeightIn ?? '',
         } : {}),
       },
     });
