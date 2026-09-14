@@ -1,0 +1,128 @@
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Animated, Platform, Image, TouchableOpacity, Text } from 'react-native';
+import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
+import { useColors } from '@/hooks/useColors';
+
+export default function SplashScreen() {
+  const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.8)).current;
+  const taglineOpacity = useRef(new Animated.Value(0)).current;
+  const buttonOpacity = useRef(new Animated.Value(0)).current;
+  const buttonTranslate = useRef(new Animated.Value(12)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(logoOpacity, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.spring(logoScale, { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 }),
+      ]),
+      Animated.timing(taglineOpacity, { toValue: 1, duration: 600, delay: 200, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.timing(buttonOpacity, { toValue: 1, duration: 500, delay: 150, useNativeDriver: true }),
+        Animated.timing(buttonTranslate, { toValue: 0, duration: 500, delay: 150, useNativeDriver: true }),
+      ]),
+    ]).start();
+  }, []);
+
+  const topPad = Platform.OS === 'web' ? 67 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+
+  return (
+    // backgroundMid is brand navy in BOTH modes — the splash is intentionally dark-branded.
+    <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad, paddingBottom: bottomPad }]}>
+      <View style={styles.content}>
+        <Animated.View style={{ opacity: logoOpacity, transform: [{ scale: logoScale }] }}>
+          <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+        </Animated.View>
+
+        <Animated.Text style={[styles.tagline, { color: colors.mutedOnBrand, opacity: taglineOpacity }]}>
+          Private aviation, redefined.
+        </Animated.Text>
+
+        <Animated.View style={{ opacity: buttonOpacity, transform: [{ translateY: buttonTranslate }], alignSelf: 'stretch' }}>
+          <TouchableOpacity
+            style={[styles.ctaButton, { backgroundColor: colors.primary }]}
+            onPress={() => router.push('/(auth)/welcome')}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Get Started"
+          >
+            <Text style={[styles.ctaText, { color: colors.primaryForeground }]}>Get Started</Text>
+            <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+
+      <View style={styles.dotsContainer}>
+        {[0, 1, 2].map((i) => (
+          <View
+            key={i}
+            style={[
+              styles.dot,
+              { backgroundColor: colors.textOnBrand + '40' },
+              i === 0 && [styles.dotActive, { backgroundColor: colors.primary }],
+            ]}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  logo: {
+    width: 220,
+    height: 50,
+  },
+  tagline: {
+    fontSize: 16,
+    fontFamily: 'Inter_400Regular',
+    letterSpacing: 0.3,
+  },
+  ctaButton: {
+    marginTop: 24,
+    height: 52,
+    borderRadius: 999,
+    paddingHorizontal: 32,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    alignSelf: 'center',
+    minWidth: 200,
+  },
+  ctaText: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  dotsContainer: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 40,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  dotActive: {
+    width: 20,
+  },
+});
+
+const logoSource = require('@/assets/images/bluebird-logo-white.png');

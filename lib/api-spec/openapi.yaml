@@ -1,0 +1,1983 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Bluebird private aviation API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication
+  - name: flights
+    description: Empty leg flights
+  - name: queue
+    description: Queue management
+  - name: trips
+    description: User trips
+  - name: membership
+    description: Membership management
+  - name: referral
+    description: Referral program
+  - name: notifications
+    description: User notifications
+  - name: concierge
+    description: AI concierge chat
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/request-code:
+    post:
+      operationId: requestLoginCode
+      tags: [auth]
+      summary: Request a 6-digit SMS sign-in code for a phone number (demo — code returned in response and logged, no real SMS)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestCodeRequest"
+      responses:
+        "200":
+          description: Code issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestCodeResponse"
+        "400":
+          description: Invalid phone number
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Resend cooldown active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: SMS delivery not configured (production — no provider wired; demo delivery is non-production only)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/verify-code:
+    post:
+      operationId: verifyLoginCode
+      tags: [auth]
+      summary: Verify a phone + 6-digit code and either sign in or authorize registration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyCodeRequest"
+      responses:
+        "200":
+          description: Existing member signed in, or unknown phone verified for registration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyCodeResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Wrong, expired, or exhausted code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/complete-registration:
+    post:
+      operationId: completePhoneRegistration
+      tags: [auth]
+      summary: Create an account after successful phone verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteRegistrationRequest"
+      responses:
+        "200":
+          description: Account created and signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Invalid profile data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Registration grant is invalid, expired, or already used
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Phone or email conflicts with an existing account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Revoke the caller's current token
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Token revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignOutResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateMe
+      tags: [auth]
+      summary: Update current user's profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMeRequest"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /flights:
+    get:
+      operationId: listFlights
+      tags: [flights]
+      summary: List available empty leg flights (public)
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of flights
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Flight"
+
+  /flights/airports:
+    get:
+      operationId: listAirports
+      tags: [flights]
+      summary: List canonical airports grouped by metro area (public)
+      responses:
+        "200":
+          description: Airport groups with optional flight inventory counts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AirportGroup"
+
+  /flights/airports/{code}/summary:
+    get:
+      operationId: getAirportSummary
+      tags: [flights]
+      summary: Airport activity summary for onboarding (public)
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Airport summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AirportSummary"
+        "404":
+          description: Airport not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /flights/{id}:
+    get:
+      operationId: getFlight
+      tags: [flights]
+      summary: Get flight details (public)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Flight details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Flight"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /flights/{id}/my-status:
+    get:
+      operationId: getFlightMyStatus
+      tags: [flights]
+      summary: Get the authenticated user's relationship to a specific flight
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User flight status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlightUserStatus"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Flight not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /queue/join:
+    post:
+      operationId: joinQueue
+      tags: [queue]
+      summary: Join queue for a flight
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinQueueRequest"
+      responses:
+        "201":
+          description: Joined queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueEntry"
+        "400":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /queue/status:
+    get:
+      operationId: getQueueStatus
+      tags: [queue]
+      summary: Get user queue status
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Queue status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QueueEntry"
+
+  /queue/{id}:
+    delete:
+      operationId: cancelQueueEntry
+      tags: [queue]
+      summary: Cancel (leave) a queue entry
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Queue entry cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelQueueResponse"
+        "404":
+          description: Queue entry not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /queue/{id}/use-pass:
+    post:
+      operationId: useLinePassOnQueueEntry
+      tags: [queue]
+      summary: Apply a Skip the Line pass to any existing waiting queue entry, including position 1, and confirm the seat immediately
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pass applied and seat confirmed, or the entry was already confirmed (alreadyConfirmed=true, no pass consumed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UseLinePassResponse"
+        "400":
+          description: Entry cancelled/expired or no passes available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Membership required or insufficient remaining seat capacity; no pass consumed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Queue entry not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Flight no longer accepts queue actions or a concurrent queue update conflicted; no pass consumed and retry may be appropriate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /trips/{id}/cancel:
+    post:
+      operationId: cancelTrip
+      tags: [trips]
+      summary: Cancel a confirmed booking — releases the seat, refunds a used Skip the Line pass, idempotent on repeat calls
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Booking cancelled (or already cancelled — idempotent, no double refund)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelBookingResponse"
+        "404":
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Flight already departed, trip already completed, or concurrent update conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /trips:
+    get:
+      operationId: listTrips
+      tags: [trips]
+      summary: Get user trips
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of trips
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trip"
+
+  /passengers:
+    get:
+      operationId: listSavedPassengers
+      tags: [passengers]
+      summary: List the authenticated member's saved passenger records
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Saved passenger records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SavedPassenger"
+    post:
+      operationId: createSavedPassenger
+      tags: [passengers]
+      summary: Create or update a saved passenger by name for the authenticated member
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavedPassengerInput"
+      responses:
+        "201":
+          description: Saved passenger created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedPassenger"
+        "200":
+          description: Existing saved passenger updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedPassenger"
+        "400":
+          description: Invalid passenger details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Duplicate passenger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /passengers/{id}:
+    put:
+      operationId: updateSavedPassenger
+      tags: [passengers]
+      summary: Update an authenticated member's saved passenger record
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavedPassengerInput"
+      responses:
+        "200":
+          description: Updated saved passenger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedPassenger"
+        "400":
+          description: Invalid passenger details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Passenger not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Duplicate passenger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteSavedPassenger
+      tags: [passengers]
+      summary: Delete an authenticated member's saved passenger record
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Passenger deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Passenger not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /trips/{id}/manifest:
+    get:
+      operationId: getTripManifest
+      tags: [trips]
+      summary: Get the passenger manifest for an owned confirmed upcoming trip
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Passenger manifest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassengerManifest"
+        "404":
+          description: Trip not found or inaccessible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Trip is not eligible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: saveTripManifest
+      tags: [trips]
+      summary: Save passenger details for an owned confirmed upcoming trip
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavePassengerManifestRequest"
+      responses:
+        "200":
+          description: Saved manifest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassengerManifest"
+        "400":
+          description: Invalid passenger details or passenger count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Trip not found or inaccessible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Trip is not eligible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /trips/{id}/manifest/submit:
+    post:
+      operationId: submitTripManifest
+      tags: [trips]
+      summary: Submit a complete passenger manifest to Bluebird operations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Submitted manifest, idempotent when unchanged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassengerManifest"
+        "400":
+          description: Manifest is incomplete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Trip not found or inaccessible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Trip is not eligible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /membership:
+    get:
+      operationId: getMembership
+      tags: [membership]
+      summary: Get user membership
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Membership details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membership"
+
+  /membership/upgrade:
+    post:
+      operationId: upgradeMembership
+      tags: [membership]
+      summary: Upgrade membership tier
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpgradeMembershipRequest"
+      responses:
+        "200":
+          description: Membership upgraded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membership"
+
+  /membership/buy-pass:
+    post:
+      operationId: buyLinePass
+      tags: [membership]
+      summary: Buy one Skip the Line pass (demo checkout — no real billing)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Pass purchased
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuyPassResponse"
+        "501":
+          description: Demo checkout disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /membership/change:
+    post:
+      operationId: changeMembership
+      tags: [membership]
+      summary: Schedule a downgrade or cancellation at next renewal, or revert a pending change
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeMembershipRequest"
+      responses:
+        "200":
+          description: Membership change scheduled (or reverted)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membership"
+        "400":
+          description: Invalid change request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /referral:
+    get:
+      operationId: getReferral
+      tags: [referral]
+      summary: Get referral info
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Referral info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralInfo"
+        "403":
+          description: A Bluebird membership is required to access and share a referral link (code MEMBERSHIP_REQUIRED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List notifications
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /notifications/{id}/read:
+    post:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark notification as read
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Marked read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  /concierge/chat:
+    post:
+      operationId: conciergeChat
+      tags: [concierge]
+      summary: Send a message to the AI concierge
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConciergeChatRequest"
+      responses:
+        "200":
+          description: Concierge reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConciergeReply"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: AI service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /concierge/history:
+    get:
+      operationId: getConciergeHistory
+      tags: [concierge]
+      summary: Load the caller's recent concierge conversation history
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Recent concierge messages, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConciergeHistoryMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /concierge/callback-requests:
+    post:
+      operationId: requestConciergeCallback
+      tags: [concierge]
+      summary: Request human follow-up for an escalated concierge reply
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConciergeCallbackInput"
+      responses:
+        "200":
+          description: Callback request accepted, including an existing request for the same reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConciergeCallbackConfirmation"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Escalated concierge reply not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ConciergeChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+          minLength: 1
+          maxLength: 4000
+    ConciergeChatRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          minItems: 1
+          maxItems: 40
+          items:
+            $ref: "#/components/schemas/ConciergeChatMessage"
+    ConciergeHistoryMessage:
+      type: object
+      required: [id, role, content, createdAt, requiresHumanFollowUp, callbackRequested]
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        createdAt:
+          type: string
+        requiresHumanFollowUp:
+          type: boolean
+        callbackRequested:
+          type: boolean
+    ConciergeReply:
+      type: object
+      required: [reply, assistantMessageId, requiresHumanFollowUp]
+      properties:
+        reply:
+          type: string
+        assistantMessageId:
+          type: string
+        requiresHumanFollowUp:
+          type: boolean
+    ConciergeCallbackInput:
+      type: object
+      required: [assistantMessageId]
+      properties:
+        assistantMessageId:
+          type: string
+          minLength: 1
+          maxLength: 100
+    ConciergeCallbackConfirmation:
+      type: object
+      required: [id, status, created, message]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [requested]
+        created:
+          type: boolean
+        message:
+          type: string
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: Machine-readable error code (e.g. MEMBERSHIP_REQUIRED) for client-side routing.
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+
+    SignOutResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    RequestCodeRequest:
+      type: object
+      properties:
+        phone:
+          type: string
+          description: Phone number in any common format; normalized server-side.
+      required:
+        - phone
+
+    RequestCodeResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        phone:
+          type: string
+          description: The normalized phone number the code was issued for.
+        demoCode:
+          type: string
+          description: Demo only — the raw 6-digit code in lieu of a delivered SMS.
+        expiresInSeconds:
+          type: number
+        resendCooldownSeconds:
+          type: number
+      required:
+        - message
+        - phone
+
+    VerifyCodeRequest:
+      type: object
+      properties:
+        phone:
+          type: string
+        code:
+          type: string
+          description: The 6-digit SMS code.
+        referralCode:
+          type: string
+          description: Optional referral code carried from a /join/{code} link.
+      required:
+        - phone
+        - code
+
+    VerifyCodeResponse:
+      oneOf:
+        - $ref: "#/components/schemas/SignedInVerification"
+        - $ref: "#/components/schemas/RegistrationRequiredVerification"
+      discriminator:
+        propertyName: outcome
+        mapping:
+          signed_in: "#/components/schemas/SignedInVerification"
+          registration_required: "#/components/schemas/RegistrationRequiredVerification"
+
+    SignedInVerification:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum: [signed_in]
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+        referralFeedback:
+          type: string
+          enum: [invalid_code, self_referral, already_used]
+          description: Explains why an existing account did not receive another referral reward.
+      required:
+        - outcome
+        - token
+        - user
+
+    RegistrationRequiredVerification:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum: [registration_required]
+        registrationGrant:
+          type: string
+          description: Short-lived single-use credential returned only when registration is required.
+        registrationGrantExpiresInSeconds:
+          type: number
+      required:
+        - outcome
+        - registrationGrant
+        - registrationGrantExpiresInSeconds
+
+    CompleteRegistrationRequest:
+      type: object
+      properties:
+        registrationGrant:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        referralCode:
+          type: string
+          description: Optional member referral code carried from a /join/{code} link.
+      required:
+        - registrationGrant
+        - firstName
+        - lastName
+        - email
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+        referralFeedback:
+          type: string
+          enum: [reward_granted, invalid_code, self_referral, already_used]
+          description: Outcome of optional referral attribution during registration.
+      required:
+        - token
+        - user
+
+    UpdateMeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        weightKg:
+          type: number
+          nullable: true
+          minimum: 1
+          maximum: 500
+          description: Optional member weight in kilograms. Send null to clear the saved value.
+        homeAirports:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            pattern: "^\\s*[A-Za-z]{3,4}\\s*$"
+          description: Canonical airport codes to save as the member's preferences. Surrounding whitespace is trimmed, casing is normalized, and duplicates are removed server-side. An empty array clears all selections.
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          nullable: true
+        weightKg:
+          type: number
+          nullable: true
+          minimum: 1
+          maximum: 500
+          description: Member weight in kilograms, when provided.
+        membershipTier:
+          type: string
+          enum: [none, base, plus, concierge]
+          description: '"none" marks a registered non-member who has not purchased a plan yet.'
+        linePassCount:
+          type: number
+        referralCode:
+          type: string
+        homeAirports:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - phone
+        - weightKg
+        - membershipTier
+        - linePassCount
+        - referralCode
+        - homeAirports
+        - createdAt
+
+    Flight:
+      type: object
+      properties:
+        id:
+          type: string
+        fromAirport:
+          type: string
+        fromCity:
+          type: string
+        toAirport:
+          type: string
+        toCity:
+          type: string
+        aircraftType:
+          type: string
+        aircraftCapacity:
+          type: number
+        departureDate:
+          type: string
+        departureTime:
+          type: string
+        duration:
+          type: string
+        seatsAvailable:
+          type: number
+        priceUsd:
+          type: number
+        discountPct:
+          type: number
+        featured:
+          type: boolean
+        international:
+          type: boolean
+        internationalFeeUsd:
+          type: number
+        rangeNm:
+          type: number
+          nullable: true
+        cruiseSpeed:
+          type: string
+          nullable: true
+        destWeather:
+          type: string
+          nullable: true
+        departureFbo:
+          type: string
+          nullable: true
+        departureFboAddress:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [available, boarding, departed, completed, cancelled]
+        imageUrl:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - fromAirport
+        - fromCity
+        - toAirport
+        - toCity
+        - aircraftType
+        - aircraftCapacity
+        - departureDate
+        - departureTime
+        - duration
+        - seatsAvailable
+        - status
+        - createdAt
+
+    AirportInfo:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        city:
+          type: string
+        flightCount:
+          type: number
+      required:
+        - code
+        - name
+        - city
+
+    AirportGroup:
+      type: object
+      properties:
+        city:
+          type: string
+        airports:
+          type: array
+          items:
+            $ref: "#/components/schemas/AirportInfo"
+      required:
+        - city
+        - airports
+
+    AirportDestination:
+      type: object
+      properties:
+        code:
+          type: string
+        city:
+          type: string
+        count:
+          type: number
+      required:
+        - code
+        - city
+        - count
+
+    AirportSummary:
+      type: object
+      properties:
+        airport:
+          $ref: "#/components/schemas/AirportInfo"
+        flightCount30d:
+          type: number
+        topDestinations:
+          type: array
+          items:
+            $ref: "#/components/schemas/AirportDestination"
+        recentFlights:
+          type: array
+          items:
+            $ref: "#/components/schemas/Flight"
+      required:
+        - airport
+        - flightCount30d
+        - topDestinations
+        - recentFlights
+
+    JoinQueueRequest:
+      type: object
+      properties:
+        flightId:
+          type: string
+        useLinePass:
+          type: boolean
+        passengers:
+          type: number
+          multipleOf: 1
+          minimum: 1
+          maximum: 6
+          default: 1
+          description: >
+            Number of human passengers. A booking is limited to six total
+            occupants, so a booking with a pet may include at most five
+            passengers.
+        acceptIntlFee:
+          type: boolean
+          description: >
+            Base member acknowledged the one-time international authorization
+            hold for this flight (demo acknowledgement — never authorized or billed).
+        bringingPet:
+          type: boolean
+          description: Whether the member will travel with a pet.
+        petFeeAcknowledged:
+          type: boolean
+          description: Member acknowledged that the $500 cleaning fee applies only if the flight is awarded.
+        petWeightLbs:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 500
+          description: Pet weight in pounds; required when bringingPet is true.
+        petCrateLengthIn:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 200
+          description: Pet crate length in inches; optional at queue join and collected later in the passenger manifest.
+        petCrateWidthIn:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 200
+          description: Pet crate width in inches; optional at queue join and collected later in the passenger manifest.
+        petCrateHeightIn:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 200
+          description: Pet crate height in inches; optional at queue join and collected later in the passenger manifest.
+      required:
+        - flightId
+        - bringingPet
+      allOf:
+        - if:
+            properties:
+              bringingPet:
+                const: true
+          then:
+            required:
+              - petFeeAcknowledged
+              - petWeightLbs
+
+    CancelQueueResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required:
+        - success
+
+    QueueEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        flightId:
+          type: string
+        flight:
+          $ref: "#/components/schemas/Flight"
+        position:
+          type: number
+        totalInQueue:
+          type: number
+        status:
+          type: string
+          enum: [waiting, confirmed, cancelled, expired]
+        createdAt:
+          type: string
+        movementHistory:
+          type: array
+          description: >-
+            Append-only movement log — a 'joined' event recorded at insert time
+            plus a 'moved' event for each position improvement.
+          items:
+            $ref: "#/components/schemas/QueueMovementEvent"
+        bringingPet:
+          type: boolean
+        petFeeAcknowledged:
+          type: boolean
+        petWeightLbs:
+          type: number
+          nullable: true
+          description: Pet weight in pounds.
+        petCrateLengthIn:
+          type: number
+          nullable: true
+          description: Pet crate length in inches.
+        petCrateWidthIn:
+          type: number
+          nullable: true
+          description: Pet crate width in inches.
+        petCrateHeightIn:
+          type: number
+          nullable: true
+          description: Pet crate height in inches.
+      required:
+        - id
+        - flightId
+        - position
+        - totalInQueue
+        - status
+        - createdAt
+        - bringingPet
+        - petFeeAcknowledged
+        - petWeightLbs
+        - petCrateLengthIn
+        - petCrateWidthIn
+        - petCrateHeightIn
+    QueueMovementEvent:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [joined, moved]
+        position:
+          type: number
+          description: Initial position (joined events only).
+        from:
+          type: number
+          description: Previous position (moved events only).
+        to:
+          type: number
+          description: New position (moved events only).
+        at:
+          type: string
+          description: UTC ISO-8601 timestamp of the event.
+      required:
+        - type
+        - at
+
+    UseLinePassResponse:
+      allOf:
+        - $ref: "#/components/schemas/QueueEntry"
+        - type: object
+          properties:
+            linePassCount:
+              type: number
+              description: The user's remaining Skip the Line pass balance after use
+            alreadyConfirmed:
+              type: boolean
+              description: True when the entry was already confirmed before the pass was applied — no pass was consumed
+            trip:
+              $ref: "#/components/schemas/Trip"
+              description: The upcoming trip created by a successful pass redemption; absent when alreadyConfirmed is true
+          required:
+            - linePassCount
+
+    FlightUserStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [none, waiting, confirmed]
+        queueEntryId:
+          type: string
+        queuePosition:
+          type: number
+        totalInQueue:
+          type: number
+        tripId:
+          type: string
+        confirmedFlight:
+          $ref: "#/components/schemas/ConfirmedFlightDetails"
+        manifest:
+          $ref: "#/components/schemas/ManifestProgress"
+      required:
+        - status
+
+    ConfirmedFlightDetails:
+      type: object
+      description: Departure details disclosed only for an authenticated confirmed flight.
+      properties:
+        departureFbo:
+          type: string
+          nullable: true
+        departureFboAddress:
+          type: string
+          nullable: true
+
+    Trip:
+      type: object
+      properties:
+        id:
+          type: string
+        flightId:
+          type: string
+        flight:
+          $ref: "#/components/schemas/Flight"
+        status:
+          type: string
+          enum: [upcoming, completed, cancelled]
+        bookedAt:
+          type: string
+        cleaningFeeUsd:
+          type: number
+          description: Cleaning fee applied when a pet-travel queue entry is awarded; otherwise zero.
+        manifest:
+          $ref: "#/components/schemas/ManifestProgress"
+      required:
+        - id
+        - flightId
+        - status
+        - bookedAt
+        - cleaningFeeUsd
+
+    ManifestProgress:
+      type: object
+      required: [requiredCount, completedCount, isComplete, version]
+      properties:
+        requiredCount: { type: number }
+        completedCount: { type: number }
+        isComplete: { type: boolean }
+        version: { type: number }
+        submittedAt:
+          type: string
+          nullable: true
+        deliveryStatus:
+          type: string
+          nullable: true
+          enum: [delivered, demo_recorded]
+
+    Passenger:
+      type: object
+      required: [passengerOrder, firstName, lastName]
+      properties:
+        passengerOrder: { type: number, minimum: 1 }
+        firstName: { type: string }
+        lastName: { type: string }
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        dateOfBirth:
+          type: string
+          nullable: true
+        weightKg:
+          type: number
+          nullable: true
+          minimum: 1
+          maximum: 500
+
+    PassengerInput:
+      type: object
+      required: [passengerOrder, firstName, lastName]
+      properties:
+        passengerOrder: { type: number, minimum: 1, multipleOf: 1 }
+        firstName: { type: string, maxLength: 100 }
+        lastName: { type: string, maxLength: 100 }
+        phone:
+          type: string
+          nullable: true
+          maxLength: 40
+        email:
+          type: string
+          nullable: true
+          maxLength: 255
+        dateOfBirth:
+          type: string
+          nullable: true
+          pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+        weightKg:
+          type: number
+          nullable: true
+          minimum: 1
+          maximum: 500
+
+    SavePassengerManifestRequest:
+      type: object
+      required: [passengers]
+      properties:
+        passengers:
+          type: array
+          minItems: 1
+          maxItems: 6
+          description: >
+            Human passenger roster. A booking is limited to six total
+            occupants, so a booking with a pet may include at most five
+            passengers.
+          items:
+            $ref: "#/components/schemas/PassengerInput"
+        pet:
+          $ref: "#/components/schemas/PetManifestInput"
+
+    SavedPassenger:
+      type: object
+      required: [id, firstName, lastName, weightKg, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        weightKg:
+          type: number
+          minimum: 1
+          maximum: 500
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    SavedPassengerInput:
+      type: object
+      required: [firstName, lastName, weightKg]
+      properties:
+        firstName: { type: string, maxLength: 100 }
+        lastName: { type: string, maxLength: 100 }
+        phone:
+          type: string
+          nullable: true
+          maxLength: 40
+        email:
+          type: string
+          nullable: true
+          maxLength: 255
+        weightKg:
+          type: number
+          minimum: 1
+          maximum: 500
+
+    PetManifestInput:
+      type: object
+      properties:
+        weightLb: { type: number, nullable: true, minimum: 1, maximum: 500 }
+        crateLengthIn: { type: number, nullable: true, minimum: 1, maximum: 200 }
+        crateWidthIn: { type: number, nullable: true, minimum: 1, maximum: 200 }
+        crateHeightIn: { type: number, nullable: true, minimum: 1, maximum: 200 }
+
+    PetManifest:
+      type: object
+      required: [weightLb, crateLengthIn, crateWidthIn, crateHeightIn]
+      properties:
+        weightLb: { type: number, nullable: true }
+        crateLengthIn: { type: number, nullable: true }
+        crateWidthIn: { type: number, nullable: true }
+        crateHeightIn: { type: number, nullable: true }
+
+    PassengerManifest:
+      type: object
+      required: [tripId, requiredCount, completedCount, isComplete, international, bringingPet, passengers, version]
+      properties:
+        tripId: { type: string }
+        requiredCount: { type: number }
+        completedCount: { type: number }
+        isComplete: { type: boolean }
+        international: { type: boolean }
+        bringingPet: { type: boolean }
+        pet:
+          allOf:
+            - $ref: "#/components/schemas/PetManifest"
+          nullable: true
+        passengers:
+          type: array
+          maxItems: 6
+          description: Human passenger roster; a pet, when present, occupies one of the six total occupants.
+          items:
+            $ref: "#/components/schemas/Passenger"
+        version: { type: number }
+        submittedAt:
+          type: string
+          nullable: true
+        deliveryStatus:
+          type: string
+          nullable: true
+          enum: [delivered, demo_recorded]
+        operationsNotified:
+          type: boolean
+
+    CancelBookingResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        passRefunded:
+          type: boolean
+          description: True when a Skip the Line pass spent on this booking was returned to the member's balance.
+        linePassCount:
+          type: number
+          description: The member's pass balance after the cancellation.
+        trip:
+          $ref: "#/components/schemas/Trip"
+      required:
+        - success
+        - passRefunded
+        - linePassCount
+
+    MembershipPlan:
+      type: object
+      properties:
+        id:
+          type: string
+          enum: [base, plus, concierge]
+        label:
+          type: string
+        priceAnnualUsd:
+          type: number
+          description: Annual membership price in US dollars.
+        features:
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - label
+        - priceAnnualUsd
+        - features
+
+    Membership:
+      type: object
+      properties:
+        tier:
+          type: string
+          enum: [none, base, plus, concierge]
+        plans:
+          type: array
+          description: Purchasable plan catalog (always present; drives the non-member join screen).
+          items:
+            $ref: "#/components/schemas/MembershipPlan"
+        linePassCount:
+          type: number
+        renewalDate:
+          type: string
+        pendingTier:
+          type: string
+          enum: [base, plus, cancelled]
+          description: >
+            Scheduled plan change taking effect at renewalDate. "cancelled"
+            means the membership ends at renewal. Absent when no change is pending.
+        features:
+          type: array
+          items:
+            type: string
+        totalSavedUsd:
+          type: number
+          description: >
+            Estimated private-flight value received through completed Bluebird trips,
+            calculated as the sum of each completed flight's charter value (priceUsd).
+            This is not cash, referral credit, or a withdrawable balance.
+        lifetimeCompletedFlights:
+          type: number
+          description: Total completed Bluebird flights across the member's account lifetime
+        annualFlightAllowance:
+          type: number
+          description: The tier's annual flight allowance
+        flightsThisYear:
+          type: number
+          description: Completed flights in the current calendar year
+      required:
+        - tier
+        - linePassCount
+        - features
+        - totalSavedUsd
+        - lifetimeCompletedFlights
+        - annualFlightAllowance
+        - flightsThisYear
+
+    BuyPassResponse:
+      type: object
+      properties:
+        linePassCount:
+          type: number
+      required:
+        - linePassCount
+
+    UpgradeMembershipRequest:
+      type: object
+      properties:
+        tier:
+          type: string
+          enum: [base, plus, concierge]
+          description: Non-members may purchase any tier, including Base.
+      required:
+        - tier
+
+    ChangeMembershipRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [downgrade, cancel, revert]
+        tier:
+          type: string
+          enum: [base, plus]
+          description: Target tier — required when action is "downgrade"
+      required:
+        - action
+
+    ReferralInfo:
+      type: object
+      properties:
+        code:
+          type: string
+        referralUrl:
+          type: string
+        rewardPassesPerPerson:
+          type: number
+        successfulReferrals:
+          type: number
+        invited:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvitedFriend"
+      required:
+        - code
+        - referralUrl
+        - rewardPassesPerPerson
+        - successfulReferrals
+        - invited
+
+    InvitedFriend:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [joined, pending]
+      required:
+        - name
+        - status
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        type:
+          type: string
+          enum: [queue_update, flight_confirmed, membership, referral, system]
+        read:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - title
+        - body
+        - type
+        - read
+        - createdAt

@@ -1,0 +1,20 @@
+- [Entitlement atomicity](entitlement-atomicity.md) — spend passes/credits and deliver their benefit in one server transaction; never split across client calls.
+- [Identifier migrations](identifier-migrations.md) — drop legacy unique constraints by catalog lookup, normalize/dedupe before enforcing a new unique identifier; prove with a scratch-schema fixture.
+- [Demo auth controls](demo-auth-controls.md) — verification/reset flows need real single-use hashed tokens + routing gates even in demo; only email *delivery* may be simulated.
+- [API contract & schema sync](api-contract-sync.md) — new endpoints/fields go through openapi.yaml + codegen; new columns need ensureSchema() too, not just a live-DB ALTER.
+- [Bluebird stack headers](bluebird-app-header.md) — default native-stack header hides behind the notch over NativeTabs; use the shared custom AppHeader.
+- [Bluebird theming](bluebird-theming.md) — all colors via useColors() tokens (no literals); semantic tokens & native-tabs caveat inside.
+- [OpenAPI schema naming](openapi-zod-naming.md) — component schema names must not equal `<OperationId>Response`; zod codegen exports collide.
+- [Orval codegen post-patch](orval-codegen-patch.md) — generated hooks need the Partial<UseQueryOptions> patch step in the codegen command; never hand-edit generated api.ts.
+- [RN-web quirks](rn-web-quirks.md) — Alert.alert buttons are no-ops on web; Expo web lives at $REPLIT_EXPO_DEV_DOMAIN root; new routes need expo restart for typed routes.
+- [Membership gating](membership-gating.md) — member-only actions return 403 + code MEMBERSHIP_REQUIRED; client routes on the code, server gate is authoritative.
+- [Departure lifecycle](departure-lifecycle.md) — all queue transitions must pass the shared flight-accepts-actions guard; the sweep completes flights/trips and expires waiting entries.
+- [Seat capacity model](seat-capacity-model.md) — flights.seatsAvailable is a baseline, never mutated; remaining seats derived from confirmed queue entries.
+- [Stale composite TS builds](stale-ts-builds.md) — phantom missing-export/field type errors mean stale lib dist; run `tsc -b lib/*` before believing them.
+- [OpenAPI email format](openapi-email-format.md) — avoid `format: email` until generated Zod and the installed Zod major agree; keep runtime validation server-side.
+- [Airport preference catalog](airport-preference-catalog.md) — legacy preference backfills must use the same canonical allowlist as account validation.
+- [Account-scoped prototype state](account-scoped-prototype-state.md) — key local demo state by member and gate controls until that exact key hydrates.
+- [Expo route utility placement](expo-route-utility-placement.md) — keep shared non-screen modules outside the Expo Router app tree to avoid false route warnings.
+- [Occupant capacity](occupant-capacity.md) — passenger and pet counts share one six-occupant ceiling; reserved passenger capacity remains the other bound.
+- [Confirmed-only flight metadata](confirmed-flight-metadata.md) — FBO fields stay out of public and waiting-flight payloads; expose them only from confirmed authenticated responses.
+- [Saved passenger identity](saved-passenger-identity.md) — dedupe member-owned reusable passengers by normalized first/last name; keep date of birth flight-specific.

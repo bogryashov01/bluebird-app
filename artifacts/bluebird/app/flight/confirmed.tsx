@@ -1,0 +1,205 @@
+import React, { useEffect, useRef } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Platform, Share, Image,
+} from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
+import { useColors } from '@/hooks/useColors';
+import { PrimaryButton } from '@/components/PrimaryButton';
+import * as Haptics from 'expo-haptics';
+import { PassCelebration } from '@/components/PassCelebration';
+import { addFlightToCalendar } from '@/lib/addToCalendar';
+
+function computeArrival(departureTime?: string, duration?: string): string {
+  if (!departureTime || !duration) return '';
+  const [depH, depM] = departureTime.split(':').map(Number);
+  const hours = duration.match(/(\d+)h/);
+  const mins = duration.match(/(\d+)m/);
+  const totalMins = depH * 60 + depM
+    + (hours ? parseInt(hours[1]) * 60 : 0)
+    + (mins ? parseInt(mins[1]) : 0);
+  const arrH = Math.floor(totalMins / 60) % 24;
+  const arrM = totalMins % 60;
+  return `${String(arrH).padStart(2, '0')}:${String(arrM).padStart(2, '0')}`;
+}
+
+const NEXT_STEPS = [
+  'Review your itinerary',
+  'Add flight to calendar',
+  'Arrive 30 minutes early',
+];
+
+// Dark "You're confirmed!" celebration screen — brand navy in both modes.
+export default function FlightConfirmedScreen() {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{
+    from?: string; to?: string; fromCity?: string; toCity?: string;
+    departureTime?: string; duration?: string; aircraftType?: string;
+    departureDate?: string; passUsed?: string; flightId?: string; petFeeUsd?: string;
+  }>();
+  const passUsed = params.passUsed === '1';
+  const petFeeApplies = params.petFeeUsd === '500';
+  const [celebrating, setCelebrating] = React.useState(passUsed);
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  const topPad = Platform.OS === 'web' ? 67 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+
+  useEffect(() => {
+    if (celebrating) return; // celebration handles its own haptics; animate on reveal
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    Animated.parallel([
+      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 }),
+      Animated.timing(opacityAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+    ]).start();
+  }, [celebrating]);
+
+  const hasRoute = !!params.from && !!params.to;
+  const arrival = computeArrival(params.departureTime, params.duration);
+  const routeLine = [params.fromCity ?? params.from, params.toCity ?? params.to]
+    .filter(Boolean).join(' → ');
+  const subtitle = [routeLine, params.aircraftType].filter(Boolean).join(' · ');
+
+  const handleShare = () => {
+    Share.share({
+      message: hasRoute
+        ? `I'm confirmed on a Bluebird flight: ${params.from} → ${params.to}${params.departureDate ? ` on ${params.departureDate}` : ''}! ✈️`
+        : "I'm confirmed on a Bluebird flight! ✈️",
+    }).catch(() => {});
+  };
+
+  const handleAddToCalendar = () => {
+    addFlightToCalendar({
+      from: params.from, to: params.to,
+      fromCity: params.fromCity, toCity: params.toCity,
+      departureDate: params.departureDate, departureTime: params.departureTime,
+      duration: params.duration, aircraftType: params.aircraftType,
+    });
+  };
+
+  const handleItinerary = () => {
+    if (params.flightId) {
+      router.push(`/flight/${params.flightId}`);
+    } else {
+      router.dismissTo('/(tabs)/trips');
+    }
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.backgroundMid }]}>
+      {celebrating && <PassCelebration onDone={() => setCelebrating(false)} />}
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingTop: topPad + 40, paddingBottom: bottomPad + 110 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Bluebird brand mark (mockup: blue bird instead of a check ring) */}
+        <Animated.View style={{ opacity: opacityAnim, transform: [{ scale: scaleAnim }] }}>
+          <Image
+            source={require('@/assets/images/bluebird-bird-mark.png')}
+            style={styles.birdMark}
+            resizeMode="contain"
+          />
+        </Animated.View>
+
+        <Animated.View style={{ opacity: opacityAnim, alignItems: 'center', gap: 6 }}>
+          <Text style={[styles.title, { color: colors.textOnBrand }]}>You're confirmed!</Text>
+          {!!subtitle && <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>{subtitle}</Text>}
+        </Animated.View>
+
+        {/* Route row — codes with times, separated by a thin horizontal line */}
+        {hasRoute && (
+          <View style={styles.timeline}>
+            <View style={styles.timelineEnd}>
+              <Text style={[styles.timelineCode, { color: colors.textOnBrand }]}>{params.from}</Text>
+              {!!params.departureTime && (
+                <Text style={[styles.timelineTime, { color: colors.mutedOnBrand }]}>{params.departureTime}</Text>
+              )}
+            </View>
+            <View style={[styles.timelineLine, { backgroundColor: colors.textOnBrand + '33' }]} />
+            <View style={[styles.timelineEnd, { alignItems: 'flex-end' }]}>
+              <Text style={[styles.timelineCode, { color: colors.textOnBrand }]}>{params.to}</Text>
+              {!!arrival && <Text style={[styles.timelineTime, { color: colors.mutedOnBrand }]}>{arrival}</Text>}
+            </View>
+          </View>
+        )}
+
+        {/* Next steps — slightly lighter card */}
+        <View style={[styles.nextSteps, { backgroundColor: colors.textOnBrand + '0D' }]}>
+          <Text style={[styles.nextStepsTitle, { color: colors.textOnBrand }]}>Next Steps</Text>
+          {NEXT_STEPS.map((step) => (
+            <View key={step} style={styles.stepRow}>
+              <Feather name="check" size={14} color={colors.primary} />
+              <Text style={[styles.stepText, { color: colors.mutedOnBrand }]}>{step}</Text>
+            </View>
+          ))}
+        </View>
+
+        {petFeeApplies && (
+          <View style={[styles.feeNotice, { backgroundColor: colors.primary + '1F', borderColor: colors.primary + '59' }]}>
+            <Feather name="info" size={16} color={colors.primary} />
+            <Text style={[styles.feeNoticeText, { color: colors.textOnBrand }]}>
+              Your flight was awarded. The $500 pet cleaning fee now applies to this trip.
+            </Text>
+          </View>
+        )}
+
+        {/* Actions */}
+        <View style={styles.actionRow}>
+          {[
+            { label: 'Add to\nCalendar', onPress: handleAddToCalendar },
+            { label: 'Itinerary', onPress: handleItinerary },
+            { label: 'Share', onPress: handleShare },
+          ].map((a) => (
+            <TouchableOpacity
+              key={a.label}
+              style={[styles.actionBtn, { backgroundColor: colors.textOnBrand + '12' }]}
+              onPress={a.onPress}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.actionText, { color: colors.textOnBrand }]}>{a.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+
+      <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
+        <PrimaryButton label="View My Trips" onPress={() => router.dismissTo('/(tabs)/trips')} />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  scroll: { paddingHorizontal: 24, alignItems: 'center', gap: 26 },
+  birdMark: { width: 76, height: 59 },
+  title: { fontFamily: 'Inter_700Bold', fontSize: 28, textAlign: 'center' },
+  subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, textAlign: 'center' },
+  timeline: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 16 },
+  timelineEnd: { alignItems: 'flex-start' },
+  timelineCode: { fontFamily: 'Inter_700Bold', fontSize: 22 },
+  timelineTime: { fontFamily: 'Inter_500Medium', fontSize: 13, marginTop: 2 },
+  timelineLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  nextSteps: { alignSelf: 'stretch', gap: 10, borderRadius: 16, padding: 16 },
+  feeNotice: {
+    alignSelf: 'stretch', flexDirection: 'row', gap: 10, alignItems: 'flex-start',
+    borderRadius: 14, borderWidth: 1, padding: 14,
+  },
+  feeNoticeText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 13.5, lineHeight: 19 },
+  nextStepsTitle: { fontFamily: 'Inter_700Bold', fontSize: 14, marginBottom: 2 },
+  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepText: { fontFamily: 'Inter_400Regular', fontSize: 14 },
+  actionRow: { flexDirection: 'row', gap: 10, alignSelf: 'stretch' },
+  actionBtn: {
+    flex: 1, borderRadius: 14, paddingVertical: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  actionText: { fontFamily: 'Inter_600SemiBold', fontSize: 12.5, textAlign: 'center', lineHeight: 17 },
+  footer: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    paddingHorizontal: 22, paddingTop: 12,
+  },
+});
