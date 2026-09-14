@@ -12,6 +12,12 @@ export interface User {
   name: string;
   phone: string;
   email?: string | null;
+  /**
+     * Member weight in kilograms, when provided.
+     * @minimum 1
+     * @maximum 500
+     */
+  weightKg: number | null;
   /** "none" marks a registered non-member who has not purchased a plan yet. */
   membershipTier: UserMembershipTier;
   linePassCount: number;

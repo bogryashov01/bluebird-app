@@ -171,6 +171,63 @@ const invalidPrefsShape = await req('/auth/me', {
 });
 check('PATCH /auth/me rejects a non-array preference', invalidPrefsShape.status === 400);
 
+// 5c. Optional account weight accepts fractional values, persists through a
+// fresh user read, and can be cleared without affecting passenger manifests.
+const validWeight = await req('/auth/me', {
+  method: 'PATCH',
+  token: jwt,
+  body: { weightKg: 72.5 },
+});
+check('PATCH /auth/me saves a fractional account weight',
+  validWeight.status === 200 && validWeight.json?.weightKg === 72.5,
+  JSON.stringify(validWeight.json));
+const meWithWeight = await req('/auth/me', { token: jwt });
+check('account weight persists through a fresh /auth/me request',
+  meWithWeight.status === 200 && meWithWeight.json?.weightKg === 72.5,
+  JSON.stringify(meWithWeight.json));
+const blankWeight = await req('/auth/me', {
+  method: 'PATCH',
+  token: jwt,
+  body: { weightKg: null },
+});
+check('PATCH /auth/me clears account weight with null',
+  blankWeight.status === 200 && blankWeight.json?.weightKg === null,
+  JSON.stringify(blankWeight.json));
+const zeroWeight = await req('/auth/me', {
+  method: 'PATCH',
+  token: jwt,
+  body: { weightKg: 0 },
+});
+check('PATCH /auth/me rejects zero account weight', zeroWeight.status === 400, JSON.stringify(zeroWeight.json));
+const nonNumericWeight = await req('/auth/me', {
+  method: 'PATCH',
+  token: jwt,
+  body: { weightKg: 'not-a-number' },
+});
+check('PATCH /auth/me rejects non-numeric account weight', nonNumericWeight.status === 400, JSON.stringify(nonNumericWeight.json));
+const overWeight = await req('/auth/me', {
+  method: 'PATCH',
+  token: jwt,
+  body: { weightKg: 501 },
+});
+check('PATCH /auth/me rejects account weight over 500 kg', overWeight.status === 400, JSON.stringify(overWeight.json));
+const maxWeight = await req('/auth/me', {
+  method: 'PATCH',
+  token: jwt,
+  body: { weightKg: 500 },
+});
+check('PATCH /auth/me accepts the 500 kg upper bound',
+  maxWeight.status === 200 && maxWeight.json?.weightKg === 500,
+  JSON.stringify(maxWeight.json));
+const omittedWeight = await req('/auth/me', {
+  method: 'PATCH',
+  token: jwt,
+  body: { name: 'Auth Tester' },
+});
+check('PATCH /auth/me leaves weight unchanged when omitted',
+  omittedWeight.status === 200 && omittedWeight.json?.weightKg === 500,
+  JSON.stringify(omittedWeight.json));
+
 // 6. Returning member: request a new code (fast-forward the cooldown via DB),
 // verify, and confirm it signs into the SAME account without creating a new one.
 await pool.query(`UPDATE login_codes SET last_sent_at = NOW() - INTERVAL '10 minutes' WHERE phone = $1`, [normalized]);
@@ -182,6 +239,9 @@ check('returning member signs into the same account', login2.status === 200 && l
 check('returning member receives an immediate session', login2.json?.outcome === 'signed_in' && typeof login2.json?.token === 'string');
 check('airport preferences persist on the member account',
   JSON.stringify(login2.json?.user?.homeAirports) === JSON.stringify(['DFW', 'DAL', 'LGA']));
+check('signed-in user response includes the saved account weight',
+  login2.json?.user?.weightKg === 500,
+  JSON.stringify(login2.json));
 
 // 7. Expired codes are rejected (age the row via DB instead of waiting 5 min)
 await pool.query(`UPDATE login_codes SET last_sent_at = NOW() - INTERVAL '10 minutes' WHERE phone = $1`, [normalized]);

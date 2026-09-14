@@ -7,8 +7,13 @@
  */
 import * as zod from 'zod';
 
+export const verifyLoginCodeResponseOneUserWeightKgMax = 500;
+export const completePhoneRegistrationResponseUserWeightKgMax = 500;
+export const getMeResponseWeightKgMax = 500;
+export const updateMeBodyWeightKgMax = 500;
 export const updateMeBodyHomeAirportsItemRegExp = new RegExp('^\\s*[A-Za-z]{3,4}\\s*$');
 export const updateMeBodyHomeAirportsMax = 20;
+export const updateMeResponseWeightKgMax = 500;
 export const joinQueueBodyTwoPassengersDefault = 1;
 export const joinQueueBodyTwoPassengersMax = 6;
 export const joinQueueBodyTwoPassengersMultipleOf = 1;
@@ -91,6 +96,9 @@ export const VerifyLoginCodeBody = zod.object({
   "referralCode": zod.string().optional().describe('Optional referral code carried from a \/join\/{code} link.')
 })
 
+
+
+
 export const VerifyLoginCodeResponse = zod.union([zod.object({
   "outcome": zod.enum(['signed_in']),
   "token": zod.string(),
@@ -99,6 +107,7 @@ export const VerifyLoginCodeResponse = zod.union([zod.object({
   "name": zod.string(),
   "phone": zod.string(),
   "email": zod.string().nullish(),
+  "weightKg": zod.number().min(1).max(verifyLoginCodeResponseOneUserWeightKgMax).nullable().describe('Member weight in kilograms, when provided.'),
   "membershipTier": zod.enum(['none', 'base', 'plus', 'concierge']).describe('\"none\" marks a registered non-member who has not purchased a plan yet.'),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
@@ -124,6 +133,9 @@ export const CompletePhoneRegistrationBody = zod.object({
   "referralCode": zod.string().optional().describe('Optional member referral code carried from a \/join\/{code} link.')
 })
 
+
+
+
 export const CompletePhoneRegistrationResponse = zod.object({
   "token": zod.string(),
   "user": zod.object({
@@ -131,6 +143,7 @@ export const CompletePhoneRegistrationResponse = zod.object({
   "name": zod.string(),
   "phone": zod.string(),
   "email": zod.string().nullish(),
+  "weightKg": zod.number().min(1).max(completePhoneRegistrationResponseUserWeightKgMax).nullable().describe('Member weight in kilograms, when provided.'),
   "membershipTier": zod.enum(['none', 'base', 'plus', 'concierge']).describe('\"none\" marks a registered non-member who has not purchased a plan yet.'),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
@@ -152,11 +165,15 @@ export const LogoutResponse = zod.object({
 /**
  * @summary Get current user
  */
+
+
+
 export const GetMeResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "phone": zod.string(),
   "email": zod.string().nullish(),
+  "weightKg": zod.number().min(1).max(getMeResponseWeightKgMax).nullable().describe('Member weight in kilograms, when provided.'),
   "membershipTier": zod.enum(['none', 'base', 'plus', 'concierge']).describe('\"none\" marks a registered non-member who has not purchased a plan yet.'),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
@@ -171,17 +188,23 @@ export const GetMeResponse = zod.object({
 
 
 
+
 export const UpdateMeBody = zod.object({
   "name": zod.string().optional(),
   "email": zod.string().optional(),
+  "weightKg": zod.number().min(1).max(updateMeBodyWeightKgMax).nullish().describe('Optional member weight in kilograms. Send null to clear the saved value.'),
   "homeAirports": zod.array(zod.string().regex(updateMeBodyHomeAirportsItemRegExp)).max(updateMeBodyHomeAirportsMax).optional().describe('Canonical airport codes to save as the member\'s preferences. Surrounding whitespace is trimmed, casing is normalized, and duplicates are removed server-side. An empty array clears all selections.')
 })
+
+
+
 
 export const UpdateMeResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "phone": zod.string(),
   "email": zod.string().nullish(),
+  "weightKg": zod.number().min(1).max(updateMeResponseWeightKgMax).nullable().describe('Member weight in kilograms, when provided.'),
   "membershipTier": zod.enum(['none', 'base', 'plus', 'concierge']).describe('\"none\" marks a registered non-member who has not purchased a plan yet.'),
   "linePassCount": zod.number(),
   "referralCode": zod.string(),

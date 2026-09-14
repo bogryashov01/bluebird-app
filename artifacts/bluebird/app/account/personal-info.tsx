@@ -15,13 +15,19 @@ export default function PersonalInfoScreen() {
 
   const [name, setName]   = React.useState(user?.name ?? '');
   const [email, setEmail] = React.useState(user?.email ?? '');
+  const [weightKg, setWeightKg] = React.useState(user?.weightKg == null ? '' : String(user.weightKg));
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState(false);
 
   const updateMutation = useUpdateMe({
     mutation: {
       onSuccess: (data: any) => {
-        if (user) updateUser({ ...user, name: data.name, email: data.email ?? null });
+        if (user) updateUser({
+          ...user,
+          name: data.name,
+          email: data.email ?? null,
+          weightKg: data.weightKg ?? null,
+        });
         setSaved(true);
         setTimeout(() => setSaved(false), 2500);
       },
@@ -32,13 +38,32 @@ export default function PersonalInfoScreen() {
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
   const dirty =
     name !== (user?.name ?? '') ||
-    email !== (user?.email ?? '');
+    email !== (user?.email ?? '') ||
+    weightKg !== (user?.weightKg == null ? '' : String(user.weightKg));
 
   const handleSave = () => {
     setErrorMsg(null);
     if (!name.trim()) { setErrorMsg('Name cannot be empty'); return; }
     if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) { setErrorMsg('Enter a valid email address'); return; }
-    updateMutation.mutate({ data: { name: name.trim(), email: email.trim() } });
+    const trimmedWeight = weightKg.trim();
+    const normalizedWeight = trimmedWeight === '' ? null : Number(trimmedWeight);
+    if (
+      trimmedWeight !== '' &&
+      (normalizedWeight === null ||
+        !Number.isFinite(normalizedWeight) ||
+        normalizedWeight < 1 ||
+        normalizedWeight > 500)
+    ) {
+      setErrorMsg('Weight must be between 1 and 500 kg');
+      return;
+    }
+    updateMutation.mutate({
+      data: {
+        name: name.trim(),
+        email: email.trim(),
+        weightKg: normalizedWeight,
+      },
+    });
   };
 
   const fieldStyle = [
@@ -83,6 +108,19 @@ export default function PersonalInfoScreen() {
         />
         <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]}>
           Your phone number is how you sign in and can't be changed here.
+        </Text>
+
+        <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Weight (kg)</Text>
+        <TextInput
+          style={fieldStyle}
+          value={weightKg}
+          onChangeText={setWeightKg}
+          placeholder="Optional"
+          placeholderTextColor={colors.mutedForegroundLight}
+          keyboardType="decimal-pad"
+        />
+        <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]}>
+          Enter a value between 1 and 500 kg.
         </Text>
 
         {errorMsg && <Text style={[styles.errorText, { color: colors.destructive }]}>{errorMsg}</Text>}

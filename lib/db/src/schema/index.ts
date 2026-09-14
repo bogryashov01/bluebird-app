@@ -8,6 +8,7 @@ export const usersTable = pgTable("users", {
   name: text("name").notNull(),
   phone: text("phone").notNull().unique(),
   email: text("email"),
+  weightKg: numeric("weight_kg", { mode: "number" }),
   membershipTier: text("membership_tier").notNull().default("base"),
   pendingTier: text("pending_tier"),
   linePassCount: integer("line_pass_count").notNull().default(0),
@@ -20,6 +21,7 @@ export const usersTable = pgTable("users", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   uniqueIndex("users_referral_code_unique").on(table.referralCode),
+  check("users_weight_positive", sql`${table.weightKg} IS NULL OR ${table.weightKg} > 0`),
 ]);
 
 export const referralRewardsTable = pgTable("referral_rewards", {

@@ -12,6 +12,7 @@ export async function ensureSchema(): Promise<void> {
       name            TEXT        NOT NULL,
       phone           TEXT        NOT NULL UNIQUE,
       email           TEXT,
+      weight_kg       NUMERIC,
       membership_tier TEXT        NOT NULL DEFAULT 'base',
       line_pass_count INTEGER     NOT NULL DEFAULT 0,
       referral_code   TEXT        NOT NULL,
@@ -23,6 +24,24 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_tier TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS home_airport TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS weight_kg NUMERIC;
+    UPDATE users SET weight_kg = NULL WHERE weight_kg IS NOT NULL AND weight_kg <= 0;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE c.conname = 'users_weight_positive'
+          AND t.relname = 'users'
+          AND n.nspname = current_schema()
+      ) THEN
+        ALTER TABLE users
+          ADD CONSTRAINT users_weight_positive
+          CHECK (weight_kg IS NULL OR weight_kg > 0);
+      END IF;
+    END $$;
     -- Convert the legacy single value exactly once. Detecting whether the new
     -- column already existed distinguishes an unmigrated account from a member
     -- who intentionally cleared their list. Retire the legacy value after it

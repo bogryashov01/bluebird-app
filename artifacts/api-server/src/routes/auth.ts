@@ -393,9 +393,9 @@ router.get("/me", authMiddleware, async (req, res) => {
 // account identifier and cannot be changed here.
 router.patch("/me", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
-  const { name, email, homeAirports } = req.body ?? {};
+  const { name, email, weightKg, homeAirports } = req.body ?? {};
 
-  const updates: { name?: string; email?: string | null; homeAirports?: string[] } = {};
+  const updates: { name?: string; email?: string | null; weightKg?: number | null; homeAirports?: string[] } = {};
   if (name !== undefined) {
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ error: "Name cannot be empty" });
@@ -411,6 +411,21 @@ router.patch("/me", authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "Enter a valid email address" });
     }
     updates.email = trimmed || null;
+  }
+  if (weightKg !== undefined) {
+    if (weightKg === null || (typeof weightKg === "string" && weightKg.trim() === "")) {
+      updates.weightKg = null;
+    } else {
+      const normalized = typeof weightKg === "number"
+        ? weightKg
+        : typeof weightKg === "string"
+          ? Number(weightKg.trim())
+          : Number.NaN;
+      if (!Number.isFinite(normalized) || normalized < 1 || normalized > 500) {
+        return res.status(400).json({ error: "Weight must be between 1 and 500 kg" });
+      }
+      updates.weightKg = normalized;
+    }
   }
   if (homeAirports !== undefined) {
     if (!Array.isArray(homeAirports)) {

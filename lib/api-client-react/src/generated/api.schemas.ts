@@ -141,6 +141,12 @@ export interface User {
   name: string;
   phone: string;
   email?: string | null;
+  /**
+     * Member weight in kilograms, when provided.
+     * @minimum 1
+     * @maximum 500
+     */
+  weightKg: number | null;
   /** "none" marks a registered non-member who has not purchased a plan yet. */
   membershipTier: UserMembershipTier;
   linePassCount: number;
@@ -217,6 +223,12 @@ export interface AuthResponse {
 export interface UpdateMeRequest {
   name?: string;
   email?: string;
+  /**
+     * Optional member weight in kilograms. Send null to clear the saved value.
+     * @minimum 1
+     * @maximum 500
+     */
+  weightKg?: number | null;
   /**
      * Canonical airport codes to save as the member's preferences. Surrounding whitespace is trimmed, casing is normalized, and duplicates are removed server-side. An empty array clears all selections.
      * @maxItems 20

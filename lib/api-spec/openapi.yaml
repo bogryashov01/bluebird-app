@@ -1221,6 +1221,12 @@ components:
           type: string
         email:
           type: string
+        weightKg:
+          type: number
+          nullable: true
+          minimum: 1
+          maximum: 500
+          description: Optional member weight in kilograms. Send null to clear the saved value.
         homeAirports:
           type: array
           maxItems: 20
@@ -1241,6 +1247,12 @@ components:
         email:
           type: string
           nullable: true
+        weightKg:
+          type: number
+          nullable: true
+          minimum: 1
+          maximum: 500
+          description: Member weight in kilograms, when provided.
         membershipTier:
           type: string
           enum: [none, base, plus, concierge]
@@ -1259,6 +1271,7 @@ components:
         - id
         - name
         - phone
+        - weightKg
         - membershipTier
         - linePassCount
         - referralCode

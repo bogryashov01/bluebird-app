@@ -10,6 +10,12 @@ export interface UpdateMeRequest {
   name?: string;
   email?: string;
   /**
+     * Optional member weight in kilograms. Send null to clear the saved value.
+     * @minimum 1
+     * @maximum 500
+     */
+  weightKg?: number | null;
+  /**
      * Canonical airport codes to save as the member's preferences. Surrounding whitespace is trimmed, casing is normalized, and duplicates are removed server-side. An empty array clears all selections.
      * @maxItems 20
      * @items.pattern ^\s*[A-Za-z]{3,4}\s*$
