@@ -54,10 +54,8 @@ function formatTime12(t: string): string {
   return `${hr}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 function infoTiles(f: any) {
-  const tiles = [{ label: 'Seats', value: `${f.seatsAvailable} available` }];
+  const tiles = [{ label: 'Seats', value: '6 available' }];
   if (f.rangeNm)      tiles.push({ label: 'Range',  value: `${Number(f.rangeNm).toLocaleString()} nm` });
-  if (f.cruiseSpeed)  tiles.push({ label: 'Speed',  value: f.cruiseSpeed });
-  if (f.destWeather)  tiles.push({ label: `Weather · ${f.toAirport}`, value: f.destWeather });
   return tiles;
 }
 
@@ -458,7 +456,7 @@ export default function FlightDetailScreen() {
           </View>
         </View>
 
-        {/* ── Info tile grid (Seats / Range / Speed / Weather) ── */}
+        {/* ── Info tile grid (Seats / Range) ── */}
         <View style={styles.amenityGrid}>
           {infoTiles(f).map((a) => (
             <View key={a.label} style={[styles.amenityTile, { backgroundColor: colors.surface }]}>
