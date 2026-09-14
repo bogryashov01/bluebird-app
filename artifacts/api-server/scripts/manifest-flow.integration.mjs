@@ -65,6 +65,41 @@ async function main() {
 
     const ownerToken = token(ids.owner);
     const otherToken = token(ids.other);
+    const initiallyEmpty = await api("GET", "/passengers", ownerToken);
+    check("saved passenger library starts empty", initiallyEmpty.status === 200 && initiallyEmpty.json.length === 0);
+    const invalidSaved = await api("POST", "/passengers", ownerToken, {
+      firstName: "Saved", lastName: "Traveler", weightKg: 0,
+    });
+    check("saved passenger weight is validated", invalidSaved.status === 400);
+    const createdSaved = await api("POST", "/passengers", ownerToken, {
+      firstName: "  Saved ", lastName: " Traveler ", phone: "(555) 010-0200",
+      email: "SAVED@example.com", weightKg: 72,
+    });
+    check("member can create a saved passenger",
+      createdSaved.status === 201 && createdSaved.json.firstName === "Saved" &&
+      createdSaved.json.email === "saved@example.com");
+    const duplicateSaved = await api("POST", "/passengers", ownerToken, {
+      firstName: "saved", lastName: "traveler", phone: "+1 555 010 0200", weightKg: 74,
+    });
+    const ownerSavedList = await api("GET", "/passengers", ownerToken);
+    check("same saved identity updates instead of duplicating",
+      duplicateSaved.status === 200 && ownerSavedList.json.length === 1 && ownerSavedList.json[0].weightKg === 74);
+    check("another member cannot see saved passenger records",
+      (await api("GET", "/passengers", otherToken)).json.length === 0);
+    check("another member cannot mutate a saved passenger",
+      (await api("PUT", `/passengers/${createdSaved.json.id}`, otherToken, {
+        firstName: "Hijack", lastName: "Attempt", weightKg: 80,
+      })).status === 404);
+    const editedSaved = await api("PUT", `/passengers/${createdSaved.json.id}`, ownerToken, {
+      firstName: "Edited", lastName: "Traveler", phone: null, email: null, weightKg: 75,
+    });
+    check("member can edit a saved passenger", editedSaved.status === 200 && editedSaved.json.firstName === "Edited");
+    check("another member cannot delete a saved passenger",
+      (await api("DELETE", `/passengers/${createdSaved.json.id}`, otherToken)).status === 404);
+    const deletedSaved = await api("DELETE", `/passengers/${createdSaved.json.id}`, ownerToken);
+    check("member can delete a saved passenger", deletedSaved.status === 200 &&
+      (await api("GET", "/passengers", ownerToken)).json.length === 0);
+
     const get = await api("GET", `/trips/${ids.trip}/manifest`, ownerToken);
     check(
       "confirmed owner starts with a primary traveler and reserved-seat limit",
@@ -123,6 +158,8 @@ async function main() {
         passengerOrder: 1,
         firstName: "Ada",
         lastName: "Lovelace",
+        phone: "+1 555 111 2222",
+        email: "ada@example.com",
         dateOfBirth: "1980-12-10",
         weightKg: 70,
         passportNumber: "MUST-NOT-PERSIST",
@@ -136,7 +173,9 @@ async function main() {
     check("saved names, birth dates, and weights are restored",
       restored.json.passengers[1].lastName === "Hopper" &&
       restored.json.passengers[0].dateOfBirth === "1980-12-10" &&
-      restored.json.passengers[0].weightKg === 70);
+      restored.json.passengers[0].weightKg === 70 &&
+      restored.json.passengers[0].phone === "+1 555 111 2222" &&
+      restored.json.passengers[0].email === "ada@example.com");
     check("passport attributes are excluded from manifest responses", !/passport|nationality|issuingCountry/i.test(JSON.stringify(restored.json)), JSON.stringify(restored.json));
 
     const submit1 = await api("POST", `/trips/${ids.trip}/manifest/submit`, ownerToken);
@@ -147,7 +186,8 @@ async function main() {
       [ids.trip],
     )).rows;
     check("only one operational update is recorded", updates.length === 1);
-    check("operations output includes names, birth dates, and weights", /Ada Lovelace; Date of birth 1980-12-10; Weight 70 kg/.test(updates[0].body));
+    check("operations output includes names, birth dates, weights, and contact details",
+      /Ada Lovelace; Date of birth 1980-12-10; Weight 70 kg; Phone \+1 555 111 2222; Email ada@example.com/.test(updates[0].body));
     check("operations output excludes passport attributes", !/passport|nationality|issuing country|MUST-NOT-PERSIST/i.test(updates[0].body), updates[0].body);
 
     const weightEdit = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
@@ -242,6 +282,7 @@ async function main() {
   } finally {
     await pool.query(`DELETE FROM manifest_operational_updates WHERE trip_id IN ($1,$2,$3,$4)`, [ids.trip, ids.petTrip, ids.maxHumanTrip, ids.maxPetTrip]).catch(() => {});
     await pool.query(`DELETE FROM trip_passengers WHERE trip_id IN ($1,$2,$3,$4)`, [ids.trip, ids.petTrip, ids.maxHumanTrip, ids.maxPetTrip]).catch(() => {});
+    await pool.query(`DELETE FROM saved_passengers WHERE user_id IN ($1,$2)`, [ids.owner, ids.other]).catch(() => {});
     await pool.query(`DELETE FROM trips WHERE id IN ($1,$2,$3,$4)`, [ids.trip, ids.petTrip, ids.maxHumanTrip, ids.maxPetTrip]).catch(() => {});
     await pool.query(`DELETE FROM queue_entries WHERE id LIKE $1`, [`%${suffix}`]).catch(() => {});
     await pool.query(`DELETE FROM flights WHERE id IN ($1,$2,$3,$4)`, [ids.domestic, ids.petFlight, ids.maxHumanFlight, ids.maxPetFlight]).catch(() => {});

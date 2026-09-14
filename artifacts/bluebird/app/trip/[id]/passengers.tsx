@@ -13,6 +13,8 @@ import { useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetTripManifest,
+  useCreateSavedPassenger,
+  useListSavedPassengers,
   useSaveTripManifest,
   useSubmitTripManifest,
   type Passenger,
@@ -52,6 +54,10 @@ export default function PassengerListScreen() {
   const { data, isLoading, isFetching, isError, error } = useGetTripManifest(id!, {
     query: { enabled: !!id && !!user, queryKey: manifestQueryKey },
   });
+  const savedPassengersQueryKey = ['/api/passengers', user?.id ?? 'signed-out'] as const;
+  const { data: savedPassengers } = useListSavedPassengers({
+    query: { enabled: !!user, queryKey: savedPassengersQueryKey },
+  });
   const [passengers, setPassengers] = useState<DraftPassenger[]>([]);
   const [pet, setPet] = useState<PetDraft>(EMPTY_PET);
   const [mode, setMode] = useState<ScreenMode>('edit');
@@ -59,6 +65,7 @@ export default function PassengerListScreen() {
   const [feedback, setFeedback] = useState('');
   const [dirty, setDirty] = useState(false);
   const [hydratedIdentity, setHydratedIdentity] = useState('');
+  const [savingPassengerIndex, setSavingPassengerIndex] = useState<number | null>(null);
   const resetIdentity = useRef('');
   const reviewAfterSave = useRef(false);
   const manifestIdentity = `${user?.id ?? 'signed-out'}:${id ?? ''}`;
@@ -148,6 +155,19 @@ export default function PassengerListScreen() {
         setFeedback(err?.data?.error || err?.message || 'Unable to submit passenger information.'),
     },
   });
+  const saveToPassengers = useCreateSavedPassenger({
+    mutation: {
+      onSuccess: () => {
+        setSavingPassengerIndex(null);
+        setFeedback('Passenger saved to your library.');
+        queryClient.invalidateQueries({ queryKey: savedPassengersQueryKey });
+      },
+      onError: (err: any) => {
+        setSavingPassengerIndex(null);
+        setFeedback(err?.data?.error || err?.message || 'Unable to save passenger to your library.');
+      },
+    },
+  });
 
   const updatePassenger = (index: number, field: keyof DraftPassenger, value: string) => {
     setDirty(true);
@@ -208,6 +228,8 @@ export default function PassengerListScreen() {
       passengerOrder: index + 1,
       firstName: passenger.firstName,
       lastName: passenger.lastName,
+      phone: passenger.phone || null,
+      email: passenger.email || null,
       dateOfBirth: passenger.dateOfBirth || null,
       weightKg: optionalMeasurement(passenger.weightKg),
     })),
@@ -221,6 +243,42 @@ export default function PassengerListScreen() {
     } : {}),
   });
   const pending = save.isPending || submit.isPending;
+  const savedPassengerFor = (passenger: DraftPassenger) =>
+    savedPassengers?.find((saved) =>
+      saved.firstName.trim().toLocaleLowerCase() === passenger.firstName.trim().toLocaleLowerCase() &&
+      saved.lastName.trim().toLocaleLowerCase() === passenger.lastName.trim().toLocaleLowerCase());
+  const passengerSaveable = (passenger: DraftPassenger) =>
+    !!passenger.firstName.trim() && !!passenger.lastName.trim() && validMeasurement(passenger.weightKg, 500);
+  const selectSavedPassenger = (index: number, saved: NonNullable<typeof savedPassengers>[number]) => {
+    setDirty(true);
+    setFeedback('');
+    setPassengers((current) => current.map((passenger, passengerIndex) =>
+      passengerIndex === index
+        ? {
+            ...passenger,
+            firstName: saved.firstName,
+            lastName: saved.lastName,
+            phone: saved.phone ?? '',
+            email: saved.email ?? '',
+            weightKg: String(saved.weightKg),
+          }
+        : passenger));
+  };
+  const savePassengerRecord = (index: number) => {
+    const passenger = passengers[index];
+    if (!passenger || !passengerSaveable(passenger)) return;
+    setSavingPassengerIndex(index);
+    setFeedback('');
+    saveToPassengers.mutate({
+      data: {
+        firstName: passenger.firstName.trim(),
+        lastName: passenger.lastName.trim(),
+        phone: passenger.phone?.trim() || null,
+        email: passenger.email?.trim() || null,
+        weightKg: Number(passenger.weightKg),
+      },
+    });
+  };
 
   const handleSave = () => {
     reviewAfterSave.current = false;
@@ -296,6 +354,11 @@ export default function PassengerListScreen() {
                     <Text style={[styles.summaryDetail, { color: colors.mutedForegroundLight }]}>
                       Weight · {passenger.weightKg} kg
                     </Text>
+                    {!!(passenger.phone || passenger.email) && (
+                      <Text style={[styles.summaryDetail, { color: colors.mutedForegroundLight }]}>
+                        {[passenger.phone, passenger.email].filter(Boolean).join(' · ')}
+                      </Text>
+                    )}
                   </View>
                 </View>
               ))}
@@ -355,9 +418,57 @@ export default function PassengerListScreen() {
                     <Feather name={passengerComplete(passenger) ? 'check-circle' : 'circle'} size={20} color={passengerComplete(passenger) ? colors.success : colors.mutedForegroundLight} />
                   )}
                 </View>
+                {!!savedPassengers?.length && (
+                  <View style={styles.savedPicker}>
+                    <Text style={[styles.label, { color: colors.mutedForegroundLight }]}>Saved passenger</Text>
+                    <View style={styles.savedPickerRow}>
+                      {savedPassengers.map((saved) => (
+                        <TouchableOpacity
+                          key={saved.id}
+                          testID={`select-saved-passenger-${index + 1}-${saved.id}`}
+                          style={[
+                            styles.savedChip,
+                            { borderColor: colors.border },
+                            savedPassengerFor(passenger)?.id === saved.id && { backgroundColor: colors.primary + '16', borderColor: colors.primary },
+                          ]}
+                          onPress={() => selectSavedPassenger(index, saved)}
+                        >
+                          <Text style={[styles.savedChipText, { color: colors.textOnSurface }]}>
+                            {saved.firstName} {saved.lastName}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    {savedPassengerFor(passenger) && (
+                      <Text style={[styles.savedHint, { color: colors.mutedForegroundLight }]}>
+                        Saved contact details and weight filled in. Date of birth is still flight-specific.
+                      </Text>
+                    )}
+                  </View>
+                )}
                 <View style={styles.row}>
                   <Field testID={`passenger-${index + 1}-first-name`} label="First name" value={passenger.firstName} onChangeText={(value: string) => updatePassenger(index, 'firstName', value)} colors={colors} />
                   <Field testID={`passenger-${index + 1}-last-name`} label="Last name" value={passenger.lastName} onChangeText={(value: string) => updatePassenger(index, 'lastName', value)} colors={colors} />
+                </View>
+                <View style={styles.row}>
+                  <Field
+                    testID={`passenger-${index + 1}-phone`}
+                    label="Phone (optional)"
+                    value={passenger.phone ?? ''}
+                    onChangeText={(value: string) => updatePassenger(index, 'phone', value)}
+                    keyboardType="phone-pad"
+                    colors={colors}
+                  />
+                  <Field
+                    testID={`passenger-${index + 1}-email`}
+                    label="Email (optional)"
+                    value={passenger.email ?? ''}
+                    onChangeText={(value: string) => updatePassenger(index, 'email', value)}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    colors={colors}
+                  />
                 </View>
                 <Field
                   label="Date of birth (YYYY-MM-DD)"
@@ -384,6 +495,19 @@ export default function PassengerListScreen() {
                     ? !validMeasurement(passenger.weightKg, 500) && 'Weight must be between 1 and 500 kg.'
                     : 'Weight is required (1–500 kg).'}
                 </Text>
+                {passengerSaveable(passenger) && !savedPassengerFor(passenger) && (
+                  <TouchableOpacity
+                    testID={`save-to-passengers-${index + 1}`}
+                    style={[styles.saveLibraryButton, { borderColor: colors.primary }]}
+                    onPress={() => savePassengerRecord(index)}
+                    disabled={savingPassengerIndex === index}
+                  >
+                    {savingPassengerIndex === index
+                      ? <ActivityIndicator size="small" color={colors.primary} />
+                      : <Feather name="bookmark" size={15} color={colors.primary} />}
+                    <Text style={[styles.saveLibraryText, { color: colors.primary }]}>Save to Passengers</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
             {editingSection !== 'pet' && canAddPassenger && (
@@ -564,12 +688,19 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   slot: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 1 },
   cardTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 16, marginTop: 3 },
+  savedPicker: { marginBottom: 10 },
+  savedPickerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  savedChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  savedChipText: { fontFamily: 'Inter_500Medium', fontSize: 12 },
+  savedHint: { fontFamily: 'Inter_400Regular', fontSize: 11.5, lineHeight: 16, marginTop: 7 },
   row: { flexDirection: 'row', gap: 10 },
   measurementRow: { flexDirection: 'row', gap: 8 },
   field: { flex: 1, marginBottom: 12 },
   label: { fontFamily: 'Inter_500Medium', fontSize: 12, marginBottom: 6 },
   input: { borderWidth: 1, borderRadius: 12, minHeight: 46, paddingHorizontal: 12, fontFamily: 'Inter_400Regular', fontSize: 15 },
   validation: { fontFamily: 'Inter_500Medium', fontSize: 12, marginTop: -5, marginBottom: 6 },
+  saveLibraryButton: { minHeight: 40, borderWidth: 1, borderRadius: 999, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 2, marginBottom: 2 },
+  saveLibraryText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   addButton: { minHeight: 48, borderWidth: 1, borderStyle: 'dashed', borderRadius: 14, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, marginBottom: 12 },
   addButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   addLimit: { marginLeft: 'auto', fontFamily: 'Inter_400Regular', fontSize: 12 },

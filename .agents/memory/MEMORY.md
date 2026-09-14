@@ -17,3 +17,4 @@
 - [Expo route utility placement](expo-route-utility-placement.md) — keep shared non-screen modules outside the Expo Router app tree to avoid false route warnings.
 - [Occupant capacity](occupant-capacity.md) — passenger and pet counts share one six-occupant ceiling; reserved passenger capacity remains the other bound.
 - [Confirmed-only flight metadata](confirmed-flight-metadata.md) — FBO fields stay out of public and waiting-flight payloads; expose them only from confirmed authenticated responses.
+- [Saved passenger identity](saved-passenger-identity.md) — dedupe member-owned reusable passengers by normalized first/last name; keep date of birth flight-specific.

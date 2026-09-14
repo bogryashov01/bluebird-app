@@ -157,6 +157,10 @@ function RootLayoutNav() {
         options={{ headerShown: true, title: 'Connect Contacts', ...headerOptions }}
       />
       <Stack.Screen
+        name="account/passengers"
+        options={{ headerShown: true, title: 'Passengers', ...headerOptions }}
+      />
+      <Stack.Screen
         name="support/help-center"
         options={{ headerShown: true, title: 'Help Center', ...headerOptions }}
       />

@@ -20,11 +20,26 @@ export const joinQueueBodyTwoPetCrateWidthInExclusiveMin = 0;
 export const joinQueueBodyTwoPetCrateWidthInMax = 200;
 export const joinQueueBodyTwoPetCrateHeightInExclusiveMin = 0;
 export const joinQueueBodyTwoPetCrateHeightInMax = 200;
+export const listSavedPassengersResponseWeightKgMax = 500;
+export const createSavedPassengerBodyFirstNameMax = 100;
+export const createSavedPassengerBodyLastNameMax = 100;
+export const createSavedPassengerBodyPhoneMax = 40;
+export const createSavedPassengerBodyEmailMax = 255;
+export const createSavedPassengerBodyWeightKgMax = 500;
+export const createSavedPassengerResponseWeightKgMax = 500;
+export const updateSavedPassengerBodyFirstNameMax = 100;
+export const updateSavedPassengerBodyLastNameMax = 100;
+export const updateSavedPassengerBodyPhoneMax = 40;
+export const updateSavedPassengerBodyEmailMax = 255;
+export const updateSavedPassengerBodyWeightKgMax = 500;
+export const updateSavedPassengerResponseWeightKgMax = 500;
 export const getTripManifestResponsePassengersItemWeightKgMax = 500;
 export const getTripManifestResponsePassengersMax = 6;
 export const saveTripManifestBodyPassengersItemPassengerOrderMultipleOf = 1;
 export const saveTripManifestBodyPassengersItemFirstNameMax = 100;
 export const saveTripManifestBodyPassengersItemLastNameMax = 100;
+export const saveTripManifestBodyPassengersItemPhoneMax = 40;
+export const saveTripManifestBodyPassengersItemEmailMax = 255;
 export const saveTripManifestBodyPassengersItemDateOfBirthRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 export const saveTripManifestBodyPassengersItemWeightKgMax = 500;
 export const saveTripManifestBodyPassengersMax = 6;
@@ -153,6 +168,7 @@ export const GetMeResponse = zod.object({
 /**
  * @summary Update current user's profile
  */
+
 
 
 export const UpdateMeBody = zod.object({
@@ -341,6 +357,11 @@ export const GetFlightMyStatusResponse = zod.object({
 /**
  * @summary Join queue for a flight
  */
+
+
+
+
+
 
 
 export const JoinQueueBody = zod.unknown().and(zod.object({
@@ -673,11 +694,116 @@ export const ListTripsResponse = zod.array(ListTripsResponseItem)
 
 
 /**
+ * @summary List the authenticated member's saved passenger records
+ */
+
+
+
+export const ListSavedPassengersResponseItem = zod.object({
+  "id": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "weightKg": zod.number().min(1).max(listSavedPassengersResponseWeightKgMax),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListSavedPassengersResponse = zod.array(ListSavedPassengersResponseItem)
+
+
+/**
+ * @summary Create or update a saved passenger by name for the authenticated member
+ */
+
+
+
+
+
+
+
+export const CreateSavedPassengerBody = zod.object({
+  "firstName": zod.string().max(createSavedPassengerBodyFirstNameMax),
+  "lastName": zod.string().max(createSavedPassengerBodyLastNameMax),
+  "phone": zod.string().max(createSavedPassengerBodyPhoneMax).nullish(),
+  "email": zod.string().max(createSavedPassengerBodyEmailMax).nullish(),
+  "weightKg": zod.number().min(1).max(createSavedPassengerBodyWeightKgMax)
+})
+
+
+
+
+export const CreateSavedPassengerResponse = zod.object({
+  "id": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "weightKg": zod.number().min(1).max(createSavedPassengerResponseWeightKgMax),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Update an authenticated member's saved passenger record
+ */
+export const UpdateSavedPassengerParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+
+
+
+
+export const UpdateSavedPassengerBody = zod.object({
+  "firstName": zod.string().max(updateSavedPassengerBodyFirstNameMax),
+  "lastName": zod.string().max(updateSavedPassengerBodyLastNameMax),
+  "phone": zod.string().max(updateSavedPassengerBodyPhoneMax).nullish(),
+  "email": zod.string().max(updateSavedPassengerBodyEmailMax).nullish(),
+  "weightKg": zod.number().min(1).max(updateSavedPassengerBodyWeightKgMax)
+})
+
+
+
+
+export const UpdateSavedPassengerResponse = zod.object({
+  "id": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "weightKg": zod.number().min(1).max(updateSavedPassengerResponseWeightKgMax),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Delete an authenticated member's saved passenger record
+ */
+export const DeleteSavedPassengerParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteSavedPassengerResponse = zod.object({
+  "success": zod.boolean()
+})
+
+
+/**
  * @summary Get the passenger manifest for an owned confirmed upcoming trip
  */
 export const GetTripManifestParams = zod.object({
   "id": zod.coerce.string()
 })
+
+
+
+
 
 
 export const GetTripManifestResponse = zod.object({
@@ -697,6 +823,8 @@ export const GetTripManifestResponse = zod.object({
   "passengerOrder": zod.number().min(1),
   "firstName": zod.string(),
   "lastName": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
   "dateOfBirth": zod.string().nullish(),
   "weightKg": zod.number().min(1).max(getTripManifestResponsePassengersItemWeightKgMax).nullish()
 })).max(getTripManifestResponsePassengersMax).describe('Human passenger roster; a pet, when present, occupies one of the six total occupants.'),
@@ -715,11 +843,25 @@ export const SaveTripManifestParams = zod.object({
 })
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 export const SaveTripManifestBody = zod.object({
   "passengers": zod.array(zod.object({
   "passengerOrder": zod.number().min(1).multipleOf(saveTripManifestBodyPassengersItemPassengerOrderMultipleOf),
   "firstName": zod.string().max(saveTripManifestBodyPassengersItemFirstNameMax),
   "lastName": zod.string().max(saveTripManifestBodyPassengersItemLastNameMax),
+  "phone": zod.string().max(saveTripManifestBodyPassengersItemPhoneMax).nullish(),
+  "email": zod.string().max(saveTripManifestBodyPassengersItemEmailMax).nullish(),
   "dateOfBirth": zod.string().regex(saveTripManifestBodyPassengersItemDateOfBirthRegExp).nullish(),
   "weightKg": zod.number().min(1).max(saveTripManifestBodyPassengersItemWeightKgMax).nullish()
 })).min(1).max(saveTripManifestBodyPassengersMax).describe('Human passenger roster. A booking is limited to six total occupants, so a booking with a pet may include at most five passengers.\n'),
@@ -730,6 +872,10 @@ export const SaveTripManifestBody = zod.object({
   "crateHeightIn": zod.number().min(1).max(saveTripManifestBodyPetCrateHeightInMax).nullish()
 }).optional()
 })
+
+
+
+
 
 
 export const SaveTripManifestResponse = zod.object({
@@ -749,6 +895,8 @@ export const SaveTripManifestResponse = zod.object({
   "passengerOrder": zod.number().min(1),
   "firstName": zod.string(),
   "lastName": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
   "dateOfBirth": zod.string().nullish(),
   "weightKg": zod.number().min(1).max(saveTripManifestResponsePassengersItemWeightKgMax).nullish()
 })).max(saveTripManifestResponsePassengersMax).describe('Human passenger roster; a pet, when present, occupies one of the six total occupants.'),
@@ -765,6 +913,10 @@ export const SaveTripManifestResponse = zod.object({
 export const SubmitTripManifestParams = zod.object({
   "id": zod.coerce.string()
 })
+
+
+
+
 
 
 export const SubmitTripManifestResponse = zod.object({
@@ -784,6 +936,8 @@ export const SubmitTripManifestResponse = zod.object({
   "passengerOrder": zod.number().min(1),
   "firstName": zod.string(),
   "lastName": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
   "dateOfBirth": zod.string().nullish(),
   "weightKg": zod.number().min(1).max(submitTripManifestResponsePassengersItemWeightKgMax).nullish()
 })).max(submitTripManifestResponsePassengersMax).describe('Human passenger roster; a pet, when present, occupies one of the six total occupants.'),
@@ -928,6 +1082,8 @@ export const MarkNotificationReadResponse = zod.object({
  */
 
 
+
+
 export const ConciergeChatBody = zod.object({
   "messages": zod.array(zod.object({
   "role": zod.enum(['user', 'assistant']),
@@ -945,6 +1101,7 @@ export const ConciergeChatResponse = zod.object({
 /**
  * @summary Load the caller's recent concierge conversation history
  */
+
 
 
 export const GetConciergeHistoryQueryParams = zod.object({
@@ -965,6 +1122,7 @@ export const GetConciergeHistoryResponse = zod.array(GetConciergeHistoryResponse
 /**
  * @summary Request human follow-up for an escalated concierge reply
  */
+
 
 
 export const RequestConciergeCallbackBody = zod.object({

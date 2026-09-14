@@ -72,6 +72,8 @@ async function manifestResponse(trip: any, flight: any, entry: any, database: an
       passengerOrder: passenger.passengerOrder,
       firstName: passenger.firstName,
       lastName: passenger.lastName,
+      phone: passenger.phone ?? null,
+      email: passenger.email ?? null,
       dateOfBirth: passenger.dateOfBirth ?? null,
       weightKg: passenger.weightKg ?? null,
     }));
@@ -188,6 +190,8 @@ router.put("/:id/manifest", authMiddleware, async (req, res) => {
     const comparable = (rows: any[]) => JSON.stringify(rows.map((p) => ({
       passengerOrder: p.passengerOrder, firstName: p.firstName.trim(), lastName: p.lastName.trim(),
       dateOfBirth: p.dateOfBirth || null,
+      phone: p.phone || null,
+      email: p.email || null,
       weightKg: p.weightKg ?? null,
     })));
     const previousPet = {
@@ -200,6 +204,8 @@ router.put("/:id/manifest", authMiddleware, async (req, res) => {
     await txDb.insert(tripPassengersTable).values(normalized.map((passenger) => ({
       id: makeId(), tripId: result.trip.id, passengerOrder: passenger.passengerOrder,
       firstName: passenger.firstName.trim(), lastName: passenger.lastName.trim(),
+      phone: passenger.phone?.trim() || null,
+      email: passenger.email?.trim().toLowerCase() || null,
       dateOfBirth: passenger.dateOfBirth || null,
       weightKg: passenger.weightKg ?? null,
     })));
@@ -243,7 +249,7 @@ router.post("/:id/manifest/submit", authMiddleware, async (req, res) => {
       `Trip: ${result.trip.id}`,
       `Flight: ${result.flight.fromAirport} → ${result.flight.toAirport} on ${result.flight.departureDate} at ${result.flight.departureTime}`,
       ...manifest.passengers.map((passenger: any) =>
-        `Passenger ${passenger.passengerOrder}: ${passenger.firstName} ${passenger.lastName}; Date of birth ${passenger.dateOfBirth}; Weight ${passenger.weightKg} kg`
+        `Passenger ${passenger.passengerOrder}: ${passenger.firstName} ${passenger.lastName}; Date of birth ${passenger.dateOfBirth}; Weight ${passenger.weightKg} kg${passenger.phone ? `; Phone ${passenger.phone}` : ""}${passenger.email ? `; Email ${passenger.email}` : ""}`
       ),
       ...(manifest.pet ? [
         `Pet: ${manifest.pet.weightLb} lb; Crate ${manifest.pet.crateLengthIn} × ${manifest.pet.crateWidthIn} × ${manifest.pet.crateHeightIn} in`,

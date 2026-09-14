@@ -85,6 +85,10 @@ export interface ErrorResponse {
   code?: string;
 }
 
+export interface SuccessResponse {
+  success: boolean;
+}
+
 export interface SignOutResponse {
   message: string;
 }
@@ -459,6 +463,8 @@ export interface Passenger {
   passengerOrder: number;
   firstName: string;
   lastName: string;
+  phone?: string | null;
+  email?: string | null;
   dateOfBirth?: string | null;
   /**
      * @minimum 1
@@ -474,6 +480,10 @@ export interface PassengerInput {
   firstName: string;
   /** @maxLength 100 */
   lastName: string;
+  /** @maxLength 40 */
+  phone?: string | null;
+  /** @maxLength 255 */
+  email?: string | null;
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
   dateOfBirth?: string | null;
   /**
@@ -514,6 +524,37 @@ export interface SavePassengerManifestRequest {
      */
   passengers: PassengerInput[];
   pet?: PetManifestInput;
+}
+
+export interface SavedPassenger {
+  id: string;
+  firstName: string;
+  lastName: string;
+  phone?: string | null;
+  email?: string | null;
+  /**
+     * @minimum 1
+     * @maximum 500
+     */
+  weightKg: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SavedPassengerInput {
+  /** @maxLength 100 */
+  firstName: string;
+  /** @maxLength 100 */
+  lastName: string;
+  /** @maxLength 40 */
+  phone?: string | null;
+  /** @maxLength 255 */
+  email?: string | null;
+  /**
+     * @minimum 1
+     * @maximum 500
+     */
+  weightKg: number;
 }
 
 export interface PetManifest {

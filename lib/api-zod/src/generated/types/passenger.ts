@@ -11,6 +11,8 @@ export interface Passenger {
   passengerOrder: number;
   firstName: string;
   lastName: string;
+  phone?: string | null;
+  email?: string | null;
   dateOfBirth?: string | null;
   /**
      * @minimum 1

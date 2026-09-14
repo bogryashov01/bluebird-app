@@ -274,6 +274,8 @@ export async function ensureSchema(): Promise<void> {
       passenger_order INTEGER NOT NULL CHECK (passenger_order > 0),
       first_name TEXT NOT NULL DEFAULT '',
       last_name TEXT NOT NULL DEFAULT '',
+      phone TEXT,
+      email TEXT,
       date_of_birth TEXT,
       weight_kg NUMERIC,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -281,6 +283,8 @@ export async function ensureSchema(): Promise<void> {
       CONSTRAINT trip_passengers_weight_positive CHECK (weight_kg IS NULL OR weight_kg > 0)
     );
     ALTER TABLE trip_passengers ADD COLUMN IF NOT EXISTS date_of_birth TEXT;
+    ALTER TABLE trip_passengers ADD COLUMN IF NOT EXISTS phone TEXT;
+    ALTER TABLE trip_passengers ADD COLUMN IF NOT EXISTS email TEXT;
     ALTER TABLE trip_passengers ADD COLUMN IF NOT EXISTS weight_kg NUMERIC;
     ALTER TABLE trip_passengers ALTER COLUMN weight_kg TYPE NUMERIC USING weight_kg::NUMERIC;
     UPDATE trip_passengers SET weight_kg = NULL WHERE weight_kg IS NOT NULL AND weight_kg <= 0;
@@ -328,6 +332,61 @@ export async function ensureSchema(): Promise<void> {
         'gi'
       )
       WHERE body ~* '; (Passport|Issuing country|Nationality|Expires)';
+
+    CREATE TABLE IF NOT EXISTS saved_passengers (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      identity_key TEXT NOT NULL,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      phone TEXT,
+      email TEXT,
+      weight_kg NUMERIC NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT saved_passengers_user_identity_unique UNIQUE (user_id, identity_key),
+      CONSTRAINT saved_passengers_weight_range CHECK (weight_kg >= 1 AND weight_kg <= 500)
+    );
+    ALTER TABLE saved_passengers ADD COLUMN IF NOT EXISTS identity_key TEXT;
+    ALTER TABLE saved_passengers ADD COLUMN IF NOT EXISTS phone TEXT;
+    ALTER TABLE saved_passengers ADD COLUMN IF NOT EXISTS email TEXT;
+    ALTER TABLE saved_passengers ADD COLUMN IF NOT EXISTS weight_kg NUMERIC;
+    ALTER TABLE saved_passengers ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+    ALTER TABLE saved_passengers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+    UPDATE saved_passengers
+      SET identity_key = lower(regexp_replace(trim(first_name) || ':' || trim(last_name), '\\s+', ' ', 'g'))
+      WHERE identity_key IS NULL OR identity_key = '';
+    UPDATE saved_passengers
+      SET weight_kg = GREATEST(1, LEAST(500, COALESCE(weight_kg, 1)))
+      WHERE weight_kg IS NULL OR weight_kg < 1 OR weight_kg > 500;
+    WITH ranked AS (
+      SELECT id, ROW_NUMBER() OVER (
+        PARTITION BY user_id, identity_key
+        ORDER BY created_at ASC, id ASC
+      ) AS row_number
+      FROM saved_passengers
+    )
+    DELETE FROM saved_passengers
+      WHERE id IN (SELECT id FROM ranked WHERE row_number > 1);
+    ALTER TABLE saved_passengers ALTER COLUMN identity_key SET NOT NULL;
+    ALTER TABLE saved_passengers ALTER COLUMN weight_kg SET NOT NULL;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'saved_passengers_user_identity_unique'
+      ) THEN
+        ALTER TABLE saved_passengers
+          ADD CONSTRAINT saved_passengers_user_identity_unique UNIQUE (user_id, identity_key);
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'saved_passengers_weight_range'
+      ) THEN
+        ALTER TABLE saved_passengers
+          ADD CONSTRAINT saved_passengers_weight_range CHECK (weight_kg >= 1 AND weight_kg <= 500);
+      END IF;
+    END $$;
 
     CREATE TABLE IF NOT EXISTS revoked_tokens (
       token_hash TEXT        PRIMARY KEY,

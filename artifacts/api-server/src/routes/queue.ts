@@ -119,7 +119,7 @@ router.post("/join", authMiddleware, async (req, res) => {
     const [flight] = await txDb
       .select()
       .from(flightsTable)
-      .where(eq(flightsTable.id, entry.flightId));
+      .where(eq(flightsTable.id, flightId));
     if (!flight) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Flight not found" });

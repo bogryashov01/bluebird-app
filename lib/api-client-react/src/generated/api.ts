@@ -48,7 +48,10 @@ import type {
   RequestCodeRequest,
   RequestCodeResponse,
   SavePassengerManifestRequest,
+  SavedPassenger,
+  SavedPassengerInput,
   SignOutResponse,
+  SuccessResponse,
   Trip,
   UpdateMeRequest,
   UpgradeMembershipRequest,
@@ -1423,6 +1426,297 @@ export function useListTrips<TData = Awaited<ReturnType<typeof listTrips>>, TErr
 
 
 
+
+export const getListSavedPassengersUrl = () => {
+
+
+
+
+  return `/api/passengers`
+}
+
+/**
+ * @summary List the authenticated member's saved passenger records
+ */
+export const listSavedPassengers = async ( options?: Parameters<typeof customFetch>[1]): Promise<SavedPassenger[]> => {
+
+  return customFetch<SavedPassenger[]>(getListSavedPassengersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSavedPassengersQueryKey = () => {
+    return [
+    `/api/passengers`
+    ] as const;
+    }
+
+
+export const getListSavedPassengersQueryOptions = <TData = Awaited<ReturnType<typeof listSavedPassengers>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSavedPassengers>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSavedPassengersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSavedPassengers>>> = ({ signal }) => listSavedPassengers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSavedPassengers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSavedPassengersQueryResult = NonNullable<Awaited<ReturnType<typeof listSavedPassengers>>>
+export type ListSavedPassengersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List the authenticated member's saved passenger records
+ */
+
+export function useListSavedPassengers<TData = Awaited<ReturnType<typeof listSavedPassengers>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSavedPassengers>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSavedPassengersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateSavedPassengerUrl = () => {
+
+
+
+
+  return `/api/passengers`
+}
+
+/**
+ * @summary Create or update a saved passenger by name for the authenticated member
+ */
+export const createSavedPassenger = async (savedPassengerInput: SavedPassengerInput, options?: Parameters<typeof customFetch>[1]): Promise<SavedPassenger> => {
+
+  return customFetch<SavedPassenger>(getCreateSavedPassengerUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(savedPassengerInput)
+  }
+);}
+
+
+
+
+
+export const getCreateSavedPassengerMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSavedPassenger>>, TError,{data: BodyType<SavedPassengerInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSavedPassenger>>, TError,{data: BodyType<SavedPassengerInput>}, TContext> => {
+
+const mutationKey = ['createSavedPassenger'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSavedPassenger>>, {data: BodyType<SavedPassengerInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSavedPassenger(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSavedPassengerMutationResult = NonNullable<Awaited<ReturnType<typeof createSavedPassenger>>>
+    export type CreateSavedPassengerMutationBody = BodyType<SavedPassengerInput>
+    export type CreateSavedPassengerMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Create or update a saved passenger by name for the authenticated member
+ */
+export const useCreateSavedPassenger = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSavedPassenger>>, TError,{data: BodyType<SavedPassengerInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSavedPassenger>>,
+        TError,
+        {data: BodyType<SavedPassengerInput>},
+        TContext
+      > => {
+      return useMutation(getCreateSavedPassengerMutationOptions(options));
+    }
+
+export const getUpdateSavedPassengerUrl = (id: string,) => {
+
+
+
+
+  return `/api/passengers/${id}`
+}
+
+/**
+ * @summary Update an authenticated member's saved passenger record
+ */
+export const updateSavedPassenger = async (id: string,
+    savedPassengerInput: SavedPassengerInput, options?: Parameters<typeof customFetch>[1]): Promise<SavedPassenger> => {
+
+  return customFetch<SavedPassenger>(getUpdateSavedPassengerUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(savedPassengerInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateSavedPassengerMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSavedPassenger>>, TError,{id: string;data: BodyType<SavedPassengerInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSavedPassenger>>, TError,{id: string;data: BodyType<SavedPassengerInput>}, TContext> => {
+
+const mutationKey = ['updateSavedPassenger'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSavedPassenger>>, {id: string;data: BodyType<SavedPassengerInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateSavedPassenger(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSavedPassengerMutationResult = NonNullable<Awaited<ReturnType<typeof updateSavedPassenger>>>
+    export type UpdateSavedPassengerMutationBody = BodyType<SavedPassengerInput>
+    export type UpdateSavedPassengerMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Update an authenticated member's saved passenger record
+ */
+export const useUpdateSavedPassenger = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSavedPassenger>>, TError,{id: string;data: BodyType<SavedPassengerInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateSavedPassenger>>,
+        TError,
+        {id: string;data: BodyType<SavedPassengerInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateSavedPassengerMutationOptions(options));
+    }
+
+export const getDeleteSavedPassengerUrl = (id: string,) => {
+
+
+
+
+  return `/api/passengers/${id}`
+}
+
+/**
+ * @summary Delete an authenticated member's saved passenger record
+ */
+export const deleteSavedPassenger = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<SuccessResponse> => {
+
+  return customFetch<SuccessResponse>(getDeleteSavedPassengerUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteSavedPassengerMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSavedPassenger>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteSavedPassenger>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteSavedPassenger'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSavedPassenger>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteSavedPassenger(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteSavedPassengerMutationResult = NonNullable<Awaited<ReturnType<typeof deleteSavedPassenger>>>
+
+    export type DeleteSavedPassengerMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Delete an authenticated member's saved passenger record
+ */
+export const useDeleteSavedPassenger = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSavedPassenger>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteSavedPassenger>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteSavedPassengerMutationOptions(options));
+    }
 
 export const getGetTripManifestUrl = (id: string,) => {
 

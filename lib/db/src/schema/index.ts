@@ -121,6 +121,8 @@ export const tripPassengersTable = pgTable("trip_passengers", {
   passengerOrder: integer("passenger_order").notNull(),
   firstName: text("first_name").notNull().default(""),
   lastName: text("last_name").notNull().default(""),
+  phone: text("phone"),
+  email: text("email"),
   dateOfBirth: text("date_of_birth"),
   weightKg: numeric("weight_kg", { mode: "number" }),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -128,6 +130,22 @@ export const tripPassengersTable = pgTable("trip_passengers", {
   uniqueIndex("trip_passengers_trip_order_unique").on(table.tripId, table.passengerOrder),
   check("trip_passengers_order_positive", sql`${table.passengerOrder} > 0`),
   check("trip_passengers_weight_positive", sql`${table.weightKg} IS NULL OR ${table.weightKg} > 0`),
+]);
+
+export const savedPassengersTable = pgTable("saved_passengers", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  identityKey: text("identity_key").notNull(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  weightKg: numeric("weight_kg", { mode: "number" }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("saved_passengers_user_identity_unique").on(table.userId, table.identityKey),
+  check("saved_passengers_weight_range", sql`${table.weightKg} >= 1 AND ${table.weightKg} <= 500`),
 ]);
 
 export const manifestOperationalUpdatesTable = pgTable("manifest_operational_updates", {
@@ -212,6 +230,7 @@ export type Flight = typeof flightsTable.$inferSelect;
 export type QueueEntry = typeof queueEntriesTable.$inferSelect;
 export type Trip = typeof tripsTable.$inferSelect;
 export type TripPassenger = typeof tripPassengersTable.$inferSelect;
+export type SavedPassenger = typeof savedPassengersTable.$inferSelect;
 export type Notification = typeof notificationsTable.$inferSelect;
 export type RevokedToken = typeof revokedTokensTable.$inferSelect;
 export type LoginCode = typeof loginCodesTable.$inferSelect;

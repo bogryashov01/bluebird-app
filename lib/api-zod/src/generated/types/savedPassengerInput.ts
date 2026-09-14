@@ -6,9 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface PassengerInput {
-  /** @minimum 1 */
-  passengerOrder: number;
+export interface SavedPassengerInput {
   /** @maxLength 100 */
   firstName: string;
   /** @maxLength 100 */
@@ -17,11 +15,9 @@ export interface PassengerInput {
   phone?: string | null;
   /** @maxLength 255 */
   email?: string | null;
-  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
-  dateOfBirth?: string | null;
   /**
      * @minimum 1
      * @maximum 500
      */
-  weightKg?: number | null;
+  weightKg: number;
 }

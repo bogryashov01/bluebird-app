@@ -507,6 +507,128 @@ paths:
                 items:
                   $ref: "#/components/schemas/Trip"
 
+  /passengers:
+    get:
+      operationId: listSavedPassengers
+      tags: [passengers]
+      summary: List the authenticated member's saved passenger records
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Saved passenger records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SavedPassenger"
+    post:
+      operationId: createSavedPassenger
+      tags: [passengers]
+      summary: Create or update a saved passenger by name for the authenticated member
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavedPassengerInput"
+      responses:
+        "201":
+          description: Saved passenger created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedPassenger"
+        "200":
+          description: Existing saved passenger updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedPassenger"
+        "400":
+          description: Invalid passenger details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Duplicate passenger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /passengers/{id}:
+    put:
+      operationId: updateSavedPassenger
+      tags: [passengers]
+      summary: Update an authenticated member's saved passenger record
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavedPassengerInput"
+      responses:
+        "200":
+          description: Updated saved passenger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedPassenger"
+        "400":
+          description: Invalid passenger details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Passenger not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Duplicate passenger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteSavedPassenger
+      tags: [passengers]
+      summary: Delete an authenticated member's saved passenger record
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Passenger deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Passenger not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /trips/{id}/manifest:
     get:
       operationId: getTripManifest
@@ -953,6 +1075,13 @@ components:
           description: Machine-readable error code (e.g. MEMBERSHIP_REQUIRED) for client-side routing.
       required:
         - error
+
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
 
     SignOutResponse:
       type: object
@@ -1519,6 +1648,12 @@ components:
         passengerOrder: { type: number, minimum: 1 }
         firstName: { type: string }
         lastName: { type: string }
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
         dateOfBirth:
           type: string
           nullable: true
@@ -1535,6 +1670,14 @@ components:
         passengerOrder: { type: number, minimum: 1, multipleOf: 1 }
         firstName: { type: string, maxLength: 100 }
         lastName: { type: string, maxLength: 100 }
+        phone:
+          type: string
+          nullable: true
+          maxLength: 40
+        email:
+          type: string
+          nullable: true
+          maxLength: 255
         dateOfBirth:
           type: string
           nullable: true
@@ -1561,6 +1704,45 @@ components:
             $ref: "#/components/schemas/PassengerInput"
         pet:
           $ref: "#/components/schemas/PetManifestInput"
+
+    SavedPassenger:
+      type: object
+      required: [id, firstName, lastName, weightKg, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        weightKg:
+          type: number
+          minimum: 1
+          maximum: 500
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    SavedPassengerInput:
+      type: object
+      required: [firstName, lastName, weightKg]
+      properties:
+        firstName: { type: string, maxLength: 100 }
+        lastName: { type: string, maxLength: 100 }
+        phone:
+          type: string
+          nullable: true
+          maxLength: 40
+        email:
+          type: string
+          nullable: true
+          maxLength: 255
+        weightKg:
+          type: number
+          minimum: 1
+          maximum: 500
 
     PetManifestInput:
       type: object

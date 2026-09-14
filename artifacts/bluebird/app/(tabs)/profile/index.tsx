@@ -134,6 +134,11 @@ export default function ProfileScreen() {
               label: 'Payment Methods',
               onPress: () => router.push('/account/payment-methods' as any),
             },
+            {
+              label: 'Passengers',
+              hint: 'saved traveler details',
+              onPress: () => router.push('/account/passengers' as any),
+            },
           ]}
         />
 
