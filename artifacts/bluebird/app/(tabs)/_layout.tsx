@@ -18,7 +18,7 @@ function NativeTabLayout({ unreadCount }: { unreadCount: number }) {
       <NativeTabs.Trigger name="index" hidden />
       <NativeTabs.Trigger name="discover/index">
         <Icon sf={{ default: 'paperplane', selected: 'paperplane.fill' }} />
-        <Label>Discover</Label>
+        <Label>Flights</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="trips/index">
         <Icon sf={{ default: 'briefcase', selected: 'briefcase.fill' }} />
@@ -78,7 +78,7 @@ function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
       <Tabs.Screen
         name="discover/index"
         options={{
-          title: 'Discover',
+          title: 'Flights',
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="airplane" tintColor={color} size={22} />

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput,
-  RefreshControl, ActivityIndicator, Platform, Image, ScrollView, ImageBackground,
+  RefreshControl, ActivityIndicator, Platform, Image, ImageBackground,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,8 +13,6 @@ import {
 } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
 import FlightMapView from '@/components/FlightMap';
-
-const FILTERS = ['All', 'This Week', 'Under 4 hrs', 'Heavy Jet', 'Near Me'];
 
 const AIRCRAFT_IMAGES: { match: RegExp; source: any }[] = [
   { match: /gulfstream|g280|challenger|falcon/i, source: require('@/assets/images/aircraft-heavy.jpg') },
@@ -47,35 +45,9 @@ function formatDateTime(f: FlightData): string {
   return `${day} · ${hours}:${mins}${ampm}`;
 }
 
-function durationHours(f: FlightData): number {
-  const [h] = f.duration.split('h');
-  return parseInt(h, 10) || 0;
-}
-
 function matchesQuery(f: FlightData, q: string): boolean {
   return [f.fromAirport, f.toAirport, f.fromCity, f.toCity, f.aircraftType]
     .some((s) => s.toLowerCase().includes(q));
-}
-
-function applyChipFilter(list: FlightData[], activeFilter: string): FlightData[] {
-  switch (activeFilter) {
-    case 'This Week': {
-      const now = new Date();
-      const weekOut = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      return list.filter((f) => {
-        const d = new Date(f.departureDate);
-        return d >= new Date(now.toDateString()) && d <= weekOut;
-      });
-    }
-    case 'Under 4 hrs':
-      return list.filter((f) => durationHours(f) < 4);
-    case 'Heavy Jet':
-      return list.filter((f) => /gulfstream|g280|challenger|falcon|global/i.test(f.aircraftType));
-    case 'Near Me':
-      return list.filter((f) => ['LAX', 'SFO', 'LAS', 'SNA', 'VNY'].includes(f.fromAirport));
-    default:
-      return list;
-  }
 }
 
 interface HeaderProps {
@@ -87,14 +59,12 @@ interface HeaderProps {
   search: string;
   onSearchChange: (t: string) => void;
   onClearSearch: () => void;
-  activeFilter: string;
-  onFilterChange: (f: string) => void;
   view: 'list' | 'map';
   onViewChange: (v: 'list' | 'map') => void;
   mapFlights: FlightData[];
   showEmpty: boolean;
-  hasActiveQueryOrFilter: boolean;
-  onResetAll: () => void;
+  hasActiveQuery: boolean;
+  onClearSearchFromEmpty: () => void;
 }
 
 /**
@@ -104,8 +74,7 @@ interface HeaderProps {
  */
 const DiscoverHeader = React.memo(function DiscoverHeader({
   colors, topPad, userName, allCount, featured, search, onSearchChange, onClearSearch,
-  activeFilter, onFilterChange, view, onViewChange, mapFlights, showEmpty,
-  hasActiveQueryOrFilter, onResetAll,
+  view, onViewChange, mapFlights, showEmpty, hasActiveQuery, onClearSearchFromEmpty,
 }: HeaderProps) {
   return (
     <View>
@@ -185,34 +154,6 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
         )}
       </View>
 
-      {/* Filter chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRow}
-        keyboardShouldPersistTaps="handled"
-      >
-        {FILTERS.map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[
-              styles.filterChip,
-              { backgroundColor: f === activeFilter ? colors.primary : colors.card },
-            ]}
-            onPress={() => onFilterChange(f)}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.filterChipText,
-              { fontFamily: 'Inter_600SemiBold' },
-              { color: f === activeFilter ? colors.primaryForeground : colors.mutedForeground },
-            ]}>
-              {f}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
       {/* List / Map toggle */}
       <View style={styles.toggleRow}>
         <TouchableOpacity
@@ -246,10 +187,10 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
             <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
               No flights match your search
             </Text>
-            {hasActiveQueryOrFilter && (
-              <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={onResetAll}>
+            {hasActiveQuery && (
+              <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={onClearSearchFromEmpty}>
                 <Text style={[styles.retryText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
-                  Clear search & filters
+                  Clear search
                 </Text>
               </TouchableOpacity>
             )}
@@ -263,10 +204,10 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
           <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
             No flights match
           </Text>
-          {hasActiveQueryOrFilter && (
-            <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={onResetAll}>
+          {hasActiveQuery && (
+            <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={onClearSearchFromEmpty}>
               <Text style={[styles.retryText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
-                Clear search & filters
+                Clear search
               </Text>
             </TouchableOpacity>
           )}
@@ -280,7 +221,6 @@ export default function DiscoverScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user, isLoading: authLoading } = useAuth();
-  const [activeFilter, setActiveFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
 
@@ -331,18 +271,17 @@ export default function DiscoverScreen() {
   const filteredFlights = React.useMemo(() => {
     let list = all.filter((f) => f.id !== featured?.id);
     if (q) list = list.filter((f) => matchesQuery(f, q));
-    return applyChipFilter(list, activeFilter);
-  }, [all, featured?.id, activeFilter, q]);
+    return list;
+  }, [all, featured?.id, q]);
 
-  // Map view respects search + filter too (featured included when it matches)
+  // Map view respects search too (featured included when it matches)
   const mapFlights = React.useMemo(() => {
     let list = all;
     if (q) list = list.filter((f) => matchesQuery(f, q));
-    return applyChipFilter(list, activeFilter);
-  }, [all, activeFilter, q]);
+    return list;
+  }, [all, q]);
 
   const onClearSearch = React.useCallback(() => setSearch(''), []);
-  const onResetAll = React.useCallback(() => { setSearch(''); setActiveFilter('All'); }, []);
 
   const renderCard = ({ item }: { item: FlightData }) => (
     <TouchableOpacity
@@ -401,14 +340,12 @@ export default function DiscoverScreen() {
               search={search}
               onSearchChange={setSearch}
               onClearSearch={onClearSearch}
-              activeFilter={activeFilter}
-              onFilterChange={setActiveFilter}
               view={view}
               onViewChange={setView}
               mapFlights={mapFlights}
               showEmpty={view === 'list' && filteredFlights.length === 0}
-              hasActiveQueryOrFilter={q.length > 0 || activeFilter !== 'All'}
-              onResetAll={onResetAll}
+              hasActiveQuery={q.length > 0}
+              onClearSearchFromEmpty={onClearSearch}
             />
           }
         />
@@ -456,11 +393,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 20, marginBottom: 16,
   },
   searchInput: { flex: 1, fontSize: 15, padding: 0 },
-
-  // Filter chips
-  filterRow: { gap: 8, paddingHorizontal: 20, paddingBottom: 18 },
-  filterChip: { paddingHorizontal: 15, paddingVertical: 9, borderRadius: 999 },
-  filterChipText: { fontSize: 13 },
 
   // List/Map toggle
   toggleRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 20, paddingBottom: 16 },
