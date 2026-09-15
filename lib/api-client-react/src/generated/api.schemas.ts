@@ -397,6 +397,9 @@ export interface QueueEntry {
   position: number;
   totalInQueue: number;
   status: QueueEntryStatus;
+  usedLinePass?: boolean;
+  usedFamilyPass?: boolean;
+  familyPassCycle?: string | null;
   createdAt: string;
   /** Append-only movement log — a 'joined' event recorded at insert time plus a 'moved' event for each position improvement. */
   movementHistory?: QueueMovementEvent[];
@@ -454,6 +457,8 @@ export interface Trip {
 export type UseLinePassResponse = QueueEntry & {
   /** The user's remaining Skip the Line pass balance after use */
   linePassCount: number;
+  /** True when the confirmed booking consumed the caller's assigned Family pool pass. */
+  usedFamilyPass?: boolean;
   /** True when the entry was already confirmed before the pass was applied — no pass was consumed */
   alreadyConfirmed?: boolean;
   /** The upcoming trip created by a successful pass redemption; absent when alreadyConfirmed is true */
@@ -638,12 +643,25 @@ export const MembershipPlanId = {
   concierge: 'concierge',
 } as const;
 
+export type MembershipPlanBillingCadence = typeof MembershipPlanBillingCadence[keyof typeof MembershipPlanBillingCadence];
+
+
+export const MembershipPlanBillingCadence = {
+  annual: 'annual',
+} as const;
+
 export interface MembershipPlan {
   id: MembershipPlanId;
   label: string;
   /** Annual membership price in US dollars. */
   priceAnnualUsd: number;
   features: string[];
+  /** Total people covered by the plan. */
+  membershipCount?: number;
+  /** Annual passes shared by the covered people. */
+  sharedAnnualPasses?: number;
+  billingCadence?: MembershipPlanBillingCadence;
+  description?: string;
 }
 
 export type MembershipTier = typeof MembershipTier[keyof typeof MembershipTier];
@@ -668,10 +686,88 @@ export const MembershipPendingTier = {
   cancelled: 'cancelled',
 } as const;
 
+export type FamilySummaryRole = typeof FamilySummaryRole[keyof typeof FamilySummaryRole];
+
+
+export const FamilySummaryRole = {
+  primary: 'primary',
+  member: 'member',
+} as const;
+
+export type FamilySummaryStatus = typeof FamilySummaryStatus[keyof typeof FamilySummaryStatus];
+
+
+export const FamilySummaryStatus = {
+  active: 'active',
+  ending: 'ending',
+} as const;
+
+export type FamilyMemberRole = typeof FamilyMemberRole[keyof typeof FamilyMemberRole];
+
+
+export const FamilyMemberRole = {
+  primary: 'primary',
+  member: 'member',
+} as const;
+
+export type FamilyMemberStatus = typeof FamilyMemberStatus[keyof typeof FamilyMemberStatus];
+
+
+export const FamilyMemberStatus = {
+  active: 'active',
+  pending: 'pending',
+  conflict: 'conflict',
+  ended: 'ended',
+} as const;
+
+export interface FamilyMember {
+  id: string;
+  userId?: string | null;
+  email: string;
+  name?: string | null;
+  role: FamilyMemberRole;
+  status: FamilyMemberStatus;
+  allocatedPasses: number;
+  usedPasses: number;
+  availablePasses: number;
+  joinedAt?: string | null;
+}
+
+export interface FamilyInvitation {
+  id: string;
+  memberId: string;
+  email: string;
+  expiresAt: string;
+  acceptanceToken?: string;
+  acceptancePath?: string;
+}
+
+export type FamilySummaryPool = {
+  total: number;
+  allocated: number;
+  available: number;
+  unallocated: number;
+  used: number;
+};
+
+export interface FamilySummary {
+  id: string;
+  role: FamilySummaryRole;
+  status: FamilySummaryStatus;
+  primaryUserId: string;
+  renewalDate: string;
+  memberLimit: number;
+  passTotal: number;
+  pool: FamilySummaryPool;
+  members: FamilyMember[];
+  pendingInvitations: FamilyInvitation[];
+}
+
 export interface Membership {
   tier: MembershipTier;
   /** Purchasable plan catalog (always present; drives the non-member join screen). */
   plans?: MembershipPlan[];
+  family?: FamilySummary;
   linePassCount: number;
   renewalDate?: string;
   /** Scheduled plan change taking effect at renewalDate. "cancelled" means the membership ends at renewal. Absent when no change is pending. */
@@ -685,6 +781,45 @@ export interface Membership {
   annualFlightAllowance: number;
   /** Completed flights in the current calendar year */
   flightsThisYear: number;
+}
+
+export interface FamilyInvitationRequest {
+  email: string;
+  linkExisting?: boolean;
+}
+
+export type FamilyInvitationResponseStatus = typeof FamilyInvitationResponseStatus[keyof typeof FamilyInvitationResponseStatus];
+
+
+export const FamilyInvitationResponseStatus = {
+  invited: 'invited',
+  linked: 'linked',
+} as const;
+
+export interface FamilyInvitationResponse {
+  status: FamilyInvitationResponseStatus;
+  invitation?: FamilyInvitation;
+  family: FamilySummary;
+}
+
+export type FamilyAcceptanceResponseStatus = typeof FamilyAcceptanceResponseStatus[keyof typeof FamilyAcceptanceResponseStatus];
+
+
+export const FamilyAcceptanceResponseStatus = {
+  accepted: 'accepted',
+} as const;
+
+export interface FamilyAcceptanceResponse {
+  status: FamilyAcceptanceResponseStatus;
+  family: FamilySummary;
+}
+
+export interface FamilyAllocationRequest {
+  /**
+     * @minimum 0
+     * @maximum 7
+     */
+  allocatedPasses: number;
 }
 
 export interface BuyPassResponse {

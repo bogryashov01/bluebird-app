@@ -39,6 +39,7 @@ export default function MembershipScreen() {
   const currentIdx = TIER_ORDER[currentTier] ?? -1;
   const nextTierId = ['base', 'plus', 'concierge'][currentIdx + 1];
   const plans: MembershipPlan[] = mem?.plans ?? [];
+  const family = mem?.family;
 
   const tierLabel = getTierLabel(currentTier, plans);
 
@@ -143,7 +144,10 @@ export default function MembershipScreen() {
 
   const totalSaved: number = mem.totalSavedUsd ?? 0;
   const lifetimeFlights: number = mem.lifetimeCompletedFlights ?? 0;
-  const linePasses: number = mem.linePassCount ?? user?.linePassCount ?? 0;
+  const familyMember = family?.members.find((member) => member.userId === user?.id);
+  const linePasses: number = familyMember
+    ? familyMember.availablePasses
+    : mem.linePassCount ?? user?.linePassCount ?? 0;
   const memberSince = user?.createdAt
     ? new Date(user.createdAt).getFullYear().toString()
     : '—';
@@ -152,6 +156,7 @@ export default function MembershipScreen() {
   const usagePct = allowance > 0 ? Math.min(usedThisYear / allowance, 1) : 0;
 
   const rows = [
+    ...(family ? [{ label: family.role === 'primary' ? 'Manage Family/Corporate' : 'View Family/Corporate', onPress: () => router.push('/membership/family' as any) }] : []),
     { label: 'AI Concierge',     onPress: () => router.push('/concierge' as any) },
     { label: 'Referral Program', onPress: () => router.push('/referral' as any) },
     { label: 'Payment Methods',  onPress: () => router.push('/account/payment-methods' as any) },
@@ -231,7 +236,7 @@ export default function MembershipScreen() {
         )}
 
         {/* ── Upgrade / status card ── */}
-        {nextTierId ? (
+        {nextTierId && !family ? (
           <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`/upgrade/${nextTierId}` as any)}>
             <LinearGradient
               colors={['#0A1128', '#1259F2']}
@@ -255,10 +260,19 @@ export default function MembershipScreen() {
             style={styles.upgradeCard}
           >
             <Text style={styles.upgradeEyebrow}>ELITE STATUS</Text>
-            <Text style={styles.upgradeTitle}>Family/Corporate</Text>
+            <Text style={styles.upgradeTitle}>{family ? 'Family/Corporate household' : 'Family/Corporate'}</Text>
             <Text style={styles.upgradeBody}>
-              You're on the highest tier. Enjoy 7 Skip the Line passes, family memberships, and dedicated support.
+              {family
+                ? family.role === 'primary'
+                  ? 'Manage four total memberships and allocate one shared pool of seven annual Skip the Line passes.'
+                  : `You have Family Plus access and ${family.members?.[0]?.availablePasses ?? 0} assigned Skip the Line passes.`
+                : "You're on the highest tier. Enjoy four memberships and seven annual Skip the Line passes."}
             </Text>
+            {family && (
+              <View style={[styles.upgradeBtn, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.upgradeBtnText, { color: '#0A1128' }]}>Open Family management</Text>
+              </View>
+            )}
           </LinearGradient>
         )}
 

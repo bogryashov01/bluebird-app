@@ -34,6 +34,11 @@ import type {
   ConciergeHistoryMessage,
   ConciergeReply,
   ErrorResponse,
+  FamilyAcceptanceResponse,
+  FamilyAllocationRequest,
+  FamilyInvitationRequest,
+  FamilyInvitationResponse,
+  FamilySummary,
   Flight,
   FlightUserStatus,
   GetConciergeHistoryParams,
@@ -2014,6 +2019,297 @@ export function useGetMembership<TData = Awaited<ReturnType<typeof getMembership
 
 
 
+
+export const getGetFamilyMembershipUrl = () => {
+
+
+
+
+  return `/api/membership/family`
+}
+
+/**
+ * @summary Get the caller's Family/Corporate membership view
+ */
+export const getFamilyMembership = async ( options?: Parameters<typeof customFetch>[1]): Promise<FamilySummary> => {
+
+  return customFetch<FamilySummary>(getGetFamilyMembershipUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFamilyMembershipQueryKey = () => {
+    return [
+    `/api/membership/family`
+    ] as const;
+    }
+
+
+export const getGetFamilyMembershipQueryOptions = <TData = Awaited<ReturnType<typeof getFamilyMembership>>, TError = ErrorType<ErrorResponse>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFamilyMembership>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFamilyMembershipQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFamilyMembership>>> = ({ signal }) => getFamilyMembership({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFamilyMembership>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFamilyMembershipQueryResult = NonNullable<Awaited<ReturnType<typeof getFamilyMembership>>>
+export type GetFamilyMembershipQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get the caller's Family/Corporate membership view
+ */
+
+export function useGetFamilyMembership<TData = Awaited<ReturnType<typeof getFamilyMembership>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFamilyMembership>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFamilyMembershipQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateFamilyInvitationUrl = () => {
+
+
+
+
+  return `/api/membership/family/invitations`
+}
+
+/**
+ * @summary Invite or link a person to the primary holder's Family/Corporate plan
+ */
+export const createFamilyInvitation = async (familyInvitationRequest: FamilyInvitationRequest, options?: Parameters<typeof customFetch>[1]): Promise<FamilyInvitationResponse> => {
+
+  return customFetch<FamilyInvitationResponse>(getCreateFamilyInvitationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(familyInvitationRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateFamilyInvitationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFamilyInvitation>>, TError,{data: BodyType<FamilyInvitationRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createFamilyInvitation>>, TError,{data: BodyType<FamilyInvitationRequest>}, TContext> => {
+
+const mutationKey = ['createFamilyInvitation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createFamilyInvitation>>, {data: BodyType<FamilyInvitationRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createFamilyInvitation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateFamilyInvitationMutationResult = NonNullable<Awaited<ReturnType<typeof createFamilyInvitation>>>
+    export type CreateFamilyInvitationMutationBody = BodyType<FamilyInvitationRequest>
+    export type CreateFamilyInvitationMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Invite or link a person to the primary holder's Family/Corporate plan
+ */
+export const useCreateFamilyInvitation = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFamilyInvitation>>, TError,{data: BodyType<FamilyInvitationRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createFamilyInvitation>>,
+        TError,
+        {data: BodyType<FamilyInvitationRequest>},
+        TContext
+      > => {
+      return useMutation(getCreateFamilyInvitationMutationOptions(options));
+    }
+
+export const getAcceptFamilyInvitationUrl = (token: string,) => {
+
+
+
+
+  return `/api/membership/family/invitations/${token}/accept`
+}
+
+/**
+ * @summary Accept a Family/Corporate invitation for the signed-in account
+ */
+export const acceptFamilyInvitation = async (token: string, options?: Parameters<typeof customFetch>[1]): Promise<FamilyAcceptanceResponse> => {
+
+  return customFetch<FamilyAcceptanceResponse>(getAcceptFamilyInvitationUrl(token),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getAcceptFamilyInvitationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptFamilyInvitation>>, TError,{token: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acceptFamilyInvitation>>, TError,{token: string}, TContext> => {
+
+const mutationKey = ['acceptFamilyInvitation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptFamilyInvitation>>, {token: string}> = (props) => {
+          const {token} = props ?? {};
+
+          return  acceptFamilyInvitation(token,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptFamilyInvitationMutationResult = NonNullable<Awaited<ReturnType<typeof acceptFamilyInvitation>>>
+
+    export type AcceptFamilyInvitationMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Accept a Family/Corporate invitation for the signed-in account
+ */
+export const useAcceptFamilyInvitation = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptFamilyInvitation>>, TError,{token: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acceptFamilyInvitation>>,
+        TError,
+        {token: string},
+        TContext
+      > => {
+      return useMutation(getAcceptFamilyInvitationMutationOptions(options));
+    }
+
+export const getUpdateFamilyMemberAllocationUrl = (memberId: string,) => {
+
+
+
+
+  return `/api/membership/family/members/${memberId}/allocation`
+}
+
+/**
+ * @summary Move unused Family/Corporate passes to a linked member
+ */
+export const updateFamilyMemberAllocation = async (memberId: string,
+    familyAllocationRequest: FamilyAllocationRequest, options?: Parameters<typeof customFetch>[1]): Promise<FamilySummary> => {
+
+  return customFetch<FamilySummary>(getUpdateFamilyMemberAllocationUrl(memberId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(familyAllocationRequest)
+  }
+);}
+
+
+
+
+
+export const getUpdateFamilyMemberAllocationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFamilyMemberAllocation>>, TError,{memberId: string;data: BodyType<FamilyAllocationRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateFamilyMemberAllocation>>, TError,{memberId: string;data: BodyType<FamilyAllocationRequest>}, TContext> => {
+
+const mutationKey = ['updateFamilyMemberAllocation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateFamilyMemberAllocation>>, {memberId: string;data: BodyType<FamilyAllocationRequest>}> = (props) => {
+          const {memberId,data} = props ?? {};
+
+          return  updateFamilyMemberAllocation(memberId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateFamilyMemberAllocationMutationResult = NonNullable<Awaited<ReturnType<typeof updateFamilyMemberAllocation>>>
+    export type UpdateFamilyMemberAllocationMutationBody = BodyType<FamilyAllocationRequest>
+    export type UpdateFamilyMemberAllocationMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Move unused Family/Corporate passes to a linked member
+ */
+export const useUpdateFamilyMemberAllocation = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFamilyMemberAllocation>>, TError,{memberId: string;data: BodyType<FamilyAllocationRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateFamilyMemberAllocation>>,
+        TError,
+        {memberId: string;data: BodyType<FamilyAllocationRequest>},
+        TContext
+      > => {
+      return useMutation(getUpdateFamilyMemberAllocationMutationOptions(options));
+    }
 
 export const getUpgradeMembershipUrl = () => {
 

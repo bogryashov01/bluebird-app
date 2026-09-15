@@ -145,6 +145,10 @@ function RootLayoutNav() {
         options={{ headerShown: true, title: 'Manage Plan', ...headerOptions }}
       />
       <Stack.Screen
+        name="membership/family"
+        options={{ headerShown: true, title: 'Family/Corporate', ...headerOptions }}
+      />
+      <Stack.Screen
         name="account/personal-info"
         options={{ headerShown: true, title: 'Personal Information', ...headerOptions }}
       />
@@ -154,7 +158,11 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="account/contacts"
-        options={{ headerShown: true, title: 'Connect Contacts', ...headerOptions }}
+        options={{ headerShown: true, title: 'Family/Corporate', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="join/family/[token]"
+        options={{ headerShown: true, title: 'Family Invitation', ...headerOptions }}
       />
       <Stack.Screen
         name="account/passengers"

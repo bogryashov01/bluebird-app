@@ -16,7 +16,7 @@ export const TIER_COLORS: Record<MembershipPlanId, string> = {
 export const TIER_TAGLINES: Record<MembershipPlanId, string> = {
   base: 'Get started with private aviation',
   plus: 'More access, more freedom',
-  concierge: 'The complete Bluebird experience',
+  concierge: 'Four memberships, one shared annual pass pool',
 };
 
 export const FALLBACK_TIER_LABELS: Record<string, string> = {

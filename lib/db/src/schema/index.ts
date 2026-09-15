@@ -24,6 +24,53 @@ export const usersTable = pgTable("users", {
   check("users_weight_positive", sql`${table.weightKg} IS NULL OR ${table.weightKg} > 0`),
 ]);
 
+export const familyPlansTable = pgTable("family_plans", {
+  id: text("id").primaryKey(),
+  primaryUserId: text("primary_user_id").notNull().references(() => usersTable.id),
+  status: text("status").notNull().default("active"),
+  passTotal: integer("pass_total").notNull().default(7),
+  renewalAt: timestamp("renewal_at").notNull(),
+  endingTier: text("ending_tier"),
+  endedAt: timestamp("ended_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("family_plans_primary_user_unique").on(table.primaryUserId),
+  check("family_plans_pass_total_seven", sql`${table.passTotal} = 7`),
+]);
+
+export const familyMembersTable = pgTable("family_members", {
+  id: text("id").primaryKey(),
+  familyPlanId: text("family_plan_id").notNull().references(() => familyPlansTable.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => usersTable.id),
+  email: text("email").notNull(),
+  role: text("role").notNull().default("member"),
+  status: text("status").notNull().default("pending"),
+  allocatedPasses: integer("allocated_passes").notNull().default(0),
+  usedPasses: integer("used_passes").notNull().default(0),
+  previousMembershipTier: text("previous_membership_tier"),
+  joinedAt: timestamp("joined_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("family_members_user_unique")
+    .on(table.userId)
+    .where(sql`${table.userId} IS NOT NULL AND ${table.status} = 'active'`),
+  uniqueIndex("family_members_plan_email_unique").on(table.familyPlanId, table.email),
+  check("family_members_allocated_nonnegative", sql`${table.allocatedPasses} >= 0`),
+  check("family_members_used_nonnegative", sql`${table.usedPasses} >= 0`),
+  check("family_members_used_within_allocation", sql`${table.usedPasses} <= ${table.allocatedPasses}`),
+]);
+
+export const familyInvitationsTable = pgTable("family_invitations", {
+  id: text("id").primaryKey(),
+  familyPlanId: text("family_plan_id").notNull().references(() => familyPlansTable.id, { onDelete: "cascade" }),
+  familyMemberId: text("family_member_id").notNull().references(() => familyMembersTable.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const referralRewardsTable = pgTable("referral_rewards", {
   id: text("id").primaryKey(),
   inviterUserId: text("inviter_user_id").notNull().references(() => usersTable.id),
@@ -69,6 +116,8 @@ export const queueEntriesTable = pgTable("queue_entries", {
   position: integer("position").notNull(),
   status: text("status").notNull().default("waiting"),
   usedLinePass: boolean("used_line_pass").notNull().default(false),
+  usedFamilyPass: boolean("used_family_pass").notNull().default(false),
+  familyPassCycle: text("family_pass_cycle"),
   passengers: integer("passengers").notNull().default(1),
   // Base members joining an international flight accept a one-time fee
   // (demo charge — recorded, never billed).
@@ -228,6 +277,9 @@ export const insertTripSchema = createInsertSchema(tripsTable).omit({ id: true, 
 export const insertNotificationSchema = createInsertSchema(notificationsTable).omit({ id: true, createdAt: true });
 
 export type User = typeof usersTable.$inferSelect;
+export type FamilyPlan = typeof familyPlansTable.$inferSelect;
+export type FamilyMember = typeof familyMembersTable.$inferSelect;
+export type FamilyInvitation = typeof familyInvitationsTable.$inferSelect;
 export type Flight = typeof flightsTable.$inferSelect;
 export type QueueEntry = typeof queueEntriesTable.$inferSelect;
 export type Trip = typeof tripsTable.$inferSelect;

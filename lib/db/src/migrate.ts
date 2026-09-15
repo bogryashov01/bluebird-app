@@ -191,6 +191,52 @@ export async function ensureSchema(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS referral_rewards_friend_unique
       ON referral_rewards (friend_user_id);
 
+    CREATE TABLE IF NOT EXISTS family_plans (
+      id TEXT PRIMARY KEY,
+      primary_user_id TEXT NOT NULL REFERENCES users(id),
+      status TEXT NOT NULL DEFAULT 'active',
+      pass_total INTEGER NOT NULL DEFAULT 7,
+      renewal_at TIMESTAMPTZ NOT NULL,
+      ending_tier TEXT,
+      ended_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT family_plans_pass_total_seven CHECK (pass_total = 7)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS family_plans_primary_user_unique
+      ON family_plans (primary_user_id);
+
+    CREATE TABLE IF NOT EXISTS family_members (
+      id TEXT PRIMARY KEY,
+      family_plan_id TEXT NOT NULL REFERENCES family_plans(id) ON DELETE CASCADE,
+      user_id TEXT REFERENCES users(id),
+      email TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member',
+      status TEXT NOT NULL DEFAULT 'pending',
+      allocated_passes INTEGER NOT NULL DEFAULT 0,
+      used_passes INTEGER NOT NULL DEFAULT 0,
+      previous_membership_tier TEXT,
+      joined_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT family_members_allocated_nonnegative CHECK (allocated_passes >= 0),
+      CONSTRAINT family_members_used_nonnegative CHECK (used_passes >= 0),
+      CONSTRAINT family_members_used_within_allocation CHECK (used_passes <= allocated_passes)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS family_members_user_unique
+      ON family_members (user_id) WHERE user_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS family_members_plan_email_unique
+      ON family_members (family_plan_id, email);
+
+    CREATE TABLE IF NOT EXISTS family_invitations (
+      id TEXT PRIMARY KEY,
+      family_plan_id TEXT NOT NULL REFERENCES family_plans(id) ON DELETE CASCADE,
+      family_member_id TEXT NOT NULL REFERENCES family_members(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      accepted_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS login_codes (
       phone        TEXT        PRIMARY KEY,
       code_hash    TEXT        NOT NULL,
@@ -250,12 +296,16 @@ export async function ensureSchema(): Promise<void> {
       position       INTEGER     NOT NULL,
       status         TEXT        NOT NULL DEFAULT 'waiting',
       used_line_pass BOOLEAN     NOT NULL DEFAULT false,
+      used_family_pass BOOLEAN   NOT NULL DEFAULT false,
+      family_pass_cycle TEXT,
       passengers     INTEGER     NOT NULL DEFAULT 1,
       movement_history JSONB     NOT NULL DEFAULT '[]'::jsonb,
       created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS passengers INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS used_family_pass BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS family_pass_cycle TEXT;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS front_notified_at TIMESTAMPTZ;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS intl_fee_accepted BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS bringing_pet BOOLEAN NOT NULL DEFAULT false;

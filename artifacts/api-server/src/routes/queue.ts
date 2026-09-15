@@ -1,6 +1,14 @@
 import { Router } from "express";
 import { db, pool } from "@workspace/db";
-import { queueEntriesTable, flightsTable, usersTable, notificationsTable, tripsTable } from "@workspace/db/schema";
+import {
+  queueEntriesTable,
+  flightsTable,
+  usersTable,
+  notificationsTable,
+  tripsTable,
+  familyMembersTable,
+  familyPlansTable,
+} from "@workspace/db/schema";
 import { eq, and, count, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@workspace/db/schema";
@@ -8,6 +16,7 @@ import { authMiddleware } from "../middlewares/auth";
 import { flightAcceptsQueueActions } from "../lib/departure";
 import { JoinQueueBody } from "@workspace/api-zod";
 import { exceedsPassengerCapacity, passengerCapacityError } from "../lib/passenger-capacity";
+import { activeFamilyMemberForUser, syncFamilyPlans } from "../lib/family";
 
 const router = Router();
 const PET_CLEANING_FEE_USD = 500;
@@ -112,6 +121,7 @@ router.post("/join", authMiddleware, async (req, res) => {
 
   const client = await pool.connect();
   try {
+    await syncFamilyPlans();
     await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
     const txDb = drizzle(client, { schema });
 
@@ -199,7 +209,25 @@ router.post("/join", authMiddleware, async (req, res) => {
     }
 
     // 3. Consume a line pass (conditional update — fails if balance is 0)
-    if (useLinePass) {
+    let usedFamilyPass = false;
+    let familyPassCycle: string | null = null;
+    let updatedPersonalPasses: number | null = null;
+    const familyMember = useLinePass ? await activeFamilyMemberForUser(userId, txDb) : null;
+    if (useLinePass && familyMember) {
+      const result = await txDb
+        .update(familyMembersTable)
+        .set({ usedPasses: sql`${familyMembersTable.usedPasses} + 1` })
+        .where(and(
+          eq(familyMembersTable.id, familyMember.member.id),
+          sql`${familyMembersTable.usedPasses} < ${familyMembersTable.allocatedPasses}`,
+        ))
+        .returning({ usedPasses: familyMembersTable.usedPasses });
+      if (result.length > 0) {
+        usedFamilyPass = true;
+        familyPassCycle = familyMember.plan.renewalAt.toISOString();
+      }
+    }
+    if (useLinePass && !usedFamilyPass) {
       const result = await txDb
         .update(usersTable)
         .set({ linePassCount: sql`${usersTable.linePassCount} - 1` })
@@ -209,6 +237,7 @@ router.post("/join", authMiddleware, async (req, res) => {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "You do not have any Skip the Line passes" });
       }
+      updatedPersonalPasses = result[0].linePassCount;
       // Note: no position shift needed — a pass join confirms immediately
       // below (atomically, in this same transaction), so the entry never
       // occupies a waiting-queue slot. If any later step fails, the whole
@@ -241,6 +270,8 @@ router.post("/join", authMiddleware, async (req, res) => {
         status: useLinePass ? "confirmed" : "waiting",
         passengers,
         usedLinePass: !!useLinePass,
+        usedFamilyPass,
+        familyPassCycle,
         intlFeeAccepted: feeApplies && !!acceptIntlFee,
         bringingPet,
         petFeeAcknowledged: bringingPet && petFeeAcknowledged === true,
@@ -310,6 +341,7 @@ router.post("/join", authMiddleware, async (req, res) => {
       ...entry,
       flight: flightForQueueResponse(flight, entry.status),
       totalInQueue: Number(totalAfterInsert),
+      ...(useLinePass ? { usedFamilyPass, linePassCount: updatedPersonalPasses } : {}),
       trip,
     });
   } catch (err: any) {
@@ -513,6 +545,7 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
 
   const client = await pool.connect();
   try {
+    await syncFamilyPlans();
     await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
     const txDb = drizzle(client, { schema });
 
@@ -612,16 +645,40 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
     }
 
     // 3. Consume a line pass (conditional update — fails if balance is 0)
-    const passResult = await txDb
-      .update(usersTable)
-      .set({ linePassCount: sql`${usersTable.linePassCount} - 1` })
-      .where(and(eq(usersTable.id, userId), sql`${usersTable.linePassCount} > 0`))
-      .returning({ linePassCount: usersTable.linePassCount });
-    if (passResult.length === 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ error: "You do not have any Skip the Line passes" });
+    const familyMember = await activeFamilyMemberForUser(userId, txDb);
+    let usedFamilyPass = false;
+    let familyPassCycle: string | null = null;
+    let linePassCount: number | null = null;
+    const familyResult = familyMember
+      ? await txDb
+          .update(familyMembersTable)
+          .set({ usedPasses: sql`${familyMembersTable.usedPasses} + 1` })
+          .where(and(
+            eq(familyMembersTable.id, familyMember.member.id),
+            sql`${familyMembersTable.usedPasses} < ${familyMembersTable.allocatedPasses}`,
+          ))
+          .returning({ usedPasses: familyMembersTable.usedPasses })
+      : [];
+    if (familyResult.length > 0) {
+      usedFamilyPass = true;
+      familyPassCycle = familyMember!.plan.renewalAt.toISOString();
     }
-    const linePassCount = passResult[0].linePassCount;
+    const passResult = !usedFamilyPass
+      ? await txDb
+          .update(usersTable)
+          .set({ linePassCount: sql`${usersTable.linePassCount} - 1` })
+          .where(and(eq(usersTable.id, userId), sql`${usersTable.linePassCount} > 0`))
+          .returning({ linePassCount: usersTable.linePassCount })
+      : [];
+    if (!usedFamilyPass && passResult.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        error: familyMember
+          ? "You do not have any Family Skip the Line passes assigned to you"
+          : "You do not have any Skip the Line passes",
+      });
+    }
+    if (!usedFamilyPass) linePassCount = (passResult[0] as { linePassCount: number }).linePassCount;
 
     // 4. Instant win — confirm this entry atomically (conditional on
     //    still-waiting as a concurrent safety net; SERIALIZABLE aborts true
@@ -629,7 +686,7 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
     //    transaction rolls back and the pass is refunded implicitly.
     const updated = await txDb
       .update(queueEntriesTable)
-      .set({ status: "confirmed", usedLinePass: true })
+      .set({ status: "confirmed", usedLinePass: true, usedFamilyPass, familyPassCycle })
       .where(
         and(
           eq(queueEntriesTable.id, entry.id),
@@ -696,6 +753,7 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
       flight: flightForQueueResponse(flight, "confirmed"),
       totalInQueue: Number(totalInQueue),
       linePassCount,
+      usedFamilyPass,
       trip,
     });
   } catch (err: any) {

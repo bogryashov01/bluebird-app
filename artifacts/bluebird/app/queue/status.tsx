@@ -12,7 +12,7 @@ import { useColors } from '@/hooks/useColors';
 import { FloatingBackButton } from '@/components/FloatingBackButton';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import { confirmDialog } from '@/lib/confirmDialog';
-import { useGetQueueStatus, useCancelQueueEntry } from '@workspace/api-client-react';
+import { useGetQueueStatus, useCancelQueueEntry, useGetMembership } from '@workspace/api-client-react';
 
 import { useAuth } from '@/context/AuthContext';
 import { observeQueueEntries } from '@/lib/queueCelebration';
@@ -235,6 +235,7 @@ export default function QueueStatusScreen() {
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { user } = useAuth();
+  const { data: membership } = useGetMembership({});
   const { entryId, flightId } = useLocalSearchParams<{ entryId?: string; flightId?: string }>();
 
   // API returns waiting + confirmed entries for the member. Poll so the
@@ -300,7 +301,8 @@ export default function QueueStatusScreen() {
         // already in the cache, so the screen re-renders to the right state.
         return;
       }
-      if ((user?.linePassCount ?? 0) > 0) {
+      const assignedFamilyPasses = membership?.family?.members.find((member) => member.userId === user?.id)?.availablePasses ?? 0;
+      if ((user?.linePassCount ?? 0) + assignedFamilyPasses > 0) {
         openPassSheet(latest);
       } else {
         router.push({ pathname: '/queue/buy-pass', params: entryParams(latest) });
@@ -342,7 +344,8 @@ export default function QueueStatusScreen() {
   const footerEntry = !needsPicker ? waitingEntries[0] : undefined;
   // Skip the Line is surfaced for every waiting entry, including position 1,
   // because queue position alone does not guarantee the seat.
-  const passCount = user?.linePassCount ?? 0;
+  const assignedFamilyPasses = membership?.family?.members.find((member) => member.userId === user?.id)?.availablePasses ?? 0;
+  const passCount = (user?.linePassCount ?? 0) + assignedFamilyPasses;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>

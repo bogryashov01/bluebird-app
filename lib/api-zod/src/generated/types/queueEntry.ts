@@ -17,6 +17,9 @@ export interface QueueEntry {
   position: number;
   totalInQueue: number;
   status: QueueEntryStatus;
+  usedLinePass?: boolean;
+  usedFamilyPass?: boolean;
+  familyPassCycle?: string | null;
   createdAt: string;
   /** Append-only movement log — a 'joined' event recorded at insert time plus a 'moved' event for each position improvement. */
   movementHistory?: QueueMovementEvent[];

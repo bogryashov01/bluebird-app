@@ -62,6 +62,8 @@ export const saveTripManifestResponsePassengersItemWeightKgMax = 500;
 export const saveTripManifestResponsePassengersMax = 6;
 export const submitTripManifestResponsePassengersItemWeightKgMax = 500;
 export const submitTripManifestResponsePassengersMax = 6;
+export const updateFamilyMemberAllocationBodyAllocatedPassesMin = 0;
+export const updateFamilyMemberAllocationBodyAllocatedPassesMax = 7;
 export const conciergeChatBodyMessagesItemContentMax = 4000;
 export const conciergeChatBodyMessagesMax = 40;
 export const getConciergeHistoryQueryLimitDefault = 50;
@@ -442,6 +444,9 @@ export const JoinQueueResponse = zod.object({
   "position": zod.number(),
   "totalInQueue": zod.number(),
   "status": zod.enum(['waiting', 'confirmed', 'cancelled', 'expired']),
+  "usedLinePass": zod.boolean().optional(),
+  "usedFamilyPass": zod.boolean().optional(),
+  "familyPassCycle": zod.string().nullish(),
   "createdAt": zod.string(),
   "movementHistory": zod.array(zod.object({
   "type": zod.enum(['joined', 'moved']),
@@ -502,6 +507,9 @@ export const GetQueueStatusResponseItem = zod.object({
   "position": zod.number(),
   "totalInQueue": zod.number(),
   "status": zod.enum(['waiting', 'confirmed', 'cancelled', 'expired']),
+  "usedLinePass": zod.boolean().optional(),
+  "usedFamilyPass": zod.boolean().optional(),
+  "familyPassCycle": zod.string().nullish(),
   "createdAt": zod.string(),
   "movementHistory": zod.array(zod.object({
   "type": zod.enum(['joined', 'moved']),
@@ -579,6 +587,9 @@ export const UseLinePassOnQueueEntryResponse = zod.object({
   "position": zod.number(),
   "totalInQueue": zod.number(),
   "status": zod.enum(['waiting', 'confirmed', 'cancelled', 'expired']),
+  "usedLinePass": zod.boolean().optional(),
+  "usedFamilyPass": zod.boolean().optional(),
+  "familyPassCycle": zod.string().nullish(),
   "createdAt": zod.string(),
   "movementHistory": zod.array(zod.object({
   "type": zod.enum(['joined', 'moved']),
@@ -599,6 +610,7 @@ export const UseLinePassOnQueueEntryResponse = zod.object({
   "petCrateHeightIn": zod.number().nullable().describe('Pet crate height in inches.')
 }).and(zod.object({
   "linePassCount": zod.number().describe('The user\'s remaining Skip the Line pass balance after use'),
+  "usedFamilyPass": zod.boolean().optional().describe('True when the confirmed booking consumed the caller\'s assigned Family pool pass.'),
   "alreadyConfirmed": zod.boolean().optional().describe('True when the entry was already confirmed before the pass was applied — no pass was consumed'),
   "trip": zod.object({
   "id": zod.string(),
@@ -1010,8 +1022,48 @@ export const GetMembershipResponse = zod.object({
   "id": zod.enum(['base', 'plus', 'concierge']),
   "label": zod.string(),
   "priceAnnualUsd": zod.number().describe('Annual membership price in US dollars.'),
-  "features": zod.array(zod.string())
+  "features": zod.array(zod.string()),
+  "membershipCount": zod.number().int().optional().describe('Total people covered by the plan.'),
+  "sharedAnnualPasses": zod.number().int().optional().describe('Annual passes shared by the covered people.'),
+  "billingCadence": zod.enum(['annual']).optional(),
+  "description": zod.string().optional()
 })).optional().describe('Purchasable plan catalog (always present; drives the non-member join screen).'),
+  "family": zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'ending']),
+  "primaryUserId": zod.string(),
+  "renewalDate": zod.string(),
+  "memberLimit": zod.number().int(),
+  "passTotal": zod.number().int(),
+  "pool": zod.object({
+  "total": zod.number().int(),
+  "allocated": zod.number().int(),
+  "available": zod.number().int(),
+  "unallocated": zod.number().int(),
+  "used": zod.number().int()
+}),
+  "members": zod.array(zod.object({
+  "id": zod.string(),
+  "userId": zod.string().nullish(),
+  "email": zod.string(),
+  "name": zod.string().nullish(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'pending', 'conflict', 'ended']),
+  "allocatedPasses": zod.number().int(),
+  "usedPasses": zod.number().int(),
+  "availablePasses": zod.number().int(),
+  "joinedAt": zod.string().nullish()
+})),
+  "pendingInvitations": zod.array(zod.object({
+  "id": zod.string(),
+  "memberId": zod.string(),
+  "email": zod.string(),
+  "expiresAt": zod.string(),
+  "acceptanceToken": zod.string().optional(),
+  "acceptancePath": zod.string().optional()
+}))
+}).optional(),
   "linePassCount": zod.number(),
   "renewalDate": zod.string().optional(),
   "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),
@@ -1020,6 +1072,206 @@ export const GetMembershipResponse = zod.object({
   "lifetimeCompletedFlights": zod.number().describe('Total completed Bluebird flights across the member\'s account lifetime'),
   "annualFlightAllowance": zod.number().describe('The tier\'s annual flight allowance'),
   "flightsThisYear": zod.number().describe('Completed flights in the current calendar year')
+})
+
+
+/**
+ * @summary Get the caller's Family/Corporate membership view
+ */
+export const GetFamilyMembershipResponse = zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'ending']),
+  "primaryUserId": zod.string(),
+  "renewalDate": zod.string(),
+  "memberLimit": zod.number().int(),
+  "passTotal": zod.number().int(),
+  "pool": zod.object({
+  "total": zod.number().int(),
+  "allocated": zod.number().int(),
+  "available": zod.number().int(),
+  "unallocated": zod.number().int(),
+  "used": zod.number().int()
+}),
+  "members": zod.array(zod.object({
+  "id": zod.string(),
+  "userId": zod.string().nullish(),
+  "email": zod.string(),
+  "name": zod.string().nullish(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'pending', 'conflict', 'ended']),
+  "allocatedPasses": zod.number().int(),
+  "usedPasses": zod.number().int(),
+  "availablePasses": zod.number().int(),
+  "joinedAt": zod.string().nullish()
+})),
+  "pendingInvitations": zod.array(zod.object({
+  "id": zod.string(),
+  "memberId": zod.string(),
+  "email": zod.string(),
+  "expiresAt": zod.string(),
+  "acceptanceToken": zod.string().optional(),
+  "acceptancePath": zod.string().optional()
+}))
+})
+
+
+/**
+ * @summary Invite or link a person to the primary holder's Family/Corporate plan
+ */
+export const createFamilyInvitationBodyLinkExistingDefault = false;
+
+export const CreateFamilyInvitationBody = zod.object({
+  "email": zod.string(),
+  "linkExisting": zod.boolean().default(createFamilyInvitationBodyLinkExistingDefault)
+})
+
+export const CreateFamilyInvitationResponse = zod.object({
+  "status": zod.enum(['invited', 'linked']),
+  "invitation": zod.object({
+  "id": zod.string(),
+  "memberId": zod.string(),
+  "email": zod.string(),
+  "expiresAt": zod.string(),
+  "acceptanceToken": zod.string().optional(),
+  "acceptancePath": zod.string().optional()
+}).optional(),
+  "family": zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'ending']),
+  "primaryUserId": zod.string(),
+  "renewalDate": zod.string(),
+  "memberLimit": zod.number().int(),
+  "passTotal": zod.number().int(),
+  "pool": zod.object({
+  "total": zod.number().int(),
+  "allocated": zod.number().int(),
+  "available": zod.number().int(),
+  "unallocated": zod.number().int(),
+  "used": zod.number().int()
+}),
+  "members": zod.array(zod.object({
+  "id": zod.string(),
+  "userId": zod.string().nullish(),
+  "email": zod.string(),
+  "name": zod.string().nullish(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'pending', 'conflict', 'ended']),
+  "allocatedPasses": zod.number().int(),
+  "usedPasses": zod.number().int(),
+  "availablePasses": zod.number().int(),
+  "joinedAt": zod.string().nullish()
+})),
+  "pendingInvitations": zod.array(zod.object({
+  "id": zod.string(),
+  "memberId": zod.string(),
+  "email": zod.string(),
+  "expiresAt": zod.string(),
+  "acceptanceToken": zod.string().optional(),
+  "acceptancePath": zod.string().optional()
+}))
+})
+})
+
+
+/**
+ * @summary Accept a Family/Corporate invitation for the signed-in account
+ */
+export const AcceptFamilyInvitationParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const AcceptFamilyInvitationResponse = zod.object({
+  "status": zod.enum(['accepted']),
+  "family": zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'ending']),
+  "primaryUserId": zod.string(),
+  "renewalDate": zod.string(),
+  "memberLimit": zod.number().int(),
+  "passTotal": zod.number().int(),
+  "pool": zod.object({
+  "total": zod.number().int(),
+  "allocated": zod.number().int(),
+  "available": zod.number().int(),
+  "unallocated": zod.number().int(),
+  "used": zod.number().int()
+}),
+  "members": zod.array(zod.object({
+  "id": zod.string(),
+  "userId": zod.string().nullish(),
+  "email": zod.string(),
+  "name": zod.string().nullish(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'pending', 'conflict', 'ended']),
+  "allocatedPasses": zod.number().int(),
+  "usedPasses": zod.number().int(),
+  "availablePasses": zod.number().int(),
+  "joinedAt": zod.string().nullish()
+})),
+  "pendingInvitations": zod.array(zod.object({
+  "id": zod.string(),
+  "memberId": zod.string(),
+  "email": zod.string(),
+  "expiresAt": zod.string(),
+  "acceptanceToken": zod.string().optional(),
+  "acceptancePath": zod.string().optional()
+}))
+})
+})
+
+
+/**
+ * @summary Move unused Family/Corporate passes to a linked member
+ */
+export const UpdateFamilyMemberAllocationParams = zod.object({
+  "memberId": zod.coerce.string()
+})
+
+
+
+
+export const UpdateFamilyMemberAllocationBody = zod.object({
+  "allocatedPasses": zod.number().int().min(updateFamilyMemberAllocationBodyAllocatedPassesMin).max(updateFamilyMemberAllocationBodyAllocatedPassesMax)
+})
+
+export const UpdateFamilyMemberAllocationResponse = zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'ending']),
+  "primaryUserId": zod.string(),
+  "renewalDate": zod.string(),
+  "memberLimit": zod.number().int(),
+  "passTotal": zod.number().int(),
+  "pool": zod.object({
+  "total": zod.number().int(),
+  "allocated": zod.number().int(),
+  "available": zod.number().int(),
+  "unallocated": zod.number().int(),
+  "used": zod.number().int()
+}),
+  "members": zod.array(zod.object({
+  "id": zod.string(),
+  "userId": zod.string().nullish(),
+  "email": zod.string(),
+  "name": zod.string().nullish(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'pending', 'conflict', 'ended']),
+  "allocatedPasses": zod.number().int(),
+  "usedPasses": zod.number().int(),
+  "availablePasses": zod.number().int(),
+  "joinedAt": zod.string().nullish()
+})),
+  "pendingInvitations": zod.array(zod.object({
+  "id": zod.string(),
+  "memberId": zod.string(),
+  "email": zod.string(),
+  "expiresAt": zod.string(),
+  "acceptanceToken": zod.string().optional(),
+  "acceptancePath": zod.string().optional()
+}))
 })
 
 
@@ -1036,8 +1288,48 @@ export const UpgradeMembershipResponse = zod.object({
   "id": zod.enum(['base', 'plus', 'concierge']),
   "label": zod.string(),
   "priceAnnualUsd": zod.number().describe('Annual membership price in US dollars.'),
-  "features": zod.array(zod.string())
+  "features": zod.array(zod.string()),
+  "membershipCount": zod.number().int().optional().describe('Total people covered by the plan.'),
+  "sharedAnnualPasses": zod.number().int().optional().describe('Annual passes shared by the covered people.'),
+  "billingCadence": zod.enum(['annual']).optional(),
+  "description": zod.string().optional()
 })).optional().describe('Purchasable plan catalog (always present; drives the non-member join screen).'),
+  "family": zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'ending']),
+  "primaryUserId": zod.string(),
+  "renewalDate": zod.string(),
+  "memberLimit": zod.number().int(),
+  "passTotal": zod.number().int(),
+  "pool": zod.object({
+  "total": zod.number().int(),
+  "allocated": zod.number().int(),
+  "available": zod.number().int(),
+  "unallocated": zod.number().int(),
+  "used": zod.number().int()
+}),
+  "members": zod.array(zod.object({
+  "id": zod.string(),
+  "userId": zod.string().nullish(),
+  "email": zod.string(),
+  "name": zod.string().nullish(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'pending', 'conflict', 'ended']),
+  "allocatedPasses": zod.number().int(),
+  "usedPasses": zod.number().int(),
+  "availablePasses": zod.number().int(),
+  "joinedAt": zod.string().nullish()
+})),
+  "pendingInvitations": zod.array(zod.object({
+  "id": zod.string(),
+  "memberId": zod.string(),
+  "email": zod.string(),
+  "expiresAt": zod.string(),
+  "acceptanceToken": zod.string().optional(),
+  "acceptancePath": zod.string().optional()
+}))
+}).optional(),
   "linePassCount": zod.number(),
   "renewalDate": zod.string().optional(),
   "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),
@@ -1071,8 +1363,48 @@ export const ChangeMembershipResponse = zod.object({
   "id": zod.enum(['base', 'plus', 'concierge']),
   "label": zod.string(),
   "priceAnnualUsd": zod.number().describe('Annual membership price in US dollars.'),
-  "features": zod.array(zod.string())
+  "features": zod.array(zod.string()),
+  "membershipCount": zod.number().int().optional().describe('Total people covered by the plan.'),
+  "sharedAnnualPasses": zod.number().int().optional().describe('Annual passes shared by the covered people.'),
+  "billingCadence": zod.enum(['annual']).optional(),
+  "description": zod.string().optional()
 })).optional().describe('Purchasable plan catalog (always present; drives the non-member join screen).'),
+  "family": zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'ending']),
+  "primaryUserId": zod.string(),
+  "renewalDate": zod.string(),
+  "memberLimit": zod.number().int(),
+  "passTotal": zod.number().int(),
+  "pool": zod.object({
+  "total": zod.number().int(),
+  "allocated": zod.number().int(),
+  "available": zod.number().int(),
+  "unallocated": zod.number().int(),
+  "used": zod.number().int()
+}),
+  "members": zod.array(zod.object({
+  "id": zod.string(),
+  "userId": zod.string().nullish(),
+  "email": zod.string(),
+  "name": zod.string().nullish(),
+  "role": zod.enum(['primary', 'member']),
+  "status": zod.enum(['active', 'pending', 'conflict', 'ended']),
+  "allocatedPasses": zod.number().int(),
+  "usedPasses": zod.number().int(),
+  "availablePasses": zod.number().int(),
+  "joinedAt": zod.string().nullish()
+})),
+  "pendingInvitations": zod.array(zod.object({
+  "id": zod.string(),
+  "memberId": zod.string(),
+  "email": zod.string(),
+  "expiresAt": zod.string(),
+  "acceptanceToken": zod.string().optional(),
+  "acceptancePath": zod.string().optional()
+}))
+}).optional(),
   "linePassCount": zod.number(),
   "renewalDate": zod.string().optional(),
   "pendingTier": zod.enum(['base', 'plus', 'cancelled']).optional().describe('Scheduled plan change taking effect at renewalDate. \"cancelled\" means the membership ends at renewal. Absent when no change is pending.\n'),

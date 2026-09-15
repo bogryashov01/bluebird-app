@@ -7,7 +7,7 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
-import { useListNotifications } from '@workspace/api-client-react';
+import { useGetMembership, useListNotifications } from '@workspace/api-client-react';
 import type { Notification } from '@workspace/api-client-react';
 import { notificationRoute } from '@/lib/notificationRoute';
 import { SettingsGroup } from '@/components/SettingsGroup';
@@ -70,6 +70,7 @@ export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const { preference } = useTheme();
   const [appearanceOpen, setAppearanceOpen] = React.useState(false);
+  const { data: membership } = useGetMembership({});
 
   const topPad    = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -126,9 +127,9 @@ export default function ProfileScreen() {
               onPress: () => router.push('/account/personal-info' as any),
             },
             {
-              label: 'Connect Contacts',
-              hint: 'find & invite members',
-              onPress: () => router.push('/account/contacts' as any),
+              label: membership?.family ? 'Manage Family/Corporate' : 'Family/Corporate',
+              hint: membership?.family ? 'members & shared passes' : 'household membership',
+              onPress: () => router.push('/membership/family' as any),
             },
             {
               label: 'Payment Methods',

@@ -32,7 +32,8 @@ export default function UpgradeScreen() {
         tagline: TIER_TAGLINES[plan.id],
         color: TIER_COLORS[plan.id],
         features: plan.features,
-        passes: plan.id === 'plus' ? 5 : plan.id === 'concierge' ? 7 : 0,
+         passes: plan.id === 'plus' ? 5 : 0,
+         familyPasses: plan.id === 'concierge' ? 7 : 0,
       }
     : undefined;
   const wasNonMember = user?.membershipTier === 'none';
@@ -75,7 +76,9 @@ export default function UpgradeScreen() {
         </View>
         <Text style={[styles.successTitle, { color: colors.textOnSurface }]}>Welcome to {info.label}!</Text>
         <Text style={[styles.successBody, { color: colors.mutedForegroundLight }]}>
-          {info.passes > 0
+          {info.familyPasses > 0
+            ? 'Your Family/Corporate membership is active. Seven annual Skip the Line passes are available in the shared Family pool.'
+            : info.passes > 0
             ? `Your membership is active. ${info.passes} Skip the Line passes have been added to your account.`
             : 'Your membership is active. You can now join the queue for any flight.'}
         </Text>
@@ -137,7 +140,9 @@ export default function UpgradeScreen() {
           </View>
         </View>
         <Text style={[styles.demoNote, { color: colors.mutedForegroundLight }]}>
-          Demo checkout — no real payment will be charged.
+          {info.label === 'Family/Corporate'
+            ? 'Family/Corporate covers four total memberships and one shared pool of seven annual passes. Demo checkout — no real payment will be charged.'
+            : 'Demo checkout — no real payment will be charged.'}
         </Text>
 
         {errorMsg && (

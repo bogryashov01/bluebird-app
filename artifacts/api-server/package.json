@@ -14,6 +14,7 @@
     "test:airport-catalog": "pnpm exec esbuild scripts/airport-catalog.integration.mjs --bundle --platform=node --format=esm --outfile=scripts/.airport-catalog.test.mjs && node scripts/.airport-catalog.test.mjs; status=$?; rm -f scripts/.airport-catalog.test.mjs; exit $status",
     "test:sms-provider": "node scripts/sms-provider.integration.mjs",
     "test:queue-flow": "pnpm exec esbuild scripts/queue-flow.integration.mjs --bundle --platform=node --format=cjs --outfile=scripts/.queue-flow.test.cjs && node scripts/.queue-flow.test.cjs; status=$?; rm -f scripts/.queue-flow.test.cjs; exit $status",
+    "test:family-flow": "pnpm exec esbuild scripts/family-flow.integration.mjs --bundle --platform=node --format=cjs --outfile=scripts/.family-flow.test.cjs && node scripts/.family-flow.test.cjs; status=$?; rm -f scripts/.family-flow.test.cjs; exit $status",
     "test:seed-restoration": "pnpm exec esbuild scripts/seed-restoration.integration.mjs --bundle --platform=node --format=cjs --outfile=scripts/.seed-restoration.test.cjs && NODE_ENV=production node scripts/.seed-restoration.test.cjs; status=$?; rm -f scripts/.seed-restoration.test.cjs; exit $status",
     "test:concierge-guidance": "pnpm exec esbuild scripts/concierge-guidance.integration.mjs --bundle --platform=node --format=esm --outfile=scripts/.concierge-guidance.test.mjs && node scripts/.concierge-guidance.test.mjs; status=$?; rm -f scripts/.concierge-guidance.test.mjs; exit $status",
     "test:concierge-callback": "NODE_ENV=development node scripts/concierge-callback.integration.mjs",

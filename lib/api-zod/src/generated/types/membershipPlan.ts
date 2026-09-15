@@ -5,6 +5,7 @@
  * Bluebird private aviation API
  * OpenAPI spec version: 0.1.0
  */
+import type { MembershipPlanBillingCadence } from './membershipPlanBillingCadence';
 import type { MembershipPlanId } from './membershipPlanId';
 
 export interface MembershipPlan {
@@ -13,4 +14,10 @@ export interface MembershipPlan {
   /** Annual membership price in US dollars. */
   priceAnnualUsd: number;
   features: string[];
+  /** Total people covered by the plan. */
+  membershipCount?: number;
+  /** Annual passes shared by the covered people. */
+  sharedAnnualPasses?: number;
+  billingCadence?: MembershipPlanBillingCadence;
+  description?: string;
 }

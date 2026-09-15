@@ -129,6 +129,9 @@ export default function ManagePlanScreen() {
           <Text style={[styles.planLabel, { color: colors.primaryForeground }]}>Bluebird {meta.label}</Text>
           <Text style={[styles.planPrice, { color: colors.primaryForeground + 'E6' }]}>{meta.price}</Text>
           <Text style={[styles.planSub, { color: colors.primaryForeground + 'BF' }]}>Renews {renewal} · Annual billing, cancel anytime</Text>
+          {currentTier === 'concierge' && (
+            <Text style={[styles.planSub, { color: colors.primaryForeground + 'BF' }]}>Four memberships · seven annual passes shared by the household</Text>
+          )}
         </View>
 
         {/* Pending change banner */}
@@ -196,7 +199,7 @@ export default function ManagePlanScreen() {
               </TouchableOpacity>
             </View>
             <Text style={[styles.note, { color: colors.mutedForegroundLight }]}>
-              Memberships bill annually. Changes take effect at your next renewal — no partial-year charges.
+              Memberships bill annually. Family/Corporate passes expire at renewal, and linked members lose Family access if the plan ends. Changes take effect at your next renewal — no partial-year charges.
             </Text>
           </>
         )}
