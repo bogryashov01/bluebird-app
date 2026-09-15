@@ -7,6 +7,7 @@
  */
 import type { Flight } from './flight';
 import type { QueueEntryStatus } from './queueEntryStatus';
+import type { QueueMember } from './queueMember';
 import type { QueueMovementEvent } from './queueMovementEvent';
 
 export interface QueueEntry {
@@ -19,6 +20,8 @@ export interface QueueEntry {
   createdAt: string;
   /** Append-only movement log — a 'joined' event recorded at insert time plus a 'moved' event for each position improvement. */
   movementHistory?: QueueMovementEvent[];
+  /** Privacy-safe initials and positions for active waiting members on this entry's flight. Returned by queue status only. */
+  queueMembers?: QueueMember[];
   bringingPet: boolean;
   petFeeAcknowledged: boolean;
   /** Pet weight in pounds. */

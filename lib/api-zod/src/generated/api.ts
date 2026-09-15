@@ -25,6 +25,12 @@ export const joinQueueBodyTwoPetCrateWidthInExclusiveMin = 0;
 export const joinQueueBodyTwoPetCrateWidthInMax = 200;
 export const joinQueueBodyTwoPetCrateHeightInExclusiveMin = 0;
 export const joinQueueBodyTwoPetCrateHeightInMax = 200;
+export const joinQueueResponseQueueMembersItemInitialsMax = 2;
+export const joinQueueResponseQueueMembersItemInitialsRegExp = new RegExp('^[A-Z]{1,2}$');
+export const getQueueStatusResponseQueueMembersItemInitialsMax = 2;
+export const getQueueStatusResponseQueueMembersItemInitialsRegExp = new RegExp('^[A-Z]{1,2}$');
+export const useLinePassOnQueueEntryResponseOneQueueMembersItemInitialsMax = 2;
+export const useLinePassOnQueueEntryResponseOneQueueMembersItemInitialsRegExp = new RegExp('^[A-Z]{1,2}$');
 export const listSavedPassengersResponseWeightKgMax = 500;
 export const createSavedPassengerBodyFirstNameMax = 100;
 export const createSavedPassengerBodyLastNameMax = 100;
@@ -400,6 +406,10 @@ export const JoinQueueBody = zod.unknown().and(zod.object({
   "petCrateHeightIn": zod.number().gt(joinQueueBodyTwoPetCrateHeightInExclusiveMin).max(joinQueueBodyTwoPetCrateHeightInMax).optional().describe('Pet crate height in inches; optional at queue join and collected later in the passenger manifest.')
 }))
 
+
+
+
+
 export const JoinQueueResponse = zod.object({
   "id": zod.string(),
   "flightId": zod.string(),
@@ -440,6 +450,10 @@ export const JoinQueueResponse = zod.object({
   "to": zod.number().optional().describe('New position (moved events only).'),
   "at": zod.string().describe('UTC ISO-8601 timestamp of the event.')
 })).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.'),
+  "queueMembers": zod.array(zod.object({
+  "initials": zod.string().min(1).max(joinQueueResponseQueueMembersItemInitialsMax).regex(joinQueueResponseQueueMembersItemInitialsRegExp).describe('One or two uppercase initials derived from the member\'s name.'),
+  "position": zod.number().int().describe('Current position in the selected flight\'s waiting queue.')
+}).describe('Privacy-safe representation of an active waiting queue member.')).optional().describe('Privacy-safe initials and positions for active waiting members on this entry\'s flight. Returned by queue status only.'),
   "bringingPet": zod.boolean(),
   "petFeeAcknowledged": zod.boolean(),
   "petWeightLbs": zod.number().nullable().describe('Pet weight in pounds.'),
@@ -452,6 +466,10 @@ export const JoinQueueResponse = zod.object({
 /**
  * @summary Get user queue status
  */
+
+
+
+
 export const GetQueueStatusResponseItem = zod.object({
   "id": zod.string(),
   "flightId": zod.string(),
@@ -492,6 +510,10 @@ export const GetQueueStatusResponseItem = zod.object({
   "to": zod.number().optional().describe('New position (moved events only).'),
   "at": zod.string().describe('UTC ISO-8601 timestamp of the event.')
 })).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.'),
+  "queueMembers": zod.array(zod.object({
+  "initials": zod.string().min(1).max(getQueueStatusResponseQueueMembersItemInitialsMax).regex(getQueueStatusResponseQueueMembersItemInitialsRegExp).describe('One or two uppercase initials derived from the member\'s name.'),
+  "position": zod.number().int().describe('Current position in the selected flight\'s waiting queue.')
+}).describe('Privacy-safe representation of an active waiting queue member.')).optional().describe('Privacy-safe initials and positions for active waiting members on this entry\'s flight. Returned by queue status only.'),
   "bringingPet": zod.boolean(),
   "petFeeAcknowledged": zod.boolean(),
   "petWeightLbs": zod.number().nullable().describe('Pet weight in pounds.'),
@@ -520,6 +542,10 @@ export const CancelQueueEntryResponse = zod.object({
 export const UseLinePassOnQueueEntryParams = zod.object({
   "id": zod.coerce.string()
 })
+
+
+
+
 
 export const UseLinePassOnQueueEntryResponse = zod.object({
   "id": zod.string(),
@@ -561,6 +587,10 @@ export const UseLinePassOnQueueEntryResponse = zod.object({
   "to": zod.number().optional().describe('New position (moved events only).'),
   "at": zod.string().describe('UTC ISO-8601 timestamp of the event.')
 })).optional().describe('Append-only movement log — a \'joined\' event recorded at insert time plus a \'moved\' event for each position improvement.'),
+  "queueMembers": zod.array(zod.object({
+  "initials": zod.string().min(1).max(useLinePassOnQueueEntryResponseOneQueueMembersItemInitialsMax).regex(useLinePassOnQueueEntryResponseOneQueueMembersItemInitialsRegExp).describe('One or two uppercase initials derived from the member\'s name.'),
+  "position": zod.number().int().describe('Current position in the selected flight\'s waiting queue.')
+}).describe('Privacy-safe representation of an active waiting queue member.')).optional().describe('Privacy-safe initials and positions for active waiting members on this entry\'s flight. Returned by queue status only.'),
   "bringingPet": zod.boolean(),
   "petFeeAcknowledged": zod.boolean(),
   "petWeightLbs": zod.number().nullable().describe('Pet weight in pounds.'),

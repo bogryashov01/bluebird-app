@@ -345,6 +345,21 @@ export interface CancelQueueResponse {
   success: boolean;
 }
 
+/**
+ * Privacy-safe representation of an active waiting queue member.
+ */
+export interface QueueMember {
+  /**
+     * One or two uppercase initials derived from the member's name.
+     * @minLength 1
+     * @maxLength 2
+     * @pattern ^[A-Z]{1,2}$
+     */
+  initials: string;
+  /** Current position in the selected flight's waiting queue. */
+  position: number;
+}
+
 export type QueueEntryStatus = typeof QueueEntryStatus[keyof typeof QueueEntryStatus];
 
 
@@ -385,6 +400,8 @@ export interface QueueEntry {
   createdAt: string;
   /** Append-only movement log — a 'joined' event recorded at insert time plus a 'moved' event for each position improvement. */
   movementHistory?: QueueMovementEvent[];
+  /** Privacy-safe initials and positions for active waiting members on this entry's flight. Returned by queue status only. */
+  queueMembers?: QueueMember[];
   bringingPet: boolean;
   petFeeAcknowledged: boolean;
   /** Pet weight in pounds. */

@@ -18,4 +18,5 @@
 - [Occupant capacity](occupant-capacity.md) — passenger and pet counts share one six-occupant ceiling; reserved passenger capacity remains the other bound.
 - [Confirmed-only flight metadata](confirmed-flight-metadata.md) — FBO fields stay out of public and waiting-flight payloads; expose them only from confirmed authenticated responses.
 - [Saved passenger identity](saved-passenger-identity.md) — dedupe member-owned reusable passengers by normalized first/last name; keep date of birth flight-specific.
+- [Queue join merge invariant](queue-join-merge-invariant.md) — validate that POST /queue/join inserts a fresh entry before returning; conflict merges can compile while leaving route-param lookups in place.
 - [GitHub publish transport](github-publish.md) — REST connector access may not authenticate local git push; empty repos need a Contents seed before Git Data API publishing.

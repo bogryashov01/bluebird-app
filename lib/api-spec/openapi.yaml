@@ -1483,6 +1483,23 @@ components:
       required:
         - success
 
+    QueueMember:
+      type: object
+      description: Privacy-safe representation of an active waiting queue member.
+      properties:
+        initials:
+          type: string
+          minLength: 1
+          maxLength: 2
+          pattern: "^[A-Z]{1,2}$"
+          description: One or two uppercase initials derived from the member's name.
+        position:
+          type: integer
+          description: Current position in the selected flight's waiting queue.
+      required:
+        - initials
+        - position
+
     QueueEntry:
       type: object
       properties:
@@ -1508,6 +1525,13 @@ components:
             plus a 'moved' event for each position improvement.
           items:
             $ref: "#/components/schemas/QueueMovementEvent"
+        queueMembers:
+          type: array
+          description: >-
+            Privacy-safe initials and positions for active waiting members on
+            this entry's flight. Returned by queue status only.
+          items:
+            $ref: "#/components/schemas/QueueMember"
         bringingPet:
           type: boolean
         petFeeAcknowledged:

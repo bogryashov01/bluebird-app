@@ -156,6 +156,47 @@ function movementRows(entry: QueueEntry): { text: string; time: string }[] {
   }
   return rows.reverse();
 }
+
+function QueueMembersCard({ entry }: { entry: QueueEntry }) {
+  const colors = useColors();
+  const members = [...(entry.queueMembers ?? [])].sort((a, b) => a.position - b.position);
+
+  return (
+    <View style={[flat.card, { backgroundColor: colors.surface }]}>
+      <View style={flat.membersHeader}>
+        <Text style={[flat.cardTitle, { color: colors.textOnSurface }]}>People waiting</Text>
+        <Text style={[flat.membersCount, { color: colors.mutedForegroundLight }]}>
+          {members.length} {members.length === 1 ? 'member' : 'members'}
+        </Text>
+      </View>
+      <View style={flat.memberBadgeRow}>
+        {members.map((member, index) => {
+          const isCurrentMember = member.position === entry.position;
+          return (
+            <View
+              key={`${member.position}-${member.initials}-${index}`}
+              style={[
+                flat.memberBadge,
+                {
+                  backgroundColor: isCurrentMember ? colors.primary : colors.primary + '14',
+                  borderColor: isCurrentMember ? colors.primary : colors.primary + '38',
+                },
+              ]}
+              accessibilityLabel={`${isCurrentMember ? 'Your' : 'Queue member'} position ${member.position}`}
+            >
+              <Text style={[flat.memberInitials, { color: isCurrentMember ? colors.primaryForeground : colors.primary }]}>
+                {member.initials}
+              </Text>
+              <Text style={[flat.memberPosition, { color: isCurrentMember ? colors.primaryForeground : colors.mutedForegroundLight }]}>
+                #{member.position}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 const confirmed = StyleSheet.create({
   wrap: {
     width: '100%',
@@ -462,6 +503,8 @@ function WaitingQueueView({ entry, onCancel }: { entry: QueueEntry; onCancel: ()
       <Text style={[flat.route, { color: colors.textOnSurface }]}>{routeLabel}</Text>
       <RingProgress position={entry.position} total={entry.totalInQueue} />
 
+      <QueueMembersCard entry={entry} />
+
       <Text style={[flat.countdown, { color: colors.primary }]}>
         {countdown === 'Imminent' ? 'Decision imminent' : `Decision in ${countdown}`}
       </Text>
@@ -526,6 +569,22 @@ const flat = StyleSheet.create({
     elevation: 2,
   },
   cardTitle: { fontFamily: 'Inter_700Bold', fontSize: 13 },
+  membersHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  membersCount: { fontFamily: 'Inter_400Regular', fontSize: 12 },
+  memberBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  memberBadge: {
+    minWidth: 54,
+    minHeight: 58,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  memberInitials: { fontFamily: 'Inter_700Bold', fontSize: 15, letterSpacing: 0.3 },
+  memberPosition: { fontFamily: 'Inter_500Medium', fontSize: 10 },
   logRow:  { flexDirection: 'row', justifyContent: 'space-between' },
   logText: { fontFamily: 'Inter_400Regular', fontSize: 13 },
   logTime: { fontFamily: 'Inter_400Regular', fontSize: 13 },

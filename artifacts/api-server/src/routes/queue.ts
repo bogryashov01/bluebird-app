@@ -179,15 +179,16 @@ router.post("/join", authMiddleware, async (req, res) => {
 
     // 2. Guard against duplicate entry — blocks both waiting AND confirmed entries
     //    so a confirmed user cannot re-join the same flight.
-      const [existing] = await txDb
-        .select({ status: queueEntriesTable.status })
-        .from(queueEntriesTable)
-        .where(
-          and(
-            eq(queueEntriesTable.id, String(req.params.id)),
-            eq(queueEntriesTable.userId, userId),
-          ),
-        );
+    const [existing] = await txDb
+      .select({ status: queueEntriesTable.status })
+      .from(queueEntriesTable)
+      .where(
+        and(
+          eq(queueEntriesTable.flightId, String(flightId)),
+          eq(queueEntriesTable.userId, userId),
+          inArray(queueEntriesTable.status, ["waiting", "confirmed"]),
+        ),
+      );
     if (existing) {
       await client.query("ROLLBACK");
       const msg =
@@ -231,14 +232,25 @@ router.post("/join", authMiddleware, async (req, res) => {
     //    commit together — the pass can never be lost without a confirmed seat
     //    (seat capacity was already enforced in step 1b within this snapshot).
     const [entry] = await txDb
-      .select()
-      .from(queueEntriesTable)
-      .where(
-        and(
-          eq(queueEntriesTable.id, String(req.params.id)),
-          eq(queueEntriesTable.userId, userId),
-        ),
-      );
+      .insert(queueEntriesTable)
+      .values({
+        id: makeId(),
+        userId,
+        flightId: String(flightId),
+        position,
+        status: useLinePass ? "confirmed" : "waiting",
+        passengers,
+        usedLinePass: !!useLinePass,
+        intlFeeAccepted: feeApplies && !!acceptIntlFee,
+        bringingPet,
+        petFeeAcknowledged: bringingPet && petFeeAcknowledged === true,
+        petWeightLbs: bringingPet ? petMeasurements.petWeightLbs : null,
+        petCrateLengthIn: bringingPet ? petMeasurements.petCrateLengthIn : null,
+        petCrateWidthIn: bringingPet ? petMeasurements.petCrateWidthIn : null,
+        petCrateHeightIn: bringingPet ? petMeasurements.petCrateHeightIn : null,
+        movementHistory: [{ type: "joined", position, at: new Date().toISOString() }],
+      })
+      .returning();
 
     let trip: any = null;
     if (useLinePass) {
@@ -331,6 +343,44 @@ router.get("/status", authMiddleware, async (req, res) => {
         ),
       );
 
+    const flightIds = [...new Set(entries.map((entry) => entry.flightId))];
+    const waitingMembers = flightIds.length === 0
+      ? []
+      : await db
+          .select({
+            flightId: queueEntriesTable.flightId,
+            position: queueEntriesTable.position,
+            name: usersTable.name,
+          })
+          .from(queueEntriesTable)
+          .innerJoin(usersTable, eq(queueEntriesTable.userId, usersTable.id))
+          .where(
+            and(
+              inArray(queueEntriesTable.flightId, flightIds),
+              eq(queueEntriesTable.status, "waiting"),
+            ),
+          );
+
+    const initialsForName = (name: string): string => {
+      const parts = name.trim().split(/\s+/).filter(Boolean);
+      if (parts.length === 0) return "M";
+      if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    };
+
+    const membersByFlight = new Map<string, { initials: string; position: number }[]>();
+    for (const member of waitingMembers) {
+      const members = membersByFlight.get(member.flightId) ?? [];
+      members.push({
+        initials: initialsForName(member.name),
+        position: member.position,
+      });
+      membersByFlight.set(member.flightId, members);
+    }
+    for (const members of membersByFlight.values()) {
+      members.sort((a, b) => a.position - b.position);
+    }
+
     const enriched = await Promise.all(
       entries.map(async (entry) => {
         const [flight] = await db.select().from(flightsTable).where(eq(flightsTable.id, entry.flightId));
@@ -338,11 +388,15 @@ router.get("/status", authMiddleware, async (req, res) => {
           .select({ value: count() })
           .from(queueEntriesTable)
           .where(and(eq(queueEntriesTable.flightId, entry.flightId), eq(queueEntriesTable.status, "waiting")));
+        const safeEntry = Object.fromEntries(
+          Object.entries(entry).filter(([key]) => key !== "userId"),
+        );
 
         return {
-          ...entry,
+          ...safeEntry,
           flight: flightForQueueResponse(flight, entry.status),
           totalInQueue: Number(totalInQueue),
+          queueMembers: membersByFlight.get(entry.flightId) ?? [],
         };
       })
     );

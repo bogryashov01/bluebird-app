@@ -54,7 +54,11 @@ async function api(method, path, { token, body } = {}) {
 
 // Creates a fresh member through the phone + SMS PIN flow (dev only: the
 // demo code rides in the request-code response in lieu of a real SMS).
-async function makeVerifiedUser(tag, tier = "plus") {
+async function makeVerifiedUser(
+  tag,
+  tier = "plus",
+  profile = { firstName: "Queue", lastName: "Tester" },
+) {
   const phone = `+1206${String(Math.floor(Math.random() * 10000000)).padStart(7, "0")}`;
   const reqCode = await api("POST", "/auth/request-code", { body: { phone } });
   if (reqCode.status !== 200 || !reqCode.json?.demoCode) throw new Error(`request-code failed: ${reqCode.status}`);
@@ -65,8 +69,8 @@ async function makeVerifiedUser(tag, tier = "plus") {
     const registration = await api("POST", "/auth/complete-registration", {
       body: {
         registrationGrant: ver.json.registrationGrant,
-        firstName: "Queue",
-        lastName: "Tester",
+        firstName: profile.firstName,
+        lastName: profile.lastName,
         email: `queue-${tag}-${fixtureSuffix}@example.test`,
       },
     });
@@ -92,7 +96,14 @@ const domestic = flights.filter((f) => !f.international);
 // runs cannot change positions or block automatic confirmation.
 const N = 3;
 const members = [];
-for (let i = 0; i < N; i++) members.push(await makeVerifiedUser(`m${i}`));
+const memberProfiles = [
+  { firstName: "Ada", lastName: "Lovelace" },
+  { firstName: "Grace", lastName: "Hopper" },
+  { firstName: "Alan", lastName: "Turing" },
+];
+for (let i = 0; i < N; i++) {
+  members.push(await makeVerifiedUser(`m${i}`, "plus", memberProfiles[i]));
+}
 
 const flight = flights.find((candidate) => candidate.id === domesticFixtureId);
 if (!flight) throw new Error("Queue-flow domestic fixture was not returned by /flights");
@@ -182,6 +193,59 @@ check("pass join consumed exactly one pass", vipMe.json?.linePassCount === 4, `g
 const m0Status = await api("GET", "/queue/status", { token: members[0].token });
 const m0Entry = m0Status.json?.find?.((e) => e.flightId === flight.id && e.status === "waiting");
 check("waiting queue unaffected — first member still position 1", m0Entry?.position === 1, JSON.stringify(m0Entry));
+
+// Queue members are scoped to every flight represented by the caller's own
+// active entries. A member on a different flight must never appear in the
+// domestic queue's initials list.
+const otherFlightMember = await makeVerifiedUser("other-flight", "plus", {
+  firstName: "Nora",
+  lastName: "Jones",
+});
+const otherFlight = flights.find((candidate) => candidate.id === intlFixtureId);
+const otherFlightFirstJoin = await api("POST", "/queue/join", {
+  token: otherFlightMember.token,
+  body: { flightId: otherFlight.id, bringingPet: false },
+});
+const m0OtherFlightJoin = await api("POST", "/queue/join", {
+  token: members[0].token,
+  body: { flightId: otherFlight.id, bringingPet: false },
+});
+check("second flight fixture accepts a separate waiting member",
+  otherFlightFirstJoin.status === 201 && otherFlightFirstJoin.json?.status === "waiting",
+  JSON.stringify(otherFlightFirstJoin.json));
+check("same member can have an active queue on the second flight",
+  m0OtherFlightJoin.status === 201 && m0OtherFlightJoin.json?.status === "waiting",
+  JSON.stringify(m0OtherFlightJoin.json));
+
+const scopedStatus = await api("GET", "/queue/status", { token: members[0].token });
+const scopedDomestic = scopedStatus.json?.find?.((entry) => entry.flightId === domesticFixtureId);
+const scopedOtherFlight = scopedStatus.json?.find?.((entry) => entry.flightId === intlFixtureId);
+const domesticQueueMembers = scopedDomestic?.queueMembers ?? [];
+const otherFlightQueueMembers = scopedOtherFlight?.queueMembers ?? [];
+check("queue members are ordered and expose only initials plus position",
+  JSON.stringify(domesticQueueMembers) === JSON.stringify([
+    { initials: "AL", position: 1 },
+    { initials: "GH", position: 2 },
+    { initials: "AT", position: 3 },
+    { initials: "QT", position: 4 },
+    { initials: "QT", position: 5 },
+  ]) &&
+  domesticQueueMembers.every((member) =>
+    Object.keys(member).sort().join(",") === "initials,position" &&
+    !("name" in member) && !("userId" in member) && !("phone" in member)),
+  JSON.stringify(domesticQueueMembers));
+check("queue status does not expose the member user ID",
+  !("userId" in (scopedDomestic ?? {})),
+  JSON.stringify(scopedDomestic));
+check("queue members stay scoped to their selected flight",
+  otherFlightQueueMembers.length === 2 &&
+  otherFlightQueueMembers[0]?.initials === "NJ" &&
+  otherFlightQueueMembers[0]?.position === 1 &&
+  otherFlightQueueMembers[1]?.initials === "AL" &&
+  otherFlightQueueMembers[1]?.position === 2 &&
+  !domesticQueueMembers.some((member) => member.initials === "NJ") &&
+  !otherFlightQueueMembers.some((member) => ["GH", "AT"].includes(member.initials)),
+  JSON.stringify({ domesticQueueMembers, otherFlightQueueMembers }));
 
 // ── 3. use-pass on an existing waiting entry confirms atomically ─────────────
 const m2Status = await api("GET", "/queue/status", { token: members[2].token });

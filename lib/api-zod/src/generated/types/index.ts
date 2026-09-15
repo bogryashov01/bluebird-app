@@ -57,6 +57,7 @@ export * from './petManifest';
 export * from './petManifestInput';
 export * from './queueEntry';
 export * from './queueEntryStatus';
+export * from './queueMember';
 export * from './queueMovementEvent';
 export * from './queueMovementEventType';
 export * from './referralInfo';
