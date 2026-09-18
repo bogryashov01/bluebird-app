@@ -18,7 +18,6 @@ import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
 
 // ── Aircraft image matching ────────────────────────────────────────────────────
-import { MAX_OCCUPANTS } from '@/lib/passengerCapacity';
 const AIRCRAFT_IMAGES = [
   { match: /gulfstream|g280|challenger|falcon/i,  source: require('@/assets/images/aircraft-heavy.jpg') },
   { match: /king air|pilatus|pc-12|turboprop/i,   source: require('@/assets/images/aircraft-turboprop.jpg') },
@@ -80,7 +79,6 @@ export default function FlightDetailScreen() {
   const heroHeight = Math.round(Math.min(300, Math.max(200, windowHeight * 0.32)));
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
-  const [passengers, setPassengers] = useState(1);
   const [directionsOpen, setDirectionsOpen] = useState(false);
   const [networkMessage, setNetworkMessage] = useState('');
   const [networkError, setNetworkError] = useState('');
@@ -199,7 +197,6 @@ export default function FlightDetailScreen() {
 
   // f is guaranteed non-null below this point
   const f         = flight as any;
-  const passengerLimit: number = MAX_OCCUPANTS;
   const imgSource = aircraftImage(f.aircraftType);
 
   const status = myStatus?.status ?? 'none';
@@ -240,7 +237,6 @@ export default function FlightDetailScreen() {
     toCity:        f.toCity,
     from:          f.fromAirport,
     to:            f.toAirport,
-    passengers:    String(passengers),
     departureDate: f.departureDate,
     departureTime: f.departureTime,
     duration:      f.duration,
@@ -584,35 +580,6 @@ export default function FlightDetailScreen() {
           </TouchableOpacity>
         )}
 
-        {/* ── Passenger stepper — only shown when user can still join.
-             For signed-in users, wait until status is known so the stepper
-             never flashes for someone already queued or confirmed. ── */}
-        {flightAvailable && (!user || (!!myStatus && status === 'none')) && (
-          <View style={[styles.stepperCard, { backgroundColor: colors.surface }]}>
-            <View style={styles.stepperLeft}>
-              <Text style={[styles.stepperTitle, { color: colors.textOnSurface }]}>Passengers</Text>
-              <Text style={[styles.stepperHint, { color: colors.mutedForegroundLight }]}>Up to {passengerLimit} passenger{passengerLimit !== 1 ? 's' : ''} · 6 occupants max</Text>
-            </View>
-            <View style={styles.stepper}>
-              <TouchableOpacity
-                style={[styles.stepBtn, { backgroundColor: colors.muted }, passengers <= 1 && styles.stepBtnDisabled]}
-                onPress={() => setPassengers(Math.max(1, passengers - 1))}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.stepBtnText, { color: colors.textOnSurface }]}>−</Text>
-              </TouchableOpacity>
-              <Text style={[styles.stepCount, { color: colors.textOnSurface }]}>{passengers}</Text>
-              <TouchableOpacity
-                style={[styles.stepBtn, { backgroundColor: colors.muted }, passengers >= passengerLimit && styles.stepBtnDisabled]}
-                onPress={() => setPassengers(Math.min(passengerLimit, passengers + 1))}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.stepBtnText, { color: colors.textOnSurface }]}>+</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
         {/* ── Policy link ── */}
         <TouchableOpacity
           style={[styles.policyRow, { borderTopColor: colors.separator }]}
@@ -795,26 +762,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 12,
   },
   mapChoiceText: { flex: 1, fontFamily: 'Inter_600SemiBold', fontSize: 15 },
-
-  // Passenger stepper
-  stepperCard: {
-    marginHorizontal: 16, borderRadius: 18,
-    paddingVertical: 14, paddingHorizontal: 18,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
-    marginBottom: 16,
-  },
-  stepperLeft:  {},
-  stepperTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
-  stepperHint:  { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 2 },
-  stepper:      { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  stepBtn: {
-    width: 34, height: 34, borderRadius: 17,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  stepBtnDisabled: { opacity: 0.35 },
-  stepBtnText: { fontFamily: 'Inter_700Bold', fontSize: 18 },
-  stepCount:   { fontFamily: 'Inter_700Bold', fontSize: 18, minWidth: 22, textAlign: 'center' },
 
   // Policy link
   policyRow: {

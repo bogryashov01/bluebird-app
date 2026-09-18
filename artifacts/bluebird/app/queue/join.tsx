@@ -15,7 +15,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPassOverlay';
-import { MAX_OCCUPANTS } from '@/lib/passengerCapacity';
 
 const POLICY_ITEMS = [
   'Flights may be cancelled or changed due to operational requirements.',
@@ -28,13 +27,12 @@ export default function JoinQueueAcknowledgeScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     flightId: string; fromCity: string; toCity: string;
-    from: string; to: string; useLinePass?: string; passengers?: string;
+    from: string; to: string; useLinePass?: string;
     departureDate?: string; departureTime?: string; duration?: string;
     aircraftType?: string; international?: string; feeUsd?: string;
     flightStatus?: string;
   }>();
   const { flightId, fromCity, toCity, from, to } = params;
-  const passengers = Math.min(MAX_OCCUPANTS, Math.max(1, parseInt(params.passengers ?? '1', 10) || 1));
   const useLinePass = params.useLinePass === '1';
   const isInternational = params.international === '1';
   const { user, updateUser } = useAuth();
@@ -148,8 +146,7 @@ export default function JoinQueueAcknowledgeScreen() {
 
   const positiveNumber = (value: string) => Number.isFinite(Number(value)) && Number(value) > 0;
   const petComplete = bringingPet !== null && (!bringingPet || (petFeeAcknowledged && positiveNumber(petWeightLbs)));
-  const occupantLimitExceeded = bringingPet === true && passengers >= MAX_OCCUPANTS;
-  const allChecked = checked.every(Boolean) && punctualityChecked && petComplete && !occupantLimitExceeded;
+  const allChecked = checked.every(Boolean) && punctualityChecked && petComplete;
   const needsIntlNotice = isInternational && user?.membershipTier === 'base';
 
   const handleContinue = () => {
@@ -175,7 +172,7 @@ export default function JoinQueueAcknowledgeScreen() {
     if (useLinePass) setOverlayPhase('applying');
     joinMutation.mutate({
       data: {
-        flightId, useLinePass, passengers, bringingPet: bringingPet === true,
+        flightId, useLinePass, bringingPet: bringingPet === true,
         petFeeAcknowledged: bringingPet === true && petFeeAcknowledged,
         ...(bringingPet ? {
           petWeightLbs: Number(petWeightLbs),
@@ -335,9 +332,7 @@ export default function JoinQueueAcknowledgeScreen() {
         )}
         {!allChecked && !joinError && (
           <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>
-            {occupantLimitExceeded
-              ? 'A pet counts as one occupant, so bookings with a pet may include at most 5 passengers.'
-              : 'Check all items above to continue'}
+            Check all items above to continue
           </Text>
         )}
         {allChecked && statusLoading && !statusError && !joinError && (
