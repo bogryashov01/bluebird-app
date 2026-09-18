@@ -173,6 +173,12 @@ router.put("/:id/manifest", authMiddleware, async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: passengerCapacityError() });
     }
+    if (passengers.length > result.flight.seatsAvailable) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        error: `This passenger list exceeds the ${result.flight.seatsAvailable}-seat capacity for this flight`,
+      });
+    }
     const orders = passengers.map((passenger) => passenger.passengerOrder);
     if (passengers.length < 1 || passengers.length > result.entry.passengers || new Set(orders).size !== orders.length ||
       orders.some((order) => !Number.isInteger(order) || order < 1 || order > result.entry.passengers) ||

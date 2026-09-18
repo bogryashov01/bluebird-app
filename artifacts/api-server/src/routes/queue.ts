@@ -129,7 +129,7 @@ router.post("/join", authMiddleware, async (req, res) => {
     const [flight] = await txDb
       .select()
       .from(flightsTable)
-      .where(eq(flightsTable.id, flightId));
+      .where(eq(flightsTable.id, entry.flightId));
     if (!flight) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Flight not found" });
@@ -158,37 +158,6 @@ router.post("/join", authMiddleware, async (req, res) => {
     //     the fee to join an international flight (Plus/Family/Corporate waive it).
     const feeApplies =
       flight.international && flight.internationalFeeUsd > 0 && member?.membershipTier === "base";
-    if (feeApplies && !acceptIntlFee) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({
-        error: `This international flight has a $${flight.internationalFeeUsd.toLocaleString()} fee for Base members — you must accept it to join (or upgrade to Plus to waive it).`,
-      });
-    }
-
-    // 1b. Aggregate seat capacity enforcement — sum passengers already reserved
-    //     by all active (waiting or confirmed) entries for this flight, then
-    //     reject when existing + requested would exceed seats_available.
-    const [{ value: reservedPassengers }] = await txDb
-      .select({ value: sql<number>`coalesce(sum(${queueEntriesTable.passengers}), 0)` })
-      .from(queueEntriesTable)
-      .where(
-        and(
-          eq(queueEntriesTable.flightId, String(flightId)),
-          inArray(queueEntriesTable.status, ["waiting", "confirmed"]),
-        ),
-      );
-    if (Number(reservedPassengers) + passengers > flight.seatsAvailable) {
-      await client.query("ROLLBACK");
-      const remaining = flight.seatsAvailable - Number(reservedPassengers);
-      return res.status(400).json({
-        error: remaining <= 0
-          ? "This flight is fully booked"
-          : `Only ${remaining} seat${remaining === 1 ? "" : "s"} remaining for this flight`,
-      });
-    }
-
-    // 2. Guard against duplicate entry — blocks both waiting AND confirmed entries
-    //    so a confirmed user cannot re-join the same flight.
       const [existing] = await txDb
         .select({ status: queueEntriesTable.status })
         .from(queueEntriesTable)
@@ -254,8 +223,8 @@ router.post("/join", authMiddleware, async (req, res) => {
 
     // 5. Insert the new entry. A Skip-the-Line join is an atomic instant win:
     //    pass consumption, entry creation as CONFIRMED, and trip creation all
-    //    commit together — the pass can never be lost without a confirmed seat
-    //    (seat capacity was already enforced in step 1b within this snapshot).
+    //    commit together. Baseline seat capacity is intentionally not checked
+    //    here; it is validated when the confirmed passenger list is saved.
     const [entry] = await txDb
       .select()
       .from(queueEntriesTable)
@@ -598,37 +567,13 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
           "This queue entry is no longer active, so a Skip the Line pass can't be used on it. Your pass was not used.",
       });
     }
-    // 2. Seat capacity check FIRST — the pass must never be consumed unless
-    //    the seat can actually be confirmed in this same transaction.
+    // 2. Verify that the flight is still open before touching the pass balance.
+    //    Baseline seat capacity is checked later when the confirmed passenger
+    //    list is saved, not while entering or advancing in the queue.
     const [flight] = await txDb
       .select()
       .from(flightsTable)
       .where(eq(flightsTable.id, entry.flightId));
-    // The pass must never be consumed for a flight that has departed or is
-    // no longer available — reject before touching the balance.
-    if (!flight || !flightAcceptsQueueActions(flight)) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        error: "This flight has already departed — your pass was not used.",
-      });
-    }
-    const [{ value: confirmedPax }] = await txDb
-      .select({ value: sql<number>`coalesce(sum(${queueEntriesTable.passengers}), 0)` })
-      .from(queueEntriesTable)
-      .where(
-        and(
-          eq(queueEntriesTable.flightId, entry.flightId),
-          eq(queueEntriesTable.status, "confirmed"),
-        ),
-      );
-    if (entry.passengers > (flight?.seatsAvailable ?? 0) - Number(confirmedPax)) {
-      await client.query("ROLLBACK");
-      return res.status(403).json({
-        error: "Not enough seats available for your party size — your pass was not used",
-      });
-    }
-
-    // 3. Consume a line pass (conditional update — fails if balance is 0)
     const familyMember = await activeFamilyMemberForUser(userId, txDb);
     let usedFamilyPass = false;
     let familyPassCycle: string | null = null;

@@ -57,7 +57,10 @@ function formatTime12(t: string): string {
   return `${hr}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 function infoTiles(f: any) {
-  const tiles = [{ label: 'Seats', value: '6 available' }];
+  const tiles = [{
+    label: 'Queue',
+    value: f.status === 'available' ? 'Open to join' : 'Closed',
+  }];
   if (f.rangeNm)      tiles.push({ label: 'Range',  value: `${Number(f.rangeNm).toLocaleString()} nm` });
   return tiles;
 }
@@ -196,7 +199,7 @@ export default function FlightDetailScreen() {
 
   // f is guaranteed non-null below this point
   const f         = flight as any;
-  const passengerLimit = Math.min(f.seatsAvailable, MAX_OCCUPANTS);
+  const passengerLimit: number = MAX_OCCUPANTS;
   const imgSource = aircraftImage(f.aircraftType);
 
   const status = myStatus?.status ?? 'none';

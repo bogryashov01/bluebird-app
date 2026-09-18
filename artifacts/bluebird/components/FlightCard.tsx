@@ -98,12 +98,6 @@ export default function FlightCard({ flight, onPress }: FlightCardProps) {
             {flight.duration}
           </Text>
         </View>
-        <View style={styles.detailItem}>
-          <Feather name="users" size={12} color={colors.mutedForeground} />
-          <Text style={[styles.detailText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            6 available
-          </Text>
-        </View>
       </View>
 
       {/* Bottom row */}

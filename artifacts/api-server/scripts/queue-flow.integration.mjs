@@ -10,6 +10,8 @@ const domesticFixtureId = `queue-flow-domestic-${fixtureSuffix}`;
 const intlFixtureId = `queue-flow-intl-${fixtureSuffix}`;
 const seatFreedFixtureId = `queue-flow-seat-freed-${fixtureSuffix}`;
 const positionOneFixtureId = `queue-flow-position-one-${fixtureSuffix}`;
+const overCapacityFixtureId = `queue-flow-over-capacity-${fixtureSuffix}`;
+const closedFixtureId = `queue-flow-closed-${fixtureSuffix}`;
 
 async function main() {
 await pool.query(`DELETE FROM trips WHERE flight_id LIKE 'queue-flow-%'`);
@@ -28,8 +30,12 @@ await pool.query(
       ($3, 'BFI', 'Seattle', 'GEG', 'Spokane', 'Citation Latitude',
        2, '2099-01-01', '16:00', '1h 00m', 2, false, 0, 'available'),
       ($4, 'BFI', 'Seattle', 'SFO', 'San Francisco', 'Citation Latitude',
-       4, '2099-01-01', '18:00', '2h 10m', 4, false, 0, 'available')`,
-  [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId],
+      4, '2099-01-01', '18:00', '2h 10m', 4, false, 0, 'available'),
+      ($5, 'BFI', 'Seattle', 'BOI', 'Boise', 'Citation Latitude',
+      1, '2099-01-01', '20:00', '1h 20m', 1, false, 0, 'available'),
+      ($6, 'BFI', 'Seattle', 'LAX', 'Los Angeles', 'Citation Latitude',
+      4, '2099-01-01', '22:00', '2h 10m', 4, false, 0, 'departed')`,
+   [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId, overCapacityFixtureId, closedFixtureId],
 );
 
 let failures = 0;
@@ -89,7 +95,6 @@ async function makeVerifiedUser(
 
 const flights = (await api("GET", "/flights")).json;
 const intlFlight = flights.find((f) => f.id === intlFixtureId);
-const domestic = flights.filter((f) => !f.international);
 
 // ── 1. N members join normally, on a flight with an empty queue ─────────────
 // Use a uniquely named fixture flight so accumulated demo queues from prior
@@ -353,35 +358,45 @@ if (m1Now?.status === "waiting") {
   }
 }
 
-// ── 5b. Negative path: a pass is NEVER consumed without a confirmed seat ─────
-// Fill a fresh flight to capacity, then attempt a Skip-the-Line join: it must
-// fail AND leave the pass balance untouched.
+// ── 5b. Open flights accept joins beyond baseline seat capacity ───────────────
 {
-  const filler = await makeVerifiedUser("filler");
-  let fullFlight = null;
-  for (const candidate of domestic) {
-    if (candidate.id === flight.id || candidate.seatsAvailable > 10) continue;
-    // Skip-the-Line join confirms atomically, filling the flight to capacity
-    // without any manual confirm step.
-    const probe = await api("POST", "/queue/join", {
-      token: filler.token, body: { flightId: candidate.id, passengers: candidate.seatsAvailable, useLinePass: true, bringingPet: false },
-    });
-    if (probe.status === 201 && probe.json.status === "confirmed") { fullFlight = candidate; break; }
-    if (probe.status === 201) await api("DELETE", `/queue/${probe.json.id}`, { token: filler.token });
-  }
-  if (fullFlight) {
-    const loser = await makeVerifiedUser("loser");
-    const balBefore = (await api("GET", "/auth/me", { token: loser.token })).json?.linePassCount;
-    const failJoin = await api("POST", "/queue/join", {
-      token: loser.token, body: { flightId: fullFlight.id, useLinePass: true, bringingPet: false },
-    });
-    check("pass join on a full flight is rejected", failJoin.status === 400, JSON.stringify(failJoin.json));
-    const balAfter = (await api("GET", "/auth/me", { token: loser.token })).json?.linePassCount;
-    check("pass balance preserved when no seat was confirmed", balAfter === balBefore,
-      `before=${balBefore} after=${balAfter}`);
-  } else {
-    console.log("  (skipped full-flight negative path — no fillable flight available)");
-  }
+  const overCapacityFlight = flights.find((candidate) => candidate.id === overCapacityFixtureId);
+  if (!overCapacityFlight) throw new Error("Queue-flow over-capacity fixture was not returned by /flights");
+  const overCapacityMembers = [
+    await makeVerifiedUser("over-capacity-1"),
+    await makeVerifiedUser("over-capacity-2"),
+    await makeVerifiedUser("over-capacity-pass"),
+  ];
+  const first = await api("POST", "/queue/join", {
+    token: overCapacityMembers[0].token,
+    body: { flightId: overCapacityFixtureId, bringingPet: false },
+  });
+  const second = await api("POST", "/queue/join", {
+    token: overCapacityMembers[1].token,
+    body: { flightId: overCapacityFixtureId, bringingPet: false },
+  });
+  check("open flight accepts normal joins beyond baseline capacity",
+    first.status === 201 && second.status === 201 &&
+      !/This flight is fully booked/i.test(JSON.stringify({ first: first.json, second: second.json })),
+    JSON.stringify({ first: first.json, second: second.json }));
+
+  const passJoin = await api("POST", "/queue/join", {
+    token: overCapacityMembers[2].token,
+    body: { flightId: overCapacityFixtureId, useLinePass: true, bringingPet: false },
+  });
+  check("Skip the Line follows the open-flight queue rule beyond capacity",
+    passJoin.status === 201 && passJoin.json?.status === "confirmed" &&
+      !/This flight is fully booked/i.test(JSON.stringify(passJoin.json)),
+    JSON.stringify(passJoin.json));
+
+  const closedJoin = await api("POST", "/queue/join", {
+    token: overCapacityMembers[0].token,
+    body: { flightId: closedFixtureId, bringingPet: false },
+  });
+  check("closed flights still reject queue joins",
+    closedJoin.status === 400 && /no longer available/i.test(closedJoin.json?.error ?? "") &&
+      !/This flight is fully booked/i.test(JSON.stringify(closedJoin.json)),
+    JSON.stringify(closedJoin.json));
 }
 
 // ── 6. International fee enforcement for Base members ────────────────────────
@@ -500,9 +515,9 @@ const buy = await api("POST", "/membership/buy-pass", { token: buyer.token });
 check("buy-pass increments balance by 1", buy.status === 200 && buy.json?.linePassCount === (before ?? 0) + 1,
   `before=${before} after=${buy.json?.linePassCount}`);
 
-await pool.query(`DELETE FROM trips WHERE flight_id IN ($1, $2, $3, $4)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId]);
-await pool.query(`DELETE FROM queue_entries WHERE flight_id IN ($1, $2, $3, $4)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId]);
-await pool.query(`DELETE FROM flights WHERE id IN ($1, $2, $3, $4)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId]);
+await pool.query(`DELETE FROM trips WHERE flight_id IN ($1, $2, $3, $4, $5, $6)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId, overCapacityFixtureId, closedFixtureId]);
+await pool.query(`DELETE FROM queue_entries WHERE flight_id IN ($1, $2, $3, $4, $5, $6)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId, overCapacityFixtureId, closedFixtureId]);
+await pool.query(`DELETE FROM flights WHERE id IN ($1, $2, $3, $4, $5, $6)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId, overCapacityFixtureId, closedFixtureId]);
 await pool.end();
 
 if (failures > 0) { console.error(`\n${failures} check(s) FAILED`); process.exit(1); }
