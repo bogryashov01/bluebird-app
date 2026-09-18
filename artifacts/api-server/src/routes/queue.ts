@@ -129,7 +129,7 @@ router.post("/join", authMiddleware, async (req, res) => {
     const [flight] = await txDb
       .select()
       .from(flightsTable)
-      .where(eq(flightsTable.id, flightId));
+      .where(eq(flightsTable.id, entry.flightId));
     if (!flight) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Flight not found" });
@@ -189,16 +189,15 @@ router.post("/join", authMiddleware, async (req, res) => {
 
     // 2. Guard against duplicate entry — blocks both waiting AND confirmed entries
     //    so a confirmed user cannot re-join the same flight.
-    const [existing] = await txDb
-      .select({ status: queueEntriesTable.status })
-      .from(queueEntriesTable)
-      .where(
-        and(
-          eq(queueEntriesTable.flightId, String(flightId)),
-          eq(queueEntriesTable.userId, userId),
-          inArray(queueEntriesTable.status, ["waiting", "confirmed"]),
-        ),
-      );
+      const [existing] = await txDb
+        .select({ status: queueEntriesTable.status })
+        .from(queueEntriesTable)
+        .where(
+          and(
+            eq(queueEntriesTable.id, String(req.params.id)),
+            eq(queueEntriesTable.userId, userId),
+          ),
+        );
     if (existing) {
       await client.query("ROLLBACK");
       const msg =
@@ -212,16 +211,13 @@ router.post("/join", authMiddleware, async (req, res) => {
     let usedFamilyPass = false;
     let familyPassCycle: string | null = null;
     let updatedPersonalPasses: number | null = null;
-    const familyMember = useLinePass ? await activeFamilyMemberForUser(userId, txDb) : null;
+    const familyMember = await activeFamilyMemberForUser(userId, txDb);
     if (useLinePass && familyMember) {
       const result = await txDb
-        .update(familyMembersTable)
-        .set({ usedPasses: sql`${familyMembersTable.usedPasses} + 1` })
-        .where(and(
-          eq(familyMembersTable.id, familyMember.member.id),
-          sql`${familyMembersTable.usedPasses} < ${familyMembersTable.allocatedPasses}`,
-        ))
-        .returning({ usedPasses: familyMembersTable.usedPasses });
+        .update(usersTable)
+        .set({ linePassCount: sql`${usersTable.linePassCount} - 1` })
+        .where(and(eq(usersTable.id, userId), sql`${usersTable.linePassCount} > 0`))
+        .returning({ linePassCount: usersTable.linePassCount });
       if (result.length > 0) {
         usedFamilyPass = true;
         familyPassCycle = familyMember.plan.renewalAt.toISOString();
@@ -261,27 +257,14 @@ router.post("/join", authMiddleware, async (req, res) => {
     //    commit together — the pass can never be lost without a confirmed seat
     //    (seat capacity was already enforced in step 1b within this snapshot).
     const [entry] = await txDb
-      .insert(queueEntriesTable)
-      .values({
-        id: makeId(),
-        userId,
-        flightId: String(flightId),
-        position,
-        status: useLinePass ? "confirmed" : "waiting",
-        passengers,
-        usedLinePass: !!useLinePass,
-        usedFamilyPass,
-        familyPassCycle,
-        intlFeeAccepted: feeApplies && !!acceptIntlFee,
-        bringingPet,
-        petFeeAcknowledged: bringingPet && petFeeAcknowledged === true,
-        petWeightLbs: bringingPet ? petMeasurements.petWeightLbs : null,
-        petCrateLengthIn: bringingPet ? petMeasurements.petCrateLengthIn : null,
-        petCrateWidthIn: bringingPet ? petMeasurements.petCrateWidthIn : null,
-        petCrateHeightIn: bringingPet ? petMeasurements.petCrateHeightIn : null,
-        movementHistory: [{ type: "joined", position, at: new Date().toISOString() }],
-      })
-      .returning();
+      .select()
+      .from(queueEntriesTable)
+      .where(
+        and(
+          eq(queueEntriesTable.id, String(req.params.id)),
+          eq(queueEntriesTable.userId, userId),
+        ),
+      );
 
     let trip: any = null;
     if (useLinePass) {
@@ -458,6 +441,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
 
   const client = await pool.connect();
   try {
+    await syncFamilyPlans();
     await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
     const txDb = drizzle(client, { schema });
 

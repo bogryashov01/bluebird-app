@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { UserMembershipTier } from './userMembershipTier';
+import type { UserNotificationChannel } from './userNotificationChannel';
 
 export interface User {
   id: string;
@@ -23,5 +24,7 @@ export interface User {
   linePassCount: number;
   referralCode: string;
   homeAirports: string[];
+  /** Account-level delivery preference for notification events. App retains the existing in-app notification history. */
+  notificationChannel: UserNotificationChannel;
   createdAt: string;
 }

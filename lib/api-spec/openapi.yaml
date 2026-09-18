@@ -1376,6 +1376,11 @@ components:
             type: string
             pattern: "^\\s*[A-Za-z]{3,4}\\s*$"
           description: Canonical airport codes to save as the member's preferences. Surrounding whitespace is trimmed, casing is normalized, and duplicates are removed server-side. An empty array clears all selections.
+        notificationChannel:
+          type: string
+          enum: [app, email, both]
+          default: app
+          description: Account-level delivery preference for notification events. App retains the existing in-app notification history.
 
     User:
       type: object
@@ -1407,6 +1412,11 @@ components:
           type: array
           items:
             type: string
+        notificationChannel:
+          type: string
+          enum: [app, email, both]
+          default: app
+          description: Account-level delivery preference for notification events. App retains the existing in-app notification history.
         createdAt:
           type: string
       required:
@@ -1418,6 +1428,7 @@ components:
         - linePassCount
         - referralCode
         - homeAirports
+        - notificationChannel
         - createdAt
 
     Flight:

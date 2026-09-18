@@ -136,6 +136,18 @@ export const UserMembershipTier = {
   concierge: 'concierge',
 } as const;
 
+/**
+ * Account-level delivery preference for notification events. App retains the existing in-app notification history.
+ */
+export type UserNotificationChannel = typeof UserNotificationChannel[keyof typeof UserNotificationChannel];
+
+
+export const UserNotificationChannel = {
+  app: 'app',
+  email: 'email',
+  both: 'both',
+} as const;
+
 export interface User {
   id: string;
   name: string;
@@ -152,6 +164,8 @@ export interface User {
   linePassCount: number;
   referralCode: string;
   homeAirports: string[];
+  /** Account-level delivery preference for notification events. App retains the existing in-app notification history. */
+  notificationChannel: UserNotificationChannel;
   createdAt: string;
 }
 
@@ -220,6 +234,18 @@ export interface AuthResponse {
   referralFeedback?: AuthResponseReferralFeedback;
 }
 
+/**
+ * Account-level delivery preference for notification events. App retains the existing in-app notification history.
+ */
+export type UpdateMeRequestNotificationChannel = typeof UpdateMeRequestNotificationChannel[keyof typeof UpdateMeRequestNotificationChannel];
+
+
+export const UpdateMeRequestNotificationChannel = {
+  app: 'app',
+  email: 'email',
+  both: 'both',
+} as const;
+
 export interface UpdateMeRequest {
   name?: string;
   email?: string;
@@ -235,6 +261,8 @@ export interface UpdateMeRequest {
      * @items.pattern ^\s*[A-Za-z]{3,4}\s*$
      */
   homeAirports?: string[];
+  /** Account-level delivery preference for notification events. App retains the existing in-app notification history. */
+  notificationChannel?: UpdateMeRequestNotificationChannel;
 }
 
 export type FlightStatus = typeof FlightStatus[keyof typeof FlightStatus];

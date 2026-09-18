@@ -18,6 +18,11 @@ export const usersTable = pgTable("users", {
   // multi-airport preferences. API responses never expose this legacy value.
   homeAirport: text("home_airport"),
   homeAirports: text("home_airports").array().notNull().default([]),
+  // App keeps the existing in-app notification history as the default channel.
+  notificationChannel: text("notification_channel")
+    .$type<NotificationDeliveryChannel>()
+    .notNull()
+    .default("app"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   uniqueIndex("users_referral_code_unique").on(table.referralCode),
@@ -292,3 +297,7 @@ export type RegistrationGrant = typeof registrationGrantsTable.$inferSelect;
 export type ReferralReward = typeof referralRewardsTable.$inferSelect;
 export type ConciergeMessage = typeof conciergeMessagesTable.$inferSelect;
 export type ConciergeCallbackRequest = typeof conciergeCallbackRequestsTable.$inferSelect;
+
+export const NOTIFICATION_DELIVERY_CHANNELS = ["app", "email", "both"] as const;
+
+export type NotificationDeliveryChannel = typeof NOTIFICATION_DELIVERY_CHANNELS[number];

@@ -105,7 +105,7 @@ export const VerifyLoginCodeBody = zod.object({
 })
 
 
-
+export const verifyLoginCodeResponseOneUserNotificationChannelDefault = `app`;
 
 export const VerifyLoginCodeResponse = zod.union([zod.object({
   "outcome": zod.enum(['signed_in']),
@@ -120,6 +120,7 @@ export const VerifyLoginCodeResponse = zod.union([zod.object({
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
   "homeAirports": zod.array(zod.string()),
+  "notificationChannel": zod.enum(['app', 'email', 'both']).default(verifyLoginCodeResponseOneUserNotificationChannelDefault).describe('Account-level delivery preference for notification events. App retains the existing in-app notification history.'),
   "createdAt": zod.string()
 }),
   "referralFeedback": zod.enum(['invalid_code', 'self_referral', 'already_used']).optional().describe('Explains why an existing account did not receive another referral reward.')
@@ -142,7 +143,7 @@ export const CompletePhoneRegistrationBody = zod.object({
 })
 
 
-
+export const completePhoneRegistrationResponseUserNotificationChannelDefault = `app`;
 
 export const CompletePhoneRegistrationResponse = zod.object({
   "token": zod.string(),
@@ -156,6 +157,7 @@ export const CompletePhoneRegistrationResponse = zod.object({
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
   "homeAirports": zod.array(zod.string()),
+  "notificationChannel": zod.enum(['app', 'email', 'both']).default(completePhoneRegistrationResponseUserNotificationChannelDefault).describe('Account-level delivery preference for notification events. App retains the existing in-app notification history.'),
   "createdAt": zod.string()
 }),
   "referralFeedback": zod.enum(['reward_granted', 'invalid_code', 'self_referral', 'already_used']).optional().describe('Outcome of optional referral attribution during registration.')
@@ -174,7 +176,7 @@ export const LogoutResponse = zod.object({
  * @summary Get current user
  */
 
-
+export const getMeResponseNotificationChannelDefault = `app`;
 
 export const GetMeResponse = zod.object({
   "id": zod.string(),
@@ -186,6 +188,7 @@ export const GetMeResponse = zod.object({
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
   "homeAirports": zod.array(zod.string()),
+  "notificationChannel": zod.enum(['app', 'email', 'both']).default(getMeResponseNotificationChannelDefault).describe('Account-level delivery preference for notification events. App retains the existing in-app notification history.'),
   "createdAt": zod.string()
 })
 
@@ -195,17 +198,18 @@ export const GetMeResponse = zod.object({
  */
 
 
-
+export const updateMeBodyNotificationChannelDefault = `app`;
 
 export const UpdateMeBody = zod.object({
   "name": zod.string().optional(),
   "email": zod.string().optional(),
   "weightKg": zod.number().min(1).max(updateMeBodyWeightKgMax).nullish().describe('Optional member weight in kilograms. Send null to clear the saved value.'),
-  "homeAirports": zod.array(zod.string().regex(updateMeBodyHomeAirportsItemRegExp)).max(updateMeBodyHomeAirportsMax).optional().describe('Canonical airport codes to save as the member\'s preferences. Surrounding whitespace is trimmed, casing is normalized, and duplicates are removed server-side. An empty array clears all selections.')
+  "homeAirports": zod.array(zod.string().regex(updateMeBodyHomeAirportsItemRegExp)).max(updateMeBodyHomeAirportsMax).optional().describe('Canonical airport codes to save as the member\'s preferences. Surrounding whitespace is trimmed, casing is normalized, and duplicates are removed server-side. An empty array clears all selections.'),
+  "notificationChannel": zod.enum(['app', 'email', 'both']).default(updateMeBodyNotificationChannelDefault).describe('Account-level delivery preference for notification events. App retains the existing in-app notification history.')
 })
 
 
-
+export const updateMeResponseNotificationChannelDefault = `app`;
 
 export const UpdateMeResponse = zod.object({
   "id": zod.string(),
@@ -217,6 +221,7 @@ export const UpdateMeResponse = zod.object({
   "linePassCount": zod.number(),
   "referralCode": zod.string(),
   "homeAirports": zod.array(zod.string()),
+  "notificationChannel": zod.enum(['app', 'email', 'both']).default(updateMeResponseNotificationChannelDefault).describe('Account-level delivery preference for notification events. App retains the existing in-app notification history.'),
   "createdAt": zod.string()
 })
 

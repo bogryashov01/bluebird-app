@@ -13,6 +13,7 @@ export async function ensureSchema(): Promise<void> {
       phone           TEXT        NOT NULL UNIQUE,
       email           TEXT,
       weight_kg       NUMERIC,
+      notification_channel TEXT NOT NULL DEFAULT 'app',
       membership_tier TEXT        NOT NULL DEFAULT 'base',
       line_pass_count INTEGER     NOT NULL DEFAULT 0,
       referral_code   TEXT        NOT NULL,
@@ -25,6 +26,7 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_tier TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS home_airport TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS weight_kg NUMERIC;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_channel TEXT NOT NULL DEFAULT 'app';
     UPDATE users SET weight_kg = NULL WHERE weight_kg IS NOT NULL AND weight_kg <= 0;
     DO $$
     BEGIN

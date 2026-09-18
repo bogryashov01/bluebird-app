@@ -151,6 +151,9 @@ function normalizeUser(value: unknown): User {
   const cached = value as User & { homeAirport?: string | null };
   return {
     ...cached,
+    notificationChannel: cached.notificationChannel === 'email' || cached.notificationChannel === 'both'
+      ? cached.notificationChannel
+      : 'app',
     homeAirports: Array.isArray(cached.homeAirports)
       ? cached.homeAirports
       : cached.homeAirport
