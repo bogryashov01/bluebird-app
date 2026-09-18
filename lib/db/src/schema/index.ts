@@ -81,7 +81,9 @@ export const queueEntriesTable = pgTable("queue_entries", {
   petCrateHeightIn: numeric("pet_crate_height_in", { mode: "number" }),
   // Set when this entry reaches the front of the queue and is notified that a
   // seat is ready; starts the 30-minute acceptance window.
-  frontNotifiedAt: timestamp("front_notified_at"),
+  // TIMESTAMPTZ in Postgres — withTimezone is required so Drizzle does not
+  // parse the session-local text form as UTC (which shifts the instant).
+  frontNotifiedAt: timestamp("front_notified_at", { withTimezone: true }),
   // Append-only movement log: a 'joined' event at insert time plus a 'moved'
   // event for every position improvement (gap-close renumbering). Rendered on
   // the Queue Status screen as "Joined queue at #N" / "Moved #A → #B".
@@ -89,7 +91,7 @@ export const queueEntriesTable = pgTable("queue_entries", {
     .$type<QueueMovementEvent[]>()
     .notNull()
     .default([]),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   check("queue_entries_pet_weight_positive", sql`${table.petWeightLbs} IS NULL OR ${table.petWeightLbs} > 0`),
   check("queue_entries_pet_crate_length_positive", sql`${table.petCrateLengthIn} IS NULL OR ${table.petCrateLengthIn} > 0`),
