@@ -4,6 +4,9 @@ import { ensureSchema } from "@workspace/db";
 import { restoreDemoData } from "./lib/seed";
 
 const rawPort = process.env["PORT"] ?? "8080";
+// 0.0.0.0 is reachable on the local LAN (and loopback). It is not a public
+// internet tunnel. Set HOST=127.0.0.1 to keep the API loopback-only.
+const host = process.env["HOST"]?.trim() || "0.0.0.0";
 
 const port = Number(rawPort);
 
@@ -16,12 +19,12 @@ async function start(): Promise<void> {
     await ensureSchema();
     await restoreDemoData();
     startSimulation();
-    app.listen(port, (err) => {
+    app.listen(port, host, (err) => {
       if (err) {
         logger.error({ err }, "Error listening on port");
         process.exit(1);
       }
-      logger.info({ port }, "Schema and demo data ready; server listening");
+      logger.info({ port, host }, "Schema and demo data ready; server listening");
     });
   } catch (err) {
     logger.fatal({ err }, "API initialization failed; refusing to serve incomplete data");
