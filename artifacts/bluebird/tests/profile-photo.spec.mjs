@@ -25,18 +25,20 @@ const profile = {
   missing: ["industry", "bio", "photo"],
 };
 
-test("profile photo picker uploads image bytes on web and previews the result", async ({ page }) => {
+const profileWithExistingPhoto = {
+  ...profile,
+  photoUrl: "/api/storage/objects/uploads/current-profile-photo.jpg",
+  photoAssetPath: "/objects/uploads/current-profile-photo.jpg",
+};
+
+async function setupProfilePhotoPage(page, profileData = profile) {
   const requests = [];
-  const consoleErrors = [];
   let uploadAttempts = 0;
 
   await page.addInitScript(({ user }) => {
     localStorage.setItem("bluebird_token", "mobile-profile-photo-test-token");
     localStorage.setItem("bluebird_user", JSON.stringify(user));
   }, { user });
-  page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text());
-  });
 
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -47,13 +49,24 @@ test("profile photo picker uploads image bytes on web and previews the result", 
       return route.fulfill({ json: user });
     }
     if (request.method() === "GET" && pathName === "/api/networking/profile") {
-      return route.fulfill({ json: profile });
+      return route.fulfill({ json: profileData });
     }
     if (request.method() === "GET" && pathName === "/api/queue/status") {
       return route.fulfill({ json: [] });
     }
     if (request.method() === "GET" && pathName === "/api/notifications") {
       return route.fulfill({ json: [] });
+    }
+    if (
+      request.method() === "GET" &&
+      ["/api/storage/objects/uploads/current-profile-photo.jpg", "/api/storage/objects/uploads/profile-photo.jpg"]
+        .includes(pathName)
+    ) {
+      return route.fulfill({
+        status: 200,
+        contentType: "image/jpeg",
+        body: Buffer.from("profile photo preview"),
+      });
     }
     if (request.method() === "POST" && pathName === "/api/storage/uploads/request-url") {
       const metadata = request.postDataJSON();
@@ -66,13 +79,6 @@ test("profile photo picker uploads image bytes on web and previews the result", 
           size: metadata.size,
           contentType: metadata.contentType,
         },
-      });
-    }
-    if (request.method() === "GET" && pathName === "/api/storage/objects/uploads/profile-photo.jpg") {
-      return route.fulfill({
-        status: 200,
-        contentType: "image/jpeg",
-        body: Buffer.from("profile photo preview"),
       });
     }
     return route.continue();
@@ -91,6 +97,17 @@ test("profile photo picker uploads image bytes on web and previews the result", 
   });
 
   await page.goto("/account/personal-info");
+  return { requests };
+}
+
+test("profile photo picker uploads image bytes on web and previews the result", async ({ page }) => {
+  const consoleErrors = [];
+  const { requests } = await setupProfilePhotoPage(page);
+
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+
   await expect(page.getByText("Add profile photo", { exact: true })).toBeVisible();
 
   const fileChooserPromise = page.waitForEvent("filechooser");
@@ -124,4 +141,57 @@ test("profile photo picker uploads image bytes on web and previews the result", 
   await expect(page.getByText("Change profile photo", { exact: true })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "First name" })).toHaveValue("Profile");
   expect(consoleErrors.join("\n")).not.toContain("validatePath");
+});
+
+test("profile photo picker rejects unsupported formats before requesting storage", async ({ page }) => {
+  const { requests } = await setupProfilePhotoPage(page, profileWithExistingPhoto);
+  const firstName = page.getByRole("textbox", { name: "First name" });
+  const bio = page.getByPlaceholder("What would you enjoy talking about?");
+
+  await expect(page.getByText("Change profile photo", { exact: true })).toBeVisible();
+  await firstName.fill("Edited");
+  await bio.fill("An edited profile bio");
+
+  const fileChooserPromise = page.waitForEvent("filechooser");
+  await page.getByText("Change profile photo", { exact: true }).click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles({
+    name: "profile.gif",
+    mimeType: "image/gif",
+    buffer: Buffer.from("unsupported profile photo"),
+  });
+
+  await expect(page.getByText("Choose a JPEG, PNG, or WebP profile photo.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Change profile photo", { exact: true })).toBeVisible();
+  await expect(firstName).toHaveValue("Edited");
+  await expect(bio).toHaveValue("An edited profile bio");
+  expect(requests.filter((request) => request.kind === "metadata")).toHaveLength(0);
+  expect(requests.filter((request) => request.kind === "upload")).toHaveLength(0);
+});
+
+
+test("profile photo picker rejects oversized images before requesting storage", async ({ page }) => {
+  const { requests } = await setupProfilePhotoPage(page, profileWithExistingPhoto);
+  const firstName = page.getByRole("textbox", { name: "First name" });
+  const bio = page.getByPlaceholder("What would you enjoy talking about?");
+
+  await expect(page.getByText("Change profile photo", { exact: true })).toBeVisible();
+  await firstName.fill("Edited");
+  await bio.fill("An edited profile bio");
+
+  const fileChooserPromise = page.waitForEvent("filechooser");
+  await page.getByText("Change profile photo", { exact: true }).click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles({
+    name: "profile-too-large.jpg",
+    mimeType: "image/jpeg",
+    buffer: Buffer.alloc(1_500_001),
+  });
+
+  await expect(page.getByText("Profile photos must be smaller than 1.5 MB.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Change profile photo", { exact: true })).toBeVisible();
+  await expect(firstName).toHaveValue("Edited");
+  await expect(bio).toHaveValue("An edited profile bio");
+  expect(requests.filter((request) => request.kind === "metadata")).toHaveLength(0);
+  expect(requests.filter((request) => request.kind === "upload")).toHaveLength(0);
 });
