@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import {
   devicePushTokensTable,
   flightsTable,
+  networkingPhotoUploadsTable,
   networkingBlocksTable,
   networkingConnectionsTable,
   networkingMessagesTable,
@@ -16,6 +17,7 @@ import {
 } from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
 import { ObjectStorageService } from "../lib/objectStorage";
+import { scheduleNetworkingPhotoCleanup } from "../lib/networkingPhotoCleanup";
 
 const router = Router();
 router.use(authMiddleware);
@@ -24,6 +26,8 @@ const MAX_BIO = 280;
 const MAX_PHOTO_BYTES = 1_500_000;
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const objectStorage = new ObjectStorageService();
+
+class ProfilePhotoOwnershipError extends Error {}
 
 function id(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 11)}`;
@@ -249,9 +253,11 @@ router.patch("/profile", async (req, res) => {
         const metadata = await objectStorage.getObjectMetadata(path);
         if (!metadata.contentType || !IMAGE_TYPES.has(metadata.contentType) ||
             !metadata.size || metadata.size > MAX_PHOTO_BYTES) {
+          scheduleNetworkingPhotoCleanup(path, userId);
           return res.status(400).json({ error: "Profile photo must be a JPEG, PNG, or WebP under 1.5 MB" });
         }
       } catch {
+        scheduleNetworkingPhotoCleanup(path, userId);
         return res.status(400).json({ error: "Uploaded profile photo could not be found" });
       }
     }
@@ -259,16 +265,67 @@ router.patch("/profile", async (req, res) => {
     updates.photoUrl = null;
   }
   if (Object.keys(updates).length === 0) return res.status(400).json({ error: "Nothing to update" });
+  const photoChangeRequested = updates.photoAssetPath !== undefined;
+  const requestedPhotoPath = photoChangeRequested ? updates.photoAssetPath : null;
+  let previousPhotoPath: string | null = null;
   try {
-    const [profile] = await db.insert(networkingProfilesTable)
-      .values({ userId, ...updates })
-      .onConflictDoUpdate({
-        target: networkingProfilesTable.userId,
-        set: { ...updates, updatedAt: new Date() },
-      })
-      .returning();
+    const profile = await db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(networkingProfilesTable)
+        .where(eq(networkingProfilesTable.userId, userId))
+        .for("update");
+      previousPhotoPath = existing?.photoAssetPath ?? null;
+
+      if (photoChangeRequested && requestedPhotoPath) {
+        const [upload] = await tx.select().from(networkingPhotoUploadsTable)
+          .where(and(
+            eq(networkingPhotoUploadsTable.objectPath, requestedPhotoPath),
+            eq(networkingPhotoUploadsTable.userId, userId),
+          ))
+          .for("update");
+        if (!upload || upload.status === "deleting") {
+          throw new ProfilePhotoOwnershipError("Uploaded profile photo is no longer available");
+        }
+        const [attached] = await tx.update(networkingPhotoUploadsTable)
+          .set({ status: "active", attachedAt: new Date() })
+          .where(and(
+            eq(networkingPhotoUploadsTable.objectPath, requestedPhotoPath),
+            eq(networkingPhotoUploadsTable.userId, userId),
+            ne(networkingPhotoUploadsTable.status, "deleting"),
+          ))
+          .returning({ objectPath: networkingPhotoUploadsTable.objectPath });
+        if (!attached) throw new ProfilePhotoOwnershipError("Uploaded profile photo is no longer available");
+      }
+
+      if (photoChangeRequested && previousPhotoPath && previousPhotoPath !== requestedPhotoPath) {
+        await tx.update(networkingPhotoUploadsTable)
+          .set({ status: "retired", attachedAt: null })
+          .where(and(
+            eq(networkingPhotoUploadsTable.objectPath, previousPhotoPath),
+            eq(networkingPhotoUploadsTable.userId, userId),
+            ne(networkingPhotoUploadsTable.status, "deleting"),
+          ));
+      }
+
+      const [saved] = await tx.insert(networkingProfilesTable)
+        .values({ userId, ...updates })
+        .onConflictDoUpdate({
+          target: networkingProfilesTable.userId,
+          set: { ...updates, updatedAt: new Date() },
+        })
+        .returning();
+      return saved;
+    });
+    if (photoChangeRequested && previousPhotoPath && previousPhotoPath !== requestedPhotoPath) {
+      scheduleNetworkingPhotoCleanup(previousPhotoPath, userId);
+    }
     return res.json(profileResponse(profile));
-  } catch {
+  } catch (error) {
+    if (error instanceof ProfilePhotoOwnershipError) {
+      scheduleNetworkingPhotoCleanup(requestedPhotoPath, userId);
+      return res.status(400).json({ error: error.message });
+    }
+    if (photoChangeRequested) scheduleNetworkingPhotoCleanup(requestedPhotoPath, userId);
+    req.log.error({ err: error }, "Failed to save networking profile");
     return res.status(500).json({ error: "Failed to save networking profile" });
   }
 });

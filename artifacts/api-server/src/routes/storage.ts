@@ -1,8 +1,11 @@
 import { Readable } from "node:stream";
 import { RequestUploadUrlBody, RequestUploadUrlResponse } from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
+import { db } from "@workspace/db";
+import { networkingPhotoUploadsTable } from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
 import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage";
+import { scheduleNetworkingPhotoCleanup } from "../lib/networkingPhotoCleanup";
 
 const router = Router();
 const storage = new ObjectStorageService();
@@ -15,8 +18,21 @@ router.post("/storage/uploads/request-url", authMiddleware, async (req: Request,
     return res.status(400).json({ error: "Profile photo must be a JPEG, PNG, or WebP under 1.5 MB" });
   }
   try {
-    const uploadURL = await storage.getObjectEntityUploadURL();
-    const objectPath = storage.normalizeObjectEntityPath(uploadURL);
+    const { uploadURL, objectPath } = await storage.createObjectEntityUpload();
+    try {
+      await db.insert(networkingPhotoUploadsTable).values({
+        objectPath,
+        userId: (req as any).userId as string,
+      });
+    } catch (error) {
+      // No response has been sent yet, so this URL cannot be used by this
+      // client. Still remove the object if a direct upload raced this insert.
+      void storage.deleteObjectEntity(objectPath).catch((cleanupError) => {
+        req.log.warn({ err: cleanupError, objectPath }, "Failed to remove untracked profile photo upload");
+      });
+      throw error;
+    }
+    scheduleNetworkingPhotoCleanup();
     return res.json(RequestUploadUrlResponse.parse({
       uploadURL,
       objectPath,

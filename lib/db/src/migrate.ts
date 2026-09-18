@@ -530,6 +530,23 @@ export async function ensureSchema(): Promise<void> {
     UPDATE networking_profiles SET photo_url = NULL
       WHERE photo_url LIKE 'data:image/%';
 
+    CREATE TABLE IF NOT EXISTS networking_photo_uploads (
+      object_path TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      attached_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS networking_photo_uploads_cleanup_idx
+      ON networking_photo_uploads (status, created_at);
+    -- Existing object-backed profiles predate ownership tracking. Backfill
+    -- them as active so cleanup can never treat a referenced object as stale.
+    INSERT INTO networking_photo_uploads (object_path, user_id, status, created_at, attached_at)
+      SELECT photo_asset_path, user_id, 'active', created_at, updated_at
+      FROM networking_profiles
+      WHERE photo_asset_path ~ '^/objects/uploads/[A-Za-z0-9-]+$'
+      ON CONFLICT (object_path) DO NOTHING;
+
     CREATE TABLE IF NOT EXISTS networking_requests (
       id TEXT PRIMARY KEY,
       flight_id TEXT NOT NULL REFERENCES flights(id) ON DELETE CASCADE,

@@ -40,8 +40,22 @@ export class ObjectStorageService {
   }
 
   async getObjectEntityUploadURL(): Promise<string> {
-    const objectPath = `${this.privateObjectDir()}/uploads/${randomUUID()}`;
-    const { bucketName, objectName } = parseObjectPath(objectPath);
+    const objectPath = `/objects/uploads/${randomUUID()}`;
+    return this.getObjectEntityUploadURLForPath(objectPath);
+  }
+
+  async createObjectEntityUpload(): Promise<{ uploadURL: string; objectPath: string }> {
+    const objectPath = `/objects/uploads/${randomUUID()}`;
+    const uploadURL = await this.getObjectEntityUploadURLForPath(objectPath);
+    return { uploadURL, objectPath };
+  }
+
+  private async getObjectEntityUploadURLForPath(objectPath: string): Promise<string> {
+    if (!/^\/objects\/uploads\/[A-Za-z0-9-]+$/.test(objectPath)) {
+      throw new Error("Invalid object entity path");
+    }
+    const objectStoragePath = `${this.privateObjectDir()}/${objectPath.slice("/objects/".length)}`;
+    const { bucketName, objectName } = parseObjectPath(objectStoragePath);
     const response = await fetch(`${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -86,6 +100,15 @@ export class ObjectStorageService {
       contentType: typeof metadata.contentType === "string" ? metadata.contentType.toLowerCase() : undefined,
       size: metadata.size ? Number(metadata.size) : undefined,
     };
+  }
+
+  async deleteObjectEntity(objectPath: string): Promise<void> {
+    if (!/^\/objects\/uploads\/[A-Za-z0-9-]+$/.test(objectPath)) {
+      throw new ObjectNotFoundError();
+    }
+    const entityId = objectPath.slice("/objects/".length);
+    const { bucketName, objectName } = parseObjectPath(`${this.privateObjectDir()}/${entityId}`);
+    await objectStorageClient.bucket(bucketName).file(objectName).delete({ ignoreNotFound: true });
   }
 
   async findPublicObject(filePath: string): Promise<File | null> {

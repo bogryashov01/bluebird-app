@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, integer, numeric, timestamp, jsonb, uniqueIndex, check } from "drizzle-orm/pg-core";
+import { pgTable, text, boolean, integer, numeric, timestamp, jsonb, uniqueIndex, index, check } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -92,6 +92,16 @@ export const networkingProfilesTable = pgTable("networking_profiles", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+export const networkingPhotoUploadsTable = pgTable("networking_photo_uploads", {
+  objectPath: text("object_path").primaryKey(),
+  userId: text("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  attachedAt: timestamp("attached_at"),
+}, (table) => [
+  index("networking_photo_uploads_cleanup_idx").on(table.status, table.createdAt),
+]);
 
 export const referralRewardsTable = pgTable("referral_rewards", {
   id: text("id").primaryKey(),
