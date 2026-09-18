@@ -102,6 +102,22 @@ const firstJoin = await api("POST", "/queue/join", {
 });
 console.log(`Flight under test: ${flight.fromAirport} → ${flight.toAirport} (${flight.id})`);
 
+const missingPetChoice = await api("POST", "/queue/join", {
+  token: members[0].token,
+  body: { flightId: flight.id },
+});
+check("missing bringingPet is a 400, not a 500",
+  missingPetChoice.status === 400 && /invalid queue request/i.test(missingPetChoice.json?.error ?? ""),
+  JSON.stringify(missingPetChoice.json));
+
+const duplicateJoin = await api("POST", "/queue/join", {
+  token: members[0].token,
+  body: { flightId: flight.id, bringingPet: false },
+});
+check("duplicate join is a 409, not a 500",
+  duplicateJoin.status === 409 && /already in the queue/i.test(duplicateJoin.json?.error ?? ""),
+  JSON.stringify(duplicateJoin.json));
+
 for (const [i, m] of members.entries()) {
   const join = i === 0 ? firstJoin : await api("POST", "/queue/join", {
     token: m.token,

@@ -8,6 +8,7 @@ import { authMiddleware } from "../middlewares/auth";
 import { flightAcceptsQueueActions } from "../lib/departure";
 import { JoinQueueBody } from "@workspace/api-zod";
 import { exceedsPassengerCapacity, passengerCapacityError } from "../lib/passenger-capacity";
+import { logger } from "../lib/logger";
 
 const router = Router();
 const PET_CLEANING_FEE_USD = 500;
@@ -184,8 +185,9 @@ router.post("/join", authMiddleware, async (req, res) => {
         .from(queueEntriesTable)
         .where(
           and(
-            eq(queueEntriesTable.id, String(req.params.id)),
+            eq(queueEntriesTable.flightId, String(flightId)),
             eq(queueEntriesTable.userId, userId),
+            inArray(queueEntriesTable.status, ["waiting", "confirmed"]),
           ),
         );
     if (existing) {
@@ -230,15 +232,27 @@ router.post("/join", authMiddleware, async (req, res) => {
     //    pass consumption, entry creation as CONFIRMED, and trip creation all
     //    commit together — the pass can never be lost without a confirmed seat
     //    (seat capacity was already enforced in step 1b within this snapshot).
+    const joinedAt = new Date().toISOString();
     const [entry] = await txDb
-      .select()
-      .from(queueEntriesTable)
-      .where(
-        and(
-          eq(queueEntriesTable.id, String(req.params.id)),
-          eq(queueEntriesTable.userId, userId),
-        ),
-      );
+      .insert(queueEntriesTable)
+      .values({
+        id: makeId(),
+        userId,
+        flightId: String(flightId),
+        position,
+        status: useLinePass ? "confirmed" : "waiting",
+        usedLinePass: Boolean(useLinePass),
+        passengers,
+        intlFeeAccepted: Boolean(feeApplies && acceptIntlFee),
+        bringingPet,
+        petFeeAcknowledged: bringingPet === true && petFeeAcknowledged === true,
+        petWeightLbs: bringingPet ? petMeasurements.petWeightLbs : null,
+        petCrateLengthIn: bringingPet ? petMeasurements.petCrateLengthIn : null,
+        petCrateWidthIn: bringingPet ? petMeasurements.petCrateWidthIn : null,
+        petCrateHeightIn: bringingPet ? petMeasurements.petCrateHeightIn : null,
+        movementHistory: [{ type: "joined", position, at: joinedAt }],
+      })
+      .returning();
 
     let trip: any = null;
     if (useLinePass) {
@@ -306,6 +320,7 @@ router.post("/join", authMiddleware, async (req, res) => {
     if (err?.code === "40001") {
       return res.status(409).json({ error: "Queue update conflict — please try again" });
     }
+    logger.error({ err }, "Failed to join queue");
     return res.status(500).json({ error: "Failed to join queue" });
   } finally {
     client.release();
