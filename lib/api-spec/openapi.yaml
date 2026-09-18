@@ -26,6 +26,8 @@ tags:
     description: User notifications
   - name: concierge
     description: AI concierge chat
+  - name: networking
+    description: Member flight networking and conversations
 
 paths:
   /healthz:
@@ -340,6 +342,221 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /networking/profile:
+    get:
+      operationId: getNetworkingProfile
+      tags: [networking]
+      summary: Get the current member's networking profile and completion state
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Networking profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingProfileResponse" }
+        "403":
+          description: Membership required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    patch:
+      operationId: updateNetworkingProfile
+      tags: [networking]
+      summary: Create or update the current member's networking profile
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateNetworkingProfileRequest" }
+      responses:
+        "200":
+          description: Updated networking profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingProfileResponse" }
+        "400":
+          description: Invalid profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /networking/push-tokens:
+    post:
+      operationId: registerNetworkingPushToken
+      tags: [networking]
+      summary: Register a device push token for networking notifications
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PushTokenRequest" }
+      responses:
+        "200":
+          description: Registered push token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PushToken" }
+
+  /networking/flights/{flightId}/front-member:
+    get:
+      operationId: getNetworkingFrontMember
+      tags: [networking]
+      summary: Find the eligible position-one waiting member for a flight
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: flightId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Front member or no eligible member
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingFrontMemberResponse" }
+
+  /networking/requests:
+    post:
+      operationId: createNetworkingRequest
+      tags: [networking]
+      summary: Send an introduction to the current position-one flight member
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateNetworkingRequest" }
+      responses:
+        "201":
+          description: Request sent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingRequestResponse" }
+        "400":
+          description: Incomplete profile or invalid message
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Membership required or blocked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /networking/requests/incoming:
+    get:
+      operationId: listIncomingNetworkingRequests
+      tags: [networking]
+      summary: List pending networking requests for the current member
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Incoming requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NetworkingRequestResponse" }
+
+  /networking/requests/{id}/decision:
+    post:
+      operationId: decideNetworkingRequest
+      tags: [networking]
+      summary: Accept, decline, ignore, block, or report a networking request
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NetworkingDecisionRequest" }
+      responses:
+        "200":
+          description: Decision applied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingDecisionResponse" }
+
+  /networking/connections:
+    get:
+      operationId: listNetworkingConnections
+      tags: [networking]
+      summary: List accepted networking connections
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NetworkingConnectionResponse" }
+
+  /networking/connections/{id}/messages:
+    get:
+      operationId: listNetworkingMessages
+      tags: [networking]
+      summary: List messages in an accepted connection
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Conversation messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NetworkingMessage" }
+    post:
+      operationId: sendNetworkingMessage
+      tags: [networking]
+      summary: Send a message in an accepted connection
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SendNetworkingMessageRequest" }
+      responses:
+        "201":
+          description: Message sent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingMessage" }
+
+  /networking/connections/{id}/block:
+    post:
+      operationId: blockNetworkingConnection
+      tags: [networking]
+      summary: Block the other member in an accepted connection
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Member blocked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BlockNetworkingResponse" }
 
   /queue/join:
     post:
@@ -2281,6 +2498,170 @@ components:
         - name
         - status
 
+    NetworkingProfile:
+      type: object
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        photoUrl: { type: string, nullable: true }
+        industry: { type: string }
+        bio: { type: string }
+        linkedinUrl: { type: string, nullable: true }
+        instagramUrl: { type: string, nullable: true }
+      required: [firstName, lastName, photoUrl, industry, bio]
+
+    NetworkingProfileResponse:
+      allOf:
+        - $ref: "#/components/schemas/NetworkingProfile"
+        - type: object
+          properties:
+            completed: { type: boolean }
+            missing:
+              type: array
+              items: { type: string }
+          required: [completed, missing]
+
+    UpdateNetworkingProfileRequest:
+      type: object
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 80 }
+        lastName: { type: string, minLength: 1, maxLength: 80 }
+        photoUrl: { type: string, nullable: true }
+        industry: { type: string, minLength: 1, maxLength: 80 }
+        bio: { type: string, minLength: 1, maxLength: 280 }
+        linkedinUrl: { type: string, nullable: true }
+        instagramUrl: { type: string, nullable: true }
+
+    PushTokenRequest:
+      type: object
+      properties:
+        token: { type: string, minLength: 1, maxLength: 512 }
+        platform: { type: string, maxLength: 20 }
+      required: [token]
+
+    PushToken:
+      type: object
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        token: { type: string }
+        platform: { type: string }
+        createdAt: { type: string }
+        lastUsedAt: { type: string }
+      required: [id, userId, token, platform, createdAt, lastUsedAt]
+
+    NetworkingProfilePreview:
+      type: object
+      properties:
+        userId: { type: string }
+        firstName: { type: string }
+        photoUrl: { type: string, nullable: true }
+        industry: { type: string }
+        bio: { type: string }
+      required: [userId, firstName, photoUrl, industry, bio]
+
+    NetworkingFrontMemberResponse:
+      type: object
+      properties:
+        eligible: { type: boolean }
+        flightId: { type: string }
+        member:
+          allOf:
+            - $ref: "#/components/schemas/NetworkingProfilePreview"
+          nullable: true
+      required: [eligible, member]
+
+    CreateNetworkingRequest:
+      type: object
+      properties:
+        flightId: { type: string }
+        message: { type: string, minLength: 1, maxLength: 240 }
+      required: [flightId, message]
+
+    NetworkingRequestResponse:
+      type: object
+      properties:
+        id: { type: string }
+        flightId: { type: string }
+        requesterId: { type: string }
+        recipientId: { type: string }
+        message: { type: string }
+        status:
+          type: string
+          enum: [pending, accepted, declined, ignored]
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        requester:
+          $ref: "#/components/schemas/NetworkingProfilePreview"
+        flight:
+          type: object
+          nullable: true
+          properties:
+            fromCity: { type: string }
+            toCity: { type: string }
+            departureDate: { type: string }
+      required: [id, flightId, requesterId, recipientId, message, status, createdAt, updatedAt]
+
+    NetworkingDecisionRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [accept, decline, ignore, block, report]
+        reason: { type: string, maxLength: 500 }
+      required: [action]
+
+    NetworkingDecisionResponse:
+      type: object
+      properties:
+        status: { type: string }
+        connection:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string }
+      required: [status]
+
+    NetworkingMessage:
+      type: object
+      properties:
+        id: { type: string }
+        connectionId: { type: string }
+        senderId: { type: string }
+        content: { type: string }
+        clientMessageId: { type: string, nullable: true }
+        createdAt: { type: string }
+      required: [id, connectionId, senderId, content, createdAt]
+
+    SendNetworkingMessageRequest:
+      type: object
+      properties:
+        content: { type: string, minLength: 1, maxLength: 1000 }
+        clientMessageId: { type: string, maxLength: 100 }
+      required: [content]
+
+    NetworkingConnectionResponse:
+      type: object
+      properties:
+        id: { type: string }
+        requestId: { type: string }
+        memberAId: { type: string }
+        memberBId: { type: string }
+        createdAt: { type: string }
+        member:
+          $ref: "#/components/schemas/NetworkingProfile"
+        lastMessage:
+          allOf:
+            - $ref: "#/components/schemas/NetworkingMessage"
+          nullable: true
+      required: [id, requestId, memberAId, memberBId, createdAt, member]
+
+    BlockNetworkingResponse:
+      type: object
+      properties:
+        blocked: { type: boolean }
+      required: [blocked]
+
     Notification:
       type: object
       properties:
@@ -2292,7 +2673,10 @@ components:
           type: string
         type:
           type: string
-          enum: [queue_update, flight_confirmed, membership, referral, system]
+          enum: [queue_update, flight_confirmed, membership, referral, networking_request, networking_accepted, networking_declined, networking_message, system]
+        data:
+          type: object
+          additionalProperties: { type: string }
         read:
           type: boolean
         createdAt:
@@ -2302,5 +2686,6 @@ components:
         - title
         - body
         - type
+        - data
         - read
         - createdAt

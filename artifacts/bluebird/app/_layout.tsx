@@ -129,6 +129,22 @@ function RootLayoutNav() {
         options={{ headerShown: true, title: 'Community', ...headerOptions }}
       />
       <Stack.Screen
+        name="networking/profile"
+        options={{ headerShown: true, title: 'Networking Profile', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="networking/requests"
+        options={{ headerShown: true, title: 'Connection Requests', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="networking/connections"
+        options={{ headerShown: true, title: 'Messages', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="networking/connections/[id]"
+        options={{ headerShown: true, title: 'Conversation', ...headerOptions }}
+      />
+      <Stack.Screen
         name="upgrade/[tier]"
         options={{ headerShown: true, title: 'Upgrade Membership', ...headerOptions }}
       />

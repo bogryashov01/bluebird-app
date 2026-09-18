@@ -762,6 +762,14 @@ export interface FamilyMember {
 }
 
 export type FamilyInvitationDeliveryStatus = typeof FamilyInvitationDeliveryStatus[keyof typeof FamilyInvitationDeliveryStatus];
+
+
+export const FamilyInvitationDeliveryStatus = {
+  pending: 'pending',
+  sent: 'sent',
+  failed: 'failed',
+} as const;
+
 export interface FamilyInvitation {
   id: string;
   memberId: string;
@@ -923,6 +931,177 @@ export interface ReferralInfo {
   invited: InvitedFriend[];
 }
 
+export interface NetworkingProfile {
+  firstName: string;
+  lastName: string;
+  photoUrl: string | null;
+  industry: string;
+  bio: string;
+  linkedinUrl?: string | null;
+  instagramUrl?: string | null;
+}
+
+export type NetworkingProfileResponse = NetworkingProfile & {
+  completed: boolean;
+  missing: string[];
+};
+
+export interface UpdateNetworkingProfileRequest {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  firstName?: string;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  lastName?: string;
+  photoUrl?: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  industry?: string;
+  /**
+     * @minLength 1
+     * @maxLength 280
+     */
+  bio?: string;
+  linkedinUrl?: string | null;
+  instagramUrl?: string | null;
+}
+
+export interface PushTokenRequest {
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  token: string;
+  /** @maxLength 20 */
+  platform?: string;
+}
+
+export interface PushToken {
+  id: string;
+  userId: string;
+  token: string;
+  platform: string;
+  createdAt: string;
+  lastUsedAt: string;
+}
+
+export interface NetworkingProfilePreview {
+  userId: string;
+  firstName: string;
+  photoUrl: string | null;
+  industry: string;
+  bio: string;
+}
+
+export interface NetworkingFrontMemberResponse {
+  eligible: boolean;
+  flightId?: string;
+  member: NetworkingProfilePreview | null;
+}
+
+export interface CreateNetworkingRequest {
+  flightId: string;
+  /**
+     * @minLength 1
+     * @maxLength 240
+     */
+  message: string;
+}
+
+export type NetworkingRequestResponseStatus = typeof NetworkingRequestResponseStatus[keyof typeof NetworkingRequestResponseStatus];
+
+
+export const NetworkingRequestResponseStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+  declined: 'declined',
+  ignored: 'ignored',
+} as const;
+
+export type NetworkingRequestResponseFlight = {
+  fromCity?: string;
+  toCity?: string;
+  departureDate?: string;
+} | null;
+
+export interface NetworkingRequestResponse {
+  id: string;
+  flightId: string;
+  requesterId: string;
+  recipientId: string;
+  message: string;
+  status: NetworkingRequestResponseStatus;
+  createdAt: string;
+  updatedAt: string;
+  requester?: NetworkingProfilePreview;
+  flight?: NetworkingRequestResponseFlight;
+}
+
+export type NetworkingDecisionRequestAction = typeof NetworkingDecisionRequestAction[keyof typeof NetworkingDecisionRequestAction];
+
+
+export const NetworkingDecisionRequestAction = {
+  accept: 'accept',
+  decline: 'decline',
+  ignore: 'ignore',
+  block: 'block',
+  report: 'report',
+} as const;
+
+export interface NetworkingDecisionRequest {
+  action: NetworkingDecisionRequestAction;
+  /** @maxLength 500 */
+  reason?: string;
+}
+
+export type NetworkingDecisionResponseConnection = {
+  id?: string;
+} | null;
+
+export interface NetworkingDecisionResponse {
+  status: string;
+  connection?: NetworkingDecisionResponseConnection;
+}
+
+export interface NetworkingMessage {
+  id: string;
+  connectionId: string;
+  senderId: string;
+  content: string;
+  clientMessageId?: string | null;
+  createdAt: string;
+}
+
+export interface SendNetworkingMessageRequest {
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  content: string;
+  /** @maxLength 100 */
+  clientMessageId?: string;
+}
+
+export interface NetworkingConnectionResponse {
+  id: string;
+  requestId: string;
+  memberAId: string;
+  memberBId: string;
+  createdAt: string;
+  member: NetworkingProfile;
+  lastMessage?: NetworkingMessage | null;
+}
+
+export interface BlockNetworkingResponse {
+  blocked: boolean;
+}
+
 export type NotificationType = typeof NotificationType[keyof typeof NotificationType];
 
 
@@ -931,14 +1110,21 @@ export const NotificationType = {
   flight_confirmed: 'flight_confirmed',
   membership: 'membership',
   referral: 'referral',
+  networking_request: 'networking_request',
+  networking_accepted: 'networking_accepted',
+  networking_declined: 'networking_declined',
+  networking_message: 'networking_message',
   system: 'system',
 } as const;
+
+export type NotificationData = {[key: string]: string};
 
 export interface Notification {
   id: string;
   title: string;
   body: string;
   type: NotificationType;
+  data: NotificationData;
   read: boolean;
   createdAt: string;
 }
@@ -955,9 +1141,3 @@ export type GetConciergeHistoryParams = {
  */
 limit?: number;
 };
-
-export const FamilyInvitationDeliveryStatus = {
-  pending: 'pending',
-  sent: 'sent',
-  failed: 'failed',
-} as const;

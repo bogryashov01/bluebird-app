@@ -79,6 +79,19 @@ export const familyInvitationsTable = pgTable("family_invitations", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const networkingProfilesTable = pgTable("networking_profiles", {
+  userId: text("user_id").primaryKey().references(() => usersTable.id, { onDelete: "cascade" }),
+  firstName: text("first_name").notNull().default(""),
+  lastName: text("last_name").notNull().default(""),
+  photoUrl: text("photo_url"),
+  industry: text("industry").notNull().default(""),
+  bio: text("bio").notNull().default(""),
+  linkedinUrl: text("linkedin_url"),
+  instagramUrl: text("instagram_url"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const referralRewardsTable = pgTable("referral_rewards", {
   id: text("id").primaryKey(),
   inviterUserId: text("inviter_user_id").notNull().references(() => usersTable.id),
@@ -226,8 +239,73 @@ export const notificationsTable = pgTable("notifications", {
   title: text("title").notNull(),
   body: text("body").notNull(),
   type: text("type").notNull().default("system"),
+  data: jsonb("data").$type<Record<string, string>>().notNull().default({}),
   read: boolean("read").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const networkingRequestsTable = pgTable("networking_requests", {
+  id: text("id").primaryKey(),
+  flightId: text("flight_id").notNull().references(() => flightsTable.id, { onDelete: "cascade" }),
+  requesterId: text("requester_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  recipientId: text("recipient_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  message: text("message").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("networking_requests_flight_requester_recipient_unique")
+    .on(table.flightId, table.requesterId, table.recipientId),
+]);
+
+export const networkingConnectionsTable = pgTable("networking_connections", {
+  id: text("id").primaryKey(),
+  requestId: text("request_id").notNull().references(() => networkingRequestsTable.id, { onDelete: "cascade" }).unique(),
+  memberAId: text("member_a_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  memberBId: text("member_b_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("networking_connections_members_unique").on(table.memberAId, table.memberBId),
+]);
+
+export const networkingMessagesTable = pgTable("networking_messages", {
+  id: text("id").primaryKey(),
+  connectionId: text("connection_id").notNull().references(() => networkingConnectionsTable.id, { onDelete: "cascade" }),
+  senderId: text("sender_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  clientMessageId: text("client_message_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("networking_messages_client_id_unique")
+    .on(table.senderId, table.clientMessageId)
+    .where(sql`${table.clientMessageId} IS NOT NULL`),
+]);
+
+export const networkingBlocksTable = pgTable("networking_blocks", {
+  id: text("id").primaryKey(),
+  blockerId: text("blocker_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  blockedId: text("blocked_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("networking_blocks_pair_unique").on(table.blockerId, table.blockedId),
+]);
+
+export const networkingReportsTable = pgTable("networking_reports", {
+  id: text("id").primaryKey(),
+  reporterId: text("reporter_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  reportedId: text("reported_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  requestId: text("request_id").references(() => networkingRequestsTable.id, { onDelete: "set null" }),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const devicePushTokensTable = pgTable("device_push_tokens", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  platform: text("platform").notNull().default("unknown"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at").notNull().defaultNow(),
 });
 
 export const conciergeMessagesTable = pgTable("concierge_messages", {
@@ -285,6 +363,7 @@ export const insertTripSchema = createInsertSchema(tripsTable).omit({ id: true, 
 export const insertNotificationSchema = createInsertSchema(notificationsTable).omit({ id: true, createdAt: true });
 
 export type User = typeof usersTable.$inferSelect;
+export type NetworkingProfile = typeof networkingProfilesTable.$inferSelect;
 export type FamilyPlan = typeof familyPlansTable.$inferSelect;
 export type FamilyMember = typeof familyMembersTable.$inferSelect;
 export type FamilyInvitation = typeof familyInvitationsTable.$inferSelect;
@@ -294,6 +373,12 @@ export type Trip = typeof tripsTable.$inferSelect;
 export type TripPassenger = typeof tripPassengersTable.$inferSelect;
 export type SavedPassenger = typeof savedPassengersTable.$inferSelect;
 export type Notification = typeof notificationsTable.$inferSelect;
+export type NetworkingRequest = typeof networkingRequestsTable.$inferSelect;
+export type NetworkingConnection = typeof networkingConnectionsTable.$inferSelect;
+export type NetworkingMessage = typeof networkingMessagesTable.$inferSelect;
+export type NetworkingBlock = typeof networkingBlocksTable.$inferSelect;
+export type NetworkingReport = typeof networkingReportsTable.$inferSelect;
+export type DevicePushToken = typeof devicePushTokensTable.$inferSelect;
 export type RevokedToken = typeof revokedTokensTable.$inferSelect;
 export type LoginCode = typeof loginCodesTable.$inferSelect;
 export type RegistrationGrant = typeof registrationGrantsTable.$inferSelect;

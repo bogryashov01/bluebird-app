@@ -3,6 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthTokenGetter, logout, type User } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
+import { Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { useRegisterNetworkingPushToken } from '@workspace/api-client-react';
 
 const TOKEN_KEY = 'bluebird_token';
 const USER_KEY = 'bluebird_user';
@@ -36,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pendingRegistrationGrant, setPendingRegistrationGrant] = useState<string | null>(null);
+  const registerPushToken = useRegisterNetworkingPushToken();
 
   useEffect(() => {
     async function loadAuth() {
@@ -85,6 +89,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     loadAuth();
   }, []);
+
+  useEffect(() => {
+    if (!user || !token || user.membershipTier === 'none' || Platform.OS === 'web') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const current = await Notifications.getPermissionsAsync();
+        let status = current.status;
+        if (status !== 'granted') {
+          status = (await Notifications.requestPermissionsAsync()).status;
+        }
+        if (status !== 'granted' || cancelled) return;
+        const push = await Notifications.getExpoPushTokenAsync();
+        if (!cancelled && push.data) {
+          registerPushToken.mutate({
+            data: {
+              token: push.data,
+              platform: Platform.OS,
+            },
+          });
+        }
+      } catch {
+        // Push permission is optional; networking notifications remain in-app.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, user?.membershipTier, token]);
 
   const signIn = async (newToken: string, newUser: AuthUser) => {
     const normalized = normalizeUser(newUser);

@@ -2,13 +2,16 @@ import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Alert, ImageBackground, useWindowDimensions,
-  Modal, Pressable, Linking,
+  Modal, Pressable, Linking, TextInput,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useGetFlight, useGetFlightMyStatus, useCancelQueueEntry, useCancelTrip } from '@workspace/api-client-react';
+import {
+  useGetFlight, useGetFlightMyStatus, useCancelQueueEntry, useCancelTrip,
+  useGetNetworkingFrontMember, useCreateNetworkingRequest,
+} from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
@@ -76,6 +79,8 @@ export default function FlightDetailScreen() {
   const queryClient = useQueryClient();
   const [passengers, setPassengers] = useState(1);
   const [directionsOpen, setDirectionsOpen] = useState(false);
+  const [networkMessage, setNetworkMessage] = useState('');
+  const [networkError, setNetworkError] = useState('');
 
   const { data: flight, isLoading, isError } = useGetFlight(id!);
 
@@ -90,6 +95,14 @@ export default function FlightDetailScreen() {
       refetchOnMount: 'always',
     },
   });
+  const { data: frontMember } = useGetNetworkingFrontMember(id!, {
+    query: {
+      enabled: !!user && user.membershipTier !== 'none' && !!id,
+      refetchInterval: 15000,
+      refetchOnMount: 'always',
+    },
+  });
+  const networkingRequest = useCreateNetworkingRequest();
 
   const topPad  = Platform.OS === 'web' ? 60 : insets.top;
   const botPad  = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -147,6 +160,22 @@ export default function FlightDetailScreen() {
     if (!myStatus?.queueEntryId) return;
     const ok = await confirmDialog('Leave Queue?', 'You will lose your position in the queue.', 'Leave Queue', true);
     if (ok) cancelMutation.mutate({ id: myStatus.queueEntryId! });
+  };
+
+  const sendNetworkingRequest = () => {
+    const message = networkMessage.trim();
+    if (!message || networkingRequest.isPending) return;
+    setNetworkError('');
+    networkingRequest.mutate({ data: { flightId: id!, message } }, {
+      onSuccess: () => setNetworkMessage(''),
+      onError: (err: any) => {
+        if (err?.data?.code === 'MEMBERSHIP_REQUIRED') {
+          router.push('/membership/plans' as any);
+          return;
+        }
+        setNetworkError(err?.data?.error ?? err?.message ?? 'Could not send your introduction.');
+      },
+    });
   };
 
   // ── Loading / Error — guards before any flight-property access ──
@@ -484,6 +513,44 @@ export default function FlightDetailScreen() {
           </Text>
         </View>
 
+        {!!frontMember?.eligible && frontMember.member && (
+          <View style={[styles.networkCard, { backgroundColor: colors.surface, borderColor: colors.primary + '35' }]}>
+            <View style={styles.networkHeading}>
+              <View style={[styles.networkAvatar, { backgroundColor: colors.primary + '18' }]}>
+                <Text style={[styles.networkAvatarText, { color: colors.primary }]}>{frontMember.member.firstName?.[0] ?? '?'}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.networkEyebrow, { color: colors.primary }]}>MEET YOUR FELLOW MEMBER</Text>
+                <Text style={[styles.networkName, { color: colors.textOnSurface }]}>{frontMember.member.firstName}</Text>
+                <Text style={[styles.networkIndustry, { color: colors.mutedForegroundLight }]}>{frontMember.member.industry}</Text>
+              </View>
+            </View>
+            <Text style={[styles.networkCopy, { color: colors.mutedForegroundLight }]}>
+              They’re currently first in line for this flight. Send a short introduction without changing your queue position.
+            </Text>
+            <TextInput
+              value={networkMessage}
+              onChangeText={setNetworkMessage}
+              placeholder="Hi — I’d enjoy meeting before the flight…"
+              placeholderTextColor={colors.mutedForegroundLight}
+              maxLength={240}
+              multiline
+              style={[styles.networkInput, { color: colors.textOnSurface, backgroundColor: colors.muted, borderColor: colors.border }]}
+            />
+            {networkError ? <Text style={[styles.networkError, { color: colors.destructive }]}>{networkError}</Text> : null}
+            <TouchableOpacity
+              style={[styles.networkButton, { backgroundColor: colors.primary, opacity: networkMessage.trim() && !networkingRequest.isPending ? 1 : 0.55 }]}
+              disabled={!networkMessage.trim() || networkingRequest.isPending}
+              onPress={sendNetworkingRequest}
+              activeOpacity={0.8}
+            >
+              {networkingRequest.isPending
+                ? <ActivityIndicator color={colors.primaryForeground} size="small" />
+                : <Text style={[styles.networkButtonText, { color: colors.primaryForeground }]}>Send introduction</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* ── FBO departure card ── */}
         {!!departureFbo && (
           <TouchableOpacity
@@ -695,6 +762,22 @@ const styles = StyleSheet.create({
   fboHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   fboAddress: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, marginTop: 7 },
   fboAction: { fontFamily: 'Inter_600SemiBold', fontSize: 13, marginTop: 8, textDecorationLine: 'underline' },
+
+  networkCard: {
+    marginHorizontal: 16, borderRadius: 18, borderWidth: 1,
+    padding: 16, marginBottom: 14,
+  },
+  networkHeading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  networkAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  networkAvatarText: { fontFamily: 'Inter_700Bold', fontSize: 19 },
+  networkEyebrow: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 0.7 },
+  networkName: { fontFamily: 'Inter_700Bold', fontSize: 17, marginTop: 3 },
+  networkIndustry: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 1 },
+  networkCopy: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, marginTop: 12 },
+  networkInput: { minHeight: 64, borderWidth: 1, borderRadius: 13, paddingHorizontal: 12, paddingVertical: 10, marginTop: 12, fontFamily: 'Inter_400Regular', fontSize: 14 },
+  networkError: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17, marginTop: 8 },
+  networkButton: { borderRadius: 999, alignItems: 'center', paddingVertical: 13, marginTop: 12 },
+  networkButtonText: { fontFamily: 'Inter_700Bold', fontSize: 14 },
 
   modalBackdrop: {
     flex: 1, justifyContent: 'flex-end', paddingHorizontal: 12,

@@ -5,6 +5,7 @@
  * Bluebird private aviation API
  * OpenAPI spec version: 0.1.0
  */
+import type { NotificationData } from './notificationData';
 import type { NotificationType } from './notificationType';
 
 export interface Notification {
@@ -12,6 +13,7 @@ export interface Notification {
   title: string;
   body: string;
   type: NotificationType;
+  data: NotificationData;
   read: boolean;
   createdAt: string;
 }

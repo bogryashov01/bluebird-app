@@ -63,6 +63,7 @@
     "@types/leaflet": "^1.9.22",
     "expo-calendar": "~15.0.8",
     "expo-clipboard": "^57.0.1",
+    "expo-notifications": "~0.32.17",
     "leaflet": "^1.9.4",
     "react-leaflet": "^5.0.0",
     "react-native-maps": "1.18.0"

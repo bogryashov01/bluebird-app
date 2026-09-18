@@ -10,6 +10,12 @@ export function notificationRoute(item: Notification): string | null {
     case 'flight_confirmed': return '/(tabs)/trips';
     case 'membership':       return '/(tabs)/membership';
     case 'referral':         return '/referral';
+    case 'networking_request': return '/networking/requests';
+    case 'networking_accepted':
+    case 'networking_message':
+      return item.data?.connectionId
+        ? `/networking/connections/${item.data.connectionId}`
+        : '/networking/connections';
     default:                 return null;
   }
 }

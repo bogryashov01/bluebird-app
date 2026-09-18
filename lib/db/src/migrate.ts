@@ -498,8 +498,83 @@ export async function ensureSchema(): Promise<void> {
       title      TEXT        NOT NULL,
       body       TEXT        NOT NULL,
       type       TEXT        NOT NULL DEFAULT 'system',
+      data       JSONB       NOT NULL DEFAULT '{}'::jsonb,
       read       BOOLEAN     NOT NULL DEFAULT false,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS data JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+    CREATE TABLE IF NOT EXISTS networking_profiles (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      first_name TEXT NOT NULL DEFAULT '',
+      last_name TEXT NOT NULL DEFAULT '',
+      photo_url TEXT,
+      industry TEXT NOT NULL DEFAULT '',
+      bio TEXT NOT NULL DEFAULT '',
+      linkedin_url TEXT,
+      instagram_url TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS networking_requests (
+      id TEXT PRIMARY KEY,
+      flight_id TEXT NOT NULL REFERENCES flights(id) ON DELETE CASCADE,
+      requester_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT networking_requests_flight_requester_recipient_unique
+        UNIQUE (flight_id, requester_id, recipient_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS networking_connections (
+      id TEXT PRIMARY KEY,
+      request_id TEXT NOT NULL UNIQUE REFERENCES networking_requests(id) ON DELETE CASCADE,
+      member_a_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      member_b_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT networking_connections_members_unique UNIQUE (member_a_id, member_b_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS networking_messages (
+      id TEXT PRIMARY KEY,
+      connection_id TEXT NOT NULL REFERENCES networking_connections(id) ON DELETE CASCADE,
+      sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      content TEXT NOT NULL,
+      client_message_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS networking_messages_client_id_unique
+      ON networking_messages (sender_id, client_message_id)
+      WHERE client_message_id IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS networking_blocks (
+      id TEXT PRIMARY KEY,
+      blocker_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      blocked_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT networking_blocks_pair_unique UNIQUE (blocker_id, blocked_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS networking_reports (
+      id TEXT PRIMARY KEY,
+      reporter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reported_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      request_id TEXT REFERENCES networking_requests(id) ON DELETE SET NULL,
+      reason TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS device_push_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token TEXT NOT NULL UNIQUE,
+      platform TEXT NOT NULL DEFAULT 'unknown',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 }

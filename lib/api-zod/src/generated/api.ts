@@ -14,6 +14,16 @@ export const updateMeBodyWeightKgMax = 500;
 export const updateMeBodyHomeAirportsItemRegExp = new RegExp('^\\s*[A-Za-z]{3,4}\\s*$');
 export const updateMeBodyHomeAirportsMax = 20;
 export const updateMeResponseWeightKgMax = 500;
+export const updateNetworkingProfileBodyFirstNameMax = 80;
+export const updateNetworkingProfileBodyLastNameMax = 80;
+export const updateNetworkingProfileBodyIndustryMax = 80;
+export const updateNetworkingProfileBodyBioMax = 280;
+export const registerNetworkingPushTokenBodyTokenMax = 512;
+export const registerNetworkingPushTokenBodyPlatformMax = 20;
+export const createNetworkingRequestBodyMessageMax = 240;
+export const decideNetworkingRequestBodyReasonMax = 500;
+export const sendNetworkingMessageBodyContentMax = 1000;
+export const sendNetworkingMessageBodyClientMessageIdMax = 100;
 export const joinQueueBodyTwoPassengersDefault = 1;
 export const joinQueueBodyTwoPassengersMax = 6;
 export const joinQueueBodyTwoPassengersMultipleOf = 1;
@@ -391,8 +401,277 @@ export const GetFlightMyStatusResponse = zod.object({
 
 
 /**
+ * @summary Get the current member's networking profile and completion state
+ */
+export const GetNetworkingProfileResponse = zod.object({
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "photoUrl": zod.string().nullable(),
+  "industry": zod.string(),
+  "bio": zod.string(),
+  "linkedinUrl": zod.string().nullish(),
+  "instagramUrl": zod.string().nullish()
+}).and(zod.object({
+  "completed": zod.boolean(),
+  "missing": zod.array(zod.string())
+}))
+
+
+/**
+ * @summary Create or update the current member's networking profile
+ */
+
+
+
+
+
+
+export const UpdateNetworkingProfileBody = zod.object({
+  "firstName": zod.string().min(1).max(updateNetworkingProfileBodyFirstNameMax).optional(),
+  "lastName": zod.string().min(1).max(updateNetworkingProfileBodyLastNameMax).optional(),
+  "photoUrl": zod.string().nullish(),
+  "industry": zod.string().min(1).max(updateNetworkingProfileBodyIndustryMax).optional(),
+  "bio": zod.string().min(1).max(updateNetworkingProfileBodyBioMax).optional(),
+  "linkedinUrl": zod.string().nullish(),
+  "instagramUrl": zod.string().nullish()
+})
+
+export const UpdateNetworkingProfileResponse = zod.object({
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "photoUrl": zod.string().nullable(),
+  "industry": zod.string(),
+  "bio": zod.string(),
+  "linkedinUrl": zod.string().nullish(),
+  "instagramUrl": zod.string().nullish()
+}).and(zod.object({
+  "completed": zod.boolean(),
+  "missing": zod.array(zod.string())
+}))
+
+
+/**
+ * @summary Register a device push token for networking notifications
+ */
+
+
+
+
+export const RegisterNetworkingPushTokenBody = zod.object({
+  "token": zod.string().min(1).max(registerNetworkingPushTokenBodyTokenMax),
+  "platform": zod.string().max(registerNetworkingPushTokenBodyPlatformMax).optional()
+})
+
+export const RegisterNetworkingPushTokenResponse = zod.object({
+  "id": zod.string(),
+  "userId": zod.string(),
+  "token": zod.string(),
+  "platform": zod.string(),
+  "createdAt": zod.string(),
+  "lastUsedAt": zod.string()
+})
+
+
+/**
+ * @summary Find the eligible position-one waiting member for a flight
+ */
+export const GetNetworkingFrontMemberParams = zod.object({
+  "flightId": zod.coerce.string()
+})
+
+export const GetNetworkingFrontMemberResponse = zod.object({
+  "eligible": zod.boolean(),
+  "flightId": zod.string().optional(),
+  "member": zod.object({
+  "userId": zod.string(),
+  "firstName": zod.string(),
+  "photoUrl": zod.string().nullable(),
+  "industry": zod.string(),
+  "bio": zod.string()
+}).nullable()
+})
+
+
+/**
+ * @summary Send an introduction to the current position-one flight member
+ */
+
+
+
+export const CreateNetworkingRequestBody = zod.object({
+  "flightId": zod.string(),
+  "message": zod.string().min(1).max(createNetworkingRequestBodyMessageMax)
+})
+
+export const CreateNetworkingRequestResponse = zod.object({
+  "id": zod.string(),
+  "flightId": zod.string(),
+  "requesterId": zod.string(),
+  "recipientId": zod.string(),
+  "message": zod.string(),
+  "status": zod.enum(['pending', 'accepted', 'declined', 'ignored']),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "requester": zod.object({
+  "userId": zod.string(),
+  "firstName": zod.string(),
+  "photoUrl": zod.string().nullable(),
+  "industry": zod.string(),
+  "bio": zod.string()
+}).optional(),
+  "flight": zod.object({
+  "fromCity": zod.string().optional(),
+  "toCity": zod.string().optional(),
+  "departureDate": zod.string().optional()
+}).nullish()
+})
+
+
+/**
+ * @summary List pending networking requests for the current member
+ */
+export const ListIncomingNetworkingRequestsResponseItem = zod.object({
+  "id": zod.string(),
+  "flightId": zod.string(),
+  "requesterId": zod.string(),
+  "recipientId": zod.string(),
+  "message": zod.string(),
+  "status": zod.enum(['pending', 'accepted', 'declined', 'ignored']),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "requester": zod.object({
+  "userId": zod.string(),
+  "firstName": zod.string(),
+  "photoUrl": zod.string().nullable(),
+  "industry": zod.string(),
+  "bio": zod.string()
+}).optional(),
+  "flight": zod.object({
+  "fromCity": zod.string().optional(),
+  "toCity": zod.string().optional(),
+  "departureDate": zod.string().optional()
+}).nullish()
+})
+export const ListIncomingNetworkingRequestsResponse = zod.array(ListIncomingNetworkingRequestsResponseItem)
+
+
+/**
+ * @summary Accept, decline, ignore, block, or report a networking request
+ */
+export const DecideNetworkingRequestParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const DecideNetworkingRequestBody = zod.object({
+  "action": zod.enum(['accept', 'decline', 'ignore', 'block', 'report']),
+  "reason": zod.string().max(decideNetworkingRequestBodyReasonMax).optional()
+})
+
+export const DecideNetworkingRequestResponse = zod.object({
+  "status": zod.string(),
+  "connection": zod.object({
+  "id": zod.string().optional()
+}).nullish()
+})
+
+
+/**
+ * @summary List accepted networking connections
+ */
+export const ListNetworkingConnectionsResponseItem = zod.object({
+  "id": zod.string(),
+  "requestId": zod.string(),
+  "memberAId": zod.string(),
+  "memberBId": zod.string(),
+  "createdAt": zod.string(),
+  "member": zod.object({
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "photoUrl": zod.string().nullable(),
+  "industry": zod.string(),
+  "bio": zod.string(),
+  "linkedinUrl": zod.string().nullish(),
+  "instagramUrl": zod.string().nullish()
+}),
+  "lastMessage": zod.object({
+  "id": zod.string(),
+  "connectionId": zod.string(),
+  "senderId": zod.string(),
+  "content": zod.string(),
+  "clientMessageId": zod.string().nullish(),
+  "createdAt": zod.string()
+}).nullish()
+})
+export const ListNetworkingConnectionsResponse = zod.array(ListNetworkingConnectionsResponseItem)
+
+
+/**
+ * @summary List messages in an accepted connection
+ */
+export const ListNetworkingMessagesParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListNetworkingMessagesResponseItem = zod.object({
+  "id": zod.string(),
+  "connectionId": zod.string(),
+  "senderId": zod.string(),
+  "content": zod.string(),
+  "clientMessageId": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListNetworkingMessagesResponse = zod.array(ListNetworkingMessagesResponseItem)
+
+
+/**
+ * @summary Send a message in an accepted connection
+ */
+export const SendNetworkingMessageParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+
+export const SendNetworkingMessageBody = zod.object({
+  "content": zod.string().min(1).max(sendNetworkingMessageBodyContentMax),
+  "clientMessageId": zod.string().max(sendNetworkingMessageBodyClientMessageIdMax).optional()
+})
+
+export const SendNetworkingMessageResponse = zod.object({
+  "id": zod.string(),
+  "connectionId": zod.string(),
+  "senderId": zod.string(),
+  "content": zod.string(),
+  "clientMessageId": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Block the other member in an accepted connection
+ */
+export const BlockNetworkingConnectionParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const BlockNetworkingConnectionResponse = zod.object({
+  "blocked": zod.boolean()
+})
+
+
+/**
  * @summary Join queue for a flight
  */
+
+
+
+
+
 
 
 export const JoinQueueBody = zod.unknown().and(zod.object({
@@ -407,6 +686,9 @@ export const JoinQueueBody = zod.unknown().and(zod.object({
   "petCrateWidthIn": zod.number().gt(joinQueueBodyTwoPetCrateWidthInExclusiveMin).max(joinQueueBodyTwoPetCrateWidthInMax).optional().describe('Pet crate width in inches; optional at queue join and collected later in the passenger manifest.'),
   "petCrateHeightIn": zod.number().gt(joinQueueBodyTwoPetCrateHeightInExclusiveMin).max(joinQueueBodyTwoPetCrateHeightInMax).optional().describe('Pet crate height in inches; optional at queue join and collected later in the passenger manifest.')
 }))
+
+
+
 
 
 export const JoinQueueResponse = zod.object({
@@ -468,6 +750,8 @@ export const JoinQueueResponse = zod.object({
 /**
  * @summary Get user queue status
  */
+
+
 
 
 export const GetQueueStatusResponseItem = zod.object({
@@ -545,6 +829,9 @@ export const CancelQueueEntryResponse = zod.object({
 export const UseLinePassOnQueueEntryParams = zod.object({
   "id": zod.coerce.string()
 })
+
+
+
 
 
 export const UseLinePassOnQueueEntryResponse = zod.object({
@@ -755,6 +1042,7 @@ export const ListTripsResponse = zod.array(ListTripsResponseItem)
  */
 
 
+
 export const ListSavedPassengersResponseItem = zod.object({
   "id": zod.string(),
   "firstName": zod.string(),
@@ -773,6 +1061,11 @@ export const ListSavedPassengersResponse = zod.array(ListSavedPassengersResponse
  */
 
 
+
+
+
+
+
 export const CreateSavedPassengerBody = zod.object({
   "firstName": zod.string().max(createSavedPassengerBodyFirstNameMax),
   "lastName": zod.string().max(createSavedPassengerBodyLastNameMax),
@@ -780,6 +1073,8 @@ export const CreateSavedPassengerBody = zod.object({
   "email": zod.string().max(createSavedPassengerBodyEmailMax).nullish(),
   "weightKg": zod.number().min(1).max(createSavedPassengerBodyWeightKgMax)
 })
+
+
 
 
 export const CreateSavedPassengerResponse = zod.object({
@@ -802,6 +1097,12 @@ export const UpdateSavedPassengerParams = zod.object({
 })
 
 
+
+
+
+
+
+
 export const UpdateSavedPassengerBody = zod.object({
   "firstName": zod.string().max(updateSavedPassengerBodyFirstNameMax),
   "lastName": zod.string().max(updateSavedPassengerBodyLastNameMax),
@@ -809,6 +1110,8 @@ export const UpdateSavedPassengerBody = zod.object({
   "email": zod.string().max(updateSavedPassengerBodyEmailMax).nullish(),
   "weightKg": zod.number().min(1).max(updateSavedPassengerBodyWeightKgMax)
 })
+
+
 
 
 export const UpdateSavedPassengerResponse = zod.object({
@@ -841,6 +1144,10 @@ export const DeleteSavedPassengerResponse = zod.object({
 export const GetTripManifestParams = zod.object({
   "id": zod.coerce.string()
 })
+
+
+
+
 
 
 export const GetTripManifestResponse = zod.object({
@@ -880,6 +1187,18 @@ export const SaveTripManifestParams = zod.object({
 })
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 export const SaveTripManifestBody = zod.object({
   "passengers": zod.array(zod.object({
   "passengerOrder": zod.number().min(1).multipleOf(saveTripManifestBodyPassengersItemPassengerOrderMultipleOf),
@@ -897,6 +1216,10 @@ export const SaveTripManifestBody = zod.object({
   "crateHeightIn": zod.number().min(1).max(saveTripManifestBodyPetCrateHeightInMax).nullish()
 }).optional()
 })
+
+
+
+
 
 
 export const SaveTripManifestResponse = zod.object({
@@ -934,6 +1257,10 @@ export const SaveTripManifestResponse = zod.object({
 export const SubmitTripManifestParams = zod.object({
   "id": zod.coerce.string()
 })
+
+
+
+
 
 
 export const SubmitTripManifestResponse = zod.object({
@@ -1203,6 +1530,8 @@ export const UpdateFamilyMemberAllocationParams = zod.object({
 })
 
 
+
+
 export const UpdateFamilyMemberAllocationBody = zod.object({
   "allocatedPasses": zod.number().int().min(updateFamilyMemberAllocationBodyAllocatedPassesMin).max(updateFamilyMemberAllocationBodyAllocatedPassesMax)
 })
@@ -1420,7 +1749,8 @@ export const ListNotificationsResponseItem = zod.object({
   "id": zod.string(),
   "title": zod.string(),
   "body": zod.string(),
-  "type": zod.enum(['queue_update', 'flight_confirmed', 'membership', 'referral', 'system']),
+  "type": zod.enum(['queue_update', 'flight_confirmed', 'membership', 'referral', 'networking_request', 'networking_accepted', 'networking_declined', 'networking_message', 'system']),
+  "data": zod.record(zod.string(), zod.string()),
   "read": zod.boolean(),
   "createdAt": zod.string()
 })
@@ -1438,7 +1768,8 @@ export const MarkNotificationReadResponse = zod.object({
   "id": zod.string(),
   "title": zod.string(),
   "body": zod.string(),
-  "type": zod.enum(['queue_update', 'flight_confirmed', 'membership', 'referral', 'system']),
+  "type": zod.enum(['queue_update', 'flight_confirmed', 'membership', 'referral', 'networking_request', 'networking_accepted', 'networking_declined', 'networking_message', 'system']),
+  "data": zod.record(zod.string(), zod.string()),
   "read": zod.boolean(),
   "createdAt": zod.string()
 })
@@ -1447,6 +1778,8 @@ export const MarkNotificationReadResponse = zod.object({
 /**
  * @summary Send a message to the AI concierge
  */
+
+
 
 
 export const ConciergeChatBody = zod.object({
@@ -1468,6 +1801,7 @@ export const ConciergeChatResponse = zod.object({
  */
 
 
+
 export const GetConciergeHistoryQueryParams = zod.object({
   "limit": zod.coerce.number().int().min(1).max(getConciergeHistoryQueryLimitMax).default(getConciergeHistoryQueryLimitDefault)
 })
@@ -1486,6 +1820,7 @@ export const GetConciergeHistoryResponse = zod.array(GetConciergeHistoryResponse
 /**
  * @summary Request human follow-up for an escalated concierge reply
  */
+
 
 
 export const RequestConciergeCallbackBody = zod.object({

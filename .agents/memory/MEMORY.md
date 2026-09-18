@@ -21,3 +21,4 @@
 - [Queue join merge invariant](queue-join-merge-invariant.md) — validate that POST /queue/join inserts a fresh entry before returning; conflict merges can compile while leaving route-param lookups in place.
 - [GitHub publish transport](github-publish.md) — REST connector access may not authenticate local git push; empty repos need a Contents seed before Git Data API publishing.
 - [Family pass cycles](family-pass-cycles.md) — tie each Family redemption to its annual cycle so later cancellations cannot refund expired passes into a new pool.
+- [Networking photo persistence](networking-photo-persistence.md) — Expo profile photos use validated portable data URIs/HTTPS URLs until a compatible App Storage upload path exists.
