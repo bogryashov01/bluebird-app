@@ -181,7 +181,7 @@ export default function NetworkingProfileScreen() {
         {field('First name', firstName, setFirstName, 'First name')}
         {field('Last name', lastName, setLastName, 'Last name')}
         {field('Industry or category', industry, setIndustry, 'e.g. Venture capital')}
-        {field('Short bio', bio, setBio, 'What would you enjoy talking about?', true)}
+        {field('Short bio', bio, setBio, 'Write a short discrption about yourself.', true)}
         {field('LinkedIn (optional)', linkedinUrl, setLinkedinUrl, 'https://linkedin.com/in/you')}
         {field('Instagram (optional)', instagramUrl, setInstagramUrl, 'https://instagram.com/you')}
         <View style={[styles.status, { backgroundColor: data.completed ? colors.success + '16' : colors.primary + '12' }]}>
