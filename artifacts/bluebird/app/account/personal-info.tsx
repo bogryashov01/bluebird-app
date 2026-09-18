@@ -18,8 +18,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
-
-type ProfilePhotoContentType = 'image/jpeg' | 'image/png' | 'image/webp';
+import { uploadProfilePhoto } from '@/lib/profile-photo-upload';
 
 function toPhotoUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
@@ -137,42 +136,14 @@ export default function PersonalInfoScreen() {
       });
       const asset = result.canceled ? null : result.assets[0];
       if (!asset) return;
-      const contentType = asset.mimeType?.toLowerCase() as ProfilePhotoContentType | undefined;
-      if (!contentType || !['image/jpeg', 'image/png', 'image/webp'].includes(contentType)) {
-        setNetworkingErrorMessage('Choose a JPEG, PNG, or WebP profile photo.');
-        return;
-      }
-      let body: Blob | ExpoFile;
-      let size = asset.fileSize;
-      if (Platform.OS === 'web') {
-        // expo-file-system's File wrapper is native-only. On web, read the
-        // browser-selected file as a Blob so React Native Web never reaches
-        // the unsupported native path implementation.
-        body = await (await fetch(asset.uri)).blob();
-        size ??= body.size;
-      } else {
-        const file = new ExpoFile(asset.uri);
-        body = file;
-        size ??= file.size;
-      }
-      if (!size || size > 1_500_000) {
-        setNetworkingErrorMessage('Profile photos must be smaller than 1.5 MB.');
-        return;
-      }
       setIsUploadingPhoto(true);
-      const upload = await uploadPhoto.mutateAsync({
-        data: {
-          name: asset.fileName ?? `profile.${contentType.slice('image/'.length).replace('jpeg', 'jpg')}`,
-          size,
-          contentType,
-        },
+      const upload = await uploadProfilePhoto(asset, {
+        platform: Platform.OS,
+        createNativeFile: (uri) => new ExpoFile(uri),
+        readWebBlob: async (uri) => (await (await fetch(uri)).blob()),
+        requestUpload: async (metadata) => uploadPhoto.mutateAsync({ data: metadata }),
+        put: (url, options) => expoFetch(url, options as any),
       });
-      const response = await expoFetch(upload.uploadURL, {
-        method: 'PUT',
-        headers: { 'Content-Type': contentType },
-        body: body as any,
-      });
-      if (!response.ok) throw new Error('Photo upload failed');
       setPhotoAssetPath(upload.objectPath);
       setPhotoUrl(toPhotoUrl(upload.objectPath));
     } catch (uploadError: any) {
