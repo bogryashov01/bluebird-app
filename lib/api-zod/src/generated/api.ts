@@ -395,11 +395,6 @@ export const GetFlightMyStatusResponse = zod.object({
  */
 
 
-
-
-
-
-
 export const JoinQueueBody = zod.unknown().and(zod.object({
   "flightId": zod.string(),
   "useLinePass": zod.boolean().optional(),
@@ -412,9 +407,6 @@ export const JoinQueueBody = zod.unknown().and(zod.object({
   "petCrateWidthIn": zod.number().gt(joinQueueBodyTwoPetCrateWidthInExclusiveMin).max(joinQueueBodyTwoPetCrateWidthInMax).optional().describe('Pet crate width in inches; optional at queue join and collected later in the passenger manifest.'),
   "petCrateHeightIn": zod.number().gt(joinQueueBodyTwoPetCrateHeightInExclusiveMin).max(joinQueueBodyTwoPetCrateHeightInMax).optional().describe('Pet crate height in inches; optional at queue join and collected later in the passenger manifest.')
 }))
-
-
-
 
 
 export const JoinQueueResponse = zod.object({
@@ -476,8 +468,6 @@ export const JoinQueueResponse = zod.object({
 /**
  * @summary Get user queue status
  */
-
-
 
 
 export const GetQueueStatusResponseItem = zod.object({
@@ -555,9 +545,6 @@ export const CancelQueueEntryResponse = zod.object({
 export const UseLinePassOnQueueEntryParams = zod.object({
   "id": zod.coerce.string()
 })
-
-
-
 
 
 export const UseLinePassOnQueueEntryResponse = zod.object({
@@ -768,7 +755,6 @@ export const ListTripsResponse = zod.array(ListTripsResponseItem)
  */
 
 
-
 export const ListSavedPassengersResponseItem = zod.object({
   "id": zod.string(),
   "firstName": zod.string(),
@@ -787,11 +773,6 @@ export const ListSavedPassengersResponse = zod.array(ListSavedPassengersResponse
  */
 
 
-
-
-
-
-
 export const CreateSavedPassengerBody = zod.object({
   "firstName": zod.string().max(createSavedPassengerBodyFirstNameMax),
   "lastName": zod.string().max(createSavedPassengerBodyLastNameMax),
@@ -799,8 +780,6 @@ export const CreateSavedPassengerBody = zod.object({
   "email": zod.string().max(createSavedPassengerBodyEmailMax).nullish(),
   "weightKg": zod.number().min(1).max(createSavedPassengerBodyWeightKgMax)
 })
-
-
 
 
 export const CreateSavedPassengerResponse = zod.object({
@@ -823,12 +802,6 @@ export const UpdateSavedPassengerParams = zod.object({
 })
 
 
-
-
-
-
-
-
 export const UpdateSavedPassengerBody = zod.object({
   "firstName": zod.string().max(updateSavedPassengerBodyFirstNameMax),
   "lastName": zod.string().max(updateSavedPassengerBodyLastNameMax),
@@ -836,8 +809,6 @@ export const UpdateSavedPassengerBody = zod.object({
   "email": zod.string().max(updateSavedPassengerBodyEmailMax).nullish(),
   "weightKg": zod.number().min(1).max(updateSavedPassengerBodyWeightKgMax)
 })
-
-
 
 
 export const UpdateSavedPassengerResponse = zod.object({
@@ -870,10 +841,6 @@ export const DeleteSavedPassengerResponse = zod.object({
 export const GetTripManifestParams = zod.object({
   "id": zod.coerce.string()
 })
-
-
-
-
 
 
 export const GetTripManifestResponse = zod.object({
@@ -913,18 +880,6 @@ export const SaveTripManifestParams = zod.object({
 })
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 export const SaveTripManifestBody = zod.object({
   "passengers": zod.array(zod.object({
   "passengerOrder": zod.number().min(1).multipleOf(saveTripManifestBodyPassengersItemPassengerOrderMultipleOf),
@@ -942,10 +897,6 @@ export const SaveTripManifestBody = zod.object({
   "crateHeightIn": zod.number().min(1).max(saveTripManifestBodyPetCrateHeightInMax).nullish()
 }).optional()
 })
-
-
-
-
 
 
 export const SaveTripManifestResponse = zod.object({
@@ -983,10 +934,6 @@ export const SaveTripManifestResponse = zod.object({
 export const SubmitTripManifestParams = zod.object({
   "id": zod.coerce.string()
 })
-
-
-
-
 
 
 export const SubmitTripManifestResponse = zod.object({
@@ -1066,7 +1013,11 @@ export const GetMembershipResponse = zod.object({
   "email": zod.string(),
   "expiresAt": zod.string(),
   "acceptanceToken": zod.string().optional(),
-  "acceptancePath": zod.string().optional()
+  "acceptancePath": zod.string().optional(),
+  "deliveryStatus": zod.enum(['pending', 'sent', 'failed']),
+  "deliveryError": zod.string().nullish(),
+  "deliveredAt": zod.string().nullish(),
+  "providerMessageId": zod.string().optional()
 }))
 }).optional(),
   "linePassCount": zod.number(),
@@ -1116,7 +1067,11 @@ export const GetFamilyMembershipResponse = zod.object({
   "email": zod.string(),
   "expiresAt": zod.string(),
   "acceptanceToken": zod.string().optional(),
-  "acceptancePath": zod.string().optional()
+  "acceptancePath": zod.string().optional(),
+  "deliveryStatus": zod.enum(['pending', 'sent', 'failed']),
+  "deliveryError": zod.string().nullish(),
+  "deliveredAt": zod.string().nullish(),
+  "providerMessageId": zod.string().optional()
 }))
 })
 
@@ -1139,7 +1094,11 @@ export const CreateFamilyInvitationResponse = zod.object({
   "email": zod.string(),
   "expiresAt": zod.string(),
   "acceptanceToken": zod.string().optional(),
-  "acceptancePath": zod.string().optional()
+  "acceptancePath": zod.string().optional(),
+  "deliveryStatus": zod.enum(['pending', 'sent', 'failed']),
+  "deliveryError": zod.string().nullish(),
+  "deliveredAt": zod.string().nullish(),
+  "providerMessageId": zod.string().optional()
 }).optional(),
   "family": zod.object({
   "id": zod.string(),
@@ -1174,7 +1133,11 @@ export const CreateFamilyInvitationResponse = zod.object({
   "email": zod.string(),
   "expiresAt": zod.string(),
   "acceptanceToken": zod.string().optional(),
-  "acceptancePath": zod.string().optional()
+  "acceptancePath": zod.string().optional(),
+  "deliveryStatus": zod.enum(['pending', 'sent', 'failed']),
+  "deliveryError": zod.string().nullish(),
+  "deliveredAt": zod.string().nullish(),
+  "providerMessageId": zod.string().optional()
 }))
 })
 })
@@ -1222,7 +1185,11 @@ export const AcceptFamilyInvitationResponse = zod.object({
   "email": zod.string(),
   "expiresAt": zod.string(),
   "acceptanceToken": zod.string().optional(),
-  "acceptancePath": zod.string().optional()
+  "acceptancePath": zod.string().optional(),
+  "deliveryStatus": zod.enum(['pending', 'sent', 'failed']),
+  "deliveryError": zod.string().nullish(),
+  "deliveredAt": zod.string().nullish(),
+  "providerMessageId": zod.string().optional()
 }))
 })
 })
@@ -1234,8 +1201,6 @@ export const AcceptFamilyInvitationResponse = zod.object({
 export const UpdateFamilyMemberAllocationParams = zod.object({
   "memberId": zod.coerce.string()
 })
-
-
 
 
 export const UpdateFamilyMemberAllocationBody = zod.object({
@@ -1275,7 +1240,11 @@ export const UpdateFamilyMemberAllocationResponse = zod.object({
   "email": zod.string(),
   "expiresAt": zod.string(),
   "acceptanceToken": zod.string().optional(),
-  "acceptancePath": zod.string().optional()
+  "acceptancePath": zod.string().optional(),
+  "deliveryStatus": zod.enum(['pending', 'sent', 'failed']),
+  "deliveryError": zod.string().nullish(),
+  "deliveredAt": zod.string().nullish(),
+  "providerMessageId": zod.string().optional()
 }))
 })
 
@@ -1332,7 +1301,11 @@ export const UpgradeMembershipResponse = zod.object({
   "email": zod.string(),
   "expiresAt": zod.string(),
   "acceptanceToken": zod.string().optional(),
-  "acceptancePath": zod.string().optional()
+  "acceptancePath": zod.string().optional(),
+  "deliveryStatus": zod.enum(['pending', 'sent', 'failed']),
+  "deliveryError": zod.string().nullish(),
+  "deliveredAt": zod.string().nullish(),
+  "providerMessageId": zod.string().optional()
 }))
 }).optional(),
   "linePassCount": zod.number(),
@@ -1407,7 +1380,11 @@ export const ChangeMembershipResponse = zod.object({
   "email": zod.string(),
   "expiresAt": zod.string(),
   "acceptanceToken": zod.string().optional(),
-  "acceptancePath": zod.string().optional()
+  "acceptancePath": zod.string().optional(),
+  "deliveryStatus": zod.enum(['pending', 'sent', 'failed']),
+  "deliveryError": zod.string().nullish(),
+  "deliveredAt": zod.string().nullish(),
+  "providerMessageId": zod.string().optional()
 }))
 }).optional(),
   "linePassCount": zod.number(),
@@ -1472,8 +1449,6 @@ export const MarkNotificationReadResponse = zod.object({
  */
 
 
-
-
 export const ConciergeChatBody = zod.object({
   "messages": zod.array(zod.object({
   "role": zod.enum(['user', 'assistant']),
@@ -1491,7 +1466,6 @@ export const ConciergeChatResponse = zod.object({
 /**
  * @summary Load the caller's recent concierge conversation history
  */
-
 
 
 export const GetConciergeHistoryQueryParams = zod.object({
@@ -1512,7 +1486,6 @@ export const GetConciergeHistoryResponse = zod.array(GetConciergeHistoryResponse
 /**
  * @summary Request human follow-up for an escalated concierge reply
  */
-
 
 
 export const RequestConciergeCallbackBody = zod.object({

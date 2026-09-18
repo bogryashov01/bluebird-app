@@ -761,6 +761,7 @@ export interface FamilyMember {
   joinedAt?: string | null;
 }
 
+export type FamilyInvitationDeliveryStatus = typeof FamilyInvitationDeliveryStatus[keyof typeof FamilyInvitationDeliveryStatus];
 export interface FamilyInvitation {
   id: string;
   memberId: string;
@@ -768,6 +769,10 @@ export interface FamilyInvitation {
   expiresAt: string;
   acceptanceToken?: string;
   acceptancePath?: string;
+  deliveryStatus: FamilyInvitationDeliveryStatus;
+  deliveryError?: string | null;
+  deliveredAt?: string | null;
+  providerMessageId?: string;
 }
 
 export type FamilySummaryPool = {
@@ -950,3 +955,9 @@ export type GetConciergeHistoryParams = {
  */
 limit?: number;
 };
+
+export const FamilyInvitationDeliveryStatus = {
+  pending: 'pending',
+  sent: 'sent',
+  failed: 'failed',
+} as const;

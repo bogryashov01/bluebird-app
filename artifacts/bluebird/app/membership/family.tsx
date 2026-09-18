@@ -39,7 +39,7 @@ export default function FamilyMembershipScreen() {
         setEmail('');
         setNotice(data.status === 'linked'
           ? 'Account linked. Family Plus access is active.'
-          : 'Invitation created. Share the acceptance link with the invited member.');
+          : 'Invitation email sent. The recipient can use the link in their inbox.');
         setFormError(null);
         refresh();
       },
@@ -157,9 +157,15 @@ export default function FamilyMembershipScreen() {
             <View key={invitation.id} style={[styles.pendingRow, { borderTopColor: colors.separator }]}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.memberName, { color: colors.textOnSurface }]}>{invitation.email}</Text>
-                <Text style={[styles.caption, { color: colors.mutedForegroundLight }]}>Invitation pending</Text>
+                <Text style={[styles.caption, { color: invitation.deliveryStatus === 'failed' ? colors.destructive : colors.mutedForegroundLight }]}>
+                  {invitation.deliveryStatus === 'failed'
+                    ? `Email failed${invitation.deliveryError ? `: ${invitation.deliveryError}` : ''}`
+                    : 'Invitation pending'}
+                </Text>
               </View>
-              <Text style={[styles.pendingText, { color: colors.mutedForegroundLight }]}>Waiting</Text>
+              <Text style={[styles.pendingText, { color: invitation.deliveryStatus === 'sent' ? colors.primary : colors.mutedForegroundLight }]}>
+                {invitation.deliveryStatus === 'sent' ? 'Sent' : 'Waiting'}
+              </Text>
             </View>
           ))}
         </View>

@@ -815,6 +815,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Invitation was created but email delivery failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /membership/family/invitations/{token}/accept:
     post:
@@ -2127,7 +2133,17 @@ components:
         expiresAt: { type: string }
         acceptanceToken: { type: string }
         acceptancePath: { type: string }
-      required: [id, memberId, email, expiresAt]
+        deliveryStatus:
+          type: string
+          enum: [pending, sent, failed]
+        deliveryError:
+          type: string
+          nullable: true
+        deliveredAt:
+          type: string
+          nullable: true
+        providerMessageId: { type: string }
+      required: [id, memberId, email, expiresAt, deliveryStatus]
 
     FamilySummary:
       type: object

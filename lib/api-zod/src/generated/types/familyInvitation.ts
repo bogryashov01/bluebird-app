@@ -5,6 +5,7 @@
  * Bluebird private aviation API
  * OpenAPI spec version: 0.1.0
  */
+import type { FamilyInvitationDeliveryStatus } from './familyInvitationDeliveryStatus';
 
 export interface FamilyInvitation {
   id: string;
@@ -13,4 +14,8 @@ export interface FamilyInvitation {
   expiresAt: string;
   acceptanceToken?: string;
   acceptancePath?: string;
+  deliveryStatus: FamilyInvitationDeliveryStatus;
+  deliveryError?: string | null;
+  deliveredAt?: string | null;
+  providerMessageId?: string;
 }

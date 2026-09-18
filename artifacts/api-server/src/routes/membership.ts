@@ -22,6 +22,10 @@ import {
   makeFamilyToken,
   syncFamilyPlans,
 } from "../lib/family";
+import {
+  FamilyInvitationEmailError,
+  sendFamilyInvitationEmail,
+} from "../lib/family-email";
 
 const router = Router();
 
@@ -119,6 +123,9 @@ async function familySummaryForUser(userId: string, database: any = db) {
         memberId: familyInvitationsTable.familyMemberId,
         email: familyInvitationsTable.email,
         expiresAt: familyInvitationsTable.expiresAt,
+        deliveryStatus: familyInvitationsTable.deliveryStatus,
+        deliveryError: familyInvitationsTable.deliveryError,
+        deliveredAt: familyInvitationsTable.deliveredAt,
       })
       .from(familyInvitationsTable)
       .where(and(
@@ -533,18 +540,50 @@ router.post("/family/invitations", authMiddleware, async (req, res) => {
       expiresAt: new Date(Date.now() + FAMILY_INVITATION_TTL_MS),
     }).returning();
     await client.query("COMMIT");
-    return res.status(201).json({
-      status: "invited",
-      invitation: {
-        id: invitation[0].id,
-        memberId,
-        email,
-        expiresAt: invitation[0].expiresAt,
+
+    try {
+      const delivery = await sendFamilyInvitationEmail({
+        recipient: email,
         acceptanceToken: token,
-        acceptancePath: `/join/family/${token}`,
-      },
-      family: await familySummaryForUser(ownerId),
-    });
+        expiresAt: invitation[0].expiresAt,
+      });
+      await db.update(familyInvitationsTable)
+        .set({
+          deliveryStatus: "sent",
+          deliveryError: null,
+          deliveredAt: new Date(),
+        })
+        .where(eq(familyInvitationsTable.id, invitation[0].id));
+      return res.status(201).json({
+        status: "invited",
+        invitation: {
+          id: invitation[0].id,
+          memberId,
+          email,
+          expiresAt: invitation[0].expiresAt,
+          acceptanceToken: token,
+          acceptancePath: `/join/family/${encodeURIComponent(token)}`,
+          deliveryStatus: "sent",
+          deliveredAt: new Date().toISOString(),
+          ...(delivery.providerMessageId ? { providerMessageId: delivery.providerMessageId } : {}),
+        },
+        family: await familySummaryForUser(ownerId),
+      });
+    } catch (err) {
+      const message = err instanceof FamilyInvitationEmailError
+        ? err.message
+        : "Invitation email could not be sent";
+      await db.update(familyInvitationsTable)
+        .set({ deliveryStatus: "failed", deliveryError: message })
+        .where(eq(familyInvitationsTable.id, invitation[0].id));
+      return res.status(502).json({
+        error: "The invitation was created, but the email could not be sent",
+        code: "FAMILY_INVITATION_EMAIL_FAILED",
+        invitationId: invitation[0].id,
+        deliveryStatus: "failed",
+        deliveryError: message,
+      });
+    }
   } catch (err: any) {
     await client.query("ROLLBACK").catch(() => {});
     if (err?.code === "40001" || err?.code === "23505") {

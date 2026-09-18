@@ -73,6 +73,9 @@ export const familyInvitationsTable = pgTable("family_invitations", {
   tokenHash: text("token_hash").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   acceptedAt: timestamp("accepted_at"),
+  deliveryStatus: text("delivery_status").notNull().default("pending"),
+  deliveryError: text("delivery_error"),
+  deliveredAt: timestamp("delivered_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

@@ -236,8 +236,14 @@ export async function ensureSchema(): Promise<void> {
       token_hash TEXT NOT NULL UNIQUE,
       expires_at TIMESTAMPTZ NOT NULL,
       accepted_at TIMESTAMPTZ,
+      delivery_status TEXT NOT NULL DEFAULT 'pending',
+      delivery_error TEXT,
+      delivered_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE family_invitations ADD COLUMN IF NOT EXISTS delivery_status TEXT NOT NULL DEFAULT 'pending';
+    ALTER TABLE family_invitations ADD COLUMN IF NOT EXISTS delivery_error TEXT;
+    ALTER TABLE family_invitations ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS login_codes (
       phone        TEXT        PRIMARY KEY,

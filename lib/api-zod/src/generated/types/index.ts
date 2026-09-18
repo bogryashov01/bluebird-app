@@ -34,6 +34,7 @@ export * from './familyAcceptanceResponse';
 export * from './familyAcceptanceResponseStatus';
 export * from './familyAllocationRequest';
 export * from './familyInvitation';
+export * from './familyInvitationDeliveryStatus';
 export * from './familyInvitationRequest';
 export * from './familyInvitationResponse';
 export * from './familyInvitationResponseStatus';
