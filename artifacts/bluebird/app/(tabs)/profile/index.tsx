@@ -174,11 +174,6 @@ export default function ProfileScreen() {
               onPress: () => router.push('/community'),
             },
             {
-              label: 'Networking Profile',
-              hint: 'introductions before shared flights',
-              onPress: () => router.push('/networking/profile' as any),
-            },
-            {
               label: 'Messages',
               hint: 'your accepted connections',
               onPress: () => router.push('/networking/connections' as any),

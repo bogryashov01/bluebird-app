@@ -130,7 +130,7 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="networking/profile"
-        options={{ headerShown: true, title: 'Networking Profile', ...headerOptions }}
+        options={{ headerShown: true, title: 'Personal Information', ...headerOptions }}
       />
       <Stack.Screen
         name="networking/requests"
