@@ -142,8 +142,19 @@ export default function PersonalInfoScreen() {
         setNetworkingErrorMessage('Choose a JPEG, PNG, or WebP profile photo.');
         return;
       }
-      const file = new ExpoFile(asset.uri);
-      const size = asset.fileSize ?? file.size;
+      let body: Blob | ExpoFile;
+      let size = asset.fileSize;
+      if (Platform.OS === 'web') {
+        // expo-file-system's File wrapper is native-only. On web, read the
+        // browser-selected file as a Blob so React Native Web never reaches
+        // the unsupported native path implementation.
+        body = await (await fetch(asset.uri)).blob();
+        size ??= body.size;
+      } else {
+        const file = new ExpoFile(asset.uri);
+        body = file;
+        size ??= file.size;
+      }
       if (!size || size > 1_500_000) {
         setNetworkingErrorMessage('Profile photos must be smaller than 1.5 MB.');
         return;
@@ -156,9 +167,6 @@ export default function PersonalInfoScreen() {
           contentType,
         },
       });
-      const body = Platform.OS === 'web'
-        ? await (await fetch(asset.uri)).blob()
-        : file;
       const response = await expoFetch(upload.uploadURL, {
         method: 'PUT',
         headers: { 'Content-Type': contentType },
