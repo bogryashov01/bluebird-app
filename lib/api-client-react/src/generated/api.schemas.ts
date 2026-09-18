@@ -935,6 +935,7 @@ export interface NetworkingProfile {
   firstName: string;
   lastName: string;
   photoUrl: string | null;
+  photoAssetPath: string | null;
   industry: string;
   bio: string;
   linkedinUrl?: string | null;
@@ -958,6 +959,7 @@ export interface UpdateNetworkingProfileRequest {
      */
   lastName?: string;
   photoUrl?: string | null;
+  photoAssetPath?: string | null;
   /**
      * @minLength 1
      * @maxLength 80
@@ -970,6 +972,35 @@ export interface UpdateNetworkingProfileRequest {
   bio?: string;
   linkedinUrl?: string | null;
   instagramUrl?: string | null;
+}
+
+export type UploadUrlRequestContentType = typeof UploadUrlRequestContentType[keyof typeof UploadUrlRequestContentType];
+
+
+export const UploadUrlRequestContentType = {
+  'image/jpeg': 'image/jpeg',
+  'image/png': 'image/png',
+  'image/webp': 'image/webp',
+} as const;
+
+export interface UploadUrlRequest {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  name: string;
+  /**
+     * @minimum 1
+     * @maximum 1500000
+     */
+  size: number;
+  contentType: UploadUrlRequestContentType;
+}
+
+export interface UploadUrlResponse {
+  uploadURL: string;
+  objectPath: string;
+  metadata?: UploadUrlRequest;
 }
 
 export interface PushTokenRequest {
@@ -995,6 +1026,7 @@ export interface NetworkingProfilePreview {
   userId: string;
   firstName: string;
   photoUrl: string | null;
+  photoAssetPath: string | null;
   industry: string;
   bio: string;
 }

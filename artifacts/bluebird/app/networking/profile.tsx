@@ -4,12 +4,22 @@ import {
   StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { File as ExpoFile } from 'expo-file-system';
+import { fetch as expoFetch } from 'expo/fetch';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useGetNetworkingProfile, useUpdateNetworkingProfile } from '@workspace/api-client-react';
+import { useGetNetworkingProfile, useRequestUploadUrl, useUpdateNetworkingProfile } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
+
+type ProfilePhotoContentType = 'image/jpeg' | 'image/png' | 'image/webp';
+
+function toPhotoUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : '';
+  return `${baseUrl}${path.startsWith('/api/') ? path : `/api/storage${path}`}`;
+}
 
 export default function NetworkingProfileScreen() {
   const colors = useColors();
@@ -20,6 +30,7 @@ export default function NetworkingProfileScreen() {
     query: { enabled: !!user && user.membershipTier !== 'none', refetchOnMount: 'always' },
   });
   const save = useUpdateNetworkingProfile();
+  const uploadPhoto = useRequestUploadUrl();
   const [firstName, setFirstName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
   const [industry, setIndustry] = React.useState('');
@@ -27,6 +38,8 @@ export default function NetworkingProfileScreen() {
   const [linkedinUrl, setLinkedinUrl] = React.useState('');
   const [instagramUrl, setInstagramUrl] = React.useState('');
   const [photoUrl, setPhotoUrl] = React.useState<string | null>(null);
+  const [photoAssetPath, setPhotoAssetPath] = React.useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = React.useState(false);
   const [error, setError] = React.useState('');
   const [saved, setSaved] = React.useState(false);
 
@@ -39,26 +52,60 @@ export default function NetworkingProfileScreen() {
     setLinkedinUrl(data.linkedinUrl ?? '');
     setInstagramUrl(data.instagramUrl ?? '');
     setPhotoUrl(data.photoUrl ?? null);
+    setPhotoAssetPath(data.photoAssetPath ?? null);
   }, [data]);
 
   const choosePhoto = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'] as any,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.75,
-      base64: true,
-    });
-    const asset = result.canceled ? null : result.assets[0];
-    if (asset?.base64) {
-      const mime = asset.mimeType === 'image/png' ? 'png' : asset.mimeType === 'image/webp' ? 'webp' : 'jpeg';
-      setPhotoUrl(`data:image/${mime};base64,${asset.base64}`);
+    setError('');
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'] as any,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.75,
+      });
+      const asset = result.canceled ? null : result.assets[0];
+      if (!asset) return;
+      const contentType = asset.mimeType?.toLowerCase() as ProfilePhotoContentType | undefined;
+      if (!contentType || !['image/jpeg', 'image/png', 'image/webp'].includes(contentType)) {
+        setError('Choose a JPEG, PNG, or WebP profile photo.');
+        return;
+      }
+      const file = new ExpoFile(asset.uri);
+      const size = asset.fileSize ?? file.size;
+      if (!size || size > 1_500_000) {
+        setError('Profile photos must be smaller than 1.5 MB.');
+        return;
+      }
+      setIsUploadingPhoto(true);
+      const upload = await uploadPhoto.mutateAsync({
+        data: {
+          name: asset.fileName ?? `profile.${contentType.slice('image/'.length).replace('jpeg', 'jpg')}`,
+          size,
+          contentType,
+        },
+      });
+      const body = Platform.OS === 'web'
+        ? await (await fetch(asset.uri)).blob()
+        : file;
+      const response = await expoFetch(upload.uploadURL, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType },
+        body: body as any,
+      });
+      if (!response.ok) throw new Error('Photo upload failed');
+      setPhotoAssetPath(upload.objectPath);
+      setPhotoUrl(toPhotoUrl(upload.objectPath));
+    } catch (uploadError: any) {
+      setError(uploadError?.data?.error ?? uploadError?.message ?? 'Could not upload your profile photo.');
+    } finally {
+      setIsUploadingPhoto(false);
     }
   };
 
   const submit = () => {
     setError('');
-    if (!firstName.trim() || !lastName.trim() || !industry.trim() || !bio.trim() || !photoUrl) {
+    if (!firstName.trim() || !lastName.trim() || !industry.trim() || !bio.trim() || (!photoUrl && !photoAssetPath)) {
       setError('Add your name, photo, industry, and a short bio to complete your profile.');
       return;
     }
@@ -68,7 +115,8 @@ export default function NetworkingProfileScreen() {
         lastName: lastName.trim(),
         industry: industry.trim(),
         bio: bio.trim(),
-        photoUrl,
+        photoUrl: photoAssetPath ? null : photoUrl,
+        photoAssetPath,
         linkedinUrl: linkedinUrl.trim() || null,
         instagramUrl: instagramUrl.trim() || null,
       },
@@ -126,9 +174,9 @@ export default function NetworkingProfileScreen() {
           <Text style={[styles.title, { color: colors.textOnSurface }]}>Your flight network</Text>
           <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Share enough to make relevant introductions before a shared flight. Your full profile is only shown after you connect.</Text>
         </View>
-        <TouchableOpacity onPress={choosePhoto} activeOpacity={0.8} style={styles.photoButton}>
+        <TouchableOpacity onPress={choosePhoto} disabled={isUploadingPhoto} activeOpacity={0.8} style={styles.photoButton}>
           {photoUrl ? <Image source={{ uri: photoUrl }} style={styles.photo} /> : <View style={[styles.photo, { backgroundColor: colors.backgroundMid }]}><Text style={[styles.photoText, { color: colors.textOnBrand }]}>+</Text></View>}
-          <Text style={[styles.photoLink, { color: colors.primary }]}>{photoUrl ? 'Change profile photo' : 'Add profile photo'}</Text>
+          <Text style={[styles.photoLink, { color: colors.primary }]}>{isUploadingPhoto ? 'Uploading profile photo…' : photoUrl ? 'Change profile photo' : 'Add profile photo'}</Text>
         </TouchableOpacity>
         {field('First name', firstName, setFirstName, 'First name')}
         {field('Last name', lastName, setLastName, 'Last name')}

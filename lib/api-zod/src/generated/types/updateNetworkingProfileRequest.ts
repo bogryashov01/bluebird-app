@@ -18,6 +18,7 @@ export interface UpdateNetworkingProfileRequest {
      */
   lastName?: string;
   photoUrl?: string | null;
+  photoAssetPath?: string | null;
   /**
      * @minLength 1
      * @maxLength 80

@@ -83,6 +83,7 @@ export const networkingProfilesTable = pgTable("networking_profiles", {
   userId: text("user_id").primaryKey().references(() => usersTable.id, { onDelete: "cascade" }),
   firstName: text("first_name").notNull().default(""),
   lastName: text("last_name").notNull().default(""),
+  photoAssetPath: text("photo_asset_path"),
   photoUrl: text("photo_url"),
   industry: text("industry").notNull().default(""),
   bio: text("bio").notNull().default(""),

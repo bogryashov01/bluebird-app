@@ -15,12 +15,15 @@ import {
   usersTable,
 } from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
+import { ObjectStorageService } from "../lib/objectStorage";
 
 const router = Router();
 router.use(authMiddleware);
 
 const MAX_BIO = 280;
 const MAX_PHOTO_BYTES = 1_500_000;
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const objectStorage = new ObjectStorageService();
 
 function id(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 11)}`;
@@ -46,10 +49,23 @@ function profileCompletion(profile: typeof networkingProfilesTable.$inferSelect 
   const missing: string[] = [];
   if (!profile?.firstName.trim()) missing.push("firstName");
   if (!profile?.lastName.trim()) missing.push("lastName");
-  if (!profile?.photoUrl) missing.push("photo");
+  if (!profile?.photoAssetPath && !profile?.photoUrl) missing.push("photo");
   if (!profile?.industry.trim()) missing.push("industry");
   if (!profile?.bio.trim()) missing.push("bio");
   return { completed: missing.length === 0, missing };
+}
+
+function profilePhotoUrl(profile: typeof networkingProfilesTable.$inferSelect): string | null {
+  if (profile.photoAssetPath) return `/api/storage${profile.photoAssetPath}`;
+  return profile.photoUrl;
+}
+
+function profileResponse(profile: typeof networkingProfilesTable.$inferSelect) {
+  return {
+    ...profile,
+    photoUrl: profilePhotoUrl(profile),
+    ...profileCompletion(profile),
+  };
 }
 
 function publicProfile(
@@ -61,6 +77,7 @@ function publicProfile(
       firstName: "",
       lastName: "",
       photoUrl: null,
+      photoAssetPath: null,
       industry: "",
       bio: "",
       ...(full ? { linkedinUrl: null, instagramUrl: null } : {}),
@@ -69,7 +86,8 @@ function publicProfile(
   return {
     firstName: profile.firstName,
     lastName: full ? profile.lastName : undefined,
-    photoUrl: profile.photoUrl,
+    photoUrl: profilePhotoUrl(profile),
+    photoAssetPath: profile.photoAssetPath,
     industry: profile.industry,
     bio: profile.bio,
     ...(full ? {
@@ -173,7 +191,7 @@ router.get("/profile", async (req, res) => {
       }).returning();
       profile = created;
     }
-    return res.json({ ...profile, ...profileCompletion(profile) });
+    return res.json(profileResponse(profile));
   } catch {
     return res.status(500).json({ error: "Failed to load networking profile" });
   }
@@ -195,25 +213,50 @@ router.patch("/profile", async (req, res) => {
       updates[key] = value;
     }
   }
-  for (const key of ["linkedinUrl", "instagramUrl", "photoUrl"] as const) {
+  for (const key of ["linkedinUrl", "instagramUrl"] as const) {
     if (body[key] !== undefined) {
       if (body[key] !== null && typeof body[key] !== "string") {
         return res.status(400).json({ error: `${key} must be a URL or null` });
       }
       const value = body[key] === null ? null : body[key].trim();
-      if (value && key !== "photoUrl" && !/^https?:\/\/\S+$/i.test(value)) {
+      if (value && !/^https?:\/\/\S+$/i.test(value)) {
         return res.status(400).json({ error: `${key} must be a valid http(s) URL` });
-      }
-      if (value && key === "photoUrl" && value.startsWith("data:image/")) {
-        const match = value.match(/^data:image\/(?:jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=]+)$/i);
-        if (!match || Math.ceil(match[1].length * 0.75) > MAX_PHOTO_BYTES) {
-          return res.status(400).json({ error: "Profile photo must be a JPEG, PNG, or WebP under 1.5 MB" });
-        }
-      } else if (value && key === "photoUrl" && !/^https?:\/\/\S+$/i.test(value)) {
-        return res.status(400).json({ error: "Profile photo must be a valid image URL" });
       }
       updates[key] = value;
     }
+  }
+  if (body.photoUrl !== undefined) {
+    if (body.photoUrl !== null && typeof body.photoUrl !== "string") {
+      return res.status(400).json({ error: "photoUrl must be a URL or null" });
+    }
+    const value = body.photoUrl === null ? null : body.photoUrl.trim();
+    if (value && !/^https?:\/\/\S+$/i.test(value)) {
+      return res.status(400).json({ error: "Legacy profile photo must be a valid image URL" });
+    }
+    updates.photoUrl = value;
+    if (body.photoAssetPath === undefined) updates.photoAssetPath = null;
+  }
+  if (body.photoAssetPath !== undefined) {
+    if (body.photoAssetPath !== null && typeof body.photoAssetPath !== "string") {
+      return res.status(400).json({ error: "photoAssetPath must be an object path or null" });
+    }
+    const path = body.photoAssetPath === null ? null : body.photoAssetPath.trim();
+    if (path) {
+      if (!/^\/objects\/uploads\/[A-Za-z0-9-]+$/.test(path)) {
+        return res.status(400).json({ error: "Profile photo must be uploaded through the profile photo uploader" });
+      }
+      try {
+        const metadata = await objectStorage.getObjectMetadata(path);
+        if (!metadata.contentType || !IMAGE_TYPES.has(metadata.contentType) ||
+            !metadata.size || metadata.size > MAX_PHOTO_BYTES) {
+          return res.status(400).json({ error: "Profile photo must be a JPEG, PNG, or WebP under 1.5 MB" });
+        }
+      } catch {
+        return res.status(400).json({ error: "Uploaded profile photo could not be found" });
+      }
+    }
+    updates.photoAssetPath = path;
+    updates.photoUrl = null;
   }
   if (Object.keys(updates).length === 0) return res.status(400).json({ error: "Nothing to update" });
   try {
@@ -224,7 +267,7 @@ router.patch("/profile", async (req, res) => {
         set: { ...updates, updatedAt: new Date() },
       })
       .returning();
-    return res.json({ ...profile, ...profileCompletion(profile) });
+    return res.json(profileResponse(profile));
   } catch {
     return res.status(500).json({ error: "Failed to save networking profile" });
   }

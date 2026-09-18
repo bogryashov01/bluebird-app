@@ -28,8 +28,105 @@ tags:
     description: AI concierge chat
   - name: networking
     description: Member flight networking and conversations
+  - name: Storage
+    description: Object storage upload and serving endpoints.
 
 paths:
+  /storage/uploads/request-url:
+    post:
+      tags: [Storage]
+      operationId: requestUploadUrl
+      summary: Request a presigned URL for a profile photo upload
+      description: |
+        Returns a presigned GCS URL for a direct image upload. The client sends
+        image metadata here, then uploads the bytes directly to the returned URL.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadUrlRequest"
+      responses:
+        "200":
+          description: Presigned upload URL generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadUrlResponse"
+        "400":
+          description: Missing or invalid required fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Failed to generate upload URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /storage/public-objects/{filePath}:
+    get:
+      tags: [Storage]
+      operationId: getPublicObject
+      summary: Serve a public asset
+      parameters:
+        - name: filePath
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Object content
+          content:
+            "*/*":
+              schema: { type: string, format: binary }
+        "404":
+          description: File not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Failed to serve public object
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /storage/objects/{objectPath}:
+    get:
+      tags: [Storage]
+      operationId: getStorageObject
+      summary: Serve an uploaded object
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Object content
+          content:
+            "*/*":
+              schema: { type: string, format: binary }
+        "404":
+          description: Object not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Failed to serve object
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /healthz:
     get:
       operationId: healthCheck
@@ -2504,11 +2601,12 @@ components:
         firstName: { type: string }
         lastName: { type: string }
         photoUrl: { type: string, nullable: true }
+        photoAssetPath: { type: string, nullable: true }
         industry: { type: string }
         bio: { type: string }
         linkedinUrl: { type: string, nullable: true }
         instagramUrl: { type: string, nullable: true }
-      required: [firstName, lastName, photoUrl, industry, bio]
+      required: [firstName, lastName, photoUrl, photoAssetPath, industry, bio]
 
     NetworkingProfileResponse:
       allOf:
@@ -2527,10 +2625,30 @@ components:
         firstName: { type: string, minLength: 1, maxLength: 80 }
         lastName: { type: string, minLength: 1, maxLength: 80 }
         photoUrl: { type: string, nullable: true }
+        photoAssetPath: { type: string, nullable: true }
         industry: { type: string, minLength: 1, maxLength: 80 }
         bio: { type: string, minLength: 1, maxLength: 280 }
         linkedinUrl: { type: string, nullable: true }
         instagramUrl: { type: string, nullable: true }
+
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160 }
+        size: { type: integer, minimum: 1, maximum: 1500000 }
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL: { type: string }
+        objectPath: { type: string }
+        metadata:
+          $ref: "#/components/schemas/UploadUrlRequest"
 
     PushTokenRequest:
       type: object
@@ -2556,9 +2674,10 @@ components:
         userId: { type: string }
         firstName: { type: string }
         photoUrl: { type: string, nullable: true }
+        photoAssetPath: { type: string, nullable: true }
         industry: { type: string }
         bio: { type: string }
-      required: [userId, firstName, photoUrl, industry, bio]
+      required: [userId, firstName, photoUrl, photoAssetPath, industry, bio]
 
     NetworkingFrontMemberResponse:
       type: object

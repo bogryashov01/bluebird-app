@@ -3,8 +3,8 @@ name: Networking photo persistence
 description: Decision and limitation for profile-photo storage in the mobile networking flow.
 ---
 
-Networking profile photos currently use validated HTTPS URLs or size-limited image data URIs stored with the profile. This keeps Expo profile editing functional without introducing a web-only object-storage client; the server enforces image format and a 1.5 MB decoded-size limit.
+Networking profile photos use an authenticated presigned upload to App Storage. The profile stores the returned `/objects/uploads/...` path in `photo_asset_path`, while API responses expose a stable `/api/storage/objects/...` URL for cross-device loading. Legacy HTTPS photos remain readable; old data URIs are cleared by the schema migration.
 
-**Why:** The available object-storage guidance targets web uploads, while this feature needs an Expo-compatible path and must not retain a local-only image URI.
+**Why:** Expo can upload a native `expo-file-system` file through the storage presigned URL, avoiding database-sized base64 payloads while keeping the image available after the original device is gone. Both picker metadata and server-side object metadata enforce JPEG/PNG/WebP and the 1.5 MB limit.
 
-**How to apply:** Keep photo values portable across sessions/devices and preserve server-side validation. Move to App Storage only when an Expo-compatible upload path is available, updating both the API contract and mobile picker flow together.
+**How to apply:** Keep the upload URL route bearer-protected, persist only the normalized object path, and resolve it through the API storage route. Update the OpenAPI contract, generated client, mobile picker, schema, and server validation together when changing this flow.

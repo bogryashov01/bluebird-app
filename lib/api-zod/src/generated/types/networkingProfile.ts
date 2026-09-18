@@ -10,6 +10,7 @@ export interface NetworkingProfile {
   firstName: string;
   lastName: string;
   photoUrl: string | null;
+  photoAssetPath: string | null;
   industry: string;
   bio: string;
   linkedinUrl?: string | null;

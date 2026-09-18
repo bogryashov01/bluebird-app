@@ -10,6 +10,7 @@ export interface NetworkingProfilePreview {
   userId: string;
   firstName: string;
   photoUrl: string | null;
+  photoAssetPath: string | null;
   industry: string;
   bio: string;
 }

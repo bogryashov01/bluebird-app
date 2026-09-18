@@ -7,6 +7,10 @@
  */
 import * as zod from 'zod';
 
+export const requestUploadUrlBodyNameMax = 160;
+export const requestUploadUrlBodySizeMax = 1500000;
+export const requestUploadUrlResponseMetadataNameMax = 160;
+export const requestUploadUrlResponseMetadataSizeMax = 1500000;
 export const verifyLoginCodeResponseOneUserWeightKgMax = 500;
 export const completePhoneRegistrationResponseUserWeightKgMax = 500;
 export const getMeResponseWeightKgMax = 500;
@@ -79,6 +83,56 @@ export const conciergeChatBodyMessagesMax = 40;
 export const getConciergeHistoryQueryLimitDefault = 50;
 export const getConciergeHistoryQueryLimitMax = 100;
 export const requestConciergeCallbackBodyAssistantMessageIdMax = 100;
+
+
+/**
+ * Returns a presigned GCS URL for a direct image upload. The client sends
+ * image metadata here, then uploads the bytes directly to the returned URL.
+ * @summary Request a presigned URL for a profile photo upload
+ */
+
+
+
+
+export const RequestUploadUrlBody = zod.object({
+  "name": zod.string().min(1).max(requestUploadUrlBodyNameMax),
+  "size": zod.number().int().min(1).max(requestUploadUrlBodySizeMax),
+  "contentType": zod.enum(['image/jpeg', 'image/png', 'image/webp'])
+})
+
+
+
+
+
+export const RequestUploadUrlResponse = zod.object({
+  "uploadURL": zod.string(),
+  "objectPath": zod.string(),
+  "metadata": zod.object({
+  "name": zod.string().min(1).max(requestUploadUrlResponseMetadataNameMax),
+  "size": zod.number().int().min(1).max(requestUploadUrlResponseMetadataSizeMax),
+  "contentType": zod.enum(['image/jpeg', 'image/png', 'image/webp'])
+}).optional()
+})
+
+
+/**
+ * @summary Serve a public asset
+ */
+export const GetPublicObjectParams = zod.object({
+  "filePath": zod.coerce.string()
+})
+
+export const GetPublicObjectResponse = zod.unknown()
+
+
+/**
+ * @summary Serve an uploaded object
+ */
+export const GetStorageObjectParams = zod.object({
+  "objectPath": zod.coerce.string()
+})
+
+export const GetStorageObjectResponse = zod.unknown()
 
 
 /**
@@ -407,6 +461,7 @@ export const GetNetworkingProfileResponse = zod.object({
   "firstName": zod.string(),
   "lastName": zod.string(),
   "photoUrl": zod.string().nullable(),
+  "photoAssetPath": zod.string().nullable(),
   "industry": zod.string(),
   "bio": zod.string(),
   "linkedinUrl": zod.string().nullish(),
@@ -430,6 +485,7 @@ export const UpdateNetworkingProfileBody = zod.object({
   "firstName": zod.string().min(1).max(updateNetworkingProfileBodyFirstNameMax).optional(),
   "lastName": zod.string().min(1).max(updateNetworkingProfileBodyLastNameMax).optional(),
   "photoUrl": zod.string().nullish(),
+  "photoAssetPath": zod.string().nullish(),
   "industry": zod.string().min(1).max(updateNetworkingProfileBodyIndustryMax).optional(),
   "bio": zod.string().min(1).max(updateNetworkingProfileBodyBioMax).optional(),
   "linkedinUrl": zod.string().nullish(),
@@ -440,6 +496,7 @@ export const UpdateNetworkingProfileResponse = zod.object({
   "firstName": zod.string(),
   "lastName": zod.string(),
   "photoUrl": zod.string().nullable(),
+  "photoAssetPath": zod.string().nullable(),
   "industry": zod.string(),
   "bio": zod.string(),
   "linkedinUrl": zod.string().nullish(),
@@ -486,6 +543,7 @@ export const GetNetworkingFrontMemberResponse = zod.object({
   "userId": zod.string(),
   "firstName": zod.string(),
   "photoUrl": zod.string().nullable(),
+  "photoAssetPath": zod.string().nullable(),
   "industry": zod.string(),
   "bio": zod.string()
 }).nullable()
@@ -516,6 +574,7 @@ export const CreateNetworkingRequestResponse = zod.object({
   "userId": zod.string(),
   "firstName": zod.string(),
   "photoUrl": zod.string().nullable(),
+  "photoAssetPath": zod.string().nullable(),
   "industry": zod.string(),
   "bio": zod.string()
 }).optional(),
@@ -543,6 +602,7 @@ export const ListIncomingNetworkingRequestsResponseItem = zod.object({
   "userId": zod.string(),
   "firstName": zod.string(),
   "photoUrl": zod.string().nullable(),
+  "photoAssetPath": zod.string().nullable(),
   "industry": zod.string(),
   "bio": zod.string()
 }).optional(),
@@ -591,6 +651,7 @@ export const ListNetworkingConnectionsResponseItem = zod.object({
   "firstName": zod.string(),
   "lastName": zod.string(),
   "photoUrl": zod.string().nullable(),
+  "photoAssetPath": zod.string().nullable(),
   "industry": zod.string(),
   "bio": zod.string(),
   "linkedinUrl": zod.string().nullish(),

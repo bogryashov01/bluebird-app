@@ -508,6 +508,7 @@ export async function ensureSchema(): Promise<void> {
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       first_name TEXT NOT NULL DEFAULT '',
       last_name TEXT NOT NULL DEFAULT '',
+      photo_asset_path TEXT,
       photo_url TEXT,
       industry TEXT NOT NULL DEFAULT '',
       bio TEXT NOT NULL DEFAULT '',
@@ -516,6 +517,18 @@ export async function ensureSchema(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE networking_profiles ADD COLUMN IF NOT EXISTS photo_asset_path TEXT;
+    -- Asset paths are the canonical representation for newly uploaded photos.
+    -- Keep older HTTPS photos readable while moving object paths out of the
+    -- legacy URL column.
+    UPDATE networking_profiles
+      SET photo_asset_path = photo_url, photo_url = NULL
+      WHERE photo_asset_path IS NULL AND photo_url LIKE '/objects/%';
+    -- Data URIs were the temporary mobile fallback. They are not portable
+    -- storage and can make profile rows very large, so require those members
+    -- to choose a new stored photo.
+    UPDATE networking_profiles SET photo_url = NULL
+      WHERE photo_url LIKE 'data:image/%';
 
     CREATE TABLE IF NOT EXISTS networking_requests (
       id TEXT PRIMARY KEY,
