@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthTokenGetter, logout, type User } from '@workspace/api-client-react';
+import { getApiBaseUrl } from '@/lib/apiBaseUrl';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 
@@ -48,9 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Validate the stored token against the server; stale/invalid tokens
           // (e.g. after a server secret change) are cleared so the user is
           // sent back to sign-in instead of seeing endless 401 errors.
-          const baseUrl = process.env.EXPO_PUBLIC_DOMAIN
-            ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-            : '';
+          const baseUrl = getApiBaseUrl() ?? '';
           try {
             const resp = await fetch(`${baseUrl}/api/auth/me`, {
               headers: { Authorization: `Bearer ${storedToken}` },
