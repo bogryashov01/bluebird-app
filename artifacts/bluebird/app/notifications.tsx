@@ -13,7 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
 import { SettingsGroup } from '@/components/SettingsGroup';
-import { notificationRoute } from '@/lib/notificationRoute';
+import { NETWORKING_INBOX_ROUTE, notificationRoute } from '@/lib/notificationRoute';
 import { usePersistedState } from '@/hooks/usePersistedState';
 
 // ── Toggle pill ───────────────────────────────────────────────────────────────
@@ -155,8 +155,8 @@ export default function NotificationsScreen() {
 
   const handleNotificationPress = (item: Notification) => {
     if (!item.read) readMutation.mutate({ id: item.id });
-    const route = notificationRoute(item);
-    if (route) router.push(route as any);
+    const route = notificationRoute(item) ?? NETWORKING_INBOX_ROUTE;
+    router.push(route as any);
   };
 
   const notifications = ((notifData as Notification[]) ?? []);
