@@ -117,6 +117,19 @@ const firstJoin = await api("POST", "/queue/join", {
   body: { flightId: flight.id, bringingPet: true, petFeeAcknowledged: true, petWeightLbs: 24.5 },
 });
 console.log(`Flight under test: ${flight.fromAirport} → ${flight.toAirport} (${flight.id})`);
+const firstStatus = await api("GET", "/queue/status", { token: members[0].token });
+const persistedFirstEntry = firstStatus.json?.find?.((entry) => entry.id === firstJoin.json?.id);
+check("normal join persists the returned waiting entry",
+  firstJoin.status === 201 && persistedFirstEntry?.flightId === flight.id &&
+  persistedFirstEntry?.status === "waiting",
+  JSON.stringify({ join: firstJoin.json, status: firstStatus.json }));
+const duplicateJoin = await api("POST", "/queue/join", {
+  token: members[0].token,
+  body: { flightId: flight.id, bringingPet: false },
+});
+check("duplicate join is scoped to the caller and body flight",
+  duplicateJoin.status === 409 && /already in the queue/i.test(duplicateJoin.json?.error ?? ""),
+  JSON.stringify(duplicateJoin.json));
 
 for (const [i, m] of members.entries()) {
   const join = i === 0 ? firstJoin : await api("POST", "/queue/join", {

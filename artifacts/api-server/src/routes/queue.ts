@@ -129,7 +129,7 @@ router.post("/join", authMiddleware, async (req, res) => {
     const [flight] = await txDb
       .select()
       .from(flightsTable)
-      .where(eq(flightsTable.id, entry.flightId));
+      .where(eq(flightsTable.id, flightId));
     if (!flight) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Flight not found" });
@@ -158,15 +158,25 @@ router.post("/join", authMiddleware, async (req, res) => {
     //     the fee to join an international flight (Plus/Family/Corporate waive it).
     const feeApplies =
       flight.international && flight.internationalFeeUsd > 0 && member?.membershipTier === "base";
-      const [existing] = await txDb
-        .select({ status: queueEntriesTable.status })
-        .from(queueEntriesTable)
-        .where(
-          and(
-            eq(queueEntriesTable.id, String(req.params.id)),
-            eq(queueEntriesTable.userId, userId),
-          ),
-        );
+    if (feeApplies && !acceptIntlFee) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        error: `This international flight has a $${flight.internationalFeeUsd.toLocaleString()} fee for Base members — you must accept it to join (or upgrade to Plus to waive it).`,
+      });
+    }
+
+    // 2. Guard against duplicate active entries. Terminal entries can be
+    // re-created, but waiting and confirmed entries cannot be duplicated.
+    const [existing] = await txDb
+      .select({ status: queueEntriesTable.status })
+      .from(queueEntriesTable)
+      .where(
+        and(
+          eq(queueEntriesTable.flightId, flightId),
+          eq(queueEntriesTable.userId, userId),
+          inArray(queueEntriesTable.status, ["waiting", "confirmed"]),
+        ),
+      );
     if (existing) {
       await client.query("ROLLBACK");
       const msg =
@@ -183,10 +193,13 @@ router.post("/join", authMiddleware, async (req, res) => {
     const familyMember = await activeFamilyMemberForUser(userId, txDb);
     if (useLinePass && familyMember) {
       const result = await txDb
-        .update(usersTable)
-        .set({ linePassCount: sql`${usersTable.linePassCount} - 1` })
-        .where(and(eq(usersTable.id, userId), sql`${usersTable.linePassCount} > 0`))
-        .returning({ linePassCount: usersTable.linePassCount });
+        .update(familyMembersTable)
+        .set({ usedPasses: sql`${familyMembersTable.usedPasses} + 1` })
+        .where(and(
+          eq(familyMembersTable.id, familyMember.member.id),
+          sql`${familyMembersTable.usedPasses} < ${familyMembersTable.allocatedPasses}`,
+        ))
+        .returning({ usedPasses: familyMembersTable.usedPasses });
       if (result.length > 0) {
         usedFamilyPass = true;
         familyPassCycle = familyMember.plan.renewalAt.toISOString();
@@ -221,19 +234,31 @@ router.post("/join", authMiddleware, async (req, res) => {
       );
     const position = useLinePass ? 1 : Number(queueCount) + 1;
 
-    // 5. Insert the new entry. A Skip-the-Line join is an atomic instant win:
-    //    pass consumption, entry creation as CONFIRMED, and trip creation all
-    //    commit together. Baseline seat capacity is intentionally not checked
-    //    here; it is validated when the confirmed passenger list is saved.
+    // 5. Insert the new entry before creating dependent records. A
+    //    Skip-the-Line join is an atomic instant win: pass consumption, entry
+    //    creation as CONFIRMED, and trip creation all commit together.
     const [entry] = await txDb
-      .select()
-      .from(queueEntriesTable)
-      .where(
-        and(
-          eq(queueEntriesTable.id, String(req.params.id)),
-          eq(queueEntriesTable.userId, userId),
-        ),
-      );
+      .insert(queueEntriesTable)
+      .values({
+        id: makeId(),
+        userId,
+        flightId: String(flightId),
+        position,
+        status: useLinePass ? "confirmed" : "waiting",
+        passengers,
+        usedLinePass: !!useLinePass,
+        usedFamilyPass,
+        familyPassCycle,
+        intlFeeAccepted: feeApplies && !!acceptIntlFee,
+        bringingPet,
+        petFeeAcknowledged: bringingPet && petFeeAcknowledged === true,
+        petWeightLbs: bringingPet ? petMeasurements.petWeightLbs : null,
+        petCrateLengthIn: bringingPet ? petMeasurements.petCrateLengthIn : null,
+        petCrateWidthIn: bringingPet ? petMeasurements.petCrateWidthIn : null,
+        petCrateHeightIn: bringingPet ? petMeasurements.petCrateHeightIn : null,
+        movementHistory: [{ type: "joined", position, at: new Date().toISOString() }],
+      })
+      .returning();
 
     let trip: any = null;
     if (useLinePass) {
