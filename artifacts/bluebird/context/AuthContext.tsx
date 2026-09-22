@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthTokenGetter, logout, type User } from '@workspace/api-client-react';
-import { getApiBaseUrl } from '@/lib/apiBaseUrl';
+import { getApiBaseUrl, ProductionApiUrlError } from '@/lib/apiBaseUrl';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { Platform } from 'react-native';
@@ -78,13 +78,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setToken(storedToken);
               setUser(normalizeUser(JSON.parse(storedUser)));
             }
-          } catch {
+          } catch (error) {
+            if (error instanceof ProductionApiUrlError) throw error;
             // Network error — keep cached session so offline use still works
             setToken(storedToken);
             setUser(normalizeUser(JSON.parse(storedUser)));
           }
         }
-      } catch {
+      } catch (error) {
+        if (error instanceof ProductionApiUrlError) throw error;
         // ignore read errors
       } finally {
         setIsLoading(false);

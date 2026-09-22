@@ -25,10 +25,16 @@ import { StatusBar } from 'expo-status-bar';
 
 SplashScreen.preventAutoHideAsync();
 
-// Set API base URL for Expo (absolute URL needed outside a same-origin proxy)
-const apiBaseUrl = getApiBaseUrl();
-if (apiBaseUrl) {
-  setBaseUrl(apiBaseUrl);
+function applyApiBaseUrl(): void {
+  const apiBaseUrl = getApiBaseUrl();
+  if (apiBaseUrl) {
+    setBaseUrl(apiBaseUrl);
+  }
+}
+
+function ApiOriginGate({ children }: { children: React.ReactNode }) {
+  applyApiBaseUrl();
+  return <>{children}</>;
 }
 
 const queryClient = new QueryClient({
@@ -219,15 +225,17 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ThemeProvider>
         <ErrorBoundary>
-          <QueryClientProvider client={queryClient}>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <KeyboardProvider>
-                <AuthProvider>
-                  <RootLayoutNav />
-                </AuthProvider>
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </QueryClientProvider>
+          <ApiOriginGate>
+            <QueryClientProvider client={queryClient}>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <KeyboardProvider>
+                  <AuthProvider>
+                    <RootLayoutNav />
+                  </AuthProvider>
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </QueryClientProvider>
+          </ApiOriginGate>
         </ErrorBoundary>
       </ThemeProvider>
     </SafeAreaProvider>

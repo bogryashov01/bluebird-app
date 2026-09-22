@@ -73,7 +73,9 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
         </Text>
 
         <Text style={[styles.message, { color: colors.mutedForeground }]}>
-          Please reload the app to continue.
+          {error.name === 'ProductionApiUrlError'
+            ? error.message
+            : 'Please reload the app to continue.'}
         </Text>
 
         <Pressable
