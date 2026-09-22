@@ -1,0 +1,135 @@
+TASK — Push the latest Bluebird Replit version to GitHub
+
+The Bluebird project has continued to receive changes in Replit.
+
+I now need ALL current Replit project changes safely committed and pushed to the existing GitHub repository.
+
+Repository:
+https://github.com/bogryashov01/bluebird-app.git
+
+Branch:
+main
+
+IMPORTANT:
+
+- Do NOT modify application code.
+- Do NOT refactor anything.
+- Do NOT upgrade dependencies.
+- Do NOT change configuration just to make the push work.
+- Do NOT overwrite or rewrite Git history.
+- Do NOT force push.
+- Do NOT reset the remote branch.
+- Do NOT delete existing GitHub commits.
+- Preserve all existing commits already on GitHub.
+- Do NOT commit secrets, .env files, node_modules, caches, build output, local databases, or temporary Replit files that are intentionally ignored.
+
+The goal is ONLY to publish the current Replit version safely.
+
+--------------------------------------------------
+1. INSPECT CURRENT STATE
+--------------------------------------------------
+
+Before making any Git changes, inspect:
+
+- git status
+- current branch
+- current HEAD
+- configured remotes
+- origin/main
+- local commits not yet pushed
+- remote commits not present locally
+
+Fetch origin before deciding how to proceed.
+
+--------------------------------------------------
+2. PROTECT EXISTING GITHUB HISTORY
+--------------------------------------------------
+
+The GitHub repository already contains important local-development and bug-fix commits.
+
+Do NOT overwrite them.
+
+If origin/main contains commits that the Replit working copy does not have:
+
+DO NOT force push.
+
+Instead, safely integrate the remote history with the current Replit changes.
+
+Preserve BOTH:
+
+A. the latest Replit product/UI changes
+B. all existing GitHub commits
+
+If merge conflicts occur, stop and report them rather than making destructive assumptions.
+
+--------------------------------------------------
+3. PREPARE CURRENT REPLIT CHANGES
+--------------------------------------------------
+
+Identify all legitimate Bluebird source changes currently present in Replit.
+
+Ensure ignored/local-only files are not committed.
+
+Check specifically for accidental inclusion of:
+
+- .env
+- secrets
+- API keys
+- node_modules
+- build/dist output
+- caches
+- local database files
+- temporary generated artifacts that are intentionally ignored
+
+--------------------------------------------------
+4. COMMIT
+--------------------------------------------------
+
+Commit the current legitimate Replit changes with a clear commit message such as:
+
+feat: sync latest Bluebird Replit updates
+
+Do not amend or rewrite previous commits.
+
+--------------------------------------------------
+5. PUSH
+--------------------------------------------------
+
+Push safely to:
+
+origin/main
+
+Do NOT use --force or --force-with-lease.
+
+--------------------------------------------------
+6. VERIFY
+--------------------------------------------------
+
+After pushing, verify:
+
+- local working tree is clean
+- local main and origin/main point to the expected history
+- the new commit exists remotely
+- existing GitHub commits were preserved
+- current Replit source files are represented in the remote tree
+
+At the end report:
+
+GITHUB SYNC: PASS / FAIL
+
+Include:
+
+1. Repository
+2. Branch
+3. Previous HEAD
+4. New HEAD
+5. Commit created
+6. Remote commit after push
+7. Whether remote changes had to be integrated
+8. Any merge conflicts
+9. Number of files included in the new commit
+10. Confirmation that no secrets/local-only files were committed
+
+Then STOP.
+
+Do not start any new development work.
