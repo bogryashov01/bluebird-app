@@ -26,8 +26,107 @@ tags:
     description: User notifications
   - name: concierge
     description: AI concierge chat
+  - name: networking
+    description: Member flight networking and conversations
+  - name: Storage
+    description: Object storage upload and serving endpoints.
 
 paths:
+  /storage/uploads/request-url:
+    post:
+      tags: [Storage]
+      operationId: requestUploadUrl
+      summary: Request a presigned URL for a profile photo upload
+      description: |
+        Returns a presigned GCS URL for a direct image upload. The client sends
+        image metadata here, then uploads the bytes directly to the returned URL.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadUrlRequest"
+      responses:
+        "200":
+          description: Presigned upload URL generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadUrlResponse"
+        "400":
+          description: Missing or invalid required fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Failed to generate upload URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /storage/public-objects/{filePath}:
+    get:
+      tags: [Storage]
+      operationId: getPublicObject
+      summary: Serve a public asset
+      parameters:
+        - name: filePath
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Object content
+          content:
+            "*/*":
+              schema: { type: string, format: binary }
+        "404":
+          description: File not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Failed to serve public object
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /storage/objects/{objectPath}:
+    get:
+      tags: [Storage]
+      operationId: getStorageObject
+      summary: Serve an uploaded object
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Object content
+          content:
+            "*/*":
+              schema: { type: string, format: binary }
+        "404":
+          description: Object not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Failed to serve object
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /healthz:
     get:
       operationId: healthCheck
@@ -340,6 +439,221 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /networking/profile:
+    get:
+      operationId: getNetworkingProfile
+      tags: [networking]
+      summary: Get the current member's networking profile and completion state
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Networking profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingProfileResponse" }
+        "403":
+          description: Membership required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    patch:
+      operationId: updateNetworkingProfile
+      tags: [networking]
+      summary: Create or update the current member's networking profile
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateNetworkingProfileRequest" }
+      responses:
+        "200":
+          description: Updated networking profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingProfileResponse" }
+        "400":
+          description: Invalid profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /networking/push-tokens:
+    post:
+      operationId: registerNetworkingPushToken
+      tags: [networking]
+      summary: Register a device push token for networking notifications
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PushTokenRequest" }
+      responses:
+        "200":
+          description: Registered push token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PushToken" }
+
+  /networking/flights/{flightId}/front-member:
+    get:
+      operationId: getNetworkingFrontMember
+      tags: [networking]
+      summary: Find the eligible position-one waiting member for a flight
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: flightId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Front member or no eligible member
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingFrontMemberResponse" }
+
+  /networking/requests:
+    post:
+      operationId: createNetworkingRequest
+      tags: [networking]
+      summary: Send an introduction to the current position-one flight member
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateNetworkingRequest" }
+      responses:
+        "201":
+          description: Request sent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingRequestResponse" }
+        "400":
+          description: Incomplete profile or invalid message
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Membership required or blocked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /networking/requests/incoming:
+    get:
+      operationId: listIncomingNetworkingRequests
+      tags: [networking]
+      summary: List pending networking requests for the current member
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Incoming requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NetworkingRequestResponse" }
+
+  /networking/requests/{id}/decision:
+    post:
+      operationId: decideNetworkingRequest
+      tags: [networking]
+      summary: Accept, decline, ignore, block, or report a networking request
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NetworkingDecisionRequest" }
+      responses:
+        "200":
+          description: Decision applied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingDecisionResponse" }
+
+  /networking/connections:
+    get:
+      operationId: listNetworkingConnections
+      tags: [networking]
+      summary: List accepted networking connections
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NetworkingConnectionResponse" }
+
+  /networking/connections/{id}/messages:
+    get:
+      operationId: listNetworkingMessages
+      tags: [networking]
+      summary: List messages in an accepted connection
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Conversation messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NetworkingMessage" }
+    post:
+      operationId: sendNetworkingMessage
+      tags: [networking]
+      summary: Send a message in an accepted connection
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SendNetworkingMessageRequest" }
+      responses:
+        "201":
+          description: Message sent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingMessage" }
+
+  /networking/connections/{id}/block:
+    post:
+      operationId: blockNetworkingConnection
+      tags: [networking]
+      summary: Block the other member in an accepted connection
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Member blocked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BlockNetworkingResponse" }
 
   /queue/join:
     post:
@@ -755,6 +1069,154 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Membership"
+
+  /membership/family:
+    get:
+      operationId: getFamilyMembership
+      tags: [membership]
+      summary: Get the caller's Family/Corporate membership view
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Family plan summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FamilySummary"
+        "403":
+          description: Family owner/member permission required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Caller is not linked to a Family/Corporate plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /membership/family/invitations:
+    post:
+      operationId: createFamilyInvitation
+      tags: [membership]
+      summary: Invite or link a person to the primary holder's Family/Corporate plan
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FamilyInvitationRequest"
+      responses:
+        "201":
+          description: Invitation created or existing non-member linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FamilyInvitationResponse"
+        "403":
+          description: Primary holder required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Capacity, duplicate, or existing membership conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Invitation was created but email delivery failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /membership/family/invitations/{token}/accept:
+    post:
+      operationId: acceptFamilyInvitation
+      tags: [membership]
+      summary: Accept a Family/Corporate invitation for the signed-in account
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Invitation accepted and Plus access activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FamilyAcceptanceResponse"
+        "403":
+          description: Signed-in email does not match the invitation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Existing membership or concurrent acceptance conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "410":
+          description: Expired or already-used invitation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /membership/family/members/{memberId}/allocation:
+    patch:
+      operationId: updateFamilyMemberAllocation
+      tags: [membership]
+      summary: Move unused Family/Corporate passes to a linked member
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FamilyAllocationRequest"
+      responses:
+        "200":
+          description: Updated Family plan summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FamilySummary"
+        "400":
+          description: Invalid allocation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Primary holder required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Allocation exceeds the shared seven-pass pool
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /membership/upgrade:
     post:
@@ -1234,6 +1696,11 @@ components:
             type: string
             pattern: "^\\s*[A-Za-z]{3,4}\\s*$"
           description: Canonical airport codes to save as the member's preferences. Surrounding whitespace is trimmed, casing is normalized, and duplicates are removed server-side. An empty array clears all selections.
+        notificationChannel:
+          type: string
+          enum: [app, email, both]
+          default: app
+          description: Account-level delivery preference for notification events. App retains the existing in-app notification history.
 
     User:
       type: object
@@ -1265,6 +1732,11 @@ components:
           type: array
           items:
             type: string
+        notificationChannel:
+          type: string
+          enum: [app, email, both]
+          default: app
+          description: Account-level delivery preference for notification events. App retains the existing in-app notification history.
         createdAt:
           type: string
       required:
@@ -1276,6 +1748,7 @@ components:
         - linePassCount
         - referralCode
         - homeAirports
+        - notificationChannel
         - createdAt
 
     Flight:
@@ -1483,6 +1956,23 @@ components:
       required:
         - success
 
+    QueueMember:
+      type: object
+      description: Privacy-safe representation of an active waiting queue member.
+      properties:
+        initials:
+          type: string
+          minLength: 1
+          maxLength: 2
+          pattern: "^[A-Z]{1,2}$"
+          description: One or two uppercase initials derived from the member's name.
+        position:
+          type: integer
+          description: Current position in the selected flight's waiting queue.
+      required:
+        - initials
+        - position
+
     QueueEntry:
       type: object
       properties:
@@ -1499,6 +1989,13 @@ components:
         status:
           type: string
           enum: [waiting, confirmed, cancelled, expired]
+        usedLinePass:
+          type: boolean
+        usedFamilyPass:
+          type: boolean
+        familyPassCycle:
+          type: string
+          nullable: true
         createdAt:
           type: string
         movementHistory:
@@ -1508,6 +2005,13 @@ components:
             plus a 'moved' event for each position improvement.
           items:
             $ref: "#/components/schemas/QueueMovementEvent"
+        queueMembers:
+          type: array
+          description: >-
+            Privacy-safe initials and positions for active waiting members on
+            this entry's flight. Returned by queue status only.
+          items:
+            $ref: "#/components/schemas/QueueMember"
         bringingPet:
           type: boolean
         petFeeAcknowledged:
@@ -1571,6 +2075,9 @@ components:
             linePassCount:
               type: number
               description: The user's remaining Skip the Line pass balance after use
+            usedFamilyPass:
+              type: boolean
+              description: True when the confirmed booking consumed the caller's assigned Family pool pass.
             alreadyConfirmed:
               type: boolean
               description: True when the entry was already confirmed before the pass was applied — no pass was consumed
@@ -1838,6 +2345,17 @@ components:
           type: array
           items:
             type: string
+        membershipCount:
+          type: integer
+          description: Total people covered by the plan.
+        sharedAnnualPasses:
+          type: integer
+          description: Annual passes shared by the covered people.
+        billingCadence:
+          type: string
+          enum: [annual]
+        description:
+          type: string
       required:
         - id
         - label
@@ -1855,6 +2373,8 @@ components:
           description: Purchasable plan catalog (always present; drives the non-member join screen).
           items:
             $ref: "#/components/schemas/MembershipPlan"
+        family:
+          $ref: "#/components/schemas/FamilySummary"
         linePassCount:
           type: number
         renewalDate:
@@ -1892,6 +2412,123 @@ components:
         - lifetimeCompletedFlights
         - annualFlightAllowance
         - flightsThisYear
+
+    FamilyMember:
+      type: object
+      properties:
+        id: { type: string }
+        userId:
+          type: string
+          nullable: true
+        email: { type: string }
+        name:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [primary, member]
+        status:
+          type: string
+          enum: [active, pending, conflict, ended]
+        allocatedPasses: { type: integer }
+        usedPasses: { type: integer }
+        availablePasses: { type: integer }
+        joinedAt:
+          type: string
+          nullable: true
+      required: [id, email, role, status, allocatedPasses, usedPasses, availablePasses]
+
+    FamilyInvitation:
+      type: object
+      properties:
+        id: { type: string }
+        memberId: { type: string }
+        email: { type: string }
+        expiresAt: { type: string }
+        acceptanceToken: { type: string }
+        acceptancePath: { type: string }
+        deliveryStatus:
+          type: string
+          enum: [pending, sent, failed]
+        deliveryError:
+          type: string
+          nullable: true
+        deliveredAt:
+          type: string
+          nullable: true
+        providerMessageId: { type: string }
+      required: [id, memberId, email, expiresAt, deliveryStatus]
+
+    FamilySummary:
+      type: object
+      properties:
+        id: { type: string }
+        role:
+          type: string
+          enum: [primary, member]
+        status:
+          type: string
+          enum: [active, ending]
+        primaryUserId: { type: string }
+        renewalDate: { type: string }
+        memberLimit: { type: integer }
+        passTotal: { type: integer }
+        pool:
+          type: object
+          properties:
+            total: { type: integer }
+            allocated: { type: integer }
+            available: { type: integer }
+            unallocated: { type: integer }
+            used: { type: integer }
+          required: [total, allocated, available, unallocated, used]
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/FamilyMember"
+        pendingInvitations:
+          type: array
+          items:
+            $ref: "#/components/schemas/FamilyInvitation"
+      required: [id, role, status, primaryUserId, renewalDate, memberLimit, passTotal, pool, members, pendingInvitations]
+
+    FamilyInvitationRequest:
+      type: object
+      properties:
+        email: { type: string }
+        linkExisting:
+          type: boolean
+          default: false
+      required: [email]
+
+    FamilyInvitationResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [invited, linked]
+        invitation:
+          $ref: "#/components/schemas/FamilyInvitation"
+        family:
+          $ref: "#/components/schemas/FamilySummary"
+      required: [status, family]
+
+    FamilyAcceptanceResponse:
+      type: object
+      properties:
+        status: { type: string, enum: [accepted] }
+        family:
+          $ref: "#/components/schemas/FamilySummary"
+      required: [status, family]
+
+    FamilyAllocationRequest:
+      type: object
+      properties:
+        allocatedPasses:
+          type: integer
+          minimum: 0
+          maximum: 7
+      required: [allocatedPasses]
 
     BuyPassResponse:
       type: object
@@ -1958,6 +2595,192 @@ components:
         - name
         - status
 
+    NetworkingProfile:
+      type: object
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        photoUrl: { type: string, nullable: true }
+        photoAssetPath: { type: string, nullable: true }
+        industry: { type: string }
+        bio: { type: string }
+        linkedinUrl: { type: string, nullable: true }
+        instagramUrl: { type: string, nullable: true }
+      required: [firstName, lastName, photoUrl, photoAssetPath, industry, bio]
+
+    NetworkingProfileResponse:
+      allOf:
+        - $ref: "#/components/schemas/NetworkingProfile"
+        - type: object
+          properties:
+            completed: { type: boolean }
+            missing:
+              type: array
+              items: { type: string }
+          required: [completed, missing]
+
+    UpdateNetworkingProfileRequest:
+      type: object
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 80 }
+        lastName: { type: string, minLength: 1, maxLength: 80 }
+        photoUrl: { type: string, nullable: true }
+        photoAssetPath: { type: string, nullable: true }
+        industry: { type: string, minLength: 1, maxLength: 80 }
+        bio: { type: string, minLength: 1, maxLength: 280 }
+        linkedinUrl: { type: string, nullable: true }
+        instagramUrl: { type: string, nullable: true }
+
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160 }
+        size: { type: integer, minimum: 1, maximum: 1500000 }
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL: { type: string }
+        objectPath: { type: string }
+        metadata:
+          $ref: "#/components/schemas/UploadUrlRequest"
+
+    PushTokenRequest:
+      type: object
+      properties:
+        token: { type: string, minLength: 1, maxLength: 512 }
+        platform: { type: string, maxLength: 20 }
+      required: [token]
+
+    PushToken:
+      type: object
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        token: { type: string }
+        platform: { type: string }
+        createdAt: { type: string }
+        lastUsedAt: { type: string }
+      required: [id, userId, token, platform, createdAt, lastUsedAt]
+
+    NetworkingProfilePreview:
+      type: object
+      properties:
+        userId: { type: string }
+        firstName: { type: string }
+        photoUrl: { type: string, nullable: true }
+        photoAssetPath: { type: string, nullable: true }
+        industry: { type: string }
+        bio: { type: string }
+      required: [userId, firstName, photoUrl, photoAssetPath, industry, bio]
+
+    NetworkingFrontMemberResponse:
+      type: object
+      properties:
+        eligible: { type: boolean }
+        flightId: { type: string }
+        member:
+          allOf:
+            - $ref: "#/components/schemas/NetworkingProfilePreview"
+          nullable: true
+      required: [eligible, member]
+
+    CreateNetworkingRequest:
+      type: object
+      properties:
+        flightId: { type: string }
+        message: { type: string, minLength: 1, maxLength: 240 }
+      required: [flightId, message]
+
+    NetworkingRequestResponse:
+      type: object
+      properties:
+        id: { type: string }
+        flightId: { type: string }
+        requesterId: { type: string }
+        recipientId: { type: string }
+        message: { type: string }
+        status:
+          type: string
+          enum: [pending, accepted, declined, ignored]
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        requester:
+          $ref: "#/components/schemas/NetworkingProfilePreview"
+        flight:
+          type: object
+          nullable: true
+          properties:
+            fromCity: { type: string }
+            toCity: { type: string }
+            departureDate: { type: string }
+      required: [id, flightId, requesterId, recipientId, message, status, createdAt, updatedAt]
+
+    NetworkingDecisionRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [accept, decline, ignore, block, report]
+        reason: { type: string, maxLength: 500 }
+      required: [action]
+
+    NetworkingDecisionResponse:
+      type: object
+      properties:
+        status: { type: string }
+        connection:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string }
+      required: [status]
+
+    NetworkingMessage:
+      type: object
+      properties:
+        id: { type: string }
+        connectionId: { type: string }
+        senderId: { type: string }
+        content: { type: string }
+        clientMessageId: { type: string, nullable: true }
+        createdAt: { type: string }
+      required: [id, connectionId, senderId, content, createdAt]
+
+    SendNetworkingMessageRequest:
+      type: object
+      properties:
+        content: { type: string, minLength: 1, maxLength: 1000 }
+        clientMessageId: { type: string, maxLength: 100 }
+      required: [content]
+
+    NetworkingConnectionResponse:
+      type: object
+      properties:
+        id: { type: string }
+        requestId: { type: string }
+        memberAId: { type: string }
+        memberBId: { type: string }
+        createdAt: { type: string }
+        member:
+          $ref: "#/components/schemas/NetworkingProfile"
+        lastMessage:
+          allOf:
+            - $ref: "#/components/schemas/NetworkingMessage"
+          nullable: true
+      required: [id, requestId, memberAId, memberBId, createdAt, member]
+
+    BlockNetworkingResponse:
+      type: object
+      properties:
+        blocked: { type: boolean }
+      required: [blocked]
+
     Notification:
       type: object
       properties:
@@ -1969,7 +2792,10 @@ components:
           type: string
         type:
           type: string
-          enum: [queue_update, flight_confirmed, membership, referral, system]
+          enum: [queue_update, flight_confirmed, membership, referral, networking_request, networking_accepted, networking_declined, networking_message, system]
+        data:
+          type: object
+          additionalProperties: { type: string }
         read:
           type: boolean
         createdAt:
@@ -1979,5 +2805,6 @@ components:
         - title
         - body
         - type
+        - data
         - read
         - createdAt

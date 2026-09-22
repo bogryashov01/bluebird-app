@@ -23,6 +23,7 @@ import type {
   AirportGroup,
   AirportSummary,
   AuthResponse,
+  BlockNetworkingResponse,
   BuyPassResponse,
   CancelBookingResponse,
   CancelQueueResponse,
@@ -33,7 +34,13 @@ import type {
   ConciergeChatRequest,
   ConciergeHistoryMessage,
   ConciergeReply,
+  CreateNetworkingRequest,
   ErrorResponse,
+  FamilyAcceptanceResponse,
+  FamilyAllocationRequest,
+  FamilyInvitationRequest,
+  FamilyInvitationResponse,
+  FamilySummary,
   Flight,
   FlightUserStatus,
   GetConciergeHistoryParams,
@@ -41,8 +48,17 @@ import type {
   JoinQueueRequest,
   ListFlightsParams,
   Membership,
+  NetworkingConnectionResponse,
+  NetworkingDecisionRequest,
+  NetworkingDecisionResponse,
+  NetworkingFrontMemberResponse,
+  NetworkingMessage,
+  NetworkingProfileResponse,
+  NetworkingRequestResponse,
   Notification,
   PassengerManifest,
+  PushToken,
+  PushTokenRequest,
   QueueEntry,
   ReferralInfo,
   RequestCodeRequest,
@@ -50,11 +66,15 @@ import type {
   SavePassengerManifestRequest,
   SavedPassenger,
   SavedPassengerInput,
+  SendNetworkingMessageRequest,
   SignOutResponse,
   SuccessResponse,
   Trip,
   UpdateMeRequest,
+  UpdateNetworkingProfileRequest,
   UpgradeMembershipRequest,
+  UploadUrlRequest,
+  UploadUrlResponse,
   UseLinePassResponse,
   User,
   VerifyCodeRequest,
@@ -87,6 +107,233 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getRequestUploadUrlUrl = () => {
+
+
+
+
+  return `/api/storage/uploads/request-url`
+}
+
+/**
+ * Returns a presigned GCS URL for a direct image upload. The client sends
+ * image metadata here, then uploads the bytes directly to the returned URL.
+ * @summary Request a presigned URL for a profile photo upload
+ */
+export const requestUploadUrl = async (uploadUrlRequest: UploadUrlRequest, options?: Parameters<typeof customFetch>[1]): Promise<UploadUrlResponse> => {
+
+  return customFetch<UploadUrlResponse>(getRequestUploadUrlUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(uploadUrlRequest)
+  }
+);}
+
+
+
+
+
+export const getRequestUploadUrlMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestUploadUrl>>, TError,{data: BodyType<UploadUrlRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestUploadUrl>>, TError,{data: BodyType<UploadUrlRequest>}, TContext> => {
+
+const mutationKey = ['requestUploadUrl'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestUploadUrl>>, {data: BodyType<UploadUrlRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestUploadUrl(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestUploadUrlMutationResult = NonNullable<Awaited<ReturnType<typeof requestUploadUrl>>>
+    export type RequestUploadUrlMutationBody = BodyType<UploadUrlRequest>
+    export type RequestUploadUrlMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Request a presigned URL for a profile photo upload
+ */
+export const useRequestUploadUrl = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestUploadUrl>>, TError,{data: BodyType<UploadUrlRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestUploadUrl>>,
+        TError,
+        {data: BodyType<UploadUrlRequest>},
+        TContext
+      > => {
+      return useMutation(getRequestUploadUrlMutationOptions(options));
+    }
+
+export const getGetPublicObjectUrl = (filePath: string,) => {
+
+
+
+
+  return `/api/storage/public-objects/${filePath}`
+}
+
+/**
+ * @summary Serve a public asset
+ */
+export const getPublicObject = async (filePath: string, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetPublicObjectUrl(filePath),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicObjectQueryKey = (filePath: string,) => {
+    return [
+    `/api/storage/public-objects/${filePath}`
+    ] as const;
+    }
+
+
+export const getGetPublicObjectQueryOptions = <TData = Awaited<ReturnType<typeof getPublicObject>>, TError = ErrorType<ErrorResponse>>(filePath: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicObject>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicObjectQueryKey(filePath);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicObject>>> = ({ signal }) => getPublicObject(filePath, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: filePath !== null && filePath !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicObject>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicObjectQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicObject>>>
+export type GetPublicObjectQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Serve a public asset
+ */
+
+export function useGetPublicObject<TData = Awaited<ReturnType<typeof getPublicObject>>, TError = ErrorType<ErrorResponse>>(
+ filePath: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicObject>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicObjectQueryOptions(filePath,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetStorageObjectUrl = (objectPath: string,) => {
+
+
+
+
+  return `/api/storage/objects/${objectPath}`
+}
+
+/**
+ * @summary Serve an uploaded object
+ */
+export const getStorageObject = async (objectPath: string, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetStorageObjectUrl(objectPath),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStorageObjectQueryKey = (objectPath: string,) => {
+    return [
+    `/api/storage/objects/${objectPath}`
+    ] as const;
+    }
+
+
+export const getGetStorageObjectQueryOptions = <TData = Awaited<ReturnType<typeof getStorageObject>>, TError = ErrorType<ErrorResponse>>(objectPath: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStorageObject>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStorageObjectQueryKey(objectPath);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStorageObject>>> = ({ signal }) => getStorageObject(objectPath, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: objectPath !== null && objectPath !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStorageObject>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStorageObjectQueryResult = NonNullable<Awaited<ReturnType<typeof getStorageObject>>>
+export type GetStorageObjectQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Serve an uploaded object
+ */
+
+export function useGetStorageObject<TData = Awaited<ReturnType<typeof getStorageObject>>, TError = ErrorType<ErrorResponse>>(
+ objectPath: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStorageObject>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStorageObjectQueryOptions(objectPath,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getHealthCheckUrl = () => {
 
@@ -988,6 +1235,819 @@ export function useGetFlightMyStatus<TData = Awaited<ReturnType<typeof getFlight
 
 
 
+
+export const getGetNetworkingProfileUrl = () => {
+
+
+
+
+  return `/api/networking/profile`
+}
+
+/**
+ * @summary Get the current member's networking profile and completion state
+ */
+export const getNetworkingProfile = async ( options?: Parameters<typeof customFetch>[1]): Promise<NetworkingProfileResponse> => {
+
+  return customFetch<NetworkingProfileResponse>(getGetNetworkingProfileUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetNetworkingProfileQueryKey = () => {
+    return [
+    `/api/networking/profile`
+    ] as const;
+    }
+
+
+export const getGetNetworkingProfileQueryOptions = <TData = Awaited<ReturnType<typeof getNetworkingProfile>>, TError = ErrorType<ErrorResponse>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getNetworkingProfile>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetNetworkingProfileQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNetworkingProfile>>> = ({ signal }) => getNetworkingProfile({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getNetworkingProfile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetNetworkingProfileQueryResult = NonNullable<Awaited<ReturnType<typeof getNetworkingProfile>>>
+export type GetNetworkingProfileQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get the current member's networking profile and completion state
+ */
+
+export function useGetNetworkingProfile<TData = Awaited<ReturnType<typeof getNetworkingProfile>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getNetworkingProfile>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetNetworkingProfileQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateNetworkingProfileUrl = () => {
+
+
+
+
+  return `/api/networking/profile`
+}
+
+/**
+ * @summary Create or update the current member's networking profile
+ */
+export const updateNetworkingProfile = async (updateNetworkingProfileRequest: UpdateNetworkingProfileRequest, options?: Parameters<typeof customFetch>[1]): Promise<NetworkingProfileResponse> => {
+
+  return customFetch<NetworkingProfileResponse>(getUpdateNetworkingProfileUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateNetworkingProfileRequest)
+  }
+);}
+
+
+
+
+
+export const getUpdateNetworkingProfileMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateNetworkingProfile>>, TError,{data: BodyType<UpdateNetworkingProfileRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateNetworkingProfile>>, TError,{data: BodyType<UpdateNetworkingProfileRequest>}, TContext> => {
+
+const mutationKey = ['updateNetworkingProfile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateNetworkingProfile>>, {data: BodyType<UpdateNetworkingProfileRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateNetworkingProfile(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateNetworkingProfileMutationResult = NonNullable<Awaited<ReturnType<typeof updateNetworkingProfile>>>
+    export type UpdateNetworkingProfileMutationBody = BodyType<UpdateNetworkingProfileRequest>
+    export type UpdateNetworkingProfileMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Create or update the current member's networking profile
+ */
+export const useUpdateNetworkingProfile = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateNetworkingProfile>>, TError,{data: BodyType<UpdateNetworkingProfileRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateNetworkingProfile>>,
+        TError,
+        {data: BodyType<UpdateNetworkingProfileRequest>},
+        TContext
+      > => {
+      return useMutation(getUpdateNetworkingProfileMutationOptions(options));
+    }
+
+export const getRegisterNetworkingPushTokenUrl = () => {
+
+
+
+
+  return `/api/networking/push-tokens`
+}
+
+/**
+ * @summary Register a device push token for networking notifications
+ */
+export const registerNetworkingPushToken = async (pushTokenRequest: PushTokenRequest, options?: Parameters<typeof customFetch>[1]): Promise<PushToken> => {
+
+  return customFetch<PushToken>(getRegisterNetworkingPushTokenUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(pushTokenRequest)
+  }
+);}
+
+
+
+
+
+export const getRegisterNetworkingPushTokenMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerNetworkingPushToken>>, TError,{data: BodyType<PushTokenRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerNetworkingPushToken>>, TError,{data: BodyType<PushTokenRequest>}, TContext> => {
+
+const mutationKey = ['registerNetworkingPushToken'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerNetworkingPushToken>>, {data: BodyType<PushTokenRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerNetworkingPushToken(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterNetworkingPushTokenMutationResult = NonNullable<Awaited<ReturnType<typeof registerNetworkingPushToken>>>
+    export type RegisterNetworkingPushTokenMutationBody = BodyType<PushTokenRequest>
+    export type RegisterNetworkingPushTokenMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Register a device push token for networking notifications
+ */
+export const useRegisterNetworkingPushToken = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerNetworkingPushToken>>, TError,{data: BodyType<PushTokenRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof registerNetworkingPushToken>>,
+        TError,
+        {data: BodyType<PushTokenRequest>},
+        TContext
+      > => {
+      return useMutation(getRegisterNetworkingPushTokenMutationOptions(options));
+    }
+
+export const getGetNetworkingFrontMemberUrl = (flightId: string,) => {
+
+
+
+
+  return `/api/networking/flights/${flightId}/front-member`
+}
+
+/**
+ * @summary Find the eligible position-one waiting member for a flight
+ */
+export const getNetworkingFrontMember = async (flightId: string, options?: Parameters<typeof customFetch>[1]): Promise<NetworkingFrontMemberResponse> => {
+
+  return customFetch<NetworkingFrontMemberResponse>(getGetNetworkingFrontMemberUrl(flightId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetNetworkingFrontMemberQueryKey = (flightId: string,) => {
+    return [
+    `/api/networking/flights/${flightId}/front-member`
+    ] as const;
+    }
+
+
+export const getGetNetworkingFrontMemberQueryOptions = <TData = Awaited<ReturnType<typeof getNetworkingFrontMember>>, TError = ErrorType<unknown>>(flightId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getNetworkingFrontMember>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetNetworkingFrontMemberQueryKey(flightId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNetworkingFrontMember>>> = ({ signal }) => getNetworkingFrontMember(flightId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: flightId !== null && flightId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getNetworkingFrontMember>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetNetworkingFrontMemberQueryResult = NonNullable<Awaited<ReturnType<typeof getNetworkingFrontMember>>>
+export type GetNetworkingFrontMemberQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Find the eligible position-one waiting member for a flight
+ */
+
+export function useGetNetworkingFrontMember<TData = Awaited<ReturnType<typeof getNetworkingFrontMember>>, TError = ErrorType<unknown>>(
+ flightId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getNetworkingFrontMember>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetNetworkingFrontMemberQueryOptions(flightId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateNetworkingRequestUrl = () => {
+
+
+
+
+  return `/api/networking/requests`
+}
+
+/**
+ * @summary Send an introduction to the current position-one flight member
+ */
+export const createNetworkingRequest = async (createNetworkingRequest: CreateNetworkingRequest, options?: Parameters<typeof customFetch>[1]): Promise<NetworkingRequestResponse> => {
+
+  return customFetch<NetworkingRequestResponse>(getCreateNetworkingRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createNetworkingRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateNetworkingRequestMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createNetworkingRequest>>, TError,{data: BodyType<CreateNetworkingRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createNetworkingRequest>>, TError,{data: BodyType<CreateNetworkingRequest>}, TContext> => {
+
+const mutationKey = ['createNetworkingRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createNetworkingRequest>>, {data: BodyType<CreateNetworkingRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createNetworkingRequest(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateNetworkingRequestMutationResult = NonNullable<Awaited<ReturnType<typeof createNetworkingRequest>>>
+    export type CreateNetworkingRequestMutationBody = BodyType<CreateNetworkingRequest>
+    export type CreateNetworkingRequestMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Send an introduction to the current position-one flight member
+ */
+export const useCreateNetworkingRequest = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createNetworkingRequest>>, TError,{data: BodyType<CreateNetworkingRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createNetworkingRequest>>,
+        TError,
+        {data: BodyType<CreateNetworkingRequest>},
+        TContext
+      > => {
+      return useMutation(getCreateNetworkingRequestMutationOptions(options));
+    }
+
+export const getListIncomingNetworkingRequestsUrl = () => {
+
+
+
+
+  return `/api/networking/requests/incoming`
+}
+
+/**
+ * @summary List pending networking requests for the current member
+ */
+export const listIncomingNetworkingRequests = async ( options?: Parameters<typeof customFetch>[1]): Promise<NetworkingRequestResponse[]> => {
+
+  return customFetch<NetworkingRequestResponse[]>(getListIncomingNetworkingRequestsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListIncomingNetworkingRequestsQueryKey = () => {
+    return [
+    `/api/networking/requests/incoming`
+    ] as const;
+    }
+
+
+export const getListIncomingNetworkingRequestsQueryOptions = <TData = Awaited<ReturnType<typeof listIncomingNetworkingRequests>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listIncomingNetworkingRequests>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListIncomingNetworkingRequestsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listIncomingNetworkingRequests>>> = ({ signal }) => listIncomingNetworkingRequests({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listIncomingNetworkingRequests>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListIncomingNetworkingRequestsQueryResult = NonNullable<Awaited<ReturnType<typeof listIncomingNetworkingRequests>>>
+export type ListIncomingNetworkingRequestsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List pending networking requests for the current member
+ */
+
+export function useListIncomingNetworkingRequests<TData = Awaited<ReturnType<typeof listIncomingNetworkingRequests>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listIncomingNetworkingRequests>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListIncomingNetworkingRequestsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDecideNetworkingRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/networking/requests/${id}/decision`
+}
+
+/**
+ * @summary Accept, decline, ignore, block, or report a networking request
+ */
+export const decideNetworkingRequest = async (id: string,
+    networkingDecisionRequest: NetworkingDecisionRequest, options?: Parameters<typeof customFetch>[1]): Promise<NetworkingDecisionResponse> => {
+
+  return customFetch<NetworkingDecisionResponse>(getDecideNetworkingRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(networkingDecisionRequest)
+  }
+);}
+
+
+
+
+
+export const getDecideNetworkingRequestMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideNetworkingRequest>>, TError,{id: string;data: BodyType<NetworkingDecisionRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideNetworkingRequest>>, TError,{id: string;data: BodyType<NetworkingDecisionRequest>}, TContext> => {
+
+const mutationKey = ['decideNetworkingRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideNetworkingRequest>>, {id: string;data: BodyType<NetworkingDecisionRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  decideNetworkingRequest(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideNetworkingRequestMutationResult = NonNullable<Awaited<ReturnType<typeof decideNetworkingRequest>>>
+    export type DecideNetworkingRequestMutationBody = BodyType<NetworkingDecisionRequest>
+    export type DecideNetworkingRequestMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Accept, decline, ignore, block, or report a networking request
+ */
+export const useDecideNetworkingRequest = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideNetworkingRequest>>, TError,{id: string;data: BodyType<NetworkingDecisionRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof decideNetworkingRequest>>,
+        TError,
+        {id: string;data: BodyType<NetworkingDecisionRequest>},
+        TContext
+      > => {
+      return useMutation(getDecideNetworkingRequestMutationOptions(options));
+    }
+
+export const getListNetworkingConnectionsUrl = () => {
+
+
+
+
+  return `/api/networking/connections`
+}
+
+/**
+ * @summary List accepted networking connections
+ */
+export const listNetworkingConnections = async ( options?: Parameters<typeof customFetch>[1]): Promise<NetworkingConnectionResponse[]> => {
+
+  return customFetch<NetworkingConnectionResponse[]>(getListNetworkingConnectionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListNetworkingConnectionsQueryKey = () => {
+    return [
+    `/api/networking/connections`
+    ] as const;
+    }
+
+
+export const getListNetworkingConnectionsQueryOptions = <TData = Awaited<ReturnType<typeof listNetworkingConnections>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNetworkingConnections>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListNetworkingConnectionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listNetworkingConnections>>> = ({ signal }) => listNetworkingConnections({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listNetworkingConnections>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListNetworkingConnectionsQueryResult = NonNullable<Awaited<ReturnType<typeof listNetworkingConnections>>>
+export type ListNetworkingConnectionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List accepted networking connections
+ */
+
+export function useListNetworkingConnections<TData = Awaited<ReturnType<typeof listNetworkingConnections>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNetworkingConnections>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListNetworkingConnectionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListNetworkingMessagesUrl = (id: string,) => {
+
+
+
+
+  return `/api/networking/connections/${id}/messages`
+}
+
+/**
+ * @summary List messages in an accepted connection
+ */
+export const listNetworkingMessages = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<NetworkingMessage[]> => {
+
+  return customFetch<NetworkingMessage[]>(getListNetworkingMessagesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListNetworkingMessagesQueryKey = (id: string,) => {
+    return [
+    `/api/networking/connections/${id}/messages`
+    ] as const;
+    }
+
+
+export const getListNetworkingMessagesQueryOptions = <TData = Awaited<ReturnType<typeof listNetworkingMessages>>, TError = ErrorType<unknown>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNetworkingMessages>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListNetworkingMessagesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listNetworkingMessages>>> = ({ signal }) => listNetworkingMessages(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listNetworkingMessages>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListNetworkingMessagesQueryResult = NonNullable<Awaited<ReturnType<typeof listNetworkingMessages>>>
+export type ListNetworkingMessagesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List messages in an accepted connection
+ */
+
+export function useListNetworkingMessages<TData = Awaited<ReturnType<typeof listNetworkingMessages>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listNetworkingMessages>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListNetworkingMessagesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSendNetworkingMessageUrl = (id: string,) => {
+
+
+
+
+  return `/api/networking/connections/${id}/messages`
+}
+
+/**
+ * @summary Send a message in an accepted connection
+ */
+export const sendNetworkingMessage = async (id: string,
+    sendNetworkingMessageRequest: SendNetworkingMessageRequest, options?: Parameters<typeof customFetch>[1]): Promise<NetworkingMessage> => {
+
+  return customFetch<NetworkingMessage>(getSendNetworkingMessageUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sendNetworkingMessageRequest)
+  }
+);}
+
+
+
+
+
+export const getSendNetworkingMessageMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendNetworkingMessage>>, TError,{id: string;data: BodyType<SendNetworkingMessageRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendNetworkingMessage>>, TError,{id: string;data: BodyType<SendNetworkingMessageRequest>}, TContext> => {
+
+const mutationKey = ['sendNetworkingMessage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendNetworkingMessage>>, {id: string;data: BodyType<SendNetworkingMessageRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  sendNetworkingMessage(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendNetworkingMessageMutationResult = NonNullable<Awaited<ReturnType<typeof sendNetworkingMessage>>>
+    export type SendNetworkingMessageMutationBody = BodyType<SendNetworkingMessageRequest>
+    export type SendNetworkingMessageMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Send a message in an accepted connection
+ */
+export const useSendNetworkingMessage = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendNetworkingMessage>>, TError,{id: string;data: BodyType<SendNetworkingMessageRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendNetworkingMessage>>,
+        TError,
+        {id: string;data: BodyType<SendNetworkingMessageRequest>},
+        TContext
+      > => {
+      return useMutation(getSendNetworkingMessageMutationOptions(options));
+    }
+
+export const getBlockNetworkingConnectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/networking/connections/${id}/block`
+}
+
+/**
+ * @summary Block the other member in an accepted connection
+ */
+export const blockNetworkingConnection = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<BlockNetworkingResponse> => {
+
+  return customFetch<BlockNetworkingResponse>(getBlockNetworkingConnectionUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getBlockNetworkingConnectionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof blockNetworkingConnection>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof blockNetworkingConnection>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['blockNetworkingConnection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof blockNetworkingConnection>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  blockNetworkingConnection(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BlockNetworkingConnectionMutationResult = NonNullable<Awaited<ReturnType<typeof blockNetworkingConnection>>>
+
+    export type BlockNetworkingConnectionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Block the other member in an accepted connection
+ */
+export const useBlockNetworkingConnection = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof blockNetworkingConnection>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof blockNetworkingConnection>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getBlockNetworkingConnectionMutationOptions(options));
+    }
 
 export const getJoinQueueUrl = () => {
 
@@ -2014,6 +3074,297 @@ export function useGetMembership<TData = Awaited<ReturnType<typeof getMembership
 
 
 
+
+export const getGetFamilyMembershipUrl = () => {
+
+
+
+
+  return `/api/membership/family`
+}
+
+/**
+ * @summary Get the caller's Family/Corporate membership view
+ */
+export const getFamilyMembership = async ( options?: Parameters<typeof customFetch>[1]): Promise<FamilySummary> => {
+
+  return customFetch<FamilySummary>(getGetFamilyMembershipUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFamilyMembershipQueryKey = () => {
+    return [
+    `/api/membership/family`
+    ] as const;
+    }
+
+
+export const getGetFamilyMembershipQueryOptions = <TData = Awaited<ReturnType<typeof getFamilyMembership>>, TError = ErrorType<ErrorResponse>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFamilyMembership>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFamilyMembershipQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFamilyMembership>>> = ({ signal }) => getFamilyMembership({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFamilyMembership>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFamilyMembershipQueryResult = NonNullable<Awaited<ReturnType<typeof getFamilyMembership>>>
+export type GetFamilyMembershipQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get the caller's Family/Corporate membership view
+ */
+
+export function useGetFamilyMembership<TData = Awaited<ReturnType<typeof getFamilyMembership>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFamilyMembership>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFamilyMembershipQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateFamilyInvitationUrl = () => {
+
+
+
+
+  return `/api/membership/family/invitations`
+}
+
+/**
+ * @summary Invite or link a person to the primary holder's Family/Corporate plan
+ */
+export const createFamilyInvitation = async (familyInvitationRequest: FamilyInvitationRequest, options?: Parameters<typeof customFetch>[1]): Promise<FamilyInvitationResponse> => {
+
+  return customFetch<FamilyInvitationResponse>(getCreateFamilyInvitationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(familyInvitationRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateFamilyInvitationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFamilyInvitation>>, TError,{data: BodyType<FamilyInvitationRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createFamilyInvitation>>, TError,{data: BodyType<FamilyInvitationRequest>}, TContext> => {
+
+const mutationKey = ['createFamilyInvitation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createFamilyInvitation>>, {data: BodyType<FamilyInvitationRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createFamilyInvitation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateFamilyInvitationMutationResult = NonNullable<Awaited<ReturnType<typeof createFamilyInvitation>>>
+    export type CreateFamilyInvitationMutationBody = BodyType<FamilyInvitationRequest>
+    export type CreateFamilyInvitationMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Invite or link a person to the primary holder's Family/Corporate plan
+ */
+export const useCreateFamilyInvitation = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFamilyInvitation>>, TError,{data: BodyType<FamilyInvitationRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createFamilyInvitation>>,
+        TError,
+        {data: BodyType<FamilyInvitationRequest>},
+        TContext
+      > => {
+      return useMutation(getCreateFamilyInvitationMutationOptions(options));
+    }
+
+export const getAcceptFamilyInvitationUrl = (token: string,) => {
+
+
+
+
+  return `/api/membership/family/invitations/${token}/accept`
+}
+
+/**
+ * @summary Accept a Family/Corporate invitation for the signed-in account
+ */
+export const acceptFamilyInvitation = async (token: string, options?: Parameters<typeof customFetch>[1]): Promise<FamilyAcceptanceResponse> => {
+
+  return customFetch<FamilyAcceptanceResponse>(getAcceptFamilyInvitationUrl(token),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getAcceptFamilyInvitationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptFamilyInvitation>>, TError,{token: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acceptFamilyInvitation>>, TError,{token: string}, TContext> => {
+
+const mutationKey = ['acceptFamilyInvitation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptFamilyInvitation>>, {token: string}> = (props) => {
+          const {token} = props ?? {};
+
+          return  acceptFamilyInvitation(token,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptFamilyInvitationMutationResult = NonNullable<Awaited<ReturnType<typeof acceptFamilyInvitation>>>
+
+    export type AcceptFamilyInvitationMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Accept a Family/Corporate invitation for the signed-in account
+ */
+export const useAcceptFamilyInvitation = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptFamilyInvitation>>, TError,{token: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acceptFamilyInvitation>>,
+        TError,
+        {token: string},
+        TContext
+      > => {
+      return useMutation(getAcceptFamilyInvitationMutationOptions(options));
+    }
+
+export const getUpdateFamilyMemberAllocationUrl = (memberId: string,) => {
+
+
+
+
+  return `/api/membership/family/members/${memberId}/allocation`
+}
+
+/**
+ * @summary Move unused Family/Corporate passes to a linked member
+ */
+export const updateFamilyMemberAllocation = async (memberId: string,
+    familyAllocationRequest: FamilyAllocationRequest, options?: Parameters<typeof customFetch>[1]): Promise<FamilySummary> => {
+
+  return customFetch<FamilySummary>(getUpdateFamilyMemberAllocationUrl(memberId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(familyAllocationRequest)
+  }
+);}
+
+
+
+
+
+export const getUpdateFamilyMemberAllocationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFamilyMemberAllocation>>, TError,{memberId: string;data: BodyType<FamilyAllocationRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateFamilyMemberAllocation>>, TError,{memberId: string;data: BodyType<FamilyAllocationRequest>}, TContext> => {
+
+const mutationKey = ['updateFamilyMemberAllocation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateFamilyMemberAllocation>>, {memberId: string;data: BodyType<FamilyAllocationRequest>}> = (props) => {
+          const {memberId,data} = props ?? {};
+
+          return  updateFamilyMemberAllocation(memberId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateFamilyMemberAllocationMutationResult = NonNullable<Awaited<ReturnType<typeof updateFamilyMemberAllocation>>>
+    export type UpdateFamilyMemberAllocationMutationBody = BodyType<FamilyAllocationRequest>
+    export type UpdateFamilyMemberAllocationMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Move unused Family/Corporate passes to a linked member
+ */
+export const useUpdateFamilyMemberAllocation = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFamilyMemberAllocation>>, TError,{memberId: string;data: BodyType<FamilyAllocationRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateFamilyMemberAllocation>>,
+        TError,
+        {memberId: string;data: BodyType<FamilyAllocationRequest>},
+        TContext
+      > => {
+      return useMutation(getUpdateFamilyMemberAllocationMutationOptions(options));
+    }
 
 export const getUpgradeMembershipUrl = () => {
 

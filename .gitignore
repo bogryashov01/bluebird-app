@@ -56,6 +56,9 @@ Thumbs.db
 # Generated output
 build/
 static-build/
+test-results/
+playwright-report/
+blob-report/
 
 # Local databases and runtime files
 *.db

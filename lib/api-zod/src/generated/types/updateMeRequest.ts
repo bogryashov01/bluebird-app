@@ -5,6 +5,7 @@
  * Bluebird private aviation API
  * OpenAPI spec version: 0.1.0
  */
+import type { UpdateMeRequestNotificationChannel } from './updateMeRequestNotificationChannel';
 
 export interface UpdateMeRequest {
   name?: string;
@@ -21,4 +22,6 @@ export interface UpdateMeRequest {
      * @items.pattern ^\s*[A-Za-z]{3,4}\s*$
      */
   homeAirports?: string[];
+  /** Account-level delivery preference for notification events. App retains the existing in-app notification history. */
+  notificationChannel?: UpdateMeRequestNotificationChannel;
 }

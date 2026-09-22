@@ -10,6 +10,8 @@ import referralRouter from "./referral";
 import notificationsRouter from "./notifications";
 import conciergeRouter from "./concierge";
 import devRouter from "./dev";
+import networkingRouter from "./networking";
+import storageRouter from "./storage";
 
 const router: IRouter = Router();
 
@@ -24,5 +26,7 @@ router.use("/membership", membershipRouter);
 router.use("/referral", referralRouter);
 router.use("/notifications", notificationsRouter);
 router.use("/concierge", conciergeRouter);
+router.use("/networking", networkingRouter);
+router.use(storageRouter);
 
 export default router;

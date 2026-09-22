@@ -146,6 +146,8 @@ const me = await req('/auth/me', { token: jwt });
 check('/auth/me returns the member', me.status === 200 && me.json?.phone === normalized);
 check('/auth/me returns homeAirports and not the legacy field',
   Array.isArray(me.json?.homeAirports) && !Object.hasOwn(me.json ?? {}, 'homeAirport'));
+check('/auth/me defaults notification delivery to app',
+  me.json?.notificationChannel === 'app');
 
 // 5b. Preferred airports are normalized, deduplicated, and are not limited to
 // airports represented in current flight inventory (DFW/LGA).
@@ -227,6 +229,25 @@ const omittedWeight = await req('/auth/me', {
 check('PATCH /auth/me leaves weight unchanged when omitted',
   omittedWeight.status === 200 && omittedWeight.json?.weightKg === 500,
   JSON.stringify(omittedWeight.json));
+// 5c. Notification delivery preference is account-scoped and validated.
+for (const channel of ['email', 'both', 'app']) {
+  const updatedChannel = await req('/auth/me', {
+    method: 'PATCH',
+    token: jwt,
+    body: { notificationChannel: channel },
+  });
+  check(`PATCH /auth/me saves notification channel ${channel}`,
+    updatedChannel.status === 200 && updatedChannel.json?.notificationChannel === channel,
+    JSON.stringify(updatedChannel.json));
+}
+const invalidChannel = await req('/auth/me', {
+  method: 'PATCH',
+  token: jwt,
+  body: { notificationChannel: 'push' },
+});
+check('PATCH /auth/me rejects an unknown notification channel',
+  invalidChannel.status === 400,
+  JSON.stringify(invalidChannel.json));
 
 // 6. Returning member: request a new code (fast-forward the cooldown via DB),
 // verify, and confirm it signs into the SAME account without creating a new one.
@@ -242,6 +263,8 @@ check('airport preferences persist on the member account',
 check('signed-in user response includes the saved account weight',
   login2.json?.user?.weightKg === 500,
   JSON.stringify(login2.json));
+check('notification delivery preference persists on the member account',
+  login2.json?.user?.notificationChannel === 'app');
 
 // 7. Expired codes are rejected (age the row via DB instead of waiting 5 min)
 await pool.query(`UPDATE login_codes SET last_sent_at = NOW() - INTERVAL '10 minutes' WHERE phone = $1`, [normalized]);

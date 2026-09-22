@@ -10,6 +10,8 @@ const domesticFixtureId = `queue-flow-domestic-${fixtureSuffix}`;
 const intlFixtureId = `queue-flow-intl-${fixtureSuffix}`;
 const seatFreedFixtureId = `queue-flow-seat-freed-${fixtureSuffix}`;
 const positionOneFixtureId = `queue-flow-position-one-${fixtureSuffix}`;
+const overCapacityFixtureId = `queue-flow-over-capacity-${fixtureSuffix}`;
+const closedFixtureId = `queue-flow-closed-${fixtureSuffix}`;
 
 async function main() {
 await pool.query(`DELETE FROM trips WHERE flight_id LIKE 'queue-flow-%'`);
@@ -28,8 +30,12 @@ await pool.query(
       ($3, 'BFI', 'Seattle', 'GEG', 'Spokane', 'Citation Latitude',
        2, '2099-01-01', '16:00', '1h 00m', 2, false, 0, 'available'),
       ($4, 'BFI', 'Seattle', 'SFO', 'San Francisco', 'Citation Latitude',
-       4, '2099-01-01', '18:00', '2h 10m', 4, false, 0, 'available')`,
-  [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId],
+      4, '2099-01-01', '18:00', '2h 10m', 4, false, 0, 'available'),
+      ($5, 'BFI', 'Seattle', 'BOI', 'Boise', 'Citation Latitude',
+      1, '2099-01-01', '20:00', '1h 20m', 1, false, 0, 'available'),
+      ($6, 'BFI', 'Seattle', 'LAX', 'Los Angeles', 'Citation Latitude',
+      4, '2099-01-01', '22:00', '2h 10m', 4, false, 0, 'departed')`,
+   [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId, overCapacityFixtureId, closedFixtureId],
 );
 
 let failures = 0;
@@ -54,7 +60,11 @@ async function api(method, path, { token, body } = {}) {
 
 // Creates a fresh member through the phone + SMS PIN flow (dev only: the
 // demo code rides in the request-code response in lieu of a real SMS).
-async function makeVerifiedUser(tag, tier = "plus") {
+async function makeVerifiedUser(
+  tag,
+  tier = "plus",
+  profile = { firstName: "Queue", lastName: "Tester" },
+) {
   const phone = `+1206${String(Math.floor(Math.random() * 10000000)).padStart(7, "0")}`;
   const reqCode = await api("POST", "/auth/request-code", { body: { phone } });
   if (reqCode.status !== 200 || !reqCode.json?.demoCode) throw new Error(`request-code failed: ${reqCode.status}`);
@@ -65,8 +75,8 @@ async function makeVerifiedUser(tag, tier = "plus") {
     const registration = await api("POST", "/auth/complete-registration", {
       body: {
         registrationGrant: ver.json.registrationGrant,
-        firstName: "Queue",
-        lastName: "Tester",
+        firstName: profile.firstName,
+        lastName: profile.lastName,
         email: `queue-${tag}-${fixtureSuffix}@example.test`,
       },
     });
@@ -85,14 +95,20 @@ async function makeVerifiedUser(tag, tier = "plus") {
 
 const flights = (await api("GET", "/flights")).json;
 const intlFlight = flights.find((f) => f.id === intlFixtureId);
-const domestic = flights.filter((f) => !f.international);
 
 // ── 1. N members join normally, on a flight with an empty queue ─────────────
 // Use a uniquely named fixture flight so accumulated demo queues from prior
 // runs cannot change positions or block automatic confirmation.
 const N = 3;
 const members = [];
-for (let i = 0; i < N; i++) members.push(await makeVerifiedUser(`m${i}`));
+const memberProfiles = [
+  { firstName: "Ada", lastName: "Lovelace" },
+  { firstName: "Grace", lastName: "Hopper" },
+  { firstName: "Alan", lastName: "Turing" },
+];
+for (let i = 0; i < N; i++) {
+  members.push(await makeVerifiedUser(`m${i}`, "plus", memberProfiles[i]));
+}
 
 const flight = flights.find((candidate) => candidate.id === domesticFixtureId);
 if (!flight) throw new Error("Queue-flow domestic fixture was not returned by /flights");
@@ -198,6 +214,59 @@ check("pass join consumed exactly one pass", vipMe.json?.linePassCount === 4, `g
 const m0Status = await api("GET", "/queue/status", { token: members[0].token });
 const m0Entry = m0Status.json?.find?.((e) => e.flightId === flight.id && e.status === "waiting");
 check("waiting queue unaffected — first member still position 1", m0Entry?.position === 1, JSON.stringify(m0Entry));
+
+// Queue members are scoped to every flight represented by the caller's own
+// active entries. A member on a different flight must never appear in the
+// domestic queue's initials list.
+const otherFlightMember = await makeVerifiedUser("other-flight", "plus", {
+  firstName: "Nora",
+  lastName: "Jones",
+});
+const otherFlight = flights.find((candidate) => candidate.id === intlFixtureId);
+const otherFlightFirstJoin = await api("POST", "/queue/join", {
+  token: otherFlightMember.token,
+  body: { flightId: otherFlight.id, bringingPet: false },
+});
+const m0OtherFlightJoin = await api("POST", "/queue/join", {
+  token: members[0].token,
+  body: { flightId: otherFlight.id, bringingPet: false },
+});
+check("second flight fixture accepts a separate waiting member",
+  otherFlightFirstJoin.status === 201 && otherFlightFirstJoin.json?.status === "waiting",
+  JSON.stringify(otherFlightFirstJoin.json));
+check("same member can have an active queue on the second flight",
+  m0OtherFlightJoin.status === 201 && m0OtherFlightJoin.json?.status === "waiting",
+  JSON.stringify(m0OtherFlightJoin.json));
+
+const scopedStatus = await api("GET", "/queue/status", { token: members[0].token });
+const scopedDomestic = scopedStatus.json?.find?.((entry) => entry.flightId === domesticFixtureId);
+const scopedOtherFlight = scopedStatus.json?.find?.((entry) => entry.flightId === intlFixtureId);
+const domesticQueueMembers = scopedDomestic?.queueMembers ?? [];
+const otherFlightQueueMembers = scopedOtherFlight?.queueMembers ?? [];
+check("queue members are ordered and expose only initials plus position",
+  JSON.stringify(domesticQueueMembers) === JSON.stringify([
+    { initials: "AL", position: 1 },
+    { initials: "GH", position: 2 },
+    { initials: "AT", position: 3 },
+    { initials: "QT", position: 4 },
+    { initials: "QT", position: 5 },
+  ]) &&
+  domesticQueueMembers.every((member) =>
+    Object.keys(member).sort().join(",") === "initials,position" &&
+    !("name" in member) && !("userId" in member) && !("phone" in member)),
+  JSON.stringify(domesticQueueMembers));
+check("queue status does not expose the member user ID",
+  !("userId" in (scopedDomestic ?? {})),
+  JSON.stringify(scopedDomestic));
+check("queue members stay scoped to their selected flight",
+  otherFlightQueueMembers.length === 2 &&
+  otherFlightQueueMembers[0]?.initials === "NJ" &&
+  otherFlightQueueMembers[0]?.position === 1 &&
+  otherFlightQueueMembers[1]?.initials === "AL" &&
+  otherFlightQueueMembers[1]?.position === 2 &&
+  !domesticQueueMembers.some((member) => member.initials === "NJ") &&
+  !otherFlightQueueMembers.some((member) => ["GH", "AT"].includes(member.initials)),
+  JSON.stringify({ domesticQueueMembers, otherFlightQueueMembers }));
 
 // ── 3. use-pass on an existing waiting entry confirms atomically ─────────────
 const m2Status = await api("GET", "/queue/status", { token: members[2].token });
@@ -305,35 +374,45 @@ if (m1Now?.status === "waiting") {
   }
 }
 
-// ── 5b. Negative path: a pass is NEVER consumed without a confirmed seat ─────
-// Fill a fresh flight to capacity, then attempt a Skip-the-Line join: it must
-// fail AND leave the pass balance untouched.
+// ── 5b. Open flights accept joins beyond baseline seat capacity ───────────────
 {
-  const filler = await makeVerifiedUser("filler");
-  let fullFlight = null;
-  for (const candidate of domestic) {
-    if (candidate.id === flight.id || candidate.seatsAvailable > 10) continue;
-    // Skip-the-Line join confirms atomically, filling the flight to capacity
-    // without any manual confirm step.
-    const probe = await api("POST", "/queue/join", {
-      token: filler.token, body: { flightId: candidate.id, passengers: candidate.seatsAvailable, useLinePass: true, bringingPet: false },
-    });
-    if (probe.status === 201 && probe.json.status === "confirmed") { fullFlight = candidate; break; }
-    if (probe.status === 201) await api("DELETE", `/queue/${probe.json.id}`, { token: filler.token });
-  }
-  if (fullFlight) {
-    const loser = await makeVerifiedUser("loser");
-    const balBefore = (await api("GET", "/auth/me", { token: loser.token })).json?.linePassCount;
-    const failJoin = await api("POST", "/queue/join", {
-      token: loser.token, body: { flightId: fullFlight.id, useLinePass: true, bringingPet: false },
-    });
-    check("pass join on a full flight is rejected", failJoin.status === 400, JSON.stringify(failJoin.json));
-    const balAfter = (await api("GET", "/auth/me", { token: loser.token })).json?.linePassCount;
-    check("pass balance preserved when no seat was confirmed", balAfter === balBefore,
-      `before=${balBefore} after=${balAfter}`);
-  } else {
-    console.log("  (skipped full-flight negative path — no fillable flight available)");
-  }
+  const overCapacityFlight = flights.find((candidate) => candidate.id === overCapacityFixtureId);
+  if (!overCapacityFlight) throw new Error("Queue-flow over-capacity fixture was not returned by /flights");
+  const overCapacityMembers = [
+    await makeVerifiedUser("over-capacity-1"),
+    await makeVerifiedUser("over-capacity-2"),
+    await makeVerifiedUser("over-capacity-pass"),
+  ];
+  const first = await api("POST", "/queue/join", {
+    token: overCapacityMembers[0].token,
+    body: { flightId: overCapacityFixtureId, bringingPet: false },
+  });
+  const second = await api("POST", "/queue/join", {
+    token: overCapacityMembers[1].token,
+    body: { flightId: overCapacityFixtureId, bringingPet: false },
+  });
+  check("open flight accepts normal joins beyond baseline capacity",
+    first.status === 201 && second.status === 201 &&
+      !/This flight is fully booked/i.test(JSON.stringify({ first: first.json, second: second.json })),
+    JSON.stringify({ first: first.json, second: second.json }));
+
+  const passJoin = await api("POST", "/queue/join", {
+    token: overCapacityMembers[2].token,
+    body: { flightId: overCapacityFixtureId, useLinePass: true, bringingPet: false },
+  });
+  check("Skip the Line follows the open-flight queue rule beyond capacity",
+    passJoin.status === 201 && passJoin.json?.status === "confirmed" &&
+      !/This flight is fully booked/i.test(JSON.stringify(passJoin.json)),
+    JSON.stringify(passJoin.json));
+
+  const closedJoin = await api("POST", "/queue/join", {
+    token: overCapacityMembers[0].token,
+    body: { flightId: closedFixtureId, bringingPet: false },
+  });
+  check("closed flights still reject queue joins",
+    closedJoin.status === 400 && /no longer available/i.test(closedJoin.json?.error ?? "") &&
+      !/This flight is fully booked/i.test(JSON.stringify(closedJoin.json)),
+    JSON.stringify(closedJoin.json));
 }
 
 // ── 6. International fee enforcement for Base members ────────────────────────
@@ -452,9 +531,9 @@ const buy = await api("POST", "/membership/buy-pass", { token: buyer.token });
 check("buy-pass increments balance by 1", buy.status === 200 && buy.json?.linePassCount === (before ?? 0) + 1,
   `before=${before} after=${buy.json?.linePassCount}`);
 
-await pool.query(`DELETE FROM trips WHERE flight_id IN ($1, $2, $3, $4)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId]);
-await pool.query(`DELETE FROM queue_entries WHERE flight_id IN ($1, $2, $3, $4)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId]);
-await pool.query(`DELETE FROM flights WHERE id IN ($1, $2, $3, $4)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId]);
+await pool.query(`DELETE FROM trips WHERE flight_id IN ($1, $2, $3, $4, $5, $6)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId, overCapacityFixtureId, closedFixtureId]);
+await pool.query(`DELETE FROM queue_entries WHERE flight_id IN ($1, $2, $3, $4, $5, $6)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId, overCapacityFixtureId, closedFixtureId]);
+await pool.query(`DELETE FROM flights WHERE id IN ($1, $2, $3, $4, $5, $6)`, [domesticFixtureId, intlFixtureId, seatFreedFixtureId, positionOneFixtureId, overCapacityFixtureId, closedFixtureId]);
 await pool.end();
 
 if (failures > 0) { console.error(`\n${failures} check(s) FAILED`); process.exit(1); }

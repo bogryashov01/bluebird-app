@@ -110,6 +110,11 @@ export default function AllPlansScreen() {
                   <Text style={[styles.featureText, { color: colors.textOnSurface }]}>{feat}</Text>
                 </View>
               ))}
+                {tier.id === 'concierge' && (
+                  <Text style={[styles.familyNote, { color: colors.mutedForegroundLight }]}>
+                    Four memberships in one · seven annual Skip the Line passes · $13,995 billed annually
+                  </Text>
+                )}
             </View>
           );
         })}
@@ -149,4 +154,5 @@ const styles = StyleSheet.create({
   },
   featureCheck: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   featureText: { fontFamily: 'Inter_400Regular', fontSize: 13, flex: 1 },
+  familyNote: { fontFamily: 'Inter_500Medium', fontSize: 12, lineHeight: 18, paddingHorizontal: 16, paddingBottom: 14 },
 });

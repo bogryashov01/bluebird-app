@@ -108,6 +108,13 @@ check("password/verification columns dropped",
 check("email is nullable", cols.find((c) => c.column_name === "email")?.is_nullable === "YES");
 check("phone is NOT NULL", cols.find((c) => c.column_name === "phone")?.is_nullable === "NO");
 check("home_airports is NOT NULL", cols.find((c) => c.column_name === "home_airports")?.is_nullable === "NO");
+check("notification channel is NOT NULL", cols.find((c) => c.column_name === "notification_channel")?.is_nullable === "NO");
+const notificationChannels = (await pool.query(
+  `SELECT notification_channel FROM users ORDER BY id`,
+)).rows.map((row) => row.notification_channel);
+check("legacy members default to app notification delivery",
+  notificationChannels.length === 7 && notificationChannels.every((channel) => channel === "app"),
+  JSON.stringify(notificationChannels));
 
 const emailUnique = (await pool.query(`
   SELECT count(*)::int AS n FROM pg_constraint c

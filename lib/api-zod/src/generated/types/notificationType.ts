@@ -14,5 +14,9 @@ export const NotificationType = {
   flight_confirmed: 'flight_confirmed',
   membership: 'membership',
   referral: 'referral',
+  networking_request: 'networking_request',
+  networking_accepted: 'networking_accepted',
+  networking_declined: 'networking_declined',
+  networking_message: 'networking_message',
   system: 'system',
 } as const;

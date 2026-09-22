@@ -1,7 +1,16 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
-import { usersTable, notificationsTable, referralRewardsTable, revokedTokensTable, loginCodesTable, registrationGrantsTable } from "@workspace/db/schema";
+import {
+  usersTable,
+  notificationsTable,
+  referralRewardsTable,
+  revokedTokensTable,
+  loginCodesTable,
+  registrationGrantsTable,
+  NOTIFICATION_DELIVERY_CHANNELS,
+  type NotificationDeliveryChannel,
+} from "@workspace/db/schema";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { activeSmsProvider, sendSms } from "../lib/sms";
 import jwt from "jsonwebtoken";
@@ -43,7 +52,15 @@ function sanitizeUser<T extends Record<string, unknown>>(user: T) {
   return {
     ...safeUser,
     homeAirports: Array.isArray(user.homeAirports) ? user.homeAirports : [],
+    notificationChannel: isNotificationDeliveryChannel(user.notificationChannel)
+      ? user.notificationChannel
+      : "app",
   };
+}
+
+function isNotificationDeliveryChannel(value: unknown): value is NotificationDeliveryChannel {
+  return typeof value === "string"
+    && (NOTIFICATION_DELIVERY_CHANNELS as readonly string[]).includes(value);
 }
 
 // POST /auth/request-code — issue a 6-digit SMS sign-in code (demo: no real
@@ -393,9 +410,15 @@ router.get("/me", authMiddleware, async (req, res) => {
 // account identifier and cannot be changed here.
 router.patch("/me", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
-  const { name, email, weightKg, homeAirports } = req.body ?? {};
+  const { name, email, weightKg, homeAirports, notificationChannel } = req.body ?? {};
 
-  const updates: { name?: string; email?: string | null; weightKg?: number | null; homeAirports?: string[] } = {};
+  const updates: {
+    name?: string;
+    email?: string | null;
+    weightKg?: number | null;
+    homeAirports?: string[];
+    notificationChannel?: NotificationDeliveryChannel;
+  } = {};
   if (name !== undefined) {
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ error: "Name cannot be empty" });
@@ -446,6 +469,12 @@ router.patch("/me", authMiddleware, async (req, res) => {
       if (!normalized.includes(code)) normalized.push(code);
     }
     updates.homeAirports = normalized;
+  }
+  if (notificationChannel !== undefined) {
+    if (!isNotificationDeliveryChannel(notificationChannel)) {
+      return res.status(400).json({ error: "notificationChannel must be app, email, or both" });
+    }
+    updates.notificationChannel = notificationChannel;
   }
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: "Nothing to update" });

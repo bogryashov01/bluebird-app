@@ -6,4 +6,4 @@ The codegen command includes a post-generation patch that wraps hook `query` opt
 
 **Why:** Orval v8 can't express this in config, and without it any caller passing only `enabled` fails typecheck.
 
-**How to apply:** Regenerate the client only via the package's codegen script (never raw orval, never hand-edit generated output), and keep the patch step when changing codegen.
+**How to apply:** Regenerate the client only via the package's codegen script (never raw orval, never hand-edit generated output), and keep the patch step when changing codegen. If OpenAPI adds integer fields, normalize Orval's `zod.int()` to `zod.number().int()` because this workspace uses Zod 3.

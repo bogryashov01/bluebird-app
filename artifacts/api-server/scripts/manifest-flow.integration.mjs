@@ -10,11 +10,13 @@ const ids = {
   petFlight: `manifest-pet-${suffix}`,
   maxHumanFlight: `manifest-max-human-${suffix}`,
   maxPetFlight: `manifest-max-pet-${suffix}`,
+  overCapacityFlight: `manifest-over-capacity-${suffix}`,
   waiting: `manifest-waiting-${suffix}`,
   trip: `manifest-trip-${suffix}`,
   petTrip: `manifest-pet-trip-${suffix}`,
   maxHumanTrip: `manifest-max-human-trip-${suffix}`,
   maxPetTrip: `manifest-max-pet-trip-${suffix}`,
+  overCapacityTrip: `manifest-over-capacity-trip-${suffix}`,
 };
 const token = (userId) => jwt.sign(
   { userId },
@@ -43,25 +45,30 @@ async function main() {
        ids.other, `+1877${Math.floor(Math.random() * 1e7).toString().padStart(7, "0")}`, `${ids.other}@test.invalid`]);
     await pool.query(`INSERT INTO flights
       (id,from_airport,from_city,to_airport,to_city,aircraft_type,aircraft_capacity,departure_date,departure_time,duration,seats_available,international,status)
-      VALUES ($1,'DAL','Dallas','AUS','Austin','Citation',6,'2099-06-01','09:00','1h',6,false,'available'),
+       VALUES ($1,'DAL','Dallas','AUS','Austin','Citation',6,'2099-06-01','09:00','1h',6,false,'available'),
              ($2,'JFK','New York','NAS','Nassau','Citation',6,'2099-06-02','09:00','3h',6,true,'available'),
              ($3,'LAX','Los Angeles','SFO','San Francisco','Citation',6,'2099-06-03','09:00','1h','6',false,'available'),
-             ($4,'LAX','Los Angeles','SEA','Seattle','Citation',6,'2099-06-04','09:00','3h',6,true,'available')`,
-       [ids.domestic, ids.petFlight, ids.maxHumanFlight, ids.maxPetFlight]);
+              ($4,'LAX','Los Angeles','SEA','Seattle','Citation',6,'2099-06-04','09:00','3h',6,true,'available'),
+              ($5,'DAL','Dallas','HOU','Houston','Citation',6,'2099-06-05','09:00','1h',1,false,'available')`,
+       [ids.domestic, ids.petFlight, ids.maxHumanFlight, ids.maxPetFlight, ids.overCapacityFlight]);
     await pool.query(`INSERT INTO queue_entries
       (id,user_id,flight_id,position,status,passengers,bringing_pet,pet_fee_acknowledged)
       VALUES ($1,$2,$3,1,'confirmed',2,false,false),
              ($4,$2,$5,1,'confirmed',1,true,true),
               ($6,$2,$3,2,'waiting',1,false,false),
               ($7,$2,$8,1,'confirmed',6,false,false),
-              ($9,$2,$10,1,'confirmed',5,true,true)`,
+               ($9,$2,$10,1,'confirmed',5,true,true),
+               ($11,$2,$12,1,'confirmed',2,false,false)`,
        [`qe-dom-${suffix}`, ids.owner, ids.domestic, `qe-pet-${suffix}`, ids.petFlight, ids.waiting,
-        `qe-max-human-${suffix}`, ids.maxHumanFlight, `qe-max-pet-${suffix}`, ids.maxPetFlight]);
+         `qe-max-human-${suffix}`, ids.maxHumanFlight, `qe-max-pet-${suffix}`, ids.maxPetFlight,
+         `qe-over-capacity-${suffix}`, ids.overCapacityFlight]);
     await pool.query(`INSERT INTO trips (id,user_id,flight_id,status,cleaning_fee_usd) VALUES
       ($1,$2,$3,'upcoming',0),($4,$2,$5,'upcoming',500),
-      ($6,$2,$7,'upcoming',0),($8,$2,$9,'upcoming',500)`,
+      ($6,$2,$7,'upcoming',0),($8,$2,$9,'upcoming',500),
+      ($10,$2,$11,'upcoming',0)`,
       [ids.trip, ids.owner, ids.domestic, ids.petTrip, ids.petFlight,
-       ids.maxHumanTrip, ids.maxHumanFlight, ids.maxPetTrip, ids.maxPetFlight]);
+       ids.maxHumanTrip, ids.maxHumanFlight, ids.maxPetTrip, ids.maxPetFlight,
+       ids.overCapacityTrip, ids.overCapacityFlight]);
 
     const ownerToken = token(ids.owner);
     const otherToken = token(ids.other);
@@ -120,6 +127,16 @@ async function main() {
       ],
     });
     check("roster cannot exceed reserved seats", tooMany.status === 400, JSON.stringify(tooMany.json));
+
+    const overFlightCapacity = await api("PUT", `/trips/${ids.overCapacityTrip}/manifest`, ownerToken, {
+      passengers: [
+        { passengerOrder: 1, firstName: "One", lastName: "Traveler", dateOfBirth: "1980-01-01", weightKg: 70 },
+        { passengerOrder: 2, firstName: "Two", lastName: "Traveler", dateOfBirth: "1981-01-01", weightKg: 71 },
+      ],
+    });
+    check("manifest validates baseline flight capacity after confirmation",
+      overFlightCapacity.status === 400 && /capacity/i.test(overFlightCapacity.json?.error ?? ""),
+      JSON.stringify(overFlightCapacity.json));
 
     const invalidCalendar = await api("PUT", `/trips/${ids.trip}/manifest`, ownerToken, {
       passengers: [
@@ -280,12 +297,12 @@ async function main() {
       sevenPassengerManifest.status === 400 && /6 occupants/i.test(sevenPassengerManifest.json?.error ?? ""),
       JSON.stringify(sevenPassengerManifest.json));
   } finally {
-    await pool.query(`DELETE FROM manifest_operational_updates WHERE trip_id IN ($1,$2,$3,$4)`, [ids.trip, ids.petTrip, ids.maxHumanTrip, ids.maxPetTrip]).catch(() => {});
-    await pool.query(`DELETE FROM trip_passengers WHERE trip_id IN ($1,$2,$3,$4)`, [ids.trip, ids.petTrip, ids.maxHumanTrip, ids.maxPetTrip]).catch(() => {});
+    await pool.query(`DELETE FROM manifest_operational_updates WHERE trip_id IN ($1,$2,$3,$4,$5)`, [ids.trip, ids.petTrip, ids.maxHumanTrip, ids.maxPetTrip, ids.overCapacityTrip]).catch(() => {});
+    await pool.query(`DELETE FROM trip_passengers WHERE trip_id IN ($1,$2,$3,$4,$5)`, [ids.trip, ids.petTrip, ids.maxHumanTrip, ids.maxPetTrip, ids.overCapacityTrip]).catch(() => {});
     await pool.query(`DELETE FROM saved_passengers WHERE user_id IN ($1,$2)`, [ids.owner, ids.other]).catch(() => {});
-    await pool.query(`DELETE FROM trips WHERE id IN ($1,$2,$3,$4)`, [ids.trip, ids.petTrip, ids.maxHumanTrip, ids.maxPetTrip]).catch(() => {});
+    await pool.query(`DELETE FROM trips WHERE id IN ($1,$2,$3,$4,$5)`, [ids.trip, ids.petTrip, ids.maxHumanTrip, ids.maxPetTrip, ids.overCapacityTrip]).catch(() => {});
     await pool.query(`DELETE FROM queue_entries WHERE id LIKE $1`, [`%${suffix}`]).catch(() => {});
-    await pool.query(`DELETE FROM flights WHERE id IN ($1,$2,$3,$4)`, [ids.domestic, ids.petFlight, ids.maxHumanFlight, ids.maxPetFlight]).catch(() => {});
+    await pool.query(`DELETE FROM flights WHERE id IN ($1,$2,$3,$4,$5)`, [ids.domestic, ids.petFlight, ids.maxHumanFlight, ids.maxPetFlight, ids.overCapacityFlight]).catch(() => {});
     await pool.query(`DELETE FROM users WHERE id IN ($1,$2)`, [ids.owner, ids.other]).catch(() => {});
     await pool.end();
   }

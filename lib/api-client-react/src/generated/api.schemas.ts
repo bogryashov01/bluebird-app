@@ -136,6 +136,18 @@ export const UserMembershipTier = {
   concierge: 'concierge',
 } as const;
 
+/**
+ * Account-level delivery preference for notification events. App retains the existing in-app notification history.
+ */
+export type UserNotificationChannel = typeof UserNotificationChannel[keyof typeof UserNotificationChannel];
+
+
+export const UserNotificationChannel = {
+  app: 'app',
+  email: 'email',
+  both: 'both',
+} as const;
+
 export interface User {
   id: string;
   name: string;
@@ -152,6 +164,8 @@ export interface User {
   linePassCount: number;
   referralCode: string;
   homeAirports: string[];
+  /** Account-level delivery preference for notification events. App retains the existing in-app notification history. */
+  notificationChannel: UserNotificationChannel;
   createdAt: string;
 }
 
@@ -220,6 +234,18 @@ export interface AuthResponse {
   referralFeedback?: AuthResponseReferralFeedback;
 }
 
+/**
+ * Account-level delivery preference for notification events. App retains the existing in-app notification history.
+ */
+export type UpdateMeRequestNotificationChannel = typeof UpdateMeRequestNotificationChannel[keyof typeof UpdateMeRequestNotificationChannel];
+
+
+export const UpdateMeRequestNotificationChannel = {
+  app: 'app',
+  email: 'email',
+  both: 'both',
+} as const;
+
 export interface UpdateMeRequest {
   name?: string;
   email?: string;
@@ -235,6 +261,8 @@ export interface UpdateMeRequest {
      * @items.pattern ^\s*[A-Za-z]{3,4}\s*$
      */
   homeAirports?: string[];
+  /** Account-level delivery preference for notification events. App retains the existing in-app notification history. */
+  notificationChannel?: UpdateMeRequestNotificationChannel;
 }
 
 export type FlightStatus = typeof FlightStatus[keyof typeof FlightStatus];
@@ -345,6 +373,21 @@ export interface CancelQueueResponse {
   success: boolean;
 }
 
+/**
+ * Privacy-safe representation of an active waiting queue member.
+ */
+export interface QueueMember {
+  /**
+     * One or two uppercase initials derived from the member's name.
+     * @minLength 1
+     * @maxLength 2
+     * @pattern ^[A-Z]{1,2}$
+     */
+  initials: string;
+  /** Current position in the selected flight's waiting queue. */
+  position: number;
+}
+
 export type QueueEntryStatus = typeof QueueEntryStatus[keyof typeof QueueEntryStatus];
 
 
@@ -382,9 +425,14 @@ export interface QueueEntry {
   position: number;
   totalInQueue: number;
   status: QueueEntryStatus;
+  usedLinePass?: boolean;
+  usedFamilyPass?: boolean;
+  familyPassCycle?: string | null;
   createdAt: string;
   /** Append-only movement log — a 'joined' event recorded at insert time plus a 'moved' event for each position improvement. */
   movementHistory?: QueueMovementEvent[];
+  /** Privacy-safe initials and positions for active waiting members on this entry's flight. Returned by queue status only. */
+  queueMembers?: QueueMember[];
   bringingPet: boolean;
   petFeeAcknowledged: boolean;
   /** Pet weight in pounds. */
@@ -437,6 +485,8 @@ export interface Trip {
 export type UseLinePassResponse = QueueEntry & {
   /** The user's remaining Skip the Line pass balance after use */
   linePassCount: number;
+  /** True when the confirmed booking consumed the caller's assigned Family pool pass. */
+  usedFamilyPass?: boolean;
   /** True when the entry was already confirmed before the pass was applied — no pass was consumed */
   alreadyConfirmed?: boolean;
   /** The upcoming trip created by a successful pass redemption; absent when alreadyConfirmed is true */
@@ -621,12 +671,25 @@ export const MembershipPlanId = {
   concierge: 'concierge',
 } as const;
 
+export type MembershipPlanBillingCadence = typeof MembershipPlanBillingCadence[keyof typeof MembershipPlanBillingCadence];
+
+
+export const MembershipPlanBillingCadence = {
+  annual: 'annual',
+} as const;
+
 export interface MembershipPlan {
   id: MembershipPlanId;
   label: string;
   /** Annual membership price in US dollars. */
   priceAnnualUsd: number;
   features: string[];
+  /** Total people covered by the plan. */
+  membershipCount?: number;
+  /** Annual passes shared by the covered people. */
+  sharedAnnualPasses?: number;
+  billingCadence?: MembershipPlanBillingCadence;
+  description?: string;
 }
 
 export type MembershipTier = typeof MembershipTier[keyof typeof MembershipTier];
@@ -651,10 +714,101 @@ export const MembershipPendingTier = {
   cancelled: 'cancelled',
 } as const;
 
+export type FamilySummaryRole = typeof FamilySummaryRole[keyof typeof FamilySummaryRole];
+
+
+export const FamilySummaryRole = {
+  primary: 'primary',
+  member: 'member',
+} as const;
+
+export type FamilySummaryStatus = typeof FamilySummaryStatus[keyof typeof FamilySummaryStatus];
+
+
+export const FamilySummaryStatus = {
+  active: 'active',
+  ending: 'ending',
+} as const;
+
+export type FamilyMemberRole = typeof FamilyMemberRole[keyof typeof FamilyMemberRole];
+
+
+export const FamilyMemberRole = {
+  primary: 'primary',
+  member: 'member',
+} as const;
+
+export type FamilyMemberStatus = typeof FamilyMemberStatus[keyof typeof FamilyMemberStatus];
+
+
+export const FamilyMemberStatus = {
+  active: 'active',
+  pending: 'pending',
+  conflict: 'conflict',
+  ended: 'ended',
+} as const;
+
+export interface FamilyMember {
+  id: string;
+  userId?: string | null;
+  email: string;
+  name?: string | null;
+  role: FamilyMemberRole;
+  status: FamilyMemberStatus;
+  allocatedPasses: number;
+  usedPasses: number;
+  availablePasses: number;
+  joinedAt?: string | null;
+}
+
+export type FamilyInvitationDeliveryStatus = typeof FamilyInvitationDeliveryStatus[keyof typeof FamilyInvitationDeliveryStatus];
+
+
+export const FamilyInvitationDeliveryStatus = {
+  pending: 'pending',
+  sent: 'sent',
+  failed: 'failed',
+} as const;
+
+export interface FamilyInvitation {
+  id: string;
+  memberId: string;
+  email: string;
+  expiresAt: string;
+  acceptanceToken?: string;
+  acceptancePath?: string;
+  deliveryStatus: FamilyInvitationDeliveryStatus;
+  deliveryError?: string | null;
+  deliveredAt?: string | null;
+  providerMessageId?: string;
+}
+
+export type FamilySummaryPool = {
+  total: number;
+  allocated: number;
+  available: number;
+  unallocated: number;
+  used: number;
+};
+
+export interface FamilySummary {
+  id: string;
+  role: FamilySummaryRole;
+  status: FamilySummaryStatus;
+  primaryUserId: string;
+  renewalDate: string;
+  memberLimit: number;
+  passTotal: number;
+  pool: FamilySummaryPool;
+  members: FamilyMember[];
+  pendingInvitations: FamilyInvitation[];
+}
+
 export interface Membership {
   tier: MembershipTier;
   /** Purchasable plan catalog (always present; drives the non-member join screen). */
   plans?: MembershipPlan[];
+  family?: FamilySummary;
   linePassCount: number;
   renewalDate?: string;
   /** Scheduled plan change taking effect at renewalDate. "cancelled" means the membership ends at renewal. Absent when no change is pending. */
@@ -668,6 +822,45 @@ export interface Membership {
   annualFlightAllowance: number;
   /** Completed flights in the current calendar year */
   flightsThisYear: number;
+}
+
+export interface FamilyInvitationRequest {
+  email: string;
+  linkExisting?: boolean;
+}
+
+export type FamilyInvitationResponseStatus = typeof FamilyInvitationResponseStatus[keyof typeof FamilyInvitationResponseStatus];
+
+
+export const FamilyInvitationResponseStatus = {
+  invited: 'invited',
+  linked: 'linked',
+} as const;
+
+export interface FamilyInvitationResponse {
+  status: FamilyInvitationResponseStatus;
+  invitation?: FamilyInvitation;
+  family: FamilySummary;
+}
+
+export type FamilyAcceptanceResponseStatus = typeof FamilyAcceptanceResponseStatus[keyof typeof FamilyAcceptanceResponseStatus];
+
+
+export const FamilyAcceptanceResponseStatus = {
+  accepted: 'accepted',
+} as const;
+
+export interface FamilyAcceptanceResponse {
+  status: FamilyAcceptanceResponseStatus;
+  family: FamilySummary;
+}
+
+export interface FamilyAllocationRequest {
+  /**
+     * @minimum 0
+     * @maximum 7
+     */
+  allocatedPasses: number;
 }
 
 export interface BuyPassResponse {
@@ -738,6 +931,209 @@ export interface ReferralInfo {
   invited: InvitedFriend[];
 }
 
+export interface NetworkingProfile {
+  firstName: string;
+  lastName: string;
+  photoUrl: string | null;
+  photoAssetPath: string | null;
+  industry: string;
+  bio: string;
+  linkedinUrl?: string | null;
+  instagramUrl?: string | null;
+}
+
+export type NetworkingProfileResponse = NetworkingProfile & {
+  completed: boolean;
+  missing: string[];
+};
+
+export interface UpdateNetworkingProfileRequest {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  firstName?: string;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  lastName?: string;
+  photoUrl?: string | null;
+  photoAssetPath?: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  industry?: string;
+  /**
+     * @minLength 1
+     * @maxLength 280
+     */
+  bio?: string;
+  linkedinUrl?: string | null;
+  instagramUrl?: string | null;
+}
+
+export type UploadUrlRequestContentType = typeof UploadUrlRequestContentType[keyof typeof UploadUrlRequestContentType];
+
+
+export const UploadUrlRequestContentType = {
+  'image/jpeg': 'image/jpeg',
+  'image/png': 'image/png',
+  'image/webp': 'image/webp',
+} as const;
+
+export interface UploadUrlRequest {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  name: string;
+  /**
+     * @minimum 1
+     * @maximum 1500000
+     */
+  size: number;
+  contentType: UploadUrlRequestContentType;
+}
+
+export interface UploadUrlResponse {
+  uploadURL: string;
+  objectPath: string;
+  metadata?: UploadUrlRequest;
+}
+
+export interface PushTokenRequest {
+  /**
+     * @minLength 1
+     * @maxLength 512
+     */
+  token: string;
+  /** @maxLength 20 */
+  platform?: string;
+}
+
+export interface PushToken {
+  id: string;
+  userId: string;
+  token: string;
+  platform: string;
+  createdAt: string;
+  lastUsedAt: string;
+}
+
+export interface NetworkingProfilePreview {
+  userId: string;
+  firstName: string;
+  photoUrl: string | null;
+  photoAssetPath: string | null;
+  industry: string;
+  bio: string;
+}
+
+export interface NetworkingFrontMemberResponse {
+  eligible: boolean;
+  flightId?: string;
+  member: NetworkingProfilePreview | null;
+}
+
+export interface CreateNetworkingRequest {
+  flightId: string;
+  /**
+     * @minLength 1
+     * @maxLength 240
+     */
+  message: string;
+}
+
+export type NetworkingRequestResponseStatus = typeof NetworkingRequestResponseStatus[keyof typeof NetworkingRequestResponseStatus];
+
+
+export const NetworkingRequestResponseStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+  declined: 'declined',
+  ignored: 'ignored',
+} as const;
+
+export type NetworkingRequestResponseFlight = {
+  fromCity?: string;
+  toCity?: string;
+  departureDate?: string;
+} | null;
+
+export interface NetworkingRequestResponse {
+  id: string;
+  flightId: string;
+  requesterId: string;
+  recipientId: string;
+  message: string;
+  status: NetworkingRequestResponseStatus;
+  createdAt: string;
+  updatedAt: string;
+  requester?: NetworkingProfilePreview;
+  flight?: NetworkingRequestResponseFlight;
+}
+
+export type NetworkingDecisionRequestAction = typeof NetworkingDecisionRequestAction[keyof typeof NetworkingDecisionRequestAction];
+
+
+export const NetworkingDecisionRequestAction = {
+  accept: 'accept',
+  decline: 'decline',
+  ignore: 'ignore',
+  block: 'block',
+  report: 'report',
+} as const;
+
+export interface NetworkingDecisionRequest {
+  action: NetworkingDecisionRequestAction;
+  /** @maxLength 500 */
+  reason?: string;
+}
+
+export type NetworkingDecisionResponseConnection = {
+  id?: string;
+} | null;
+
+export interface NetworkingDecisionResponse {
+  status: string;
+  connection?: NetworkingDecisionResponseConnection;
+}
+
+export interface NetworkingMessage {
+  id: string;
+  connectionId: string;
+  senderId: string;
+  content: string;
+  clientMessageId?: string | null;
+  createdAt: string;
+}
+
+export interface SendNetworkingMessageRequest {
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  content: string;
+  /** @maxLength 100 */
+  clientMessageId?: string;
+}
+
+export interface NetworkingConnectionResponse {
+  id: string;
+  requestId: string;
+  memberAId: string;
+  memberBId: string;
+  createdAt: string;
+  member: NetworkingProfile;
+  lastMessage?: NetworkingMessage | null;
+}
+
+export interface BlockNetworkingResponse {
+  blocked: boolean;
+}
+
 export type NotificationType = typeof NotificationType[keyof typeof NotificationType];
 
 
@@ -746,14 +1142,21 @@ export const NotificationType = {
   flight_confirmed: 'flight_confirmed',
   membership: 'membership',
   referral: 'referral',
+  networking_request: 'networking_request',
+  networking_accepted: 'networking_accepted',
+  networking_declined: 'networking_declined',
+  networking_message: 'networking_message',
   system: 'system',
 } as const;
+
+export type NotificationData = {[key: string]: string};
 
 export interface Notification {
   id: string;
   title: string;
   body: string;
   type: NotificationType;
+  data: NotificationData;
   read: boolean;
   createdAt: string;
 }

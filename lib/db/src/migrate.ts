@@ -13,6 +13,7 @@ export async function ensureSchema(): Promise<void> {
       phone           TEXT        NOT NULL UNIQUE,
       email           TEXT,
       weight_kg       NUMERIC,
+      notification_channel TEXT NOT NULL DEFAULT 'app',
       membership_tier TEXT        NOT NULL DEFAULT 'base',
       line_pass_count INTEGER     NOT NULL DEFAULT 0,
       referral_code   TEXT        NOT NULL,
@@ -25,6 +26,7 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_tier TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS home_airport TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS weight_kg NUMERIC;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_channel TEXT NOT NULL DEFAULT 'app';
     UPDATE users SET weight_kg = NULL WHERE weight_kg IS NOT NULL AND weight_kg <= 0;
     DO $$
     BEGIN
@@ -191,6 +193,58 @@ export async function ensureSchema(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS referral_rewards_friend_unique
       ON referral_rewards (friend_user_id);
 
+    CREATE TABLE IF NOT EXISTS family_plans (
+      id TEXT PRIMARY KEY,
+      primary_user_id TEXT NOT NULL REFERENCES users(id),
+      status TEXT NOT NULL DEFAULT 'active',
+      pass_total INTEGER NOT NULL DEFAULT 7,
+      renewal_at TIMESTAMPTZ NOT NULL,
+      ending_tier TEXT,
+      ended_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT family_plans_pass_total_seven CHECK (pass_total = 7)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS family_plans_primary_user_unique
+      ON family_plans (primary_user_id);
+
+    CREATE TABLE IF NOT EXISTS family_members (
+      id TEXT PRIMARY KEY,
+      family_plan_id TEXT NOT NULL REFERENCES family_plans(id) ON DELETE CASCADE,
+      user_id TEXT REFERENCES users(id),
+      email TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member',
+      status TEXT NOT NULL DEFAULT 'pending',
+      allocated_passes INTEGER NOT NULL DEFAULT 0,
+      used_passes INTEGER NOT NULL DEFAULT 0,
+      previous_membership_tier TEXT,
+      joined_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT family_members_allocated_nonnegative CHECK (allocated_passes >= 0),
+      CONSTRAINT family_members_used_nonnegative CHECK (used_passes >= 0),
+      CONSTRAINT family_members_used_within_allocation CHECK (used_passes <= allocated_passes)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS family_members_user_unique
+      ON family_members (user_id) WHERE user_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS family_members_plan_email_unique
+      ON family_members (family_plan_id, email);
+
+    CREATE TABLE IF NOT EXISTS family_invitations (
+      id TEXT PRIMARY KEY,
+      family_plan_id TEXT NOT NULL REFERENCES family_plans(id) ON DELETE CASCADE,
+      family_member_id TEXT NOT NULL REFERENCES family_members(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      accepted_at TIMESTAMPTZ,
+      delivery_status TEXT NOT NULL DEFAULT 'pending',
+      delivery_error TEXT,
+      delivered_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE family_invitations ADD COLUMN IF NOT EXISTS delivery_status TEXT NOT NULL DEFAULT 'pending';
+    ALTER TABLE family_invitations ADD COLUMN IF NOT EXISTS delivery_error TEXT;
+    ALTER TABLE family_invitations ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
+
     CREATE TABLE IF NOT EXISTS login_codes (
       phone        TEXT        PRIMARY KEY,
       code_hash    TEXT        NOT NULL,
@@ -250,12 +304,16 @@ export async function ensureSchema(): Promise<void> {
       position       INTEGER     NOT NULL,
       status         TEXT        NOT NULL DEFAULT 'waiting',
       used_line_pass BOOLEAN     NOT NULL DEFAULT false,
+      used_family_pass BOOLEAN   NOT NULL DEFAULT false,
+      family_pass_cycle TEXT,
       passengers     INTEGER     NOT NULL DEFAULT 1,
       movement_history JSONB     NOT NULL DEFAULT '[]'::jsonb,
       created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS passengers INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS used_family_pass BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS family_pass_cycle TEXT;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS front_notified_at TIMESTAMPTZ;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS intl_fee_accepted BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS bringing_pet BOOLEAN NOT NULL DEFAULT false;
@@ -440,8 +498,113 @@ export async function ensureSchema(): Promise<void> {
       title      TEXT        NOT NULL,
       body       TEXT        NOT NULL,
       type       TEXT        NOT NULL DEFAULT 'system',
+      data       JSONB       NOT NULL DEFAULT '{}'::jsonb,
       read       BOOLEAN     NOT NULL DEFAULT false,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS data JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+    CREATE TABLE IF NOT EXISTS networking_profiles (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      first_name TEXT NOT NULL DEFAULT '',
+      last_name TEXT NOT NULL DEFAULT '',
+      photo_asset_path TEXT,
+      photo_url TEXT,
+      industry TEXT NOT NULL DEFAULT '',
+      bio TEXT NOT NULL DEFAULT '',
+      linkedin_url TEXT,
+      instagram_url TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE networking_profiles ADD COLUMN IF NOT EXISTS photo_asset_path TEXT;
+    -- Asset paths are the canonical representation for newly uploaded photos.
+    -- Keep older HTTPS photos readable while moving object paths out of the
+    -- legacy URL column.
+    UPDATE networking_profiles
+      SET photo_asset_path = photo_url, photo_url = NULL
+      WHERE photo_asset_path IS NULL AND photo_url LIKE '/objects/%';
+    -- Data URIs were the temporary mobile fallback. They are not portable
+    -- storage and can make profile rows very large, so require those members
+    -- to choose a new stored photo.
+    UPDATE networking_profiles SET photo_url = NULL
+      WHERE photo_url LIKE 'data:image/%';
+
+    CREATE TABLE IF NOT EXISTS networking_photo_uploads (
+      object_path TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      attached_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS networking_photo_uploads_cleanup_idx
+      ON networking_photo_uploads (status, created_at);
+    -- Existing object-backed profiles predate ownership tracking. Backfill
+    -- them as active so cleanup can never treat a referenced object as stale.
+    INSERT INTO networking_photo_uploads (object_path, user_id, status, created_at, attached_at)
+      SELECT photo_asset_path, user_id, 'active', created_at, updated_at
+      FROM networking_profiles
+      WHERE photo_asset_path ~ '^/objects/uploads/[A-Za-z0-9-]+$'
+      ON CONFLICT (object_path) DO NOTHING;
+
+    CREATE TABLE IF NOT EXISTS networking_requests (
+      id TEXT PRIMARY KEY,
+      flight_id TEXT NOT NULL REFERENCES flights(id) ON DELETE CASCADE,
+      requester_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT networking_requests_flight_requester_recipient_unique
+        UNIQUE (flight_id, requester_id, recipient_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS networking_connections (
+      id TEXT PRIMARY KEY,
+      request_id TEXT NOT NULL UNIQUE REFERENCES networking_requests(id) ON DELETE CASCADE,
+      member_a_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      member_b_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT networking_connections_members_unique UNIQUE (member_a_id, member_b_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS networking_messages (
+      id TEXT PRIMARY KEY,
+      connection_id TEXT NOT NULL REFERENCES networking_connections(id) ON DELETE CASCADE,
+      sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      content TEXT NOT NULL,
+      client_message_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS networking_messages_client_id_unique
+      ON networking_messages (sender_id, client_message_id)
+      WHERE client_message_id IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS networking_blocks (
+      id TEXT PRIMARY KEY,
+      blocker_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      blocked_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT networking_blocks_pair_unique UNIQUE (blocker_id, blocked_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS networking_reports (
+      id TEXT PRIMARY KEY,
+      reporter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reported_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      request_id TEXT REFERENCES networking_requests(id) ON DELETE SET NULL,
+      reason TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS device_push_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token TEXT NOT NULL UNIQUE,
+      platform TEXT NOT NULL DEFAULT 'unknown',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 }

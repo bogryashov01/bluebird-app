@@ -20,7 +20,7 @@ import * as Haptics from 'expo-haptics';
 type PaymentReviewParams = {
   flightId: string;
   fromCity?: string; toCity?: string; from?: string; to?: string;
-  useLinePass?: string; passengers?: string; feeUsd?: string;
+  useLinePass?: string; feeUsd?: string;
   flightStatus?: string; departureDate?: string; departureTime?: string;
   duration?: string; aircraftType?: string; international?: string;
   bringingPet?: string; petFeeAcknowledged?: string;
@@ -42,7 +42,6 @@ export default function InternationalPaymentReviewScreen() {
   const [overlayPhase, setOverlayPhase] = useState<ApplyingPassPhase | null>(null);
   const pendingNavRef = useRef<(() => void) | null>(null);
 
-  const passengers = Math.max(1, parseInt(params.passengers ?? '1', 10) || 1);
   const useLinePass = params.useLinePass === '1';
   const bringingPet = params.bringingPet === '1';
   const petFeeAcknowledged = params.petFeeAcknowledged === '1';
@@ -140,7 +139,6 @@ export default function InternationalPaymentReviewScreen() {
       data: {
         flightId: params.flightId,
         useLinePass,
-        passengers,
         acceptIntlFee: true,
         bringingPet,
         petFeeAcknowledged,

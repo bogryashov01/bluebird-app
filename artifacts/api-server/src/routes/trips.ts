@@ -8,6 +8,8 @@ import {
   notificationsTable,
   tripPassengersTable,
   manifestOperationalUpdatesTable,
+  familyMembersTable,
+  familyPlansTable,
 } from "@workspace/db/schema";
 import { eq, and, sql, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -170,6 +172,12 @@ router.put("/:id/manifest", authMiddleware, async (req, res) => {
     if (exceedsPassengerCapacity(passengers.length, result.entry.bringingPet)) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: passengerCapacityError() });
+    }
+    if (passengers.length > result.flight.seatsAvailable) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        error: `This passenger list exceeds the ${result.flight.seatsAvailable}-seat capacity for this flight`,
+      });
     }
     const orders = passengers.map((passenger) => passenger.passengerOrder);
     if (passengers.length < 1 || passengers.length > result.entry.passengers || new Set(orders).size !== orders.length ||
@@ -369,9 +377,10 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
     // 5. Refund the Skip the Line pass if one was spent on this booking.
     //    Tied to the confirmed→cancelled entry flip above, so a second
     //    cancellation attempt can never refund again.
-    const passRefunded = cancelledEntries.some((e) => e.usedLinePass);
+    const personalPassRefunded = cancelledEntries.some((e) => e.usedLinePass && !e.usedFamilyPass);
+    let familyPassRefunded = false;
     let linePassCount: number | null = null;
-    if (passRefunded) {
+    if (personalPassRefunded) {
       const [updatedUser] = await txDb
         .update(usersTable)
         .set({ linePassCount: sql`${usersTable.linePassCount} + 1` })
@@ -385,6 +394,34 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
         .where(eq(usersTable.id, userId));
       linePassCount = me?.linePassCount ?? null;
     }
+    if (cancelledEntries.some((e) => e.usedFamilyPass)) {
+      const [familyMember] = await txDb
+        .select({
+          id: familyMembersTable.id,
+          renewalAt: familyPlansTable.renewalAt,
+        })
+        .from(familyMembersTable)
+        .innerJoin(familyPlansTable, eq(familyMembersTable.familyPlanId, familyPlansTable.id))
+        .where(and(
+          eq(familyMembersTable.userId, userId),
+          eq(familyMembersTable.status, "active"),
+        ));
+      for (const familyEntry of cancelledEntries.filter((entry) => entry.usedFamilyPass)) {
+        if (!familyMember || !familyEntry.familyPassCycle ||
+            familyEntry.familyPassCycle !== familyMember.renewalAt.toISOString()) {
+          continue;
+        }
+        const refunded = await txDb.update(familyMembersTable)
+          .set({ usedPasses: sql`GREATEST(${familyMembersTable.usedPasses} - 1, 0)` })
+          .where(and(
+            eq(familyMembersTable.id, familyMember.id),
+            sql`${familyMembersTable.usedPasses} > 0`,
+          ))
+          .returning({ id: familyMembersTable.id });
+        familyPassRefunded = familyPassRefunded || refunded.length > 0;
+      }
+    }
+    const passRefunded = personalPassRefunded || familyPassRefunded;
 
     // 6. Notify the member.
     const route = flight ? `${flight.fromCity} → ${flight.toCity}` : "your flight";
@@ -393,7 +430,9 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
       userId,
       title: "Booking cancelled",
       body: passRefunded
-        ? `Your booking on ${route} was cancelled and your Skip the Line pass was returned to your balance.`
+        ? familyPassRefunded
+          ? `Your booking on ${route} was cancelled and your Family Skip the Line pass was returned to your assigned balance.`
+          : `Your booking on ${route} was cancelled and your Skip the Line pass was returned to your balance.`
         : `Your booking on ${route} was cancelled. Your seat has been released.`,
       type: "system",
     });
