@@ -41,6 +41,10 @@ export const REAL_MEMBER_MIN_WAIT_MS = 60_000;
 const PET_CLEANING_FEE_USD = 500;
 
 export const SIM_USER_PREFIX = "sim-user-";
+// The development networking fixture is intentionally held at position one
+// so a manual request/accept/chat run is not invalidated by the demo cadence.
+// It is still a normal waiting entry for all queue and networking endpoints.
+export const NETWORKING_TEST_MEMBER_ID = "networking-test-member";
 
 const SIM_MEMBERS = [
   { id: `${SIM_USER_PREFIX}1`, name: "Ava Sterling" },
@@ -158,6 +162,10 @@ async function advanceFlightQueue(
         ),
       );
     if (!front) {
+      await client.query("ROLLBACK");
+      return;
+    }
+    if (front.userId === NETWORKING_TEST_MEMBER_ID) {
       await client.query("ROLLBACK");
       return;
     }

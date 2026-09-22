@@ -28,10 +28,64 @@ tags:
     description: AI concierge chat
   - name: networking
     description: Member flight networking and conversations
+  - name: dev
+    description: Development-only test harness controls
   - name: Storage
     description: Object storage upload and serving endpoints.
 
 paths:
+  /dev/networking-test-member/restore:
+    post:
+      operationId: restoreNetworkingTestMember
+      tags: [dev]
+      summary: Restore the deterministic development networking test member
+      description: |
+        Development-only. Resets the fixed networking test member, its owned
+        rows, and its queue entry to a clean position-one fixture. This route
+        returns 404 in production and accepts no user identifier.
+      responses:
+        "200":
+          description: Fixture restored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingTestMemberRestoreResponse" }
+        "404":
+          description: Not available in production
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Fixture could not be restored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /dev/networking-test-member:
+    delete:
+      operationId: deleteNetworkingTestMember
+      tags: [dev]
+      summary: Delete the deterministic development networking test member
+      description: |
+        Development-only. Deletes only the fixed networking test member and
+        its owned dependent rows. This route returns 404 in production and
+        accepts no arbitrary user identifier.
+      responses:
+        "200":
+          description: Fixture deleted or already absent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingTestMemberDeleteResponse" }
+        "404":
+          description: Not available in production
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Fixture could not be deleted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /storage/uploads/request-url:
     post:
       tags: [Storage]
@@ -1537,6 +1591,28 @@ components:
           description: Machine-readable error code (e.g. MEMBERSHIP_REQUIRED) for client-side routing.
       required:
         - error
+
+    NetworkingTestMemberRestoreResponse:
+      type: object
+      required: [restored, userId, phone]
+      properties:
+        restored:
+          type: boolean
+        userId:
+          type: string
+          const: networking-test-member
+        phone:
+          type: string
+
+    NetworkingTestMemberDeleteResponse:
+      type: object
+      required: [deleted, userId]
+      properties:
+        deleted:
+          type: boolean
+        userId:
+          type: string
+          const: networking-test-member
 
     SuccessResponse:
       type: object

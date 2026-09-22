@@ -1,8 +1,21 @@
 import { db } from "@workspace/db";
-import { flightsTable, tripsTable, queueEntriesTable, notificationsTable, usersTable } from "@workspace/db/schema";
+import {
+  flightsTable,
+  tripsTable,
+  queueEntriesTable,
+  notificationsTable,
+  usersTable,
+  networkingProfilesTable,
+} from "@workspace/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { logger } from "./logger";
-import { ensureSimUsers, SIM_USER_PREFIX } from "./simulation";
+import {
+  ensureSimUsers,
+  SIM_USER_PREFIX,
+  NETWORKING_TEST_MEMBER_ID,
+} from "./simulation";
+
+export { NETWORKING_TEST_MEMBER_ID };
 
 function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
@@ -405,20 +418,235 @@ export const DEMO_MEMBER_PHONE = "+15555550100";
 export const DEMO_MEMBER_EMAIL = "demo@bluebird.app";
 export const DEMO_MEMBER_ID = "demo-member";
 
+export const NETWORKING_TEST_MEMBER_PHONE = "+15555550101";
+export const NETWORKING_TEST_MEMBER_EMAIL = "networking-test@bluebird.app";
+export const NETWORKING_TEST_MEMBER_REFERRAL_CODE = "NETWORKTEST";
+export const NETWORKING_TEST_MEMBER_FLIGHT_ID = demoFlightId(SEED_FLIGHTS[7]);
+export const NETWORKING_TEST_MEMBER_QUEUE_ID = "demo-networking-test-queue";
+
+const DEMO_NETWORKING_PROFILE = {
+  firstName: "Demo",
+  lastName: "Member",
+  photoUrl: "https://example.com/bluebird-demo-member.jpg",
+  industry: "Private aviation",
+  bio: "Bluebird member interested in thoughtful connections before the flight.",
+};
+
+const NETWORKING_TEST_PROFILE = {
+  firstName: "Taylor",
+  lastName: "Morgan",
+  photoUrl: "https://example.com/bluebird-networking-test.jpg",
+  industry: "Aviation",
+  bio: "Private aviation operator who enjoys meeting thoughtful travelers.",
+};
+
+/**
+ * Removes every row owned by the deterministic networking fixture. Several
+ * older user-owned tables predate ON DELETE CASCADE, so this order is kept
+ * explicit and must run inside the caller's transaction.
+ */
+async function deleteNetworkingTestMemberRows(tx: any): Promise<boolean> {
+  const { rowCount } = await tx.execute(sql`
+    SELECT 1 FROM users WHERE id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+
+  await tx.execute(sql`
+    DELETE FROM concierge_callback_requests
+    WHERE user_id = ${NETWORKING_TEST_MEMBER_ID}
+       OR assistant_message_id IN (
+         SELECT id FROM concierge_messages WHERE user_id = ${NETWORKING_TEST_MEMBER_ID}
+       )
+  `);
+  await tx.execute(sql`
+    DELETE FROM concierge_messages WHERE user_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM trip_passengers
+    WHERE trip_id IN (SELECT id FROM trips WHERE user_id = ${NETWORKING_TEST_MEMBER_ID})
+  `);
+  await tx.execute(sql`
+    DELETE FROM manifest_operational_updates
+    WHERE trip_id IN (SELECT id FROM trips WHERE user_id = ${NETWORKING_TEST_MEMBER_ID})
+  `);
+  await tx.execute(sql`
+    DELETE FROM trips WHERE user_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM queue_entries WHERE user_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM saved_passengers WHERE user_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM notifications WHERE user_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM networking_messages
+    WHERE sender_id = ${NETWORKING_TEST_MEMBER_ID}
+       OR connection_id IN (
+         SELECT id FROM networking_connections
+         WHERE member_a_id = ${NETWORKING_TEST_MEMBER_ID}
+            OR member_b_id = ${NETWORKING_TEST_MEMBER_ID}
+       )
+  `);
+  await tx.execute(sql`
+    DELETE FROM networking_connections
+    WHERE member_a_id = ${NETWORKING_TEST_MEMBER_ID}
+       OR member_b_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM networking_reports
+    WHERE reporter_id = ${NETWORKING_TEST_MEMBER_ID}
+       OR reported_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM networking_blocks
+    WHERE blocker_id = ${NETWORKING_TEST_MEMBER_ID}
+       OR blocked_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM networking_requests
+    WHERE requester_id = ${NETWORKING_TEST_MEMBER_ID}
+       OR recipient_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM networking_photo_uploads WHERE user_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM networking_profiles WHERE user_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM device_push_tokens WHERE user_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM family_invitations
+    WHERE family_member_id IN (
+      SELECT id FROM family_members
+      WHERE user_id = ${NETWORKING_TEST_MEMBER_ID}
+         OR family_plan_id IN (
+           SELECT id FROM family_plans WHERE primary_user_id = ${NETWORKING_TEST_MEMBER_ID}
+         )
+    )
+  `);
+  await tx.execute(sql`
+    DELETE FROM family_members
+    WHERE user_id = ${NETWORKING_TEST_MEMBER_ID}
+       OR family_plan_id IN (
+         SELECT id FROM family_plans WHERE primary_user_id = ${NETWORKING_TEST_MEMBER_ID}
+       )
+  `);
+  await tx.execute(sql`
+    DELETE FROM family_plans WHERE primary_user_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM referral_rewards
+    WHERE inviter_user_id = ${NETWORKING_TEST_MEMBER_ID}
+       OR friend_user_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM login_codes WHERE phone = ${NETWORKING_TEST_MEMBER_PHONE}
+  `);
+  await tx.execute(sql`
+    DELETE FROM registration_grants WHERE phone = ${NETWORKING_TEST_MEMBER_PHONE}
+  `);
+  await tx.execute(sql`
+    DELETE FROM revoked_tokens WHERE user_id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+  await tx.execute(sql`
+    DELETE FROM users WHERE id = ${NETWORKING_TEST_MEMBER_ID}
+  `);
+
+  return Number(rowCount ?? 0) > 0;
+}
+
+/**
+ * Deletes only the known development networking fixture. The fixed identity
+ * is intentional: this is not a general user-deletion primitive.
+ */
+export async function deleteNetworkingTestMember(): Promise<boolean> {
+  return db.transaction(async (tx) => deleteNetworkingTestMemberRows(tx));
+}
+
+async function seedNetworkingProfiles(userId: string): Promise<void> {
+  await db.insert(networkingProfilesTable).values({
+    userId,
+    ...DEMO_NETWORKING_PROFILE,
+  }).onConflictDoUpdate({
+    target: networkingProfilesTable.userId,
+    set: { ...DEMO_NETWORKING_PROFILE, updatedAt: new Date() },
+  });
+}
+
+/**
+ * Restores the complete networking fixture in development. Existing fixture
+ * activity is intentionally cleared so a server restart returns to a clean
+ * request/connection/chat state.
+ */
+export async function seedNetworkingTestMember(): Promise<void> {
+  const [phoneOwner] = await db.select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.phone, NETWORKING_TEST_MEMBER_PHONE));
+  if (phoneOwner && phoneOwner.id !== NETWORKING_TEST_MEMBER_ID) {
+    throw new Error(`Networking fixture phone belongs to another user: ${phoneOwner.id}`);
+  }
+
+  await db.transaction(async (tx) => {
+    await deleteNetworkingTestMemberRows(tx);
+    await tx.insert(usersTable).values({
+      id: NETWORKING_TEST_MEMBER_ID,
+      name: "Taylor Morgan",
+      phone: NETWORKING_TEST_MEMBER_PHONE,
+      email: NETWORKING_TEST_MEMBER_EMAIL,
+      referralCode: NETWORKING_TEST_MEMBER_REFERRAL_CODE,
+      membershipTier: "base",
+      linePassCount: 0,
+    });
+    await tx.insert(networkingProfilesTable).values({
+      userId: NETWORKING_TEST_MEMBER_ID,
+      ...NETWORKING_TEST_PROFILE,
+    });
+    await tx.insert(queueEntriesTable).values({
+      id: NETWORKING_TEST_MEMBER_QUEUE_ID,
+      userId: NETWORKING_TEST_MEMBER_ID,
+      flightId: NETWORKING_TEST_MEMBER_FLIGHT_ID,
+      position: 1,
+      status: "waiting",
+      passengers: 1,
+      usedLinePass: false,
+      usedFamilyPass: false,
+      movementHistory: [{ type: "joined", position: 1, at: new Date().toISOString() }],
+    });
+  });
+  logger.info({ userId: NETWORKING_TEST_MEMBER_ID }, "Restored networking test member");
+}
+
 export async function seedDemoMember(): Promise<void> {
     let [member] = await db.select().from(usersTable).where(eq(usersTable.phone, DEMO_MEMBER_PHONE));
     if (member) {
+      await db.update(usersTable).set({
+        name: "Demo Member",
+        email: DEMO_MEMBER_EMAIL,
+        membershipTier: "base",
+        referralCode: "DEMOBIRD",
+      }).where(eq(usersTable.id, member.id));
       await seedDemoDataForUser(member.id);
+      await seedNetworkingProfiles(member.id);
       return;
     }
     // Adopt the legacy email/password-era demo row (its phone was backfilled
     // with a placeholder during migration) instead of inserting a duplicate.
     const [legacy] = await db.select().from(usersTable).where(eq(usersTable.email, DEMO_MEMBER_EMAIL));
     if (legacy) {
-      await db.update(usersTable).set({ phone: DEMO_MEMBER_PHONE }).where(eq(usersTable.id, legacy.id));
+      await db.update(usersTable).set({
+        phone: DEMO_MEMBER_PHONE,
+        name: "Demo Member",
+        membershipTier: "base",
+        referralCode: "DEMOBIRD",
+      }).where(eq(usersTable.id, legacy.id));
       logger.info("Re-keyed legacy demo member to demo phone number");
       member = { ...legacy, phone: DEMO_MEMBER_PHONE };
       await seedDemoDataForUser(member.id);
+      await seedNetworkingProfiles(member.id);
       return;
     }
     const [created] = await db.insert(usersTable).values({
@@ -431,6 +659,7 @@ export async function seedDemoMember(): Promise<void> {
       linePassCount: 0,
     }).returning();
     await seedDemoDataForUser(created.id);
+    await seedNetworkingProfiles(created.id);
     logger.info("Seeded demo member account");
 }
 
@@ -601,4 +830,7 @@ export async function restoreDemoData(): Promise<void> {
   await seedFlights();
   await ensureSimUsers();
   await seedDemoMember();
+  if (process.env.NODE_ENV !== "production") {
+    await seedNetworkingTestMember();
+  }
 }

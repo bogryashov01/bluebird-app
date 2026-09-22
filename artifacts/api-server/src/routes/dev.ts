@@ -25,6 +25,11 @@ import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { signToken } from "../middlewares/auth";
 import { normalizePhone } from "./auth";
+import {
+  deleteNetworkingTestMember,
+  NETWORKING_TEST_MEMBER_PHONE,
+  seedNetworkingTestMember,
+} from "../lib/seed";
 
 const router = Router();
 
@@ -64,6 +69,37 @@ function validateRedirect(raw: string | undefined): string {
 }
 
 const IS_PROD = () => process.env["NODE_ENV"] === "production";
+
+// ---------------------------------------------------------------------------
+// POST /api/dev/networking-test-member/restore
+// DELETE /api/dev/networking-test-member
+//
+// These routes deliberately have no user-id parameter. They operate only on
+// the one deterministic fixture used by the development networking harness.
+// ---------------------------------------------------------------------------
+router.post("/dev/networking-test-member/restore", async (_req, res) => {
+  if (IS_PROD()) return res.status(404).json({ error: "Not found" });
+  try {
+    await seedNetworkingTestMember();
+    return res.json({
+      restored: true,
+      userId: "networking-test-member",
+      phone: NETWORKING_TEST_MEMBER_PHONE,
+    });
+  } catch {
+    return res.status(500).json({ error: "Failed to restore networking test member" });
+  }
+});
+
+router.delete("/dev/networking-test-member", async (_req, res) => {
+  if (IS_PROD()) return res.status(404).json({ error: "Not found" });
+  try {
+    const deleted = await deleteNetworkingTestMember();
+    return res.json({ deleted, userId: "networking-test-member" });
+  } catch {
+    return res.status(500).json({ error: "Failed to delete networking test member" });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // GET /api/dev/autologin
