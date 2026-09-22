@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRequestLoginCode } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
+import { rememberDevOtp, verifyCodeNavigationParams } from '@/lib/devOtp';
 
 /**
  * Formats the phone input while typing. US-style numbers get (XXX) XXX-XXXX;
@@ -38,15 +39,14 @@ export default function PhoneScreen() {
   const requestCode = useRequestLoginCode({
     mutation: {
       onSuccess: (data) => {
+        rememberDevOtp(data.phone, data.demoCode);
         router.push({
           pathname: '/(auth)/verify-code',
-          params: {
+          params: verifyCodeNavigationParams({
             phone: data.phone,
-            // Demo: the raw code stands in for a delivered SMS.
-            demoCode: data.demoCode ?? '',
-            cooldown: String(data.resendCooldownSeconds ?? 30),
+            cooldownSeconds: data.resendCooldownSeconds ?? 30,
             referralCode,
-          },
+          }),
         });
       },
       onError: (err: any) => {

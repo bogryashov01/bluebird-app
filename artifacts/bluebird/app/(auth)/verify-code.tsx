@@ -11,6 +11,16 @@ import { useRequestLoginCode, useVerifyLoginCode } from '@workspace/api-client-r
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import {
+  clearDevOtp,
+  completeRegistrationNavigationParams,
+  developmentOtpLogMessage,
+  otpDigitsFromInput,
+  rememberDevOtp,
+  shouldAutoSubmitOtp,
+  takeDevOtpForAutofill,
+  verifyLoginPayload,
+} from '@/lib/devOtp';
 
 const CODE_LENGTH = 6;
 
@@ -19,19 +29,41 @@ export default function VerifyCodeScreen() {
   const colors = useColors();
   const { signIn, setPendingRegistrationGrant } = useAuth();
   const queryClient = useQueryClient();
-  const params = useLocalSearchParams<{ phone?: string; demoCode?: string; cooldown?: string; referralCode?: string }>();
+  const params = useLocalSearchParams<{ phone?: string; cooldown?: string; referralCode?: string }>();
   const phone = typeof params.phone === 'string' ? params.phone : '';
+  const referralCode = typeof params.referralCode === 'string' ? params.referralCode : undefined;
   const initialCooldown = Number(params.cooldown) > 0 ? Number(params.cooldown) : 30;
 
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
-  // Demo: no real SMS is sent — surface the code so testers can complete the flow.
-  const [demoCode, setDemoCode] = useState(typeof params.demoCode === 'string' ? params.demoCode : '');
   const [cooldown, setCooldown] = useState(initialCooldown);
   const inputRef = useRef<TextInput>(null);
   const submittedRef = useRef<string | null>(null);
+  const verifyMutationRef = useRef<{
+    isPending: boolean;
+    mutate: (vars: { data: ReturnType<typeof verifyLoginPayload> }) => void;
+  } | null>(null);
 
-  // Resend cooldown ticker
+  const applyOtpDigits = (raw: string) => {
+    const digits = otpDigitsFromInput(raw, CODE_LENGTH);
+    setCode(digits);
+    setError(null);
+    const pending = verifyMutationRef.current?.isPending ?? false;
+    if (!shouldAutoSubmitOtp(digits, submittedRef.current, pending, CODE_LENGTH)) return;
+    submittedRef.current = digits;
+    verifyMutationRef.current?.mutate({
+      data: verifyLoginPayload(phone, digits, referralCode),
+    });
+  };
+
+  const fillDevOtpIfPresent = () => {
+    const stored = takeDevOtpForAutofill(phone);
+    if (!stored) return;
+    const message = developmentOtpLogMessage(stored);
+    if (message) console.log(message);
+    applyOtpDigits(stored);
+  };
+
   useEffect(() => {
     if (cooldown <= 0) return;
     const t = setInterval(() => setCooldown((c) => (c > 0 ? c - 1 : 0)), 1000);
@@ -41,11 +73,12 @@ export default function VerifyCodeScreen() {
   const verifyMutation = useVerifyLoginCode({
     mutation: {
       onSuccess: async (data) => {
+        clearDevOtp();
         if (data.outcome === 'registration_required' && data.registrationGrant) {
           setPendingRegistrationGrant(data.registrationGrant);
           router.replace({
             pathname: '/(auth)/complete-registration',
-            params: typeof params.referralCode === 'string' ? { referralCode: params.referralCode } : {},
+            params: completeRegistrationNavigationParams(referralCode),
           });
           return;
         }
@@ -78,15 +111,21 @@ export default function VerifyCodeScreen() {
       },
     },
   });
+  verifyMutationRef.current = verifyMutation;
+
+  useEffect(() => {
+    fillDevOtpIfPresent();
+  }, [phone]);
 
   const resendMutation = useRequestLoginCode({
     mutation: {
       onSuccess: (data) => {
-        setDemoCode(data.demoCode ?? '');
+        rememberDevOtp(data.phone ?? phone, data.demoCode);
         setCooldown(data.resendCooldownSeconds ?? 30);
         setError(null);
         setCode('');
         submittedRef.current = null;
+        fillDevOtpIfPresent();
         inputRef.current?.focus();
       },
       onError: (err: any) => {
@@ -94,23 +133,6 @@ export default function VerifyCodeScreen() {
       },
     },
   });
-
-  const handleChange = (raw: string) => {
-    const digits = raw.replace(/\D/g, '').slice(0, CODE_LENGTH);
-    setCode(digits);
-    setError(null);
-    // Auto-submit the moment the sixth digit lands (once per code value).
-    if (digits.length === CODE_LENGTH && submittedRef.current !== digits && !verifyMutation.isPending) {
-      submittedRef.current = digits;
-      verifyMutation.mutate({
-        data: {
-          phone,
-          code: digits,
-          ...(typeof params.referralCode === 'string' ? { referralCode: params.referralCode } : {}),
-        },
-      });
-    }
-  };
 
   const handleResend = () => {
     if (cooldown > 0 || resendMutation.isPending) return;
@@ -148,7 +170,7 @@ export default function VerifyCodeScreen() {
           ref={inputRef}
           style={styles.hiddenInput}
           value={code}
-          onChangeText={handleChange}
+          onChangeText={applyOtpDigits}
           keyboardType="number-pad"
           textContentType="oneTimeCode"
           autoComplete="sms-otp"
@@ -187,16 +209,6 @@ export default function VerifyCodeScreen() {
         <View style={styles.verifyingRow}>
           <ActivityIndicator size="small" color={colors.primary} />
           <Text style={[styles.verifyingText, { color: colors.mutedOnBrand }]}>Verifying…</Text>
-        </View>
-      ) : null}
-
-      {demoCode ? (
-        <View style={[styles.demoCard, { backgroundColor: colors.primary + '14', borderColor: colors.primary + '33' }]}>
-          <Feather name="message-square" size={14} color={colors.primary} />
-          <Text style={[styles.demoText, { color: colors.mutedOnBrand }]}>
-            Demo — no SMS is sent. Your code is{' '}
-            <Text style={{ fontFamily: 'Inter_700Bold', color: colors.textOnBrand }}>{demoCode}</Text>
-          </Text>
         </View>
       ) : null}
 
@@ -244,12 +256,6 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 13, fontFamily: 'Inter_500Medium', marginBottom: 8 },
   verifyingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   verifyingText: { fontSize: 13, fontFamily: 'Inter_400Regular' },
-  demoCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-    marginTop: 8,
-  },
-  demoText: { flex: 1, fontSize: 13, fontFamily: 'Inter_400Regular', lineHeight: 19 },
   resendBtn: { alignSelf: 'center', marginTop: 24, minHeight: 22, justifyContent: 'center' },
   resendText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
 });
