@@ -23,3 +23,4 @@
 - [Family pass cycles](family-pass-cycles.md) — tie each Family redemption to its annual cycle so later cancellations cannot refund expired passes into a new pool.
 - [Networking photo persistence](networking-photo-persistence.md) — Expo profile photos use validated portable data URIs/HTTPS URLs until a compatible App Storage upload path exists.
 - [Networking fixture isolation](networking-fixture-isolation.md) — keep the deterministic front member on an isolated demo flight and exempt only that fixture from queue simulation.
+- [Metro platform facades](flight-map-platform-resolution.md) — use declaration-only facades when native/web variants have different source extensions; runtime `.ts` re-exports can bypass platform resolution.
