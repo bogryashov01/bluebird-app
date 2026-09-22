@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { legalScreenHref } from '@/lib/legalLinks';
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
@@ -43,8 +44,26 @@ export default function WelcomeScreen() {
 
       <Text style={[styles.footerText, { color: colors.mutedOnBrand }]}>
         By continuing you agree to Bluebird's{' '}
-        <Text style={[styles.footerLink, { color: colors.primary }]}>Terms of Service</Text> and{' '}
-        <Text style={[styles.footerLink, { color: colors.primary }]}>Privacy Policy</Text>.
+        <Text
+          style={[styles.footerLink, { color: colors.primary }]}
+          onPress={() => router.push(legalScreenHref('terms') as any)}
+          accessibilityRole="link"
+          accessibilityLabel="Terms of Service"
+          testID="welcome-terms-link"
+        >
+          Terms of Service
+        </Text>
+        {' '}and{' '}
+        <Text
+          style={[styles.footerLink, { color: colors.primary }]}
+          onPress={() => router.push(legalScreenHref('privacy') as any)}
+          accessibilityRole="link"
+          accessibilityLabel="Privacy Policy"
+          testID="welcome-privacy-link"
+        >
+          Privacy Policy
+        </Text>
+        .
       </Text>
     </View>
   );

@@ -2,8 +2,10 @@ import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform,
 } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { parseLegalTab, type LegalTab } from '@/lib/legalLinks';
 
 const TERMS_SECTIONS = [
   {
@@ -50,7 +52,13 @@ const PRIVACY_SECTIONS = [
 export default function LegalScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const [tab, setTab] = React.useState<'terms' | 'privacy'>('terms');
+  const params = useLocalSearchParams<{ tab?: string | string[] }>();
+  const requestedTab = parseLegalTab(params.tab);
+  const [tab, setTab] = React.useState<LegalTab>(requestedTab);
+
+  React.useEffect(() => {
+    setTab(requestedTab);
+  }, [requestedTab]);
 
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
   const sections = tab === 'terms' ? TERMS_SECTIONS : PRIVACY_SECTIONS;
