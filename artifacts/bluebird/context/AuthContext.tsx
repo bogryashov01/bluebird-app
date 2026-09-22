@@ -5,8 +5,8 @@ import { getApiBaseUrl } from '@/lib/apiBaseUrl';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import { useRegisterNetworkingPushToken } from '@workspace/api-client-react';
+import { installDevPushHandler, registerExpoPushToken } from '@/lib/pushRegistration';
 
 const TOKEN_KEY = 'bluebird_token';
 const USER_KEY = 'bluebird_user';
@@ -41,6 +41,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [pendingRegistrationGrant, setPendingRegistrationGrant] = useState<string | null>(null);
   const registerPushToken = useRegisterNetworkingPushToken();
+
+  useEffect(() => {
+    installDevPushHandler();
+  }, []);
 
   useEffect(() => {
     async function loadAuth() {
@@ -90,29 +94,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!user || !token || user.membershipTier === 'none' || Platform.OS === 'web') return;
+    if (!user || !token) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const current = await Notifications.getPermissionsAsync();
-        let status = current.status;
-        if (status !== 'granted') {
-          status = (await Notifications.requestPermissionsAsync()).status;
-        }
-        if (status !== 'granted' || cancelled) return;
-        const push = await Notifications.getExpoPushTokenAsync();
-        if (!cancelled && push.data) {
-          registerPushToken.mutate({
-            data: {
-              token: push.data,
-              platform: Platform.OS,
-            },
-          });
-        }
-      } catch {
-        // Push permission is optional; networking notifications remain in-app.
+    void registerExpoPushToken(
+      (expoToken) => registerPushToken.mutateAsync({
+        data: { token: expoToken, platform: Platform.OS },
+      }),
+      user.membershipTier,
+    ).then((result) => {
+      if (cancelled || !__DEV__) return;
+      if (result.error) {
+        console.warn('[bluebird push] registration did not complete', result);
       }
-    })();
+    });
     return () => { cancelled = true; };
   }, [user?.id, user?.membershipTier, token]);
 

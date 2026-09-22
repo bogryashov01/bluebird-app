@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, asc, desc, eq, inArray, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, ne, or } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   devicePushTokensTable,
@@ -18,6 +18,7 @@ import {
 import { authMiddleware } from "../middlewares/auth";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { scheduleNetworkingPhotoCleanup } from "../lib/networkingPhotoCleanup";
+import { deliverExpoPush } from "../lib/push";
 
 const router = Router();
 router.use(authMiddleware);
@@ -126,43 +127,7 @@ async function notify(
     type,
     data,
   });
-  await deliverPush(userId, title, body, data);
-}
-
-async function deliverPush(userId: string, title: string, body: string, data: Record<string, string>) {
-  const tokens = await db.select().from(devicePushTokensTable)
-    .where(eq(devicePushTokensTable.userId, userId));
-  if (tokens.length === 0) return;
-  const valid = tokens.filter((row) => /^ExponentPushToken\[.+\]$/.test(row.token));
-  if (valid.length === 0) return;
-  try {
-    const response = await fetch("https://exp.host/--/api/v2/push/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(valid.map((row) => ({
-        to: row.token,
-        title,
-        body,
-        data,
-      }))),
-    });
-    if (!response.ok) return;
-    const result = await response.json() as {
-      data?: Array<{ status?: string; details?: { error?: string } }>;
-    };
-    const invalid = valid.filter((_row, index) =>
-      result.data?.[index]?.details?.error === "DeviceNotRegistered",
-    );
-    if (invalid.length) {
-      await db.delete(devicePushTokensTable)
-        .where(inArray(devicePushTokensTable.id, invalid.map((row) => row.id)));
-    }
-    await db.update(devicePushTokensTable)
-      .set({ lastUsedAt: new Date() })
-      .where(inArray(devicePushTokensTable.id, valid.map((row) => row.id)));
-  } catch {
-    // In-app notifications remain the source of truth when push delivery is unavailable.
-  }
+  await deliverExpoPush(userId, title, body, data);
 }
 
 async function connectionFor(userId: string, connectionId: string) {
@@ -343,8 +308,16 @@ router.post("/push-tokens", async (req, res) => {
         set: { userId, platform, lastUsedAt: new Date() },
       })
       .returning();
+    const suffix = token.replace(/^ExponentPushToken\[/, "").replace(/\]$/, "");
+    req.log.info({
+      userId,
+      platform,
+      tokenSuffix: suffix.length <= 8 ? suffix : suffix.slice(-8),
+      expoPushToken: /^ExponentPushToken\[.+\]$/.test(token),
+    }, "Registered device push token");
     return res.json(saved);
-  } catch {
+  } catch (error) {
+    req.log.error({ err: error, userId, platform }, "Failed to register push token");
     return res.status(500).json({ error: "Failed to register push token" });
   }
 });
