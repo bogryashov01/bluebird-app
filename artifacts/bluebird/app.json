@@ -36,6 +36,10 @@
             "DEFAULT"
           ]
         }
+      ],
+      "permissions": [
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR"
       ]
     },
     "web": {
@@ -56,11 +60,18 @@
         {
           "calendarPermission": "Allow Bluebird to add your confirmed flights to your calendar."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "83e7e28f-bdf2-4b83-9e9d-0727ba066b2c"
+      }
+    },
+    "owner": "bogryashov01"
   }
 }

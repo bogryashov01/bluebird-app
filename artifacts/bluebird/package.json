@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:family-mobile": "playwright test tests/family-mobile.spec.mjs",
     "test:profile-photo-native": "pnpm --filter @workspace/api-server exec esbuild '../bluebird/tests/profile-photo-native.spec.mjs' --bundle --platform=node --format=esm --outfile='../bluebird/scripts/.profile-photo-native.test.mjs' && node scripts/.profile-photo-native.test.mjs; status=$?; rm -f scripts/.profile-photo-native.test.mjs; exit $status",
+    "test:session-token": "pnpm --filter @workspace/api-server exec esbuild '../bluebird/tests/session-token.spec.mjs' --bundle --platform=node --format=esm --packages=external --outfile='../bluebird/scripts/.session-token.test.mjs' && node --test scripts/.session-token.test.mjs; status=$?; rm -f scripts/.session-token.test.mjs; exit $status",
     "test:airport-selection": "pnpm --filter @workspace/api-server exec esbuild ../bluebird/scripts/airport-selection.integration.mjs --bundle --platform=node --format=esm --outfile=../bluebird/scripts/.airport-selection.test.mjs && node scripts/.airport-selection.test.mjs; status=$?; rm -f scripts/.airport-selection.test.mjs; exit $status",
     "test:passenger-name-prefill": "pnpm --filter @workspace/api-server exec esbuild '../bluebird/lib/passenger-name.ts' --bundle --platform=node --format=esm --outfile=../bluebird/scripts/.passenger-name-prefill.test.mjs && node scripts/passenger-name-prefill.integration.mjs; status=$?; rm -f scripts/.passenger-name-prefill.test.mjs; exit $status"
   },
@@ -69,6 +70,7 @@
     "expo-clipboard": "^57.0.1",
     "expo-file-system": "^19.0.24",
     "expo-notifications": "~0.32.17",
+    "expo-secure-store": "~15.0.8",
     "leaflet": "^1.9.4",
     "react-leaflet": "^5.0.0",
     "react-native-maps": "1.18.0"

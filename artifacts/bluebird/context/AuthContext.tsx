@@ -7,8 +7,8 @@ import { router } from 'expo-router';
 import { Platform } from 'react-native';
 import { useRegisterNetworkingPushToken } from '@workspace/api-client-react';
 import { installDevPushHandler, registerExpoPushToken } from '@/lib/pushRegistration';
+import { readSessionToken, writeSessionToken, clearSessionToken } from '@/lib/sessionToken';
 
-const TOKEN_KEY = 'bluebird_token';
 const USER_KEY = 'bluebird_user';
 
 export type AuthUser = User;
@@ -28,7 +28,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 // Register the token getter globally so every API request carries the bearer token
 setAuthTokenGetter(async () => {
   try {
-    return await AsyncStorage.getItem(TOKEN_KEY);
+    return await readSessionToken();
   } catch {
     return null;
   }
@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function loadAuth() {
       try {
         const [storedToken, storedUser] = await Promise.all([
-          AsyncStorage.getItem(TOKEN_KEY),
+          readSessionToken(),
           AsyncStorage.getItem(USER_KEY),
         ]);
         if (storedToken && storedUser) {
@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } else if (resp.status === 401) {
               // Token no longer valid — clear the stale session
               await Promise.all([
-                AsyncStorage.removeItem(TOKEN_KEY),
+                clearSessionToken(),
                 AsyncStorage.removeItem(USER_KEY),
               ]);
             } else {
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (newToken: string, newUser: AuthUser) => {
     const normalized = normalizeUser(newUser);
     await Promise.all([
-      AsyncStorage.setItem(TOKEN_KEY, newToken),
+      writeSessionToken(newToken),
       AsyncStorage.setItem(USER_KEY, JSON.stringify(normalized)),
     ]);
     setToken(newToken);
@@ -131,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // ignore — token will still expire naturally server-side
     }
     await Promise.all([
-      AsyncStorage.removeItem(TOKEN_KEY),
+      clearSessionToken(),
       AsyncStorage.removeItem(USER_KEY),
     ]);
     setToken(null);
