@@ -138,7 +138,7 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="networking/connections"
-        options={{ headerShown: true, title: 'Messages', ...headerOptions }}
+        options={{ headerShown: true, title: 'Connections', ...headerOptions }}
       />
       <Stack.Screen
         name="networking/connections/[id]"

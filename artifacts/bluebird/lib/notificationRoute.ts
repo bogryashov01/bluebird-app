@@ -1,6 +1,7 @@
 import type { Notification } from '@workspace/api-client-react';
 
-export const NETWORKING_INBOX_ROUTE = '/networking/connections';
+export const CONNECTIONS_HUB_ROUTE = '/(tabs)/connections';
+export const NETWORKING_INBOX_ROUTE = `${CONNECTIONS_HUB_ROUTE}?view=messages`;
 
 /**
  * Maps a notification's type to the screen it should open.

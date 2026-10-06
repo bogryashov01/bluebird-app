@@ -1,7 +1,12 @@
 import React from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { useListNetworkingMessages, useSendNetworkingMessage, useBlockNetworkingConnection } from '@workspace/api-client-react';
+import {
+  getListNetworkingConnectionsQueryKey,
+  useListNetworkingMessages,
+  useSendNetworkingMessage,
+  useBlockNetworkingConnection,
+} from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
@@ -14,9 +19,13 @@ export default function NetworkingThreadScreen() {
   const [content, setContent] = React.useState('');
   const [error, setError] = React.useState('');
   const { data, isLoading, isError, refetch } = useListNetworkingMessages(id!, { query: { enabled: !!id, refetchInterval: 10000 } });
+  const refetchRef = React.useRef(refetch);
   const send = useSendNetworkingMessage();
   const block = useBlockNetworkingConnection();
-  useFocusEffect(React.useCallback(() => { refetch(); }, [refetch]));
+  React.useEffect(() => {
+    refetchRef.current = refetch;
+  }, [refetch]);
+  useFocusEffect(React.useCallback(() => { void refetchRef.current(); }, []));
   const submit = () => {
     const value = content.trim();
     if (!value || send.isPending) return;
@@ -25,6 +34,7 @@ export default function NetworkingThreadScreen() {
       onSuccess: () => {
         setContent('');
         queryClient.invalidateQueries({ queryKey: ['/api/networking/connections', id, 'messages'] });
+        queryClient.invalidateQueries({ queryKey: getListNetworkingConnectionsQueryKey() });
       },
       onError: (err: any) => setError(err?.data?.error ?? err?.message ?? 'Message failed. Try again.'),
     });

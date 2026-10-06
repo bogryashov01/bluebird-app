@@ -24,6 +24,10 @@ function NativeTabLayout({ unreadCount }: { unreadCount: number }) {
         <Icon sf={{ default: 'briefcase', selected: 'briefcase.fill' }} />
         <Label>Trips</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="connections">
+        <Icon sf={{ default: 'person.2', selected: 'person.2.fill' }} />
+        <Label>Connections</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="membership/index">
         <Icon sf={{ default: 'star', selected: 'star.fill' }} />
         <Label>Membership</Label>
@@ -96,6 +100,18 @@ function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
               <SymbolView name="briefcase" tintColor={color} size={22} />
             ) : (
               <Feather name="briefcase" size={20} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="connections"
+        options={{
+          title: 'Connections',
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="person.2" tintColor={color} size={22} />
+            ) : (
+              <Feather name="users" size={20} color={color} />
             ),
         }}
       />

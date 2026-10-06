@@ -1,6 +1,10 @@
 import React from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useListIncomingNetworkingRequests, useDecideNetworkingRequest } from '@workspace/api-client-react';
+import {
+  getListNetworkingConnectionsQueryKey,
+  useListIncomingNetworkingRequests,
+  useDecideNetworkingRequest,
+} from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
@@ -15,7 +19,10 @@ export default function NetworkingRequestsScreen() {
 
   const act = (id: string, action: 'accept' | 'decline' | 'ignore' | 'block' | 'report') => {
     decision.mutate({ id, data: { action } }, {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/networking/requests/incoming'] }),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['/api/networking/requests/incoming'] });
+        queryClient.invalidateQueries({ queryKey: getListNetworkingConnectionsQueryKey() });
+      },
     });
   };
   if (isLoading) return <View style={[styles.center, { backgroundColor: colors.offWhite }]}><ActivityIndicator color={colors.primary} /></View>;

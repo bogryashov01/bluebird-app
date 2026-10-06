@@ -174,9 +174,14 @@ export default function ProfileScreen() {
               onPress: () => router.push('/community'),
             },
             {
+              label: 'Connections',
+              hint: 'members you’ve met',
+              onPress: () => router.push({ pathname: '/(tabs)/connections' as any, params: { view: 'connections' } }),
+            },
+            {
               label: 'Messages',
-              hint: 'your accepted connections',
-              onPress: () => router.push('/networking/connections' as any),
+              hint: 'your recent conversations',
+              onPress: () => router.push({ pathname: '/(tabs)/connections' as any, params: { view: 'messages' } }),
             },
             {
               label: 'Connection Requests',
