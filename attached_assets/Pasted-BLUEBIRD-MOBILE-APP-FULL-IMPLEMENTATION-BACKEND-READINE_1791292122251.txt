@@ -1,0 +1,485 @@
+BLUEBIRD MOBILE APP — FULL IMPLEMENTATION & BACKEND READINESS AUDIT
+
+I need a complete read-only audit of the current Bluebird mobile app.
+
+IMPORTANT:
+- DO NOT modify any files.
+- DO NOT refactor anything.
+- DO NOT install packages.
+- DO NOT change environment variables.
+- DO NOT deploy anything.
+- DO NOT modify the database.
+- DO NOT send SMS, email, push notifications, or payments.
+- DO NOT start services if startup can trigger seeds, background jobs, external integrations, or database writes.
+
+This is an AUDIT ONLY.
+
+Context:
+
+We have now confirmed that Bluebird already has an existing production backend.
+
+Expected production origin:
+https://bluebirdjets.com
+
+Expected API:
+https://bluebirdjets.com/api
+
+The existing backend already supports major functionality including:
+- Clerk authentication
+- users / profiles
+- memberships
+- flights / empty legs
+- queues
+- Skip the Line
+- trips
+- passengers
+- pets
+- family memberships
+- payments through EPD/manual modes
+- email/SMS communications
+- referrals
+
+We DO NOT want to build a second backend for functionality that already exists.
+
+The goal of this audit is to understand exactly what the CURRENT MOBILE APP has implemented, what is still mocked/demo/local, and what needs to be connected to the existing Bluebird backend.
+
+--------------------------------------------------
+1. MOBILE APP ARCHITECTURE
+--------------------------------------------------
+
+Inspect the current mobile app and report:
+
+- Expo / React Native version
+- Expo Router structure
+- important providers/contexts
+- API client(s)
+- authentication implementation
+- local persistence
+- SecureStore usage
+- AsyncStorage usage
+- React Query or other server-state management
+- environment variables
+- API base URL resolution
+- development vs production behavior
+
+Identify the important files for each area.
+
+--------------------------------------------------
+2. SCREEN INVENTORY
+--------------------------------------------------
+
+Create a complete inventory of mobile screens/routes.
+
+For every screen classify it as:
+
+A. Production-ready UI + real backend data
+B. Production-ready UI but using mock/demo/local data
+C. Partially implemented
+D. Static/prototype UI
+E. Missing / placeholder
+F. Dead/unused route
+
+Include at least:
+
+- Splash
+- Welcome / onboarding
+- Authentication
+- Profile
+- Discover
+- Discover Map
+- Flight Details
+- Pre-Queue Terms
+- International Fee
+- Queue Submitted
+- Queue Status
+- Skip the Line
+- Flight Won
+- Flight Confirmed
+- My Trips
+- Trip Details
+- Membership
+- Upgrade Membership
+- Referral
+- Concierge
+- Profile / Personal Information
+- Connect Contacts
+- Notification Settings
+- Notifications
+- Community
+- Networking
+- any additional routes you find
+
+For each screen identify where its displayed data comes from.
+
+--------------------------------------------------
+3. MOCK / DEMO / HARDCODED DATA AUDIT
+--------------------------------------------------
+
+This section is VERY IMPORTANT.
+
+Search the entire mobile app for:
+
+- mock data
+- demo data
+- fake users
+- fake flights
+- fake queue members
+- fake posts
+- hardcoded memberships
+- hardcoded prices
+- hardcoded airports
+- hardcoded passenger information
+- hardcoded notifications
+- hardcoded activity
+- hardcoded networking profiles
+- demo payment flows
+- fake checkout
+- fake success responses
+- Math.random()
+- setTimeout() used to simulate network behavior
+- placeholder images
+- placeholder text
+- hardcoded counts/statistics
+- development-only fallback data
+- local-only data that should eventually come from the backend
+
+For EVERY occurrence provide:
+
+FILE:
+FEATURE:
+WHAT IS MOCKED:
+CURRENT SOURCE:
+EXPECTED REAL SOURCE:
+SEVERITY:
+- BLOCKER
+- HIGH
+- MEDIUM
+- LOW
+
+Do not only search for variables named "mock".
+Inspect actual application behavior.
+
+--------------------------------------------------
+4. CURRENT API USAGE
+--------------------------------------------------
+
+Inventory every API call currently made by the mobile app.
+
+For each call provide:
+
+METHOD
+PATH
+FILE
+FEATURE
+CURRENT API TARGET
+AUTH METHOD
+REAL OR LOCAL/PROTOTYPE
+EXPECTED EXISTING BLUEBIRD API ENDPOINT
+
+Determine whether the mobile app currently talks to:
+
+- local Express API
+- Replit API
+- bluebirdjets.com
+- multiple backends
+- mocked client-side services
+
+Highlight any endpoint implemented locally that duplicates functionality already available in the existing Bluebird backend.
+
+--------------------------------------------------
+5. LOCAL MOBILE BACKEND AUDIT
+--------------------------------------------------
+
+Inspect the backend currently used specifically by the mobile project.
+
+Determine:
+
+- what functionality it implements
+- what database it uses
+- what routes exist
+- which mobile screens depend on it
+
+Then compare those routes conceptually with the existing Bluebird production backend.
+
+Classify each local backend feature:
+
+A. Replace with existing Bluebird backend
+B. Keep temporarily during migration
+C. Mobile-specific feature that may still require backend work
+D. Can eventually be deleted
+
+DO NOT delete anything.
+
+--------------------------------------------------
+6. AUTHENTICATION MIGRATION
+--------------------------------------------------
+
+Audit the current mobile authentication.
+
+We know the existing Bluebird backend uses Clerk.
+
+Determine exactly:
+
+- what mobile currently uses
+- where JWT/session tokens are created
+- where tokens are stored
+- how login works
+- how logout works
+- how session restoration works
+- how API authorization headers are created
+
+Then explain what needs to change to use Clerk native authentication and existing Bluebird `/api/me`.
+
+Do NOT implement Clerk.
+
+Identify files that would need modification.
+
+Also identify what parts of our existing SecureStore implementation can be retained.
+
+--------------------------------------------------
+7. FEATURE → EXISTING BACKEND MAPPING
+--------------------------------------------------
+
+Map mobile features to existing Bluebird backend functionality.
+
+At minimum:
+
+Authentication
+Profile
+Membership
+Plans
+Flights
+Airports
+Discover
+Map
+Queue
+Queue status
+Skip the Line
+Winner confirmation
+Trips
+Passengers
+Pets
+Referral
+Family membership
+Notification preferences
+Email/SMS
+Payments
+Boarding pass
+Concierge
+Networking
+Community
+Push notifications
+
+For each classify:
+
+READY TO CONNECT
+NEEDS API CONTRACT VERIFICATION
+NEEDS BACKEND EXTENSION
+MOBILE-ONLY
+UNKNOWN
+
+Include the likely existing endpoint where possible.
+
+--------------------------------------------------
+8. DATA MODEL COMPATIBILITY
+--------------------------------------------------
+
+Compare mobile models/types with the existing backend/OpenAPI models.
+
+Look specifically for mismatches involving:
+
+- User
+- Profile
+- Membership
+- Membership tier
+- Flight / Empty Leg
+- Airport
+- Queue entry
+- Queue position
+- Skip the Line
+- Trip
+- Passenger
+- Pet
+- Referral
+- Family membership
+- Notifications
+
+Report fields the mobile expects that the existing backend may not provide.
+
+Report fields returned by backend that mobile currently ignores.
+
+DO NOT change types.
+
+--------------------------------------------------
+9. MOBILE-SPECIFIC BACKEND GAPS
+--------------------------------------------------
+
+Identify functionality that the existing backend DOES NOT currently provide but the mobile app expects.
+
+Pay particular attention to:
+
+- native push notification token registration
+- push delivery
+- push deep linking
+- member notification inbox
+- member-to-member networking
+- member chat
+- community
+- contact syncing
+- device-specific settings
+
+Separate:
+
+REQUIRED FOR V1
+OPTIONAL FOR V1
+POST-V1
+
+Do not assume every prototype feature must ship in V1.
+
+--------------------------------------------------
+10. PAYMENT READINESS
+--------------------------------------------------
+
+Inspect the mobile payment/upgrade/Skip the Line UI.
+
+Identify:
+
+- mocked payment behavior
+- fake wallet/card data
+- simulated checkout
+- payment screens that currently imply success without real settlement
+
+Compare them with the existing EPD backend integration.
+
+DO NOT attempt to process payments.
+
+Mark anything that would be unsafe to ship.
+
+--------------------------------------------------
+11. PRODUCTION BLOCKERS
+--------------------------------------------------
+
+Produce a prioritized list:
+
+P0 — prevents TestFlight/production use
+P1 — required before App Store release
+P2 — important but can follow
+P3 — polish / optional
+
+Separate:
+
+TECHNICAL BLOCKERS
+ACCESS / ACCOUNT BLOCKERS
+PRODUCT DECISION BLOCKERS
+
+Include Apple Developer access where relevant, but do not treat it as blocking normal development.
+
+--------------------------------------------------
+12. WHAT IS ALREADY GOOD
+--------------------------------------------------
+
+Do not only list problems.
+
+Identify what can safely be preserved:
+
+- completed UI
+- reusable components
+- navigation
+- SecureStore work
+- API abstractions
+- types
+- tests
+- animations
+- business-flow UI
+- other production-quality work
+
+We want to migrate, not rewrite the application.
+
+--------------------------------------------------
+13. MIGRATION PLAN
+--------------------------------------------------
+
+Recommend a SAFE incremental migration from the current mobile architecture to the existing Bluebird backend.
+
+Prefer small stages such as:
+
+Stage 1 — API foundation
+Stage 2 — Clerk authentication
+Stage 3 — Profile
+Stage 4 — Flights/Airports
+Stage 5 — Queue
+Stage 6 — Membership
+Stage 7 — Trips/Passengers
+Stage 8 — Notifications
+Stage 9 — Payments
+Stage 10 — Mobile-only features
+
+But adjust these stages based on what you actually find.
+
+For every stage provide:
+
+- files likely affected
+- existing backend endpoints
+- what mock/local functionality gets replaced
+- dependencies
+- risk level
+- how to verify success
+- whether the old implementation can remain as fallback temporarily
+
+--------------------------------------------------
+14. DEVELOPMENT ESTIMATE
+--------------------------------------------------
+
+Based ONLY on the actual repository state you inspect, estimate remaining work.
+
+Provide:
+
+- best-case estimate
+- realistic estimate
+- conservative estimate
+
+Estimate in developer working days for ONE developer.
+
+Break it down by major stage.
+
+Separate:
+
+A. Core app/backend integration
+B. Mobile-specific backend additions
+C. Payment integration
+D. Native/device work
+E. QA/polish/App Store preparation
+
+Explicitly state assumptions behind the estimate.
+
+Do not pretend unknown external approvals (Apple review, account access, payment-provider approval) are engineering time.
+
+--------------------------------------------------
+OUTPUT
+--------------------------------------------------
+
+Return one report titled:
+
+BLUEBIRD MOBILE IMPLEMENTATION AUDIT
+
+Start with an executive summary containing:
+
+1. Approximate % of mobile UI completed
+2. Approximate % of functionality currently backed by real production-compatible data
+3. Biggest remaining technical task
+4. Biggest launch blocker
+5. Whether a rewrite is needed
+6. Estimated developer days remaining to a TestFlight-ready V1
+7. Estimated developer days remaining to an App-Store-ready V1
+
+Then provide all audit sections above.
+
+At the very end include:
+
+SAFE NEXT 5 TASKS
+
+These should be the five smallest, safest engineering tasks you recommend doing next.
+
+Again:
+AUDIT ONLY.
+DO NOT MODIFY ANYTHING.
