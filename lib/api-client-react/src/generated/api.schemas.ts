@@ -91,6 +91,14 @@ export interface NetworkingTestMemberRestoreResponse {
   phone: string;
 }
 
+export interface NetworkingSamplesRestoreResult {
+  restored: boolean;
+  demoMemberId: string;
+  pendingRequests: 3;
+  acceptedConnections: 2;
+  seededMessages: 2;
+}
+
 export interface NetworkingTestMemberDeleteResponse {
   deleted: boolean;
   userId: 'networking-test-member';

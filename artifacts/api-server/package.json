@@ -20,6 +20,7 @@
     "test:concierge-callback": "NODE_ENV=development node scripts/concierge-callback.integration.mjs",
     "test:manifest-flow": "pnpm exec esbuild scripts/manifest-flow.integration.mjs --bundle --platform=node --format=cjs --outfile=scripts/.manifest-flow.test.cjs && node scripts/.manifest-flow.test.cjs; status=$?; rm -f scripts/.manifest-flow.test.cjs; exit $status",
     "test:networking-flow": "node scripts/networking-flow.integration.mjs",
+    "test:networking-samples": "node scripts/networking-samples.integration.mjs",
     "test:networking-test-member": "node scripts/networking-test-member.integration.mjs",
     "test:networking-test-member-production": "pnpm exec esbuild scripts/networking-test-member-production.integration.mjs --bundle --platform=node --format=cjs --outfile=scripts/.networking-test-member-production.test.cjs && NODE_ENV=production node scripts/.networking-test-member-production.test.cjs; status=$?; rm -f scripts/.networking-test-member-production.test.cjs; exit $status"
   },

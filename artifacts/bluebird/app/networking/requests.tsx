@@ -37,7 +37,10 @@ export default function NetworkingRequestsScreen() {
         const requester = item.requester;
         const name = requester?.firstName ?? 'A member';
         return (
-          <View style={[styles.card, { backgroundColor: colors.surface }]}>
+          <View
+            testID={`request-${item.id}`}
+            style={[styles.card, { backgroundColor: colors.surface }]}
+          >
             <View style={[styles.avatar, { backgroundColor: colors.primary + '18' }]}><Text style={[styles.avatarText, { color: colors.primary }]}>{requester?.firstName?.[0] ?? '?'}</Text></View>
             <View style={styles.content}>
               <Text style={[styles.name, { color: colors.textOnSurface }]}>{name}</Text>

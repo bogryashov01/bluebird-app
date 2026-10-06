@@ -27,8 +27,10 @@ async function main() {
   try {
     const restore = await checkRoute("/api/dev/networking-test-member/restore", "POST");
     const remove = await checkRoute("/api/dev/networking-test-member", "DELETE");
+    const restoreSamples = await checkRoute("/api/dev/networking-samples/restore", "POST");
     check("production hides the networking fixture restore control", restore.status === 404, JSON.stringify(restore));
     check("production hides the networking fixture delete control", remove.status === 404, JSON.stringify(remove));
+    check("production hides demo networking sample restoration", restoreSamples.status === 404, JSON.stringify(restoreSamples));
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await pool.end();

@@ -11,7 +11,13 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useListNetworkingConnections } from '@workspace/api-client-react';
+import {
+  getListIncomingNetworkingRequestsQueryKey,
+  getListNetworkingConnectionsQueryKey,
+  useListNetworkingConnections,
+  useRestoreNetworkingDemoSamples,
+} from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,12 +26,15 @@ type HubView = 'connections' | 'messages';
 export default function ConnectionsHubScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const { view } = useLocalSearchParams<{ view?: string }>();
   const initialView: HubView = view === 'messages' ? 'messages' : 'connections';
   const [activeView, setActiveView] = React.useState<HubView>(initialView);
+  const [restoreFeedback, setRestoreFeedback] = React.useState('');
   const { data, isLoading, isError, isRefetching, refetch } = useListNetworkingConnections({
     query: { refetchOnMount: 'always', refetchInterval: 15000 },
   });
+  const restoreSamples = useRestoreNetworkingDemoSamples();
   const refetchRef = React.useRef(refetch);
   const connections = data ?? [];
 
@@ -46,6 +55,18 @@ export default function ConnectionsHubScreen() {
   const selectView = (nextView: HubView) => {
     setActiveView(nextView);
     router.setParams({ view: nextView });
+  };
+
+  const restoreNetworkingSamples = () => {
+    setRestoreFeedback('');
+    restoreSamples.mutate(undefined, {
+      onSuccess: () => {
+        setRestoreFeedback('Sample networking data restored.');
+        void queryClient.invalidateQueries({ queryKey: getListNetworkingConnectionsQueryKey() });
+        void queryClient.invalidateQueries({ queryKey: getListIncomingNetworkingRequestsQueryKey() });
+      },
+      onError: () => setRestoreFeedback('Could not restore sample data. Try again.'),
+    });
   };
 
   const messageConnections =
@@ -186,6 +207,43 @@ export default function ConnectionsHubScreen() {
           </Text>
           <Feather name="chevron-right" size={18} color={colors.mutedForegroundLight} />
         </TouchableOpacity>
+
+        {__DEV__ ? (
+          <View style={[styles.samplePanel, { backgroundColor: colors.surface }]}>
+            <View style={styles.samplePanelCopy}>
+              <Text style={[styles.sampleEyebrow, { color: colors.primary }]}>DEVELOPMENT ONLY</Text>
+              <Text style={[styles.sampleDescription, { color: colors.mutedForegroundLight }]}>
+                Restore requests and conversations for the demo member.
+              </Text>
+            </View>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityState={{ disabled: restoreSamples.isPending }}
+              testID="restore-networking-samples"
+              onPress={restoreNetworkingSamples}
+              disabled={restoreSamples.isPending}
+              style={[styles.sampleButton, { backgroundColor: colors.secondary }]}
+            >
+              {restoreSamples.isPending ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Feather name="rotate-ccw" size={15} color={colors.primary} />
+              )}
+              <Text style={[styles.sampleButtonText, { color: colors.primary }]}>
+                {restoreSamples.isPending ? 'Restoring…' : 'Restore sample data'}
+              </Text>
+            </TouchableOpacity>
+            {restoreFeedback ? (
+              <Text
+                accessibilityLiveRegion="polite"
+                testID="networking-sample-restore-feedback"
+                style={[styles.sampleFeedback, { color: colors.mutedForegroundLight }]}
+              >
+                {restoreFeedback}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
       <FlatList
@@ -287,6 +345,13 @@ const styles = StyleSheet.create({
   },
   requestsIcon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   requestsLabel: { flex: 1, fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  samplePanel: { borderRadius: 14, padding: 12, marginTop: 4, gap: 9 },
+  samplePanelCopy: { gap: 3 },
+  sampleEyebrow: { fontFamily: 'Inter_700Bold', fontSize: 9, letterSpacing: 0.8 },
+  sampleDescription: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17 },
+  sampleButton: { minHeight: 38, borderRadius: 11, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, alignSelf: 'flex-start' },
+  sampleButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
+  sampleFeedback: { fontFamily: 'Inter_400Regular', fontSize: 11 },
   list: { paddingHorizontal: 16, paddingTop: 2, gap: 10, flexGrow: 1 },
   connectionCard: {
     borderRadius: 18,

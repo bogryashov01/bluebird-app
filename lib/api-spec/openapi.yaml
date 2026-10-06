@@ -60,6 +60,34 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
 
+  /dev/networking-samples/restore:
+    post:
+      operationId: restoreNetworkingDemoSamples
+      tags: [dev]
+      summary: Restore development networking samples for the demo member
+      description: |
+        Development-only. Resets only the reserved networking sample identities
+        and records for the demo member to the deterministic baseline. Includes
+        three incoming requests, one populated connection, and one empty
+        connection. Preserves unrelated demo data and returns 404 in production.
+        This operation accepts no user identifier.
+      responses:
+        "200":
+          description: Networking samples restored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkingSamplesRestoreResult" }
+        "404":
+          description: Not available in production
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Samples could not be restored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /dev/networking-test-member:
     delete:
       operationId: deleteNetworkingTestMember
@@ -1603,6 +1631,24 @@ components:
           const: networking-test-member
         phone:
           type: string
+
+    NetworkingSamplesRestoreResult:
+      type: object
+      required: [restored, demoMemberId, pendingRequests, acceptedConnections, seededMessages]
+      properties:
+        restored:
+          type: boolean
+        demoMemberId:
+          type: string
+        pendingRequests:
+          type: integer
+          const: 3
+        acceptedConnections:
+          type: integer
+          const: 2
+        seededMessages:
+          type: integer
+          const: 2
 
     NetworkingTestMemberDeleteResponse:
       type: object

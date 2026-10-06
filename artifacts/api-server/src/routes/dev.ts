@@ -25,9 +25,11 @@ import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { signToken } from "../middlewares/auth";
 import { normalizePhone } from "./auth";
+import { logger } from "../lib/logger";
 import {
   deleteNetworkingTestMember,
   NETWORKING_TEST_MEMBER_PHONE,
+  seedNetworkingSamplesForDemoMember,
   seedNetworkingTestMember,
 } from "../lib/seed";
 
@@ -98,6 +100,17 @@ router.delete("/dev/networking-test-member", async (_req, res) => {
     return res.json({ deleted, userId: "networking-test-member" });
   } catch {
     return res.status(500).json({ error: "Failed to delete networking test member" });
+  }
+});
+
+router.post("/dev/networking-samples/restore", async (_req, res) => {
+  if (IS_PROD()) return res.status(404).json({ error: "Not found" });
+  try {
+    const restored = await seedNetworkingSamplesForDemoMember();
+    return res.json({ restored: true, ...restored });
+  } catch (err) {
+    logger.error({ err }, "Failed to restore demo networking samples");
+    return res.status(500).json({ error: "Failed to restore demo networking samples" });
   }
 });
 

@@ -55,6 +55,7 @@ import type {
   NetworkingMessage,
   NetworkingProfileResponse,
   NetworkingRequestResponse,
+  NetworkingSamplesRestoreResult,
   NetworkingTestMemberDeleteResponse,
   NetworkingTestMemberRestoreResponse,
   Notification,
@@ -182,6 +183,82 @@ export const useRestoreNetworkingTestMember = <TError = ErrorType<ErrorResponse>
         TContext
       > => {
       return useMutation(getRestoreNetworkingTestMemberMutationOptions(options));
+    }
+
+export const getRestoreNetworkingDemoSamplesUrl = () => {
+
+
+
+
+  return `/api/dev/networking-samples/restore`
+}
+
+/**
+ * Development-only. Resets only the reserved networking sample identities
+ * and records for the demo member to the deterministic baseline. Includes
+ * three incoming requests, one populated connection, and one empty
+ * connection. Preserves unrelated demo data and returns 404 in production.
+ * This operation accepts no user identifier.
+ * @summary Restore development networking samples for the demo member
+ */
+export const restoreNetworkingDemoSamples = async ( options?: Parameters<typeof customFetch>[1]): Promise<NetworkingSamplesRestoreResult> => {
+
+  return customFetch<NetworkingSamplesRestoreResult>(getRestoreNetworkingDemoSamplesUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRestoreNetworkingDemoSamplesMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreNetworkingDemoSamples>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreNetworkingDemoSamples>>, TError,void, TContext> => {
+
+const mutationKey = ['restoreNetworkingDemoSamples'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreNetworkingDemoSamples>>, void> = () => {
+
+
+          return  restoreNetworkingDemoSamples(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreNetworkingDemoSamplesMutationResult = NonNullable<Awaited<ReturnType<typeof restoreNetworkingDemoSamples>>>
+
+    export type RestoreNetworkingDemoSamplesMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Restore development networking samples for the demo member
+ */
+export const useRestoreNetworkingDemoSamples = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreNetworkingDemoSamples>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreNetworkingDemoSamples>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRestoreNetworkingDemoSamplesMutationOptions(options));
     }
 
 export const getDeleteNetworkingTestMemberUrl = () => {

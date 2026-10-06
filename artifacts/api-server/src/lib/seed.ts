@@ -6,8 +6,13 @@ import {
   notificationsTable,
   usersTable,
   networkingProfilesTable,
+  networkingRequestsTable,
+  networkingConnectionsTable,
+  networkingMessagesTable,
+  networkingBlocksTable,
+  networkingReportsTable,
 } from "@workspace/db/schema";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { eq, and, isNull, inArray, or, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import {
   ensureSimUsers,
@@ -424,6 +429,81 @@ export const NETWORKING_TEST_MEMBER_REFERRAL_CODE = "NETWORKTEST";
 export const NETWORKING_TEST_MEMBER_FLIGHT_ID = demoFlightId(SEED_FLIGHTS[7]);
 export const NETWORKING_TEST_MEMBER_QUEUE_ID = "demo-networking-test-queue";
 
+const NETWORKING_SAMPLE_MEMBERS = [
+  {
+    id: "networking-sample-casey",
+    name: "Casey Rivera",
+    phone: "+15555550201",
+    email: "casey.sample@bluebird.app",
+    referralCode: "SAMPLECASEY",
+    firstName: "Casey",
+    lastName: "Rivera",
+    industry: "Aviation",
+    bio: "Enjoys meeting fellow travelers before takeoff.",
+    photoUrl: "https://example.com/bluebird-sample-casey.jpg",
+  },
+  {
+    id: "networking-sample-morgan",
+    name: "Morgan Ellis",
+    phone: "+15555550202",
+    email: "morgan.sample@bluebird.app",
+    referralCode: "SAMPLEMORGAN",
+    firstName: "Morgan",
+    lastName: "Ellis",
+    industry: "Design",
+    bio: "Designer who likes thoughtful conversations and new routes.",
+    photoUrl: "https://example.com/bluebird-sample-morgan.jpg",
+  },
+  {
+    id: "networking-sample-taylor",
+    name: "Taylor Brooks",
+    phone: "+15555550203",
+    email: "taylor.sample@bluebird.app",
+    referralCode: "SAMPLETAYLOR",
+    firstName: "Taylor",
+    lastName: "Brooks",
+    industry: "Technology",
+    bio: "Builds useful products and enjoys seeing new places.",
+    photoUrl: "https://example.com/bluebird-sample-taylor.jpg",
+  },
+  {
+    id: "networking-sample-riley",
+    name: "Riley Patel",
+    phone: "+15555550204",
+    email: "riley.sample@bluebird.app",
+    referralCode: "SAMPLERILEY",
+    firstName: "Riley",
+    lastName: "Patel",
+    industry: "Travel",
+    bio: "Often flying between Seattle and the Bay Area.",
+    photoUrl: "https://example.com/bluebird-sample-riley.jpg",
+  },
+  {
+    id: "networking-sample-jordan",
+    name: "Jordan Lee",
+    phone: "+15555550205",
+    email: "jordan.sample@bluebird.app",
+    referralCode: "SAMPLEJORDAN",
+    firstName: "Jordan",
+    lastName: "Lee",
+    industry: "Hospitality",
+    bio: "Always happy to share a good travel recommendation.",
+    photoUrl: "https://example.com/bluebird-sample-jordan.jpg",
+  },
+] as const;
+
+const NETWORKING_SAMPLE_REQUEST_IDS = [
+  "networking-sample-request-casey",
+  "networking-sample-request-morgan",
+  "networking-sample-request-taylor",
+  "networking-sample-request-riley",
+  "networking-sample-request-jordan",
+] as const;
+const NETWORKING_SAMPLE_CONNECTION_IDS = [
+  "networking-sample-connection-riley",
+  "networking-sample-connection-jordan",
+] as const;
+
 const DEMO_NETWORKING_PROFILE = {
   firstName: "Demo",
   lastName: "Member",
@@ -640,6 +720,212 @@ export async function seedNetworkingTestMember(): Promise<void> {
     });
   });
   logger.info({ userId: NETWORKING_TEST_MEMBER_ID }, "Restored networking test member");
+}
+
+/**
+ * Resets only the reserved sample networking identities and records. The
+ * demo member's own account data and the queue-based networking fixture are
+ * deliberately outside this reset boundary.
+ */
+export async function seedNetworkingSamplesForDemoMember(): Promise<{
+  demoMemberId: string;
+  pendingRequests: number;
+  acceptedConnections: number;
+  seededMessages: number;
+}> {
+  const [demoMember] = await db.select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.phone, DEMO_MEMBER_PHONE));
+  if (!demoMember) {
+    throw new Error("The development demo member must exist before restoring networking samples");
+  }
+
+  const sampleMemberIds = NETWORKING_SAMPLE_MEMBERS.map((member) => member.id);
+  const pendingFlightIds = [
+    demoFlightId(SEED_FLIGHTS[0]),
+    demoFlightId(SEED_FLIGHTS[1]),
+    demoFlightId(SEED_FLIGHTS[2]),
+  ];
+  const acceptedFlightIds = [
+    demoFlightId(SEED_FLIGHTS[4]),
+    demoFlightId(SEED_FLIGHTS[5]),
+  ];
+  const requestRows = [
+    ...NETWORKING_SAMPLE_MEMBERS.slice(0, 3).map((member, index) => ({
+      id: NETWORKING_SAMPLE_REQUEST_IDS[index],
+      flightId: pendingFlightIds[index],
+      requesterId: member.id,
+      recipientId: demoMember.id,
+      message: [
+        "I saw we are on the same flight. Would be nice to connect before we go.",
+        "Hello! I would enjoy hearing what brings you to Dallas.",
+        "I have a few Seattle recommendations if you would like to connect.",
+      ][index],
+      status: "pending",
+      createdAt: new Date(Date.UTC(2026, 9, 1, 8 + index)),
+      updatedAt: new Date(Date.UTC(2026, 9, 1, 8 + index)),
+    })),
+    ...NETWORKING_SAMPLE_MEMBERS.slice(3).map((member, index) => ({
+      id: NETWORKING_SAMPLE_REQUEST_IDS[index + 3],
+      flightId: acceptedFlightIds[index],
+      requesterId: demoMember.id,
+      recipientId: member.id,
+      message: "It would be great to connect before the flight.",
+      status: "accepted",
+      createdAt: new Date(Date.UTC(2026, 8, 30, 8 + index)),
+      updatedAt: new Date(Date.UTC(2026, 8, 30, 8 + index)),
+    })),
+  ];
+  const connectionRows = NETWORKING_SAMPLE_MEMBERS.slice(3).map((member, index) => {
+    const [memberAId, memberBId] = [demoMember.id, member.id].sort();
+    return {
+      id: NETWORKING_SAMPLE_CONNECTION_IDS[index],
+      requestId: NETWORKING_SAMPLE_REQUEST_IDS[index + 3],
+      memberAId,
+      memberBId,
+      createdAt: new Date(Date.UTC(2026, 8, 30, 8 + index, 30)),
+    };
+  });
+  const sampleMessages = [
+    {
+      id: "networking-sample-message-riley",
+      connectionId: NETWORKING_SAMPLE_CONNECTION_IDS[0],
+      senderId: NETWORKING_SAMPLE_MEMBERS[3].id,
+      content: "Hi! Are you also flying to New York next week?",
+      clientMessageId: "networking-sample-riley-message",
+      createdAt: new Date("2026-09-30T09:00:00.000Z"),
+    },
+    {
+      id: "networking-sample-message-demo",
+      connectionId: NETWORKING_SAMPLE_CONNECTION_IDS[0],
+      senderId: demoMember.id,
+      content: "Yes, looking forward to it. Thanks for reaching out!",
+      clientMessageId: "networking-sample-demo-message",
+      createdAt: new Date("2026-09-30T09:05:00.000Z"),
+    },
+  ];
+  const userIds = NETWORKING_SAMPLE_MEMBERS.map((member) => member.id);
+  const userPhones = NETWORKING_SAMPLE_MEMBERS.map((member) => member.phone);
+  const requestIdSql = sql.join(
+    NETWORKING_SAMPLE_REQUEST_IDS.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  const connectionIdSql = sql.join(
+    NETWORKING_SAMPLE_CONNECTION_IDS.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  const notificationOwnerIds = [demoMember.id, ...userIds];
+
+  await db.transaction(async (tx) => {
+    const reservedIdentityOwners = await tx.select({
+      id: usersTable.id,
+      phone: usersTable.phone,
+    }).from(usersTable).where(or(
+      inArray(usersTable.id, userIds),
+      inArray(usersTable.phone, userPhones),
+    ));
+    for (const owner of reservedIdentityOwners) {
+      const expected = NETWORKING_SAMPLE_MEMBERS.find(
+        (member) => member.id === owner.id && member.phone === owner.phone,
+      );
+      if (!expected) {
+        throw new Error("A reserved networking sample identity is already owned by another account");
+      }
+    }
+
+    const requiredFlightIds = [...pendingFlightIds, ...acceptedFlightIds];
+    const existingFlights = await tx.select({ id: flightsTable.id })
+      .from(flightsTable)
+      .where(inArray(flightsTable.id, requiredFlightIds));
+    if (existingFlights.length !== requiredFlightIds.length) {
+      throw new Error("Required demo flights are missing; restore flights before networking samples");
+    }
+
+    await tx.delete(networkingMessagesTable)
+      .where(inArray(networkingMessagesTable.connectionId, [...NETWORKING_SAMPLE_CONNECTION_IDS]));
+    await tx.delete(networkingConnectionsTable)
+      .where(inArray(networkingConnectionsTable.id, [...NETWORKING_SAMPLE_CONNECTION_IDS]));
+    await tx.delete(networkingRequestsTable)
+      .where(inArray(networkingRequestsTable.id, [...NETWORKING_SAMPLE_REQUEST_IDS]));
+    await tx.delete(networkingBlocksTable).where(or(
+      and(
+        eq(networkingBlocksTable.blockerId, demoMember.id),
+        inArray(networkingBlocksTable.blockedId, sampleMemberIds),
+      ),
+      and(
+        inArray(networkingBlocksTable.blockerId, sampleMemberIds),
+        eq(networkingBlocksTable.blockedId, demoMember.id),
+      ),
+    ));
+    await tx.delete(networkingReportsTable).where(or(
+      inArray(networkingReportsTable.requestId, [...NETWORKING_SAMPLE_REQUEST_IDS]),
+      and(
+        eq(networkingReportsTable.reporterId, demoMember.id),
+        inArray(networkingReportsTable.reportedId, sampleMemberIds),
+      ),
+      and(
+        inArray(networkingReportsTable.reporterId, sampleMemberIds),
+        eq(networkingReportsTable.reportedId, demoMember.id),
+      ),
+    ));
+    await tx.execute(sql`
+      DELETE FROM notifications
+      WHERE user_id IN (${sql.join(notificationOwnerIds.map((id) => sql`${id}`), sql`, `)})
+        AND (
+          data ->> 'requestId' IN (${requestIdSql})
+          OR data ->> 'connectionId' IN (${connectionIdSql})
+        )
+    `);
+
+    await tx.insert(usersTable).values(NETWORKING_SAMPLE_MEMBERS.map((member) => ({
+      id: member.id,
+      name: member.name,
+      phone: member.phone,
+      email: member.email,
+      referralCode: member.referralCode,
+      membershipTier: "base",
+      linePassCount: 0,
+      photoUrl: member.photoUrl,
+    }))).onConflictDoUpdate({
+      target: usersTable.id,
+      set: {
+        name: sql`excluded.name`,
+        phone: sql`excluded.phone`,
+        email: sql`excluded.email`,
+        referralCode: sql`excluded.referral_code`,
+        membershipTier: sql`excluded.membership_tier`,
+        linePassCount: sql`excluded.line_pass_count`,
+        photoUrl: sql`excluded.photo_url`,
+      },
+    });
+    await tx.insert(networkingProfilesTable).values(NETWORKING_SAMPLE_MEMBERS.map((member) => ({
+      userId: member.id,
+      firstName: member.firstName,
+      lastName: member.lastName,
+      industry: member.industry,
+      bio: member.bio,
+    }))).onConflictDoUpdate({
+      target: networkingProfilesTable.userId,
+      set: {
+        firstName: sql`excluded.first_name`,
+        lastName: sql`excluded.last_name`,
+        industry: sql`excluded.industry`,
+        bio: sql`excluded.bio`,
+        updatedAt: new Date(),
+      },
+    });
+    await tx.insert(networkingRequestsTable).values(requestRows);
+    await tx.insert(networkingConnectionsTable).values(connectionRows);
+    await tx.insert(networkingMessagesTable).values(sampleMessages);
+  });
+
+  logger.info({ demoMemberId: demoMember.id }, "Restored demo networking sample scenarios");
+  return {
+    demoMemberId: demoMember.id,
+    pendingRequests: 3,
+    acceptedConnections: 2,
+    seededMessages: 2,
+  };
 }
 
 export async function seedDemoMember(): Promise<void> {
