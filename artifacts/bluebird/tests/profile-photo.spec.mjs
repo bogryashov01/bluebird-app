@@ -18,6 +18,7 @@ const profile = {
   industry: "",
   bio: "",
   linkedinUrl: null,
+  facebookUrl: null,
   instagramUrl: null,
   photoUrl: null,
   photoAssetPath: null,
@@ -34,6 +35,7 @@ const profileWithExistingPhoto = {
 async function setupProfilePhotoPage(page, profileData = profile) {
   const requests = [];
   let uploadAttempts = 0;
+  let savedProfile = { ...profileData };
 
   await page.addInitScript(({ user }) => {
     localStorage.setItem("bluebird_token", "mobile-profile-photo-test-token");
@@ -45,11 +47,21 @@ async function setupProfilePhotoPage(page, profileData = profile) {
     const url = new URL(request.url());
     const pathName = url.pathname;
 
-    if (pathName === "/api/auth/me") {
+    if (request.method() === "GET" && pathName === "/api/auth/me") {
       return route.fulfill({ json: user });
     }
     if (request.method() === "GET" && pathName === "/api/networking/profile") {
-      return route.fulfill({ json: profileData });
+      return route.fulfill({ json: savedProfile });
+    }
+    if (request.method() === "PATCH" && pathName === "/api/networking/profile") {
+      const data = request.postDataJSON();
+      requests.push({ kind: "networking-save", data });
+      savedProfile = { ...savedProfile, ...data };
+      return route.fulfill({ json: savedProfile });
+    }
+    if (request.method() === "PATCH" && pathName === "/api/auth/me") {
+      requests.push({ kind: "account-save", data: request.postDataJSON() });
+      return route.fulfill({ json: { ...user, ...request.postDataJSON() } });
     }
     if (request.method() === "GET" && pathName === "/api/queue/status") {
       return route.fulfill({ json: [] });
@@ -194,4 +206,48 @@ test("profile photo picker rejects oversized images before requesting storage", 
   await expect(bio).toHaveValue("An edited profile bio");
   expect(requests.filter((request) => request.kind === "metadata")).toHaveLength(0);
   expect(requests.filter((request) => request.kind === "upload")).toHaveLength(0);
+});
+
+test("social links save, reopen, edit and clear independently of account details", async ({ page }) => {
+  const { requests } = await setupProfilePhotoPage(page, profileWithExistingPhoto);
+  const linkedin = page.getByPlaceholder("https://www.linkedin.com/in/you");
+  const facebook = page.getByPlaceholder("https://www.facebook.com/you");
+  const instagram = page.getByPlaceholder("https://www.instagram.com/you");
+  await expect(facebook).toBeVisible();
+  await linkedin.fill("https://www.linkedin.com/in/member");
+  await facebook.fill("not a URL");
+  await instagram.fill("https://www.instagram.com/member");
+  await page.getByText("Save profile", { exact: true }).click();
+  await expect(page.getByText("Enter a valid http(s) URL for Facebook, or leave it blank.")).toBeVisible();
+  await expect(linkedin).toHaveValue("https://www.linkedin.com/in/member");
+  expect(requests.filter(({ kind }) => kind === "networking-save")).toHaveLength(0);
+
+  await page.getByPlaceholder("Your name").fill("Edited account name");
+  await page.getByText("Save changes", { exact: true }).click();
+  await expect.poll(() => requests.some(({ kind }) => kind === "account-save")).toBe(true);
+  await expect(facebook).toHaveValue("not a URL");
+
+  await facebook.fill("https://www.facebook.com/member");
+  await page.getByText("Save profile", { exact: true }).click();
+  await expect(page.getByText("Saved across your devices.")).toBeVisible();
+  await expect.poll(() => requests.filter(({ kind }) => kind === "networking-save").at(-1)?.data).toEqual(
+    expect.objectContaining({
+      linkedinUrl: "https://www.linkedin.com/in/member",
+      facebookUrl: "https://www.facebook.com/member",
+      instagramUrl: "https://www.instagram.com/member",
+    }),
+  );
+  await page.reload();
+  await expect(facebook).toHaveValue("https://www.facebook.com/member");
+  await facebook.fill("https://www.facebook.com/edited");
+  await linkedin.clear();
+  await instagram.clear();
+  await page.getByText("Save profile", { exact: true }).click();
+  await expect.poll(() => requests.filter(({ kind }) => kind === "networking-save").at(-1)?.data).toEqual(
+    expect.objectContaining({ linkedinUrl: null, facebookUrl: "https://www.facebook.com/edited", instagramUrl: null }),
+  );
+  await page.reload();
+  await expect(linkedin).toHaveValue("");
+  await expect(facebook).toHaveValue("https://www.facebook.com/edited");
+  await expect(instagram).toHaveValue("");
 });

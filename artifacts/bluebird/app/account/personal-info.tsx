@@ -73,6 +73,7 @@ export default function PersonalInfoScreen() {
   const [industry, setIndustry] = React.useState('');
   const [bio, setBio] = React.useState('');
   const [linkedinUrl, setLinkedinUrl] = React.useState('');
+  const [facebookUrl, setFacebookUrl] = React.useState('');
   const [instagramUrl, setInstagramUrl] = React.useState('');
   const [photoUrl, setPhotoUrl] = React.useState<string | null>(null);
   const [photoAssetPath, setPhotoAssetPath] = React.useState<string | null>(null);
@@ -87,6 +88,7 @@ export default function PersonalInfoScreen() {
     setIndustry(networkingData.industry);
     setBio(networkingData.bio);
     setLinkedinUrl(networkingData.linkedinUrl ?? '');
+    setFacebookUrl(networkingData.facebookUrl ?? '');
     setInstagramUrl(networkingData.instagramUrl ?? '');
     setPhotoUrl(networkingData.photoUrl ?? null);
     setPhotoAssetPath(networkingData.photoAssetPath ?? null);
@@ -155,19 +157,29 @@ export default function PersonalInfoScreen() {
 
   const handleNetworkingSave = () => {
     setNetworkingErrorMessage('');
-    if (!firstName.trim() || !lastName.trim() || !industry.trim() || !bio.trim() || (!photoUrl && !photoAssetPath)) {
-      setNetworkingErrorMessage('Add your name, photo, industry, and a short bio to complete your profile.');
+    for (const [label, input] of [
+      ['LinkedIn', linkedinUrl], ['Facebook', facebookUrl], ['Instagram', instagramUrl],
+    ]) {
+      if (!input.trim()) continue;
+      try {
+        const url = new URL(input.trim());
+        if (['http:', 'https:'].includes(url.protocol) && url.hostname && !url.username && !url.password && input.trim().length <= 2048) continue;
+      } catch {
+        // The error below is shown without discarding any typed values.
+      }
+      setNetworkingErrorMessage(`Enter a valid http(s) URL for ${label}, or leave it blank.`);
       return;
     }
     networkingSave.mutate({
       data: {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        industry: industry.trim(),
-        bio: bio.trim(),
+        ...(firstName.trim() ? { firstName: firstName.trim() } : {}),
+        ...(lastName.trim() ? { lastName: lastName.trim() } : {}),
+        ...(industry.trim() ? { industry: industry.trim() } : {}),
+        ...(bio.trim() ? { bio: bio.trim() } : {}),
         photoUrl: photoAssetPath ? null : photoUrl,
         photoAssetPath,
         linkedinUrl: linkedinUrl.trim() || null,
+        facebookUrl: facebookUrl.trim() || null,
         instagramUrl: instagramUrl.trim() || null,
       },
     }, {
@@ -190,6 +202,7 @@ export default function PersonalInfoScreen() {
     onChangeText: (nextValue: string) => void,
     placeholder: string,
     multiline = false,
+    url = false,
   ) => (
     <React.Fragment key={label}>
       <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>{label}</Text>
@@ -199,9 +212,13 @@ export default function PersonalInfoScreen() {
         placeholder={placeholder}
         placeholderTextColor={colors.mutedForegroundLight}
         multiline={multiline}
+        keyboardType={url ? 'url' : 'default'}
+        autoCapitalize={url ? 'none' : 'sentences'}
+        autoCorrect={!url}
+        autoComplete={url ? 'url' : 'off'}
         style={[...fieldStyle, multiline && styles.bioInput]}
         textAlignVertical={multiline ? 'top' : 'center'}
-        maxLength={multiline ? 280 : 80}
+        maxLength={multiline ? 280 : url ? 2048 : 80}
       />
     </React.Fragment>
   );
@@ -325,8 +342,9 @@ export default function PersonalInfoScreen() {
               {networkingField('Last name', lastName, setLastName, 'Last name')}
               {networkingField('Industry or category', industry, setIndustry, 'e.g. Venture capital')}
               {networkingField('Short bio', bio, setBio, 'What would you enjoy talking about?', true)}
-              {networkingField('LinkedIn (optional)', linkedinUrl, setLinkedinUrl, 'https://linkedin.com/in/you')}
-              {networkingField('Instagram (optional)', instagramUrl, setInstagramUrl, 'https://instagram.com/you')}
+               {networkingField('LinkedIn URL (optional)', linkedinUrl, setLinkedinUrl, 'https://www.linkedin.com/in/you', false, true)}
+               {networkingField('Facebook URL (optional)', facebookUrl, setFacebookUrl, 'https://www.facebook.com/you', false, true)}
+               {networkingField('Instagram URL (optional)', instagramUrl, setInstagramUrl, 'https://www.instagram.com/you', false, true)}
               <View style={[styles.status, { backgroundColor: networkingData.completed ? colors.success + '16' : colors.primary + '12' }]}>
                 <Text style={[styles.statusText, { color: networkingData.completed ? colors.success : colors.primary }]}>
                   {networkingData.completed

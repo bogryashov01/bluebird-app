@@ -78,6 +78,8 @@ export * from './networkingProfileResponse';
 export * from './networkingRequestResponse';
 export * from './networkingRequestResponseFlight';
 export * from './networkingRequestResponseStatus';
+export * from './networkingTestMemberDeleteResponse';
+export * from './networkingTestMemberRestoreResponse';
 export * from './notification';
 export * from './notificationData';
 export * from './notificationType';

@@ -82,6 +82,32 @@ try {
   `, [recipientId, requesterId]);
   await pool.query("COMMIT");
 
+  const socialLinks = {
+    linkedinUrl: "https://www.linkedin.com/in/nora",
+    facebookUrl: "https://www.facebook.com/nora",
+    instagramUrl: "https://www.instagram.com/nora",
+  };
+  const savedLinks = await req("/networking/profile", {
+    method: "PATCH", token: recipientToken, body: socialLinks,
+  });
+  check("optional social links save without changing profile completion",
+    savedLinks.status === 200 && savedLinks.json?.completed === true &&
+    Object.entries(socialLinks).every(([key, value]) => savedLinks.json?.[key] === value));
+  const reopenedLinks = await req("/networking/profile", { token: recipientToken });
+  check("another signed-in session reloads all saved links",
+    reopenedLinks.status === 200 &&
+    Object.entries(socialLinks).every(([key, value]) => reopenedLinks.json?.[key] === value));
+  const invalidLink = await req("/networking/profile", {
+    method: "PATCH", token: recipientToken, body: { facebookUrl: "not a URL" },
+  });
+  check("invalid social URL is rejected without changing saved links",
+    invalidLink.status === 400 && /facebookUrl/.test(invalidLink.json?.error ?? "") &&
+    (await req("/networking/profile", { token: recipientToken })).json?.facebookUrl === socialLinks.facebookUrl);
+  const editedLinks = await req("/networking/profile", {
+    method: "PATCH", token: recipientToken, body: { facebookUrl: "https://www.facebook.com/new-nora" },
+  });
+  check("Facebook link can be edited", editedLinks.json?.facebookUrl === "https://www.facebook.com/new-nora");
+
   const noneUser = await pool.query("INSERT INTO users (id, name, phone, membership_tier, referral_code) VALUES ($1, 'Network None', $2, 'none', $3) RETURNING id", [`network-none-${suffix}`, `+1995${suffix.replace(/\D/g, "").slice(0, 7).padEnd(7, "0")}`, `NN${suffix}`]);
   const noneToken = jwt.sign({ userId: noneUser.rows[0].id }, secret, { expiresIn: "1h" });
   const blocked = await req("/networking/profile", { token: noneToken });
@@ -164,10 +190,14 @@ try {
   check("member profile reports completion", profile.status === 200 && profile.json?.completed === true);
   const front = await req(`/networking/flights/${flightId}/front-member`, { token: requesterToken });
   check("front member is resolved from position one", front.status === 200 && front.json?.member?.userId === recipientId);
+  check("pre-connection flight preview never exposes social links",
+    ["linkedinUrl", "facebookUrl", "instagramUrl"].every((key) => !(key in (front.json?.member ?? {}))));
   const request = await req("/networking/requests", { method: "POST", token: requesterToken, body: { flightId, message: "Hello before the flight." } });
   check("request is created without a queue mutation", request.status === 201);
   const incoming = await req("/networking/requests/incoming", { token: recipientToken });
   check("recipient sees request and message", incoming.status === 200 && incoming.json?.[0]?.message === "Hello before the flight.");
+  check("pending request preview never exposes social links",
+    ["linkedinUrl", "facebookUrl", "instagramUrl"].every((key) => !(key in (incoming.json?.[0]?.requester ?? {}))));
   const reported = await req(`/networking/requests/${request.json?.id}/decision`, { method: "POST", token: recipientToken, body: { action: "report", reason: "Testing report flow" } });
   check("recipient can report a request", reported.status === 200 && reported.json?.status === "reported");
   const retriedRequest = await req("/networking/requests", { method: "POST", token: requesterToken, body: { flightId, message: "Hello before the flight." } });
@@ -176,6 +206,21 @@ try {
   check("accept creates a social connection", accepted.status === 200 && accepted.json?.status === "accepted");
   const connections = await req("/networking/connections", { token: requesterToken });
   check("accepted connection exposes full profile", connections.status === 200 && connections.json?.[0]?.member?.lastName === "Member");
+  check("accepted connection exposes all social links",
+    connections.status === 200 &&
+    connections.json?.[0]?.member?.facebookUrl === "https://www.facebook.com/new-nora" &&
+    connections.json?.[0]?.member?.linkedinUrl === socialLinks.linkedinUrl &&
+    connections.json?.[0]?.member?.instagramUrl === socialLinks.instagramUrl);
+  const clearedLinks = await req("/networking/profile", {
+    method: "PATCH", token: recipientToken,
+    body: { linkedinUrl: null, facebookUrl: null, instagramUrl: null },
+  });
+  const clearedSession = await req("/networking/profile", { token: recipientToken });
+  const clearedConnections = await req("/networking/connections", { token: requesterToken });
+  check("clearing links persists without changing completion or connection visibility",
+    clearedLinks.status === 200 && clearedLinks.json?.completed === true &&
+    ["linkedinUrl", "facebookUrl", "instagramUrl"].every((key) =>
+      clearedSession.json?.[key] === null && clearedConnections.json?.[0]?.member?.[key] === null));
   const message = await req(`/networking/connections/${accepted.json?.connection?.id}/messages`, { method: "POST", token: requesterToken, body: { content: "Nice to meet you.", clientMessageId: "networking-idempotency" } });
   const duplicate = await req(`/networking/connections/${accepted.json?.connection?.id}/messages`, { method: "POST", token: requesterToken, body: { content: "Nice to meet you.", clientMessageId: "networking-idempotency" } });
   check("duplicate message sends return the same message", message.status === 201 && duplicate.status === 200 && message.json?.id === duplicate.json?.id);

@@ -55,6 +55,8 @@ import type {
   NetworkingMessage,
   NetworkingProfileResponse,
   NetworkingRequestResponse,
+  NetworkingTestMemberDeleteResponse,
+  NetworkingTestMemberRestoreResponse,
   Notification,
   PassengerManifest,
   PushToken,
@@ -107,6 +109,154 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getRestoreNetworkingTestMemberUrl = () => {
+
+
+
+
+  return `/api/dev/networking-test-member/restore`
+}
+
+/**
+ * Development-only. Resets the fixed networking test member, its owned
+ * rows, and its queue entry to a clean position-one fixture. This route
+ * returns 404 in production and accepts no user identifier.
+ * @summary Restore the deterministic development networking test member
+ */
+export const restoreNetworkingTestMember = async ( options?: Parameters<typeof customFetch>[1]): Promise<NetworkingTestMemberRestoreResponse> => {
+
+  return customFetch<NetworkingTestMemberRestoreResponse>(getRestoreNetworkingTestMemberUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRestoreNetworkingTestMemberMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreNetworkingTestMember>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreNetworkingTestMember>>, TError,void, TContext> => {
+
+const mutationKey = ['restoreNetworkingTestMember'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreNetworkingTestMember>>, void> = () => {
+
+
+          return  restoreNetworkingTestMember(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreNetworkingTestMemberMutationResult = NonNullable<Awaited<ReturnType<typeof restoreNetworkingTestMember>>>
+
+    export type RestoreNetworkingTestMemberMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Restore the deterministic development networking test member
+ */
+export const useRestoreNetworkingTestMember = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreNetworkingTestMember>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreNetworkingTestMember>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRestoreNetworkingTestMemberMutationOptions(options));
+    }
+
+export const getDeleteNetworkingTestMemberUrl = () => {
+
+
+
+
+  return `/api/dev/networking-test-member`
+}
+
+/**
+ * Development-only. Deletes only the fixed networking test member and
+ * its owned dependent rows. This route returns 404 in production and
+ * accepts no arbitrary user identifier.
+ * @summary Delete the deterministic development networking test member
+ */
+export const deleteNetworkingTestMember = async ( options?: Parameters<typeof customFetch>[1]): Promise<NetworkingTestMemberDeleteResponse> => {
+
+  return customFetch<NetworkingTestMemberDeleteResponse>(getDeleteNetworkingTestMemberUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteNetworkingTestMemberMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteNetworkingTestMember>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteNetworkingTestMember>>, TError,void, TContext> => {
+
+const mutationKey = ['deleteNetworkingTestMember'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteNetworkingTestMember>>, void> = () => {
+
+
+          return  deleteNetworkingTestMember(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteNetworkingTestMemberMutationResult = NonNullable<Awaited<ReturnType<typeof deleteNetworkingTestMember>>>
+
+    export type DeleteNetworkingTestMemberMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Delete the deterministic development networking test member
+ */
+export const useDeleteNetworkingTestMember = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteNetworkingTestMember>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteNetworkingTestMember>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getDeleteNetworkingTestMemberMutationOptions(options));
+    }
 
 export const getRequestUploadUrlUrl = () => {
 

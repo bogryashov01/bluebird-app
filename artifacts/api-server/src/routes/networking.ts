@@ -84,7 +84,7 @@ function publicProfile(
       photoAssetPath: null,
       industry: "",
       bio: "",
-      ...(full ? { linkedinUrl: null, instagramUrl: null } : {}),
+      ...(full ? { linkedinUrl: null, facebookUrl: null, instagramUrl: null } : {}),
     };
   }
   return {
@@ -96,6 +96,7 @@ function publicProfile(
     bio: profile.bio,
     ...(full ? {
       linkedinUrl: profile.linkedinUrl,
+      facebookUrl: profile.facebookUrl,
       instagramUrl: profile.instagramUrl,
     } : {}),
   };
@@ -217,13 +218,22 @@ router.patch("/profile", async (req, res) => {
       updates[key] = value;
     }
   }
-  for (const key of ["linkedinUrl", "instagramUrl"] as const) {
+  for (const key of ["linkedinUrl", "facebookUrl", "instagramUrl"] as const) {
     if (body[key] !== undefined) {
       if (body[key] !== null && typeof body[key] !== "string") {
         return res.status(400).json({ error: `${key} must be a URL or null` });
       }
       const value = body[key] === null ? null : body[key].trim();
-      if (value && !/^https?:\/\/\S+$/i.test(value)) {
+      let validUrl = !value;
+      if (value) {
+        try {
+          const url = new URL(value);
+          validUrl = ["http:", "https:"].includes(url.protocol) && !!url.hostname && !url.username && !url.password && value.length <= 2048;
+        } catch {
+          validUrl = false;
+        }
+      }
+      if (!validUrl) {
         return res.status(400).json({ error: `${key} must be a valid http(s) URL` });
       }
       updates[key] = value;

@@ -88,6 +88,7 @@ export const networkingProfilesTable = pgTable("networking_profiles", {
   industry: text("industry").notNull().default(""),
   bio: text("bio").notNull().default(""),
   linkedinUrl: text("linkedin_url"),
+  facebookUrl: text("facebook_url"),
   instagramUrl: text("instagram_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

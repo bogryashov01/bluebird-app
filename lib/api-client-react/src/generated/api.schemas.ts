@@ -85,6 +85,17 @@ export interface ErrorResponse {
   code?: string;
 }
 
+export interface NetworkingTestMemberRestoreResponse {
+  restored: boolean;
+  userId: 'networking-test-member';
+  phone: string;
+}
+
+export interface NetworkingTestMemberDeleteResponse {
+  deleted: boolean;
+  userId: 'networking-test-member';
+}
+
 export interface SuccessResponse {
   success: boolean;
 }
@@ -939,6 +950,7 @@ export interface NetworkingProfile {
   industry: string;
   bio: string;
   linkedinUrl?: string | null;
+  facebookUrl?: string | null;
   instagramUrl?: string | null;
 }
 
@@ -971,6 +983,7 @@ export interface UpdateNetworkingProfileRequest {
      */
   bio?: string;
   linkedinUrl?: string | null;
+  facebookUrl?: string | null;
   instagramUrl?: string | null;
 }
 

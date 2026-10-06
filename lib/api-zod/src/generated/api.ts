@@ -86,6 +86,31 @@ export const requestConciergeCallbackBodyAssistantMessageIdMax = 100;
 
 
 /**
+ * Development-only. Resets the fixed networking test member, its owned
+ * rows, and its queue entry to a clean position-one fixture. This route
+ * returns 404 in production and accepts no user identifier.
+ * @summary Restore the deterministic development networking test member
+ */
+export const RestoreNetworkingTestMemberResponse = zod.object({
+  "restored": zod.boolean(),
+  "userId": zod.literal("networking-test-member"),
+  "phone": zod.string()
+})
+
+
+/**
+ * Development-only. Deletes only the fixed networking test member and
+ * its owned dependent rows. This route returns 404 in production and
+ * accepts no arbitrary user identifier.
+ * @summary Delete the deterministic development networking test member
+ */
+export const DeleteNetworkingTestMemberResponse = zod.object({
+  "deleted": zod.boolean(),
+  "userId": zod.literal("networking-test-member")
+})
+
+
+/**
  * Returns a presigned GCS URL for a direct image upload. The client sends
  * image metadata here, then uploads the bytes directly to the returned URL.
  * @summary Request a presigned URL for a profile photo upload
@@ -465,6 +490,7 @@ export const GetNetworkingProfileResponse = zod.object({
   "industry": zod.string(),
   "bio": zod.string(),
   "linkedinUrl": zod.string().nullish(),
+  "facebookUrl": zod.string().nullish(),
   "instagramUrl": zod.string().nullish()
 }).and(zod.object({
   "completed": zod.boolean(),
@@ -489,6 +515,7 @@ export const UpdateNetworkingProfileBody = zod.object({
   "industry": zod.string().min(1).max(updateNetworkingProfileBodyIndustryMax).optional(),
   "bio": zod.string().min(1).max(updateNetworkingProfileBodyBioMax).optional(),
   "linkedinUrl": zod.string().nullish(),
+  "facebookUrl": zod.string().nullish(),
   "instagramUrl": zod.string().nullish()
 })
 
@@ -500,6 +527,7 @@ export const UpdateNetworkingProfileResponse = zod.object({
   "industry": zod.string(),
   "bio": zod.string(),
   "linkedinUrl": zod.string().nullish(),
+  "facebookUrl": zod.string().nullish(),
   "instagramUrl": zod.string().nullish()
 }).and(zod.object({
   "completed": zod.boolean(),
@@ -655,6 +683,7 @@ export const ListNetworkingConnectionsResponseItem = zod.object({
   "industry": zod.string(),
   "bio": zod.string(),
   "linkedinUrl": zod.string().nullish(),
+  "facebookUrl": zod.string().nullish(),
   "instagramUrl": zod.string().nullish()
 }),
   "lastMessage": zod.object({

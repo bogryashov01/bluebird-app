@@ -1,8 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import {
   getListNetworkingConnectionsQueryKey,
+  useListNetworkingConnections,
   useListNetworkingMessages,
   useSendNetworkingMessage,
   useBlockNetworkingConnection,
@@ -10,7 +10,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
-
+import { ActivityIndicator, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 export default function NetworkingThreadScreen() {
   const colors = useColors();
   const { user } = useAuth();
@@ -19,9 +19,29 @@ export default function NetworkingThreadScreen() {
   const [content, setContent] = React.useState('');
   const [error, setError] = React.useState('');
   const { data, isLoading, isError, refetch } = useListNetworkingMessages(id!, { query: { enabled: !!id, refetchInterval: 10000 } });
-  const refetchRef = React.useRef(refetch);
+  const { data: connections } = useListNetworkingConnections({
+    query: { enabled: !!id, refetchOnMount: 'always', refetchInterval: 15000 },
+  });
+  const connectedMember = connections?.find((connection) => connection.id === id)?.member;
+  const socialLinks = connectedMember ? [
+    { label: 'LinkedIn', url: connectedMember.linkedinUrl },
+    { label: 'Facebook', url: connectedMember.facebookUrl },
+    { label: 'Instagram', url: connectedMember.instagramUrl },
+  ].filter((link): link is { label: string; url: string } => !!link.url) : [];
+  const openSocialLink = async (url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (!['https:', 'http:'].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password) {
+        throw new Error('Invalid social link');
+      }
+      await Linking.openURL(parsed.toString());
+    } catch {
+      setError('Could not open this social link.');
+    }
+  };
   const send = useSendNetworkingMessage();
   const block = useBlockNetworkingConnection();
+  const refetchRef = React.useRef(refetch);
   React.useEffect(() => {
     refetchRef.current = refetch;
   }, [refetch]);
@@ -46,6 +66,16 @@ export default function NetworkingThreadScreen() {
         <Text style={[styles.name, { color: colors.textOnSurface }]}>{name ?? 'Connection'}</Text>
         <TouchableOpacity onPress={() => block.mutate({ id })} disabled={block.isPending}><Text style={[styles.block, { color: colors.destructive }]}>Block</Text></TouchableOpacity>
       </View>
+      {socialLinks.length > 0 && (
+        <View style={[styles.socialLinks, { borderBottomColor: colors.separator }]}>
+          {socialLinks.map(({ label, url }) => (
+            <TouchableOpacity key={label} accessibilityRole="link" testID={`connection-${label.toLowerCase()}-link`}
+              onPress={() => openSocialLink(url)} style={[styles.socialLink, { borderColor: colors.border }]}>
+              <Text style={[styles.link, { color: colors.primary }]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
       {isLoading ? <View style={styles.center}><ActivityIndicator color={colors.primary} /></View> : isError ? <View style={styles.center}><Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Could not load this conversation.</Text><TouchableOpacity onPress={() => refetch()}><Text style={[styles.link, { color: colors.primary }]}>Try again</Text></TouchableOpacity></View> : (
         <ScrollView contentContainerStyle={styles.messages}>
           {messages.length === 0 ? <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Start the conversation with a thoughtful introduction.</Text> : messages.map((message) => {
@@ -67,6 +97,8 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   subhead: { paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   name: { fontFamily: 'Inter_700Bold', fontSize: 17 },
+  socialLinks: { paddingHorizontal: 18, paddingVertical: 10, borderBottomWidth: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  socialLink: { paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderRadius: 12 },
   block: { fontFamily: 'Inter_500Medium', fontSize: 12 },
   messages: { padding: 16, gap: 10, flexGrow: 1, justifyContent: 'flex-end' },
   bubble: { maxWidth: '82%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 11 },

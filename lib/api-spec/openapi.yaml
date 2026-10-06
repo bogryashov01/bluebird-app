@@ -2681,6 +2681,7 @@ components:
         industry: { type: string }
         bio: { type: string }
         linkedinUrl: { type: string, nullable: true }
+        facebookUrl: { type: string, nullable: true }
         instagramUrl: { type: string, nullable: true }
       required: [firstName, lastName, photoUrl, photoAssetPath, industry, bio]
 
@@ -2705,6 +2706,7 @@ components:
         industry: { type: string, minLength: 1, maxLength: 80 }
         bio: { type: string, minLength: 1, maxLength: 280 }
         linkedinUrl: { type: string, nullable: true }
+        facebookUrl: { type: string, nullable: true }
         instagramUrl: { type: string, nullable: true }
 
     UploadUrlRequest:

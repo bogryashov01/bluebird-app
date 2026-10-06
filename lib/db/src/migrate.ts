@@ -513,11 +513,13 @@ export async function ensureSchema(): Promise<void> {
       industry TEXT NOT NULL DEFAULT '',
       bio TEXT NOT NULL DEFAULT '',
       linkedin_url TEXT,
+      facebook_url TEXT,
       instagram_url TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     ALTER TABLE networking_profiles ADD COLUMN IF NOT EXISTS photo_asset_path TEXT;
+    ALTER TABLE networking_profiles ADD COLUMN IF NOT EXISTS facebook_url TEXT;
     -- Asset paths are the canonical representation for newly uploaded photos.
     -- Keep older HTTPS photos readable while moving object paths out of the
     -- legacy URL column.

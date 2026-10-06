@@ -30,5 +30,6 @@ export interface UpdateNetworkingProfileRequest {
      */
   bio?: string;
   linkedinUrl?: string | null;
+  facebookUrl?: string | null;
   instagramUrl?: string | null;
 }
