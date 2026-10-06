@@ -9,6 +9,10 @@ export const usersTable = pgTable("users", {
   phone: text("phone").notNull().unique(),
   email: text("email"),
   weightKg: numeric("weight_kg", { mode: "number" }),
+  photoAssetPath: text("photo_asset_path"),
+  // Kept as a compatibility fallback for existing HTTPS profile photos.
+  // New uploads are represented by photoAssetPath.
+  photoUrl: text("photo_url"),
   membershipTier: text("membership_tier").notNull().default("base"),
   pendingTier: text("pending_tier"),
   linePassCount: integer("line_pass_count").notNull().default(0),

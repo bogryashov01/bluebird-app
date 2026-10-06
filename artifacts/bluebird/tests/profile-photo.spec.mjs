@@ -8,6 +8,13 @@ const user = {
   membershipTier: "plus",
   linePassCount: 0,
   homeAirports: ["BFI"],
+  photoAssetPath: null,
+  photoUrl: null,
+};
+const accountWithExistingPhoto = {
+  ...user,
+  photoAssetPath: "/objects/uploads/current-profile-photo.jpg",
+  photoUrl: "/api/storage/objects/uploads/current-profile-photo.jpg",
 };
 
 const profile = {
@@ -32,36 +39,49 @@ const profileWithExistingPhoto = {
   photoAssetPath: "/objects/uploads/current-profile-photo.jpg",
 };
 
-async function setupProfilePhotoPage(page, profileData = profile) {
+async function setupProfilePhotoPage(page, profileData = profile, accountData = user) {
   const requests = [];
   let uploadAttempts = 0;
-  let savedProfile = { ...profileData };
+  let currentAccount = accountData;
+  let currentProfile = profileData;
 
   await page.addInitScript(({ user }) => {
     localStorage.setItem("bluebird_token", "mobile-profile-photo-test-token");
     localStorage.setItem("bluebird_user", JSON.stringify(user));
-  }, { user });
+  }, { user: accountData });
 
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const pathName = url.pathname;
 
-    if (request.method() === "GET" && pathName === "/api/auth/me") {
-      return route.fulfill({ json: user });
+    if (request.method() === "PATCH" && pathName === "/api/auth/me") {
+      const body = request.postDataJSON();
+      requests.push({ kind: "account-update", body });
+      currentAccount = {
+        ...currentAccount,
+        ...body,
+        photoUrl: body.photoAssetPath
+          ? `/api/storage${body.photoAssetPath}`
+          : body.photoAssetPath === null ? null : currentAccount.photoUrl,
+      };
+      return route.fulfill({ json: currentAccount });
+    }
+    if (pathName === "/api/auth/me") {
+      return route.fulfill({ json: currentAccount });
     }
     if (request.method() === "GET" && pathName === "/api/networking/profile") {
-      return route.fulfill({ json: savedProfile });
+      return route.fulfill({ json: currentProfile });
     }
     if (request.method() === "PATCH" && pathName === "/api/networking/profile") {
-      const data = request.postDataJSON();
-      requests.push({ kind: "networking-save", data });
-      savedProfile = { ...savedProfile, ...data };
-      return route.fulfill({ json: savedProfile });
-    }
-    if (request.method() === "PATCH" && pathName === "/api/auth/me") {
-      requests.push({ kind: "account-save", data: request.postDataJSON() });
-      return route.fulfill({ json: { ...user, ...request.postDataJSON() } });
+      const body = request.postDataJSON();
+      requests.push({ kind: "networking-update", body });
+      currentProfile = { ...currentProfile, ...body };
+      const missing = ["firstName", "lastName", "industry", "bio"]
+        .filter((key) => !currentProfile[key]?.trim());
+      if (!currentAccount.photoAssetPath && !currentAccount.photoUrl) missing.push("photo");
+      currentProfile = { ...currentProfile, completed: missing.length === 0, missing };
+      return route.fulfill({ json: currentProfile });
     }
     if (request.method() === "GET" && pathName === "/api/queue/status") {
       return route.fulfill({ json: [] });
@@ -123,11 +143,11 @@ test("profile photo picker uploads image bytes on web and previews the result", 
   await expect(page.getByText("Add profile photo", { exact: true })).toBeVisible();
 
   const fileChooserPromise = page.waitForEvent("filechooser");
-  await page.getByText("Add profile photo", { exact: true }).click();
+  await page.getByRole("button", { name: "Choose from library" }).click();
   const fileChooser = await fileChooserPromise;
   await fileChooser.setFiles(path.resolve("../../attached_assets/BlueBird_Icon_RGB_1789739598047.jpg"));
 
-  await expect(page.getByText("Change profile photo", { exact: true })).toBeVisible();
+  await expect(page.getByText("Replace profile photo", { exact: true })).toBeVisible();
   await expect.poll(() => requests.find((request) => request.kind === "metadata")).toEqual(
     expect.objectContaining({
       metadata: expect.objectContaining({
@@ -144,28 +164,32 @@ test("profile photo picker uploads image bytes on web and previews the result", 
       bodySize: 43465,
     }),
   );
+  await expect.poll(() => requests.find((request) => request.kind === "account-update")).toEqual({
+    kind: "account-update",
+    body: { photoAssetPath: "/objects/uploads/profile-photo.jpg" },
+  });
 
   const fileChooserPromiseAfterFailure = page.waitForEvent("filechooser");
-  await page.getByText("Change profile photo", { exact: true }).click();
+  await page.getByRole("button", { name: "Choose from library" }).click();
   const fileChooserAfterFailure = await fileChooserPromiseAfterFailure;
   await fileChooserAfterFailure.setFiles(path.resolve("../../attached_assets/BlueBird_Icon_RGB_1789739598047.jpg"));
   await expect(page.getByText("Photo upload failed", { exact: true })).toBeVisible();
-  await expect(page.getByText("Change profile photo", { exact: true })).toBeVisible();
+  await expect(page.getByText("Replace profile photo", { exact: true })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "First name" })).toHaveValue("Profile");
   expect(consoleErrors.join("\n")).not.toContain("validatePath");
 });
 
 test("profile photo picker rejects unsupported formats before requesting storage", async ({ page }) => {
-  const { requests } = await setupProfilePhotoPage(page, profileWithExistingPhoto);
+  const { requests } = await setupProfilePhotoPage(page, profileWithExistingPhoto, accountWithExistingPhoto);
   const firstName = page.getByRole("textbox", { name: "First name" });
   const bio = page.getByPlaceholder("What would you enjoy talking about?");
 
-  await expect(page.getByText("Change profile photo", { exact: true })).toBeVisible();
+  await expect(page.getByText("Replace profile photo", { exact: true })).toBeVisible();
   await firstName.fill("Edited");
   await bio.fill("An edited profile bio");
 
   const fileChooserPromise = page.waitForEvent("filechooser");
-  await page.getByText("Change profile photo", { exact: true }).click();
+  await page.getByRole("button", { name: "Choose from library" }).click();
   const fileChooser = await fileChooserPromise;
   await fileChooser.setFiles({
     name: "profile.gif",
@@ -174,7 +198,7 @@ test("profile photo picker rejects unsupported formats before requesting storage
   });
 
   await expect(page.getByText("Choose a JPEG, PNG, or WebP profile photo.", { exact: true })).toBeVisible();
-  await expect(page.getByText("Change profile photo", { exact: true })).toBeVisible();
+  await expect(page.getByText("Replace profile photo", { exact: true })).toBeVisible();
   await expect(firstName).toHaveValue("Edited");
   await expect(bio).toHaveValue("An edited profile bio");
   expect(requests.filter((request) => request.kind === "metadata")).toHaveLength(0);
@@ -183,16 +207,16 @@ test("profile photo picker rejects unsupported formats before requesting storage
 
 
 test("profile photo picker rejects oversized images before requesting storage", async ({ page }) => {
-  const { requests } = await setupProfilePhotoPage(page, profileWithExistingPhoto);
+  const { requests } = await setupProfilePhotoPage(page, profileWithExistingPhoto, accountWithExistingPhoto);
   const firstName = page.getByRole("textbox", { name: "First name" });
   const bio = page.getByPlaceholder("What would you enjoy talking about?");
 
-  await expect(page.getByText("Change profile photo", { exact: true })).toBeVisible();
+  await expect(page.getByText("Replace profile photo", { exact: true })).toBeVisible();
   await firstName.fill("Edited");
   await bio.fill("An edited profile bio");
 
   const fileChooserPromise = page.waitForEvent("filechooser");
-  await page.getByText("Change profile photo", { exact: true }).click();
+  await page.getByRole("button", { name: "Choose from library" }).click();
   const fileChooser = await fileChooserPromise;
   await fileChooser.setFiles({
     name: "profile-too-large.jpg",
@@ -201,7 +225,7 @@ test("profile photo picker rejects oversized images before requesting storage", 
   });
 
   await expect(page.getByText("Profile photos must be smaller than 1.5 MB.", { exact: true })).toBeVisible();
-  await expect(page.getByText("Change profile photo", { exact: true })).toBeVisible();
+  await expect(page.getByText("Replace profile photo", { exact: true })).toBeVisible();
   await expect(firstName).toHaveValue("Edited");
   await expect(bio).toHaveValue("An edited profile bio");
   expect(requests.filter((request) => request.kind === "metadata")).toHaveLength(0);
@@ -209,7 +233,7 @@ test("profile photo picker rejects oversized images before requesting storage", 
 });
 
 test("social links save, reopen, edit and clear independently of account details", async ({ page }) => {
-  const { requests } = await setupProfilePhotoPage(page, profileWithExistingPhoto);
+  const { requests } = await setupProfilePhotoPage(page, profileWithExistingPhoto, accountWithExistingPhoto);
   const linkedin = page.getByPlaceholder("https://www.linkedin.com/in/you");
   const facebook = page.getByPlaceholder("https://www.facebook.com/you");
   const instagram = page.getByPlaceholder("https://www.instagram.com/you");
@@ -220,17 +244,17 @@ test("social links save, reopen, edit and clear independently of account details
   await page.getByText("Save profile", { exact: true }).click();
   await expect(page.getByText("Enter a valid http(s) URL for Facebook, or leave it blank.")).toBeVisible();
   await expect(linkedin).toHaveValue("https://www.linkedin.com/in/member");
-  expect(requests.filter(({ kind }) => kind === "networking-save")).toHaveLength(0);
+  expect(requests.filter(({ kind }) => kind === "networking-update")).toHaveLength(0);
 
   await page.getByPlaceholder("Your name").fill("Edited account name");
   await page.getByText("Save changes", { exact: true }).click();
-  await expect.poll(() => requests.some(({ kind }) => kind === "account-save")).toBe(true);
+  await expect.poll(() => requests.some(({ kind }) => kind === "account-update")).toBe(true);
   await expect(facebook).toHaveValue("not a URL");
 
   await facebook.fill("https://www.facebook.com/member");
   await page.getByText("Save profile", { exact: true }).click();
   await expect(page.getByText("Saved across your devices.")).toBeVisible();
-  await expect.poll(() => requests.filter(({ kind }) => kind === "networking-save").at(-1)?.data).toEqual(
+  await expect.poll(() => requests.filter(({ kind }) => kind === "networking-update").at(-1)?.body).toEqual(
     expect.objectContaining({
       linkedinUrl: "https://www.linkedin.com/in/member",
       facebookUrl: "https://www.facebook.com/member",
@@ -243,11 +267,67 @@ test("social links save, reopen, edit and clear independently of account details
   await linkedin.clear();
   await instagram.clear();
   await page.getByText("Save profile", { exact: true }).click();
-  await expect.poll(() => requests.filter(({ kind }) => kind === "networking-save").at(-1)?.data).toEqual(
+  await expect.poll(() => requests.filter(({ kind }) => kind === "networking-update").at(-1)?.body).toEqual(
     expect.objectContaining({ linkedinUrl: null, facebookUrl: "https://www.facebook.com/edited", instagramUrl: null }),
   );
   await page.reload();
   await expect(linkedin).toHaveValue("");
   await expect(facebook).toHaveValue("https://www.facebook.com/edited");
   await expect(instagram).toHaveValue("");
+});
+test("members can remove an optional account photo with a standalone null patch", async ({ page }) => {
+  const { requests } = await setupProfilePhotoPage(page, profileWithExistingPhoto, accountWithExistingPhoto);
+  await page.getByRole("button", { name: "Remove profile photo" }).click();
+  await expect.poll(() => requests.find((request) => request.kind === "account-update")).toEqual({
+    kind: "account-update",
+    body: { photoAssetPath: null },
+  });
+  await expect(page.getByText("Add profile photo", { exact: true })).toBeVisible();
+});
+
+test("networking text can be saved before an optional account photo is added", async ({ page }) => {
+  const { requests } = await setupProfilePhotoPage(page);
+  await page.getByRole("textbox", { name: "First name" }).fill("Edited");
+  await page.getByRole("textbox", { name: "Last name" }).fill("Member");
+  await page.getByPlaceholder("e.g. Venture capital").fill("Aviation");
+  await page.getByPlaceholder("What would you enjoy talking about?").fill("Happy to talk about travel.");
+  await page.getByText("Save profile", { exact: true }).click();
+
+  await expect.poll(() => requests.find((request) => request.kind === "networking-update")).toEqual({
+    kind: "networking-update",
+    body: {
+      firstName: "Edited",
+      lastName: "Member",
+      industry: "Aviation",
+      bio: "Happy to talk about travel.",
+      linkedinUrl: null,
+      facebookUrl: null,
+      instagramUrl: null,
+    },
+  });
+  expect(requests.filter((request) => request.kind === "account-update")).toHaveLength(0);
+  await expect(page.getByText("Still needed: photo", { exact: true })).toBeVisible();
+});
+
+test("web camera is unavailable without touching an existing photo or edits", async ({ page }) => {
+  const { requests } = await setupProfilePhotoPage(page, profileWithExistingPhoto, accountWithExistingPhoto);
+  await page.getByPlaceholder("Your name").fill("Edited account name");
+  await page.getByRole("button", { name: "Take photo" }).click();
+  await expect(page.getByText("Taking a photo is only available in the mobile app. Choose from your library instead.")).toBeVisible();
+  await expect(page.getByText("Replace profile photo", { exact: true })).toBeVisible();
+  await expect(page.getByPlaceholder("Your name")).toHaveValue("Edited account name");
+  expect(requests.filter((request) => request.kind === "account-update")).toHaveLength(0);
+});
+
+test("a non-member can remove their account photo without access to networking", async ({ page }) => {
+  const { requests } = await setupProfilePhotoPage(page, profileWithExistingPhoto, {
+    ...accountWithExistingPhoto,
+    membershipTier: "none",
+  });
+  await expect(page.getByText("Networking is for members")).toBeVisible();
+  await page.getByRole("button", { name: "Remove profile photo" }).click();
+  await expect.poll(() => requests.filter((request) => request.kind === "account-update")).toEqual([
+    { kind: "account-update", body: { photoAssetPath: null } },
+  ]);
+  await expect(page.getByText("Add profile photo", { exact: true })).toBeVisible();
 });

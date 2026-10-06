@@ -13,6 +13,10 @@ export interface User {
   name: string;
   phone: string;
   email?: string | null;
+  /** Canonical uploaded profile-photo object path, when set. */
+  photoAssetPath: string | null;
+  /** Resolved serving URL for photoAssetPath, or a preserved legacy HTTPS photo URL when no uploaded asset is set. */
+  photoUrl: string | null;
   /**
      * Member weight in kilograms, when provided.
      * @minimum 1

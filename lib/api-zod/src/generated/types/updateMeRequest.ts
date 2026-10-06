@@ -24,4 +24,11 @@ export interface UpdateMeRequest {
   homeAirports?: string[];
   /** Account-level delivery preference for notification events. App retains the existing in-app notification history. */
   notificationChannel?: UpdateMeRequestNotificationChannel;
+  /**
+     * The authenticated user's uploaded profile-photo object path. The
+     * object must belong to this account and be a supported image upload.
+     * Send null to remove the account photo.
+     * @nullable
+     */
+  photoAssetPath?: string | null;
 }

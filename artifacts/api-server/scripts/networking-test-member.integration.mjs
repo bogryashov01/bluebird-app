@@ -79,6 +79,18 @@ async function main() {
     demoAutologin.status === 302 && demoExchange?.status === 200 && !!demoToken,
     JSON.stringify({ autologin: demoAutologin.status, exchange: demoExchange?.status }),
   );
+  const [demoProfile, testProfile] = await Promise.all([
+    req("/networking/profile", { token: demoToken }),
+    req("/networking/profile", { token: testToken }),
+  ]);
+  check(
+    "both restored members have completed networking profiles and shared account photos",
+    demoProfile.status === 200 && demoProfile.json?.completed === true &&
+      !!demoProfile.json?.photoUrl &&
+      testProfile.status === 200 && testProfile.json?.completed === true &&
+      !!testProfile.json?.photoUrl,
+    JSON.stringify({ demo: demoProfile.json, test: testProfile.json }),
+  );
 
   const front = await req(`/networking/flights/${FLIGHT_ID}/front-member`, { token: demoToken });
   check(

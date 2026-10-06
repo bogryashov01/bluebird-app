@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import {
   networkingPhotoUploadsTable,
   networkingProfilesTable,
+  usersTable,
 } from "@workspace/db/schema";
 import { logger } from "./logger";
 import { ObjectNotFoundError, ObjectStorageService } from "./objectStorage";
@@ -34,6 +35,11 @@ export async function cleanupNetworkingPhotoObject(
     }).from(networkingProfilesTable)
       .where(eq(networkingProfilesTable.userId, upload.userId));
     if (profile?.photoAssetPath === objectPath) return null;
+    const [user] = await tx.select({
+      photoAssetPath: usersTable.photoAssetPath,
+    }).from(usersTable)
+      .where(eq(usersTable.id, upload.userId));
+    if (user?.photoAssetPath === objectPath) return null;
 
     const [updated] = await tx.update(networkingPhotoUploadsTable)
       .set({ status: "deleting" })

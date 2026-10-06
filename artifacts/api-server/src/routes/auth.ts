@@ -5,18 +5,21 @@ import {
   usersTable,
   notificationsTable,
   referralRewardsTable,
+  networkingPhotoUploadsTable,
   revokedTokensTable,
   loginCodesTable,
   registrationGrantsTable,
   NOTIFICATION_DELIVERY_CHANNELS,
   type NotificationDeliveryChannel,
 } from "@workspace/db/schema";
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, lt, ne, sql } from "drizzle-orm";
 import { activeSmsProvider, sendSms } from "../lib/sms";
 import jwt from "jsonwebtoken";
 import { signToken, authMiddleware, hashToken } from "../middlewares/auth";
 import { seedDemoDataForUser } from "../lib/seed";
 import { isCatalogAirportCode } from "../lib/airport-catalog";
+import { ObjectStorageService } from "../lib/objectStorage";
+import { scheduleNetworkingPhotoCleanup } from "../lib/networkingPhotoCleanup";
 
 const router = Router();
 
@@ -28,6 +31,9 @@ const CODE_TTL_MS = 5 * 60 * 1000; // codes expire after 5 minutes
 const RESEND_COOLDOWN_MS = 30 * 1000; // 30s between sends per phone
 const MAX_ATTEMPTS = 5; // wrong guesses before the code is invalidated
 const REGISTRATION_GRANT_TTL_MS = 10 * 60 * 1000;
+const MAX_PHOTO_BYTES = 1_500_000;
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const objectStorage = new ObjectStorageService();
 
 /**
  * Normalizes a phone number to E.164-ish form: digits only with a leading +.
@@ -49,8 +55,12 @@ function makeReferralCode(name: string): string {
 
 function sanitizeUser<T extends Record<string, unknown>>(user: T) {
   const { homeAirport: _legacyHomeAirport, ...safeUser } = user;
+  const photoAssetPath = typeof user.photoAssetPath === "string" ? user.photoAssetPath : null;
+  const legacyPhotoUrl = typeof user.photoUrl === "string" ? user.photoUrl : null;
   return {
     ...safeUser,
+    photoAssetPath,
+    photoUrl: photoAssetPath ? `/api/storage${photoAssetPath}` : legacyPhotoUrl,
     homeAirports: Array.isArray(user.homeAirports) ? user.homeAirports : [],
     notificationChannel: isNotificationDeliveryChannel(user.notificationChannel)
       ? user.notificationChannel
@@ -410,7 +420,7 @@ router.get("/me", authMiddleware, async (req, res) => {
 // account identifier and cannot be changed here.
 router.patch("/me", authMiddleware, async (req, res) => {
   const userId = (req as any).userId;
-  const { name, email, weightKg, homeAirports, notificationChannel } = req.body ?? {};
+  const { name, email, weightKg, homeAirports, notificationChannel, photoAssetPath } = req.body ?? {};
 
   const updates: {
     name?: string;
@@ -418,7 +428,10 @@ router.patch("/me", authMiddleware, async (req, res) => {
     weightKg?: number | null;
     homeAirports?: string[];
     notificationChannel?: NotificationDeliveryChannel;
+    photoAssetPath?: string | null;
+    photoUrl?: string | null;
   } = {};
+  let requestedPhotoPath: string | null | undefined;
   if (name !== undefined) {
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ error: "Name cannot be empty" });
@@ -476,19 +489,89 @@ router.patch("/me", authMiddleware, async (req, res) => {
     }
     updates.notificationChannel = notificationChannel;
   }
+  if (photoAssetPath !== undefined) {
+    if (photoAssetPath !== null && typeof photoAssetPath !== "string") {
+      return res.status(400).json({ error: "photoAssetPath must be an object path or null" });
+    }
+    requestedPhotoPath = photoAssetPath === null ? null : photoAssetPath.trim();
+    if (requestedPhotoPath === "") {
+      return res.status(400).json({ error: "photoAssetPath must be an uploaded object path or null" });
+    }
+    if (requestedPhotoPath) {
+      if (!/^\/objects\/uploads\/[A-Za-z0-9-]+$/.test(requestedPhotoPath)) {
+        return res.status(400).json({ error: "Profile photo must be uploaded through the profile photo uploader" });
+      }
+      try {
+        const metadata = await objectStorage.getObjectMetadata(requestedPhotoPath);
+        if (!metadata.contentType || !IMAGE_TYPES.has(metadata.contentType) ||
+            !metadata.size || metadata.size > MAX_PHOTO_BYTES) {
+          scheduleNetworkingPhotoCleanup(requestedPhotoPath, userId);
+          return res.status(400).json({ error: "Profile photo must be a JPEG, PNG, or WebP under 1.5 MB" });
+        }
+      } catch {
+        scheduleNetworkingPhotoCleanup(requestedPhotoPath, userId);
+        return res.status(400).json({ error: "Uploaded profile photo could not be found" });
+      }
+    }
+    updates.photoAssetPath = requestedPhotoPath || null;
+    // photoAssetPath null explicitly clears both representations; setting a
+    // stored object path replaces and clears any legacy URL fallback.
+    updates.photoUrl = null;
+  }
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: "Nothing to update" });
   }
 
   try {
-    const [updated] = await db
-      .update(usersTable)
-      .set(updates)
-      .where(eq(usersTable.id, userId))
-      .returning();
+    let previousPhotoPath: string | null = null;
+    const [updated] = await db.transaction(async (tx) => {
+      const [current] = await tx.select().from(usersTable)
+        .where(eq(usersTable.id, userId))
+        .for("update");
+      if (!current) return [];
+      previousPhotoPath = current.photoAssetPath;
+      if (requestedPhotoPath) {
+        const [upload] = await tx.select().from(networkingPhotoUploadsTable).where(and(
+          eq(networkingPhotoUploadsTable.objectPath, requestedPhotoPath),
+          eq(networkingPhotoUploadsTable.userId, userId),
+        )).for("update");
+        if (!upload || upload.status === "deleting") {
+          throw new Error("Uploaded profile photo is no longer available");
+        }
+        const [attached] = await tx.update(networkingPhotoUploadsTable)
+          .set({ status: "active", attachedAt: new Date() })
+          .where(and(
+            eq(networkingPhotoUploadsTable.objectPath, requestedPhotoPath),
+            eq(networkingPhotoUploadsTable.userId, userId),
+            ne(networkingPhotoUploadsTable.status, "deleting"),
+          ))
+          .returning({ objectPath: networkingPhotoUploadsTable.objectPath });
+        if (!attached) throw new Error("Uploaded profile photo is no longer available");
+      }
+      if (requestedPhotoPath !== undefined && previousPhotoPath && previousPhotoPath !== requestedPhotoPath) {
+        await tx.update(networkingPhotoUploadsTable)
+          .set({ status: "retired", attachedAt: null })
+          .where(and(
+            eq(networkingPhotoUploadsTable.objectPath, previousPhotoPath),
+            eq(networkingPhotoUploadsTable.userId, userId),
+            ne(networkingPhotoUploadsTable.status, "deleting"),
+          ));
+      }
+      return tx.update(usersTable)
+        .set(updates)
+        .where(eq(usersTable.id, userId))
+        .returning();
+    });
     if (!updated) return res.status(401).json({ error: "User not found" });
+    if (requestedPhotoPath !== undefined && previousPhotoPath && previousPhotoPath !== requestedPhotoPath) {
+      scheduleNetworkingPhotoCleanup(previousPhotoPath, userId);
+    }
     return res.json(sanitizeUser(updated));
   } catch (err) {
+    if (requestedPhotoPath) scheduleNetworkingPhotoCleanup(requestedPhotoPath, userId);
+    if (err instanceof Error && err.message === "Uploaded profile photo is no longer available") {
+      return res.status(400).json({ error: err.message });
+    }
     return res.status(500).json({ error: "Failed to update profile" });
   }
 });

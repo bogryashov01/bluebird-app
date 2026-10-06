@@ -164,6 +164,10 @@ export interface User {
   name: string;
   phone: string;
   email?: string | null;
+  /** Canonical uploaded profile-photo object path, when set. */
+  photoAssetPath: string | null;
+  /** Resolved serving URL for photoAssetPath, or a preserved legacy HTTPS photo URL when no uploaded asset is set. */
+  photoUrl: string | null;
   /**
      * Member weight in kilograms, when provided.
      * @minimum 1
@@ -274,6 +278,13 @@ export interface UpdateMeRequest {
   homeAirports?: string[];
   /** Account-level delivery preference for notification events. App retains the existing in-app notification history. */
   notificationChannel?: UpdateMeRequestNotificationChannel;
+  /**
+     * The authenticated user's uploaded profile-photo object path. The
+     * object must belong to this account and be a supported image upload.
+     * Send null to remove the account photo.
+     * @nullable
+     */
+  photoAssetPath?: string | null;
 }
 
 export type FlightStatus = typeof FlightStatus[keyof typeof FlightStatus];
@@ -970,6 +981,13 @@ export interface UpdateNetworkingProfileRequest {
      * @maxLength 80
      */
   lastName?: string;
+  /**
+     * Legacy alias forwarded to the account-level photo. Accepts an
+     * owned uploaded object path (or its resolved /api/storage URL), a
+     * validated HTTPS URL for existing remote photos, or null to clear.
+     * Inline/data URI photos are not accepted. Prefer photoAssetPath.
+     * @deprecated
+     */
   photoUrl?: string | null;
   photoAssetPath?: string | null;
   /**

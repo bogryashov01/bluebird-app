@@ -94,6 +94,14 @@ await pool.query(`
   VALUES ('legacy-update', 'legacy-manifest-trip', 1, 'ops@test.invalid', 'Legacy',
           E'Passenger 1: Legacy Traveler; 70 kg; Passport SECRET-PASSPORT; Issuing country United States; Nationality American; Expires 2099-01-01\\nSafe footer',
           'demo_recorded');
+  INSERT INTO networking_profiles
+    (user_id, first_name, last_name, photo_asset_path, photo_url, industry, bio)
+  VALUES
+    ('u1', 'Formatted', 'Phone', '/objects/uploads/legacy-photo-u1', 'https://cdn.example.test/ignored.jpg', 'Aviation', 'Legacy photo fixture'),
+    ('u2', 'Dup', 'Phone', NULL, 'https://cdn.example.test/legacy-u2.jpg', 'Aviation', 'HTTPS photo fixture'),
+    ('u3', 'Dup', 'Phone', NULL, 'data:image/jpeg;base64,AAAA', 'Aviation', 'Inline photo fixture');
+  INSERT INTO networking_photo_uploads (object_path, user_id, status)
+  VALUES ('/objects/uploads/legacy-photo-u1', 'u1', 'active');
 `);
 try { await pool.query(migrationSql); } catch (e) { secondRunOk = false; console.error(e.message); }
 check("migration is idempotent (second run clean)", secondRunOk);
@@ -109,6 +117,34 @@ check("email is nullable", cols.find((c) => c.column_name === "email")?.is_nulla
 check("phone is NOT NULL", cols.find((c) => c.column_name === "phone")?.is_nullable === "NO");
 check("home_airports is NOT NULL", cols.find((c) => c.column_name === "home_airports")?.is_nullable === "NO");
 check("notification channel is NOT NULL", cols.find((c) => c.column_name === "notification_channel")?.is_nullable === "NO");
+check("account photo asset path is nullable",
+  cols.find((c) => c.column_name === "photo_asset_path")?.is_nullable === "YES");
+const migratedPhoto = (await pool.query(`
+  SELECT u.photo_asset_path AS user_photo, p.photo_asset_path AS profile_photo
+  FROM users u JOIN networking_profiles p ON p.user_id = u.id WHERE u.id = 'u1'
+`)).rows[0];
+check("legacy networking photo becomes the account photo authority",
+  migratedPhoto?.user_photo === "/objects/uploads/legacy-photo-u1" && migratedPhoto?.profile_photo === null,
+  JSON.stringify(migratedPhoto));
+const migratedPhotoOwner = (await pool.query(`
+  SELECT user_id, status FROM networking_photo_uploads
+  WHERE object_path = '/objects/uploads/legacy-photo-u1'
+`)).rows[0];
+check("promoted account photo retains its upload owner record",
+  migratedPhotoOwner?.user_id === "u1" && migratedPhotoOwner?.status === "active",
+  JSON.stringify(migratedPhotoOwner));
+const legacyHttpsPhoto = (await pool.query(`
+  SELECT u.photo_url AS user_photo, p.photo_url AS profile_photo
+  FROM users u JOIN networking_profiles p ON p.user_id = u.id WHERE u.id = 'u2'
+`)).rows[0];
+check("legacy HTTPS photo is preserved on the account and de-duplicated from networking",
+  legacyHttpsPhoto?.user_photo === "https://cdn.example.test/legacy-u2.jpg" &&
+    legacyHttpsPhoto?.profile_photo === null,
+  JSON.stringify(legacyHttpsPhoto));
+const inlinePhoto = (await pool.query(`SELECT photo_url FROM users WHERE id = 'u3'`)).rows[0];
+check("data URI photo is not migrated into the account fallback",
+  inlinePhoto?.photo_url === null,
+  JSON.stringify(inlinePhoto));
 const notificationChannels = (await pool.query(
   `SELECT notification_channel FROM users ORDER BY id`,
 )).rows.map((row) => row.notification_channel);

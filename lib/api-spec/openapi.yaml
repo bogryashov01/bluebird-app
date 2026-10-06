@@ -1777,6 +1777,12 @@ components:
           enum: [app, email, both]
           default: app
           description: Account-level delivery preference for notification events. App retains the existing in-app notification history.
+        photoAssetPath:
+          type: ["string", "null"]
+          description: |
+            The authenticated user's uploaded profile-photo object path. The
+            object must belong to this account and be a supported image upload.
+            Send null to remove the account photo.
 
     User:
       type: object
@@ -1790,6 +1796,14 @@ components:
         email:
           type: string
           nullable: true
+        photoAssetPath:
+          type: string
+          nullable: true
+          description: Canonical uploaded profile-photo object path, when set.
+        photoUrl:
+          type: string
+          nullable: true
+          description: Resolved serving URL for photoAssetPath, or a preserved legacy HTTPS photo URL when no uploaded asset is set.
         weightKg:
           type: number
           nullable: true
@@ -1819,6 +1833,8 @@ components:
         - id
         - name
         - phone
+        - photoAssetPath
+        - photoUrl
         - weightKg
         - membershipTier
         - linePassCount
@@ -2701,7 +2717,15 @@ components:
       properties:
         firstName: { type: string, minLength: 1, maxLength: 80 }
         lastName: { type: string, minLength: 1, maxLength: 80 }
-        photoUrl: { type: string, nullable: true }
+        photoUrl:
+          type: string
+          nullable: true
+          deprecated: true
+          description: |
+            Legacy alias forwarded to the account-level photo. Accepts an
+            owned uploaded object path (or its resolved /api/storage URL), a
+            validated HTTPS URL for existing remote photos, or null to clear.
+            Inline/data URI photos are not accepted. Prefer photoAssetPath.
         photoAssetPath: { type: string, nullable: true }
         industry: { type: string, minLength: 1, maxLength: 80 }
         bio: { type: string, minLength: 1, maxLength: 280 }

@@ -17,6 +17,13 @@ export interface UpdateNetworkingProfileRequest {
      * @maxLength 80
      */
   lastName?: string;
+  /**
+     * Legacy alias forwarded to the account-level photo. Accepts an
+     * owned uploaded object path (or its resolved /api/storage URL), a
+     * validated HTTPS URL for existing remote photos, or null to clear.
+     * Inline/data URI photos are not accepted. Prefer photoAssetPath.
+     * @deprecated
+     */
   photoUrl?: string | null;
   photoAssetPath?: string | null;
   /**

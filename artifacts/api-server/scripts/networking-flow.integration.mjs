@@ -63,8 +63,9 @@ async function deleteUploadedObject(uploadURL) {
 await pool.query("BEGIN");
 try {
   await pool.query(`
-    INSERT INTO users (id, name, phone, membership_tier, referral_code)
-    VALUES ($1, 'Network Requester', $2, 'plus', $3), ($4, 'Network Recipient', $5, 'plus', $6)
+    INSERT INTO users (id, name, phone, membership_tier, referral_code, photo_url)
+    VALUES ($1, 'Network Requester', $2, 'plus', $3, 'https://example.com/rae.jpg'),
+           ($4, 'Network Recipient', $5, 'plus', $6, 'https://example.com/nora.jpg')
   `, [requesterId, `+1997${suffix.replace(/\D/g, "").slice(0, 7).padEnd(7, "0")}`, `NR${suffix}`, recipientId, `+1996${suffix.replace(/\D/g, "").slice(0, 7).padEnd(7, "0")}`, `NM${suffix}`]);
   await pool.query(`
     INSERT INTO flights (id, from_airport, from_city, to_airport, to_city, aircraft_type, aircraft_capacity,
@@ -134,6 +135,16 @@ try {
   }
   check("member can upload a profile photo to durable storage", uploaded, JSON.stringify(uploadRequest.json));
   const photoPath = uploadRequest.json?.objectPath;
+  const accountSetPhoto = await req("/auth/me", {
+    method: "PATCH",
+    token: requesterToken,
+    body: { photoAssetPath: photoPath },
+  });
+  check("account endpoint accepts an owned validated uploaded photo",
+    uploaded &&
+      accountSetPhoto.status === 200 &&
+      accountSetPhoto.json?.photoAssetPath === photoPath &&
+      accountSetPhoto.json?.photoUrl === `/api/storage${photoPath}`);
   const savedPhoto = await req("/networking/profile", {
     method: "PATCH",
     token: requesterToken,
@@ -148,6 +159,63 @@ try {
   check("stored profile photo path can be saved", uploaded && savedPhoto.status === 200 &&
     savedPhoto.json?.photoAssetPath === photoPath &&
     savedPhoto.json?.photoUrl === `/api/storage${photoPath}`);
+  const accountPhoto = await req("/auth/me", { token: requesterToken });
+  check("networking photo patch forwards to the account photo authority",
+    accountPhoto.status === 200 &&
+      accountPhoto.json?.photoAssetPath === photoPath &&
+      accountPhoto.json?.photoUrl === `/api/storage${photoPath}`);
+  const legacyPhotoPatch = await req("/networking/profile", {
+    method: "PATCH",
+    token: requesterToken,
+    body: { photoUrl: `/api/storage${photoPath}` },
+  });
+  check("legacy networking photoUrl PATCH forwards storage path to account photo",
+    legacyPhotoPatch.status === 200 &&
+      legacyPhotoPatch.json?.photoAssetPath === photoPath &&
+      legacyPhotoPatch.json?.photoUrl === `/api/storage${photoPath}`);
+  const foreignPhotoPatch = await req("/auth/me", {
+    method: "PATCH",
+    token: recipientToken,
+    body: { photoAssetPath: photoPath },
+  });
+  check("another account cannot claim an uploaded photo",
+    foreignPhotoPatch.status === 400);
+  const legacyHttpsPhoto = await req("/networking/profile", {
+    method: "PATCH",
+    token: recipientToken,
+    body: { photoUrl: "https://cdn.example.test/recipient.jpg" },
+  });
+  const legacyHttpsAccount = await req("/auth/me", { token: recipientToken });
+  check("legacy HTTPS networking photo is forwarded to account photo fallback",
+    legacyHttpsPhoto.status === 200 &&
+      legacyHttpsPhoto.json?.photoAssetPath === null &&
+      legacyHttpsPhoto.json?.photoUrl === "https://cdn.example.test/recipient.jpg" &&
+      legacyHttpsAccount.json?.photoAssetPath === null &&
+      legacyHttpsAccount.json?.photoUrl === "https://cdn.example.test/recipient.jpg");
+  const oldClientTextSave = await req("/networking/profile", {
+    method: "PATCH",
+    token: recipientToken,
+    body: {
+      firstName: "Nora",
+      lastName: "Member",
+      industry: "Aviation",
+      bio: "Edited from an installed older client.",
+      photoAssetPath: null,
+      photoUrl: "https://cdn.example.test/recipient.jpg",
+    },
+  });
+  const photoAfterOldClientSave = await req("/auth/me", { token: recipientToken });
+  check("old client paired null-path and HTTPS URL retains the shared photo while saving text",
+    oldClientTextSave.status === 200 &&
+      oldClientTextSave.json?.completed === true &&
+      oldClientTextSave.json?.photoUrl === "https://cdn.example.test/recipient.jpg" &&
+      photoAfterOldClientSave.json?.photoUrl === "https://cdn.example.test/recipient.jpg");
+  const dataUriPhoto = await req("/networking/profile", {
+    method: "PATCH",
+    token: recipientToken,
+    body: { photoUrl: "data:image/jpeg;base64,AAAA" },
+  });
+  check("legacy networking patch rejects data URI photos", dataUriPhoto.status === 400);
   const freshProfile = await req("/networking/profile", { token: freshSessionToken });
   const freshPhotoUrl = freshProfile.json?.photoUrl;
   const storedPhotoResponse = freshPhotoUrl
@@ -189,13 +257,18 @@ try {
   const profile = await req("/networking/profile", { token: requesterToken });
   check("member profile reports completion", profile.status === 200 && profile.json?.completed === true);
   const front = await req(`/networking/flights/${flightId}/front-member`, { token: requesterToken });
-  check("front member is resolved from position one", front.status === 200 && front.json?.member?.userId === recipientId);
+  check("front member is resolved from position one with the shared account photo",
+    front.status === 200 && front.json?.member?.userId === recipientId &&
+    front.json?.member?.photoUrl === "https://cdn.example.test/recipient.jpg");
   check("pre-connection flight preview never exposes social links",
     ["linkedinUrl", "facebookUrl", "instagramUrl"].every((key) => !(key in (front.json?.member ?? {}))));
   const request = await req("/networking/requests", { method: "POST", token: requesterToken, body: { flightId, message: "Hello before the flight." } });
-  check("request is created without a queue mutation", request.status === 201);
+  check("request includes the requester's shared photo without a queue mutation",
+    request.status === 201 && request.json?.requester?.photoUrl === `/api/storage${photoPath}`);
   const incoming = await req("/networking/requests/incoming", { token: recipientToken });
-  check("recipient sees request and message", incoming.status === 200 && incoming.json?.[0]?.message === "Hello before the flight.");
+  check("recipient sees request, message, and shared photo",
+    incoming.status === 200 && incoming.json?.[0]?.message === "Hello before the flight." &&
+    incoming.json?.[0]?.requester?.photoUrl === `/api/storage${photoPath}`);
   check("pending request preview never exposes social links",
     ["linkedinUrl", "facebookUrl", "instagramUrl"].every((key) => !(key in (incoming.json?.[0]?.requester ?? {}))));
   const reported = await req(`/networking/requests/${request.json?.id}/decision`, { method: "POST", token: recipientToken, body: { action: "report", reason: "Testing report flow" } });
@@ -205,7 +278,9 @@ try {
   const accepted = await req(`/networking/requests/${request.json?.id}/decision`, { method: "POST", token: recipientToken, body: { action: "accept" } });
   check("accept creates a social connection", accepted.status === 200 && accepted.json?.status === "accepted");
   const connections = await req("/networking/connections", { token: requesterToken });
-  check("accepted connection exposes full profile", connections.status === 200 && connections.json?.[0]?.member?.lastName === "Member");
+  check("accepted connection exposes full profile and shared account photo",
+    connections.status === 200 && connections.json?.[0]?.member?.lastName === "Member" &&
+    connections.json?.[0]?.member?.photoUrl === "https://cdn.example.test/recipient.jpg");
   check("accepted connection exposes all social links",
     connections.status === 200 &&
     connections.json?.[0]?.member?.facebookUrl === "https://www.facebook.com/new-nora" &&
@@ -229,6 +304,36 @@ try {
   const blockedConnection = await req(`/networking/connections/${accepted.json?.connection?.id}/block`, { method: "POST", token: recipientToken });
   const afterBlockMessage = await req(`/networking/connections/${accepted.json?.connection?.id}/messages`, { method: "POST", token: requesterToken, body: { content: "This should be rejected." } });
   check("blocked members cannot message each other", blockedConnection.status === 200 && afterBlockMessage.status === 403);
+  const clearedAccountPhoto = await req("/auth/me", {
+    method: "PATCH",
+    token: requesterToken,
+    body: { photoAssetPath: null },
+  });
+  const clearedNetworkingPhoto = await req("/networking/profile", { token: requesterToken });
+  const clearedLegacyPhoto = await req("/networking/profile", {
+    method: "PATCH",
+    token: recipientToken,
+    body: { photoAssetPath: null, photoUrl: null },
+  });
+  const clearedLegacyNetworkingPhoto = await req("/networking/profile", { token: recipientToken });
+  check("clearing account photo clears networking photo responses",
+    clearedAccountPhoto.status === 200 &&
+      clearedAccountPhoto.json?.photoAssetPath === null &&
+      clearedAccountPhoto.json?.photoUrl === null &&
+      clearedNetworkingPhoto.json?.photoAssetPath === null &&
+      clearedNetworkingPhoto.json?.photoUrl === null &&
+      clearedNetworkingPhoto.json?.completed === false &&
+      clearedLegacyPhoto.json?.photoUrl === null &&
+      clearedLegacyPhoto.json?.photoAssetPath === null &&
+      clearedLegacyNetworkingPhoto.json?.photoUrl === null &&
+      clearedLegacyNetworkingPhoto.json?.completed === false);
+  const incompleteRequest = await req("/networking/requests", {
+    method: "POST",
+    token: requesterToken,
+    body: { flightId, message: "Cannot introduce without my photo." },
+  });
+  check("a member without a photo cannot send introductions",
+    incompleteRequest.status === 400 && incompleteRequest.json?.code === "NETWORKING_PROFILE_INCOMPLETE");
 } finally {
   try {
     await deleteUploadedObject(uploadedObject);

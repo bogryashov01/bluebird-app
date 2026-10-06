@@ -23,5 +23,6 @@
 - [Family pass cycles](family-pass-cycles.md) — tie each Family redemption to its annual cycle so later cancellations cannot refund expired passes into a new pool.
 - [Networking photo persistence](networking-photo-persistence.md) — Expo profile photos use validated portable data URIs/HTTPS URLs until a compatible App Storage upload path exists.
 - [Networking fixture isolation](networking-fixture-isolation.md) — keep the deterministic front member on an isolated demo flight and exempt only that fixture from queue simulation.
+- [Seed after migration](seed-after-migration.md) — fixtures restored after migrations must write the current canonical fields, not legacy fields awaiting promotion.
 - [Metro platform facades](flight-map-platform-resolution.md) — use declaration-only facades when native/web variants have different source extensions; runtime `.ts` re-exports can bypass platform resolution.
 - [Bluebird browser test fixtures](bluebird-browser-test-fixtures.md) — authenticated screen tests must mock global notification and queue queries as arrays so shared shell hooks don't crash.

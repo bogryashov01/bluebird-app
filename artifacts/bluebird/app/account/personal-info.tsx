@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  ActivityIndicator, Image, Platform, StyleSheet, Text, TextInput,
+  ActivityIndicator, Alert, Image, Linking, Platform, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -19,6 +19,7 @@ import { router } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { uploadProfilePhoto } from '@/lib/profile-photo-upload';
+import { selectProfilePhoto } from '@/lib/profile-photo-selection';
 
 function toPhotoUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
@@ -26,11 +27,17 @@ function toPhotoUrl(path: string): string {
   return `${baseUrl}${path.startsWith('/api/') ? path : `/api/storage${path}`}`;
 }
 
+function resolveAccountPhotoUrl(path: string | null | undefined): string | null {
+  return path ? toPhotoUrl(path) : null;
+}
+
 export default function PersonalInfoScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
+  const [cameraPermission, requestCameraPermission] = ImagePicker.useCameraPermissions();
+  const [libraryPermission, requestLibraryPermission] = ImagePicker.useMediaLibraryPermissions();
 
   // Account and networking data intentionally remain separate. The account
   // form is available while the member-only networking query is loading or
@@ -38,18 +45,16 @@ export default function PersonalInfoScreen() {
   const updateMutation = useUpdateMe({
     mutation: {
       onSuccess: (data: any) => {
-        if (user) updateUser({
-          ...user,
-          name: data.name,
-          email: data.email ?? null,
-          weightKg: data.weightKg ?? null,
-        });
+        updateUser(data);
         setAccountSaved(true);
         setTimeout(() => setAccountSaved(false), 2500);
       },
       onError: (err: any) => setAccountError(err?.response?.data?.error ?? 'Failed to save changes'),
     },
   });
+  // Saving a photo is a standalone account update, not part of the editable
+  // name/email/weight form or the networking profile.
+  const updatePhotoMutation = useUpdateMe();
   const networkingEnabled = !!user && user.membershipTier !== 'none';
   const {
     data: networkingData,
@@ -67,6 +72,11 @@ export default function PersonalInfoScreen() {
   const [weightKg, setWeightKg] = React.useState(user?.weightKg == null ? '' : String(user.weightKg));
   const [accountError, setAccountError] = React.useState<string | null>(null);
   const [accountSaved, setAccountSaved] = React.useState(false);
+  const [photoError, setPhotoError] = React.useState<string | null>(null);
+  const [photoSaved, setPhotoSaved] = React.useState(false);
+  const [accountPhotoUrl, setAccountPhotoUrl] = React.useState<string | null>(
+    resolveAccountPhotoUrl(user?.photoUrl),
+  );
 
   const [firstName, setFirstName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
@@ -75,11 +85,13 @@ export default function PersonalInfoScreen() {
   const [linkedinUrl, setLinkedinUrl] = React.useState('');
   const [facebookUrl, setFacebookUrl] = React.useState('');
   const [instagramUrl, setInstagramUrl] = React.useState('');
-  const [photoUrl, setPhotoUrl] = React.useState<string | null>(null);
-  const [photoAssetPath, setPhotoAssetPath] = React.useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = React.useState(false);
   const [networkingErrorMessage, setNetworkingErrorMessage] = React.useState('');
   const [networkingSaved, setNetworkingSaved] = React.useState(false);
+
+  React.useEffect(() => {
+    setAccountPhotoUrl(resolveAccountPhotoUrl(user?.photoUrl));
+  }, [user?.id, user?.photoUrl]);
 
   React.useEffect(() => {
     if (!networkingData) return;
@@ -90,9 +102,17 @@ export default function PersonalInfoScreen() {
     setLinkedinUrl(networkingData.linkedinUrl ?? '');
     setFacebookUrl(networkingData.facebookUrl ?? '');
     setInstagramUrl(networkingData.instagramUrl ?? '');
-    setPhotoUrl(networkingData.photoUrl ?? null);
-    setPhotoAssetPath(networkingData.photoAssetPath ?? null);
   }, [networkingData]);
+
+  const accountPhotoReady = !!(
+    user?.photoAssetPath ||
+    accountPhotoUrl
+  );
+  const networkingMissing = networkingData
+    ? networkingData.missing.filter((item) => item !== 'photo')
+    : [];
+  if (networkingData && !accountPhotoReady) networkingMissing.push('photo');
+  const networkingCompleted = !!networkingData && networkingMissing.length === 0;
 
   const accountDirty =
     name !== (user?.name ?? '') ||
@@ -127,17 +147,51 @@ export default function PersonalInfoScreen() {
     });
   };
 
-  const choosePhoto = async () => {
-    setNetworkingErrorMessage('');
+  const pickPhoto = async (source: 'camera' | 'library') => {
+    setPhotoError(null);
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
+      const options = {
         mediaTypes: ['images'] as any,
         allowsEditing: true,
-        aspect: [1, 1],
+        aspect: [1, 1] as [number, number],
         quality: 0.75,
+      };
+      const result = await selectProfilePhoto(source, {
+        platform: Platform.OS,
+        permission: source === 'camera' ? cameraPermission : libraryPermission,
+        requestPermission: source === 'camera' ? requestCameraPermission : requestLibraryPermission,
+        launch: () => source === 'camera'
+          ? ImagePicker.launchCameraAsync(options)
+          : ImagePicker.launchImageLibraryAsync(options),
       });
-      const asset = result.canceled ? null : result.assets[0];
-      if (!asset) return;
+      if (result.kind === 'denied') {
+          if (result.permission.status === 'denied' && !result.permission.canAskAgain) {
+            Alert.alert(
+              'Permission needed',
+              source === 'camera'
+                ? 'Allow camera access in Settings to take a profile photo.'
+                : 'Allow photo library access in Settings to choose a profile photo.',
+              [
+                { text: 'Not now', style: 'cancel' },
+                {
+                  text: 'Open Settings',
+                  onPress: () => {
+                    void Linking.openSettings().catch(() => {
+                      setPhotoError('Could not open Settings. You can enable photo access in your device settings.');
+                    });
+                  },
+                },
+              ],
+            );
+          } else {
+            setPhotoError(source === 'camera'
+              ? 'Camera access is needed to take a profile photo.'
+              : 'Photo library access is needed to choose a profile photo.');
+          }
+        return;
+      }
+      if (result.kind === 'cancelled') return;
+      const asset = result.asset;
       setIsUploadingPhoto(true);
       const upload = await uploadProfilePhoto(asset, {
         platform: Platform.OS,
@@ -146,14 +200,49 @@ export default function PersonalInfoScreen() {
         requestUpload: async (metadata) => uploadPhoto.mutateAsync({ data: metadata }),
         put: (url, options) => expoFetch(url, options as any),
       });
-      setPhotoAssetPath(upload.objectPath);
-      setPhotoUrl(toPhotoUrl(upload.objectPath));
+      const savedUser = await updatePhotoMutation.mutateAsync({
+        data: { photoAssetPath: upload.objectPath },
+      });
+      updateUser(savedUser);
+      setAccountPhotoUrl(resolveAccountPhotoUrl(savedUser.photoUrl));
+      setPhotoSaved(true);
+      setTimeout(() => setPhotoSaved(false), 2500);
+      queryClient.invalidateQueries({ queryKey: ['/api/networking/profile'] });
     } catch (uploadError: any) {
-      setNetworkingErrorMessage(uploadError?.data?.error ?? uploadError?.message ?? 'Could not upload your profile photo.');
+      setPhotoError(
+        uploadError?.response?.data?.error ??
+        uploadError?.data?.error ??
+        uploadError?.message ??
+        'Could not update your profile photo.',
+      );
     } finally {
       setIsUploadingPhoto(false);
     }
   };
+
+  async function removePhoto() {
+    setPhotoError(null);
+    setIsUploadingPhoto(true);
+    try {
+      const savedUser = await updatePhotoMutation.mutateAsync({
+        data: { photoAssetPath: null },
+      });
+      updateUser(savedUser);
+      setAccountPhotoUrl(resolveAccountPhotoUrl(savedUser.photoUrl));
+      setPhotoSaved(true);
+      setTimeout(() => setPhotoSaved(false), 2500);
+      queryClient.invalidateQueries({ queryKey: ['/api/networking/profile'] });
+    } catch (updateError: any) {
+      setPhotoError(
+        updateError?.response?.data?.error ??
+        updateError?.data?.error ??
+        updateError?.message ??
+        'Could not remove your profile photo.',
+      );
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  }
 
   const handleNetworkingSave = () => {
     setNetworkingErrorMessage('');
@@ -163,10 +252,9 @@ export default function PersonalInfoScreen() {
       if (!input.trim()) continue;
       try {
         const url = new URL(input.trim());
-        if (['http:', 'https:'].includes(url.protocol) && url.hostname && !url.username && !url.password && input.trim().length <= 2048) continue;
-      } catch {
-        // The error below is shown without discarding any typed values.
-      }
+        if (['http:', 'https:'].includes(url.protocol) && url.hostname &&
+            !url.username && !url.password && input.trim().length <= 2048) continue;
+      } catch { /* Preserve typed values on validation failure. */ }
       setNetworkingErrorMessage(`Enter a valid http(s) URL for ${label}, or leave it blank.`);
       return;
     }
@@ -176,8 +264,6 @@ export default function PersonalInfoScreen() {
         ...(lastName.trim() ? { lastName: lastName.trim() } : {}),
         ...(industry.trim() ? { industry: industry.trim() } : {}),
         ...(bio.trim() ? { bio: bio.trim() } : {}),
-        photoUrl: photoAssetPath ? null : photoUrl,
-        photoAssetPath,
         linkedinUrl: linkedinUrl.trim() || null,
         facebookUrl: facebookUrl.trim() || null,
         instagramUrl: instagramUrl.trim() || null,
@@ -232,6 +318,57 @@ export default function PersonalInfoScreen() {
         bottomOffset={20}
         keyboardShouldPersistTaps="handled"
       >
+        <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Profile photo (optional)</Text>
+        <View style={styles.accountPhotoButton}>
+          {accountPhotoUrl
+            ? <Image source={{ uri: accountPhotoUrl }} style={styles.accountPhoto} accessibilityLabel="Your profile photo" />
+            : <View style={[styles.accountPhoto, { backgroundColor: colors.backgroundMid }]}>
+              <Text style={[styles.photoText, { color: colors.textOnBrand }]}>+</Text>
+            </View>}
+          <View style={styles.photoCopy}>
+            <Text style={[styles.photoLink, { color: colors.primary }]}>
+              {isUploadingPhoto ? 'Saving profile photo…' : accountPhotoUrl ? 'Replace profile photo' : 'Add profile photo'}
+            </Text>
+            <Text style={[styles.photoHint, { color: colors.mutedForegroundLight }]}>
+              Choose a photo or take one with your camera. Optional.
+            </Text>
+          </View>
+          {isUploadingPhoto && <ActivityIndicator color={colors.primary} />}
+        </View>
+        <View style={styles.photoActions}>
+          <TouchableOpacity
+            onPress={() => { void pickPhoto('camera'); }}
+            disabled={isUploadingPhoto}
+            accessibilityRole="button"
+            accessibilityLabel="Take photo"
+            testID="take-profile-photo"
+          >
+            <Text style={[styles.photoLink, { color: colors.primary }]}>Take photo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => { void pickPhoto('library'); }}
+            disabled={isUploadingPhoto}
+            accessibilityRole="button"
+            accessibilityLabel="Choose from library"
+            testID="choose-profile-photo"
+          >
+            <Text style={[styles.photoLink, { color: colors.primary }]}>Choose from library</Text>
+          </TouchableOpacity>
+        </View>
+        {accountPhotoUrl && (
+          <TouchableOpacity
+            onPress={() => { void removePhoto(); }}
+            disabled={isUploadingPhoto}
+            accessibilityRole="button"
+            accessibilityLabel="Remove profile photo"
+            style={styles.removePhotoButton}
+          >
+            <Text style={[styles.removePhotoLink, { color: colors.mutedForegroundLight }]}>Remove photo</Text>
+          </TouchableOpacity>
+        )}
+        {photoError && <Text style={[styles.errorText, { color: colors.destructive }]}>{photoError}</Text>}
+        {photoSaved && <Text style={[styles.savedText, { color: colors.success }]}>Profile photo updated.</Text>}
+
         <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Full name</Text>
         <TextInput
           style={fieldStyle}
@@ -328,28 +465,18 @@ export default function PersonalInfoScreen() {
             </View>
           ) : (
             <>
-              <TouchableOpacity onPress={choosePhoto} disabled={isUploadingPhoto} activeOpacity={0.8} style={styles.photoButton}>
-                {photoUrl
-                  ? <Image source={{ uri: photoUrl }} style={styles.photo} />
-                  : <View style={[styles.photo, { backgroundColor: colors.backgroundMid }]}>
-                    <Text style={[styles.photoText, { color: colors.textOnBrand }]}>+</Text>
-                  </View>}
-                <Text style={[styles.photoLink, { color: colors.primary }]}>
-                  {isUploadingPhoto ? 'Uploading profile photo…' : photoUrl ? 'Change profile photo' : 'Add profile photo'}
-                </Text>
-              </TouchableOpacity>
               {networkingField('First name', firstName, setFirstName, 'First name')}
               {networkingField('Last name', lastName, setLastName, 'Last name')}
               {networkingField('Industry or category', industry, setIndustry, 'e.g. Venture capital')}
               {networkingField('Short bio', bio, setBio, 'What would you enjoy talking about?', true)}
-               {networkingField('LinkedIn URL (optional)', linkedinUrl, setLinkedinUrl, 'https://www.linkedin.com/in/you', false, true)}
-               {networkingField('Facebook URL (optional)', facebookUrl, setFacebookUrl, 'https://www.facebook.com/you', false, true)}
-               {networkingField('Instagram URL (optional)', instagramUrl, setInstagramUrl, 'https://www.instagram.com/you', false, true)}
-              <View style={[styles.status, { backgroundColor: networkingData.completed ? colors.success + '16' : colors.primary + '12' }]}>
-                <Text style={[styles.statusText, { color: networkingData.completed ? colors.success : colors.primary }]}>
-                  {networkingData.completed
+              {networkingField('LinkedIn URL (optional)', linkedinUrl, setLinkedinUrl, 'https://www.linkedin.com/in/you', false, true)}
+              {networkingField('Facebook URL (optional)', facebookUrl, setFacebookUrl, 'https://www.facebook.com/you', false, true)}
+              {networkingField('Instagram URL (optional)', instagramUrl, setInstagramUrl, 'https://www.instagram.com/you', false, true)}
+              <View style={[styles.status, { backgroundColor: networkingCompleted ? colors.success + '16' : colors.primary + '12' }]}>
+                <Text style={[styles.statusText, { color: networkingCompleted ? colors.success : colors.primary }]}>
+                  {networkingCompleted
                     ? '✓ Profile complete — you can send introductions.'
-                    : `Still needed: ${networkingData.missing.join(', ')}`}
+                    : `Still needed: ${networkingMissing.join(', ')}`}
                 </Text>
               </View>
               {networkingErrorMessage ? <Text style={[styles.errorText, { color: colors.destructive }]}>{networkingErrorMessage}</Text> : null}
@@ -400,8 +527,13 @@ const styles = StyleSheet.create({
   gateTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, letterSpacing: -0.2 },
   networkingLoading: { alignItems: 'center', gap: 10, paddingVertical: 24 },
   link: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
-  photoButton: { alignItems: 'center', gap: 8, marginVertical: 5 },
-  photo: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center' },
+  accountPhotoButton: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 8 },
+  photoActions: { flexDirection: 'row', gap: 24, marginBottom: 18, paddingLeft: 82 },
+  removePhotoButton: { alignSelf: 'flex-start', marginTop: -14, marginBottom: 18 },
+  accountPhoto: { width: 68, height: 68, borderRadius: 34, alignItems: 'center', justifyContent: 'center' },
+  photoCopy: { flex: 1, gap: 4 },
+  photoHint: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17 },
+  removePhotoLink: { fontFamily: 'Inter_500Medium', fontSize: 12, paddingTop: 2 },
   photoText: { fontFamily: 'Inter_400Regular', fontSize: 34 },
   photoLink: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   status: { borderRadius: 12, padding: 12, marginTop: 18 },

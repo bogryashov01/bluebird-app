@@ -136,6 +136,8 @@ check('registered user carries normalized phone and full name',
 check('registered user has the submitted email', registered?.json?.user?.email === profile.email);
 check('new account starts as a non-member', registered?.json?.user?.membershipTier === 'none');
 check('registered user always has homeAirports', Array.isArray(registered?.json?.user?.homeAirports));
+check('new account exposes an empty canonical photo and resolved URL',
+  registered?.json?.user?.photoAssetPath === null && registered?.json?.user?.photoUrl === null);
 const jwt = registered?.json?.token;
 
 const grantReplay = await req('/auth/complete-registration', { method: 'POST', body: profile });
@@ -148,6 +150,14 @@ check('/auth/me returns homeAirports and not the legacy field',
   Array.isArray(me.json?.homeAirports) && !Object.hasOwn(me.json ?? {}, 'homeAirport'));
 check('/auth/me defaults notification delivery to app',
   me.json?.notificationChannel === 'app');
+check('/auth/me exposes canonical account photo fields',
+  me.json?.photoAssetPath === null && me.json?.photoUrl === null);
+const invalidAccountPhoto = await req('/auth/me', {
+  method: 'PATCH',
+  token: jwt,
+  body: { photoAssetPath: 'https://example.test/profile.jpg' },
+});
+check('/auth/me rejects external URLs as account photo paths', invalidAccountPhoto.status === 400);
 
 // 5b. Preferred airports are normalized, deduplicated, and are not limited to
 // airports represented in current flight inventory (DFW/LGA).

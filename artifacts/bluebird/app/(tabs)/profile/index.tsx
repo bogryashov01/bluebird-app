@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, Image, StyleSheet, ScrollView, TouchableOpacity,
   Platform, Modal, Pressable,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -64,6 +64,12 @@ function fmtDate(iso: string): string {
   });
 }
 
+function resolvePhotoUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : '';
+  return `${baseUrl}${path.startsWith('/api/') ? path : `/api/storage${path}`}`;
+}
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
@@ -86,6 +92,7 @@ export default function ProfileScreen() {
   const unreadCount = notifList.filter((n) => !n.read).length;
 
   const initials    = user?.name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) ?? '?';
+  const accountPhotoUrl = resolvePhotoUrl(user?.photoUrl);
   const tierLabel   = {
     none:      'Not a member yet',
     base:      'Base Member',
@@ -107,9 +114,11 @@ export default function ProfileScreen() {
       >
         {/* ── Avatar + name ── */}
         <View style={styles.avatarRow}>
-          <View style={[styles.avatar, { backgroundColor: colors.backgroundMid }]}>
-            <Text style={[styles.avatarText, { color: colors.textOnBrand }]}>{initials}</Text>
-          </View>
+          {accountPhotoUrl
+            ? <Image source={{ uri: accountPhotoUrl }} style={styles.avatar} accessibilityLabel="Profile photo" />
+            : <View style={[styles.avatar, { backgroundColor: colors.backgroundMid }]}>
+              <Text style={[styles.avatarText, { color: colors.textOnBrand }]}>{initials}</Text>
+            </View>}
           <View>
             <Text style={[styles.name, { color: colors.textOnSurface }]}>{user?.name ?? 'Member'}</Text>
             <Text style={[styles.memberSince, { color: colors.mutedForegroundLight }]}>

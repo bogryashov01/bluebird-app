@@ -26,6 +26,8 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_tier TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS home_airport TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS weight_kg NUMERIC;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_asset_path TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_channel TEXT NOT NULL DEFAULT 'app';
     UPDATE users SET weight_kg = NULL WHERE weight_kg IS NOT NULL AND weight_kg <= 0;
     DO $$
@@ -526,11 +528,30 @@ export async function ensureSchema(): Promise<void> {
     UPDATE networking_profiles
       SET photo_asset_path = photo_url, photo_url = NULL
       WHERE photo_asset_path IS NULL AND photo_url LIKE '/objects/%';
-    -- Data URIs were the temporary mobile fallback. They are not portable
-    -- storage and can make profile rows very large, so require those members
-    -- to choose a new stored photo.
-    UPDATE networking_profiles SET photo_url = NULL
-      WHERE photo_url LIKE 'data:image/%';
+    -- Promote existing uploaded networking photos to the account-level
+    -- canonical photo field. The networking profile is only a metadata row;
+    -- new reads resolve the photo from users.photo_asset_path.
+    UPDATE users u
+      SET photo_asset_path = p.photo_asset_path
+      FROM networking_profiles p
+      WHERE p.user_id = u.id
+        AND u.photo_asset_path IS NULL
+        AND p.photo_asset_path ~ '^/objects/uploads/[A-Za-z0-9-]+$';
+    -- Preserve valid legacy HTTPS photos as an account-level fallback when
+    -- there is no uploaded asset. Never migrate inline/data URI content.
+    UPDATE users u
+      SET photo_url = p.photo_url
+      FROM networking_profiles p
+      WHERE p.user_id = u.id
+        AND u.photo_asset_path IS NULL
+        AND u.photo_url IS NULL
+        AND p.photo_url ~* '^https://[^/[:space:]]+(/[^[:space:]]*)?$';
+    UPDATE networking_profiles
+      SET photo_asset_path = NULL
+      WHERE photo_asset_path ~ '^/objects/uploads/[A-Za-z0-9-]+$';
+    -- Remove duplicate/unsupported legacy photo values from networking
+    -- metadata after migration; the account fields above are authoritative.
+    UPDATE networking_profiles SET photo_url = NULL WHERE photo_url IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS networking_photo_uploads (
       object_path TEXT PRIMARY KEY,
@@ -544,8 +565,8 @@ export async function ensureSchema(): Promise<void> {
     -- Existing object-backed profiles predate ownership tracking. Backfill
     -- them as active so cleanup can never treat a referenced object as stale.
     INSERT INTO networking_photo_uploads (object_path, user_id, status, created_at, attached_at)
-      SELECT photo_asset_path, user_id, 'active', created_at, updated_at
-      FROM networking_profiles
+      SELECT photo_asset_path, id, 'active', created_at, NOW()
+      FROM users
       WHERE photo_asset_path ~ '^/objects/uploads/[A-Za-z0-9-]+$'
       ON CONFLICT (object_path) DO NOTHING;
 

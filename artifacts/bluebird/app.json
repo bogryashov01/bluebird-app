@@ -52,6 +52,14 @@
       "expo-web-browser",
       "expo-notifications",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Bluebird to choose a profile photo from your library.",
+          "cameraPermission": "Allow Bluebird to take a profile photo.",
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-calendar",
         {
           "calendarPermission": "Allow Bluebird to add your confirmed flights to your calendar."

@@ -49,39 +49,61 @@ async function currentUser(userId: string) {
   return user;
 }
 
-function profileCompletion(profile: typeof networkingProfilesTable.$inferSelect | null) {
+type AccountPhoto = { photoAssetPath: string | null; photoUrl: string | null };
+
+async function userPhoto(userId: string): Promise<AccountPhoto> {
+  const [user] = await db.select({
+    photoAssetPath: usersTable.photoAssetPath,
+    photoUrl: usersTable.photoUrl,
+  })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+  return {
+    photoAssetPath: user?.photoAssetPath ?? null,
+    photoUrl: user?.photoUrl ?? null,
+  };
+}
+
+function resolvedPhotoUrl(photo: AccountPhoto): string | null {
+  return photo.photoAssetPath ? `/api/storage${photo.photoAssetPath}` : photo.photoUrl;
+}
+
+function profileCompletion(
+  profile: typeof networkingProfilesTable.$inferSelect | null,
+  photo: AccountPhoto,
+) {
   const missing: string[] = [];
   if (!profile?.firstName.trim()) missing.push("firstName");
   if (!profile?.lastName.trim()) missing.push("lastName");
-  if (!profile?.photoAssetPath && !profile?.photoUrl) missing.push("photo");
+  if (!photo.photoAssetPath && !photo.photoUrl) missing.push("photo");
   if (!profile?.industry.trim()) missing.push("industry");
   if (!profile?.bio.trim()) missing.push("bio");
   return { completed: missing.length === 0, missing };
 }
 
-function profilePhotoUrl(profile: typeof networkingProfilesTable.$inferSelect): string | null {
-  if (profile.photoAssetPath) return `/api/storage${profile.photoAssetPath}`;
-  return profile.photoUrl;
-}
-
-function profileResponse(profile: typeof networkingProfilesTable.$inferSelect) {
+function profileResponse(
+  profile: typeof networkingProfilesTable.$inferSelect,
+  photo: AccountPhoto,
+) {
   return {
     ...profile,
-    photoUrl: profilePhotoUrl(profile),
-    ...profileCompletion(profile),
+    photoAssetPath: photo.photoAssetPath,
+    photoUrl: resolvedPhotoUrl(photo),
+    ...profileCompletion(profile, photo),
   };
 }
 
 function publicProfile(
   profile: typeof networkingProfilesTable.$inferSelect | null,
   full = false,
+  photo: AccountPhoto = { photoAssetPath: null, photoUrl: null },
 ) {
   if (!profile) {
     return {
       firstName: "",
       lastName: "",
-      photoUrl: null,
-      photoAssetPath: null,
+      photoUrl: resolvedPhotoUrl(photo),
+      photoAssetPath: photo.photoAssetPath,
       industry: "",
       bio: "",
       ...(full ? { linkedinUrl: null, facebookUrl: null, instagramUrl: null } : {}),
@@ -90,8 +112,8 @@ function publicProfile(
   return {
     firstName: profile.firstName,
     lastName: full ? profile.lastName : undefined,
-    photoUrl: profilePhotoUrl(profile),
-    photoAssetPath: profile.photoAssetPath,
+    photoUrl: resolvedPhotoUrl(photo),
+    photoAssetPath: photo.photoAssetPath,
     industry: profile.industry,
     bio: profile.bio,
     ...(full ? {
@@ -196,7 +218,10 @@ router.get("/profile", async (req, res) => {
       }).returning();
       profile = created;
     }
-    return res.json(profileResponse(profile));
+    return res.json(profileResponse(profile, {
+      photoAssetPath: user?.photoAssetPath ?? null,
+      photoUrl: user?.photoUrl ?? null,
+    }));
   } catch {
     return res.status(500).json({ error: "Failed to load networking profile" });
   }
@@ -208,6 +233,8 @@ router.patch("/profile", async (req, res) => {
   if (!memberRequired(user, res)) return;
   const body = req.body ?? {};
   const updates: Partial<typeof networkingProfilesTable.$inferInsert> = {};
+  let requestedPhotoPath: string | null | undefined;
+  let requestedLegacyPhotoUrl: string | null | undefined;
   for (const key of ["firstName", "lastName", "industry", "bio"] as const) {
     if (body[key] !== undefined) {
       if (typeof body[key] !== "string") return res.status(400).json({ error: `${key} must be text` });
@@ -239,22 +266,48 @@ router.patch("/profile", async (req, res) => {
       updates[key] = value;
     }
   }
-  if (body.photoUrl !== undefined) {
-    if (body.photoUrl !== null && typeof body.photoUrl !== "string") {
-      return res.status(400).json({ error: "photoUrl must be a URL or null" });
+  if (body.photoAssetPath !== undefined || body.photoUrl !== undefined) {
+    if (body.photoAssetPath !== undefined && body.photoAssetPath !== null) {
+      if (body.photoAssetPath !== null && typeof body.photoAssetPath !== "string") {
+        return res.status(400).json({ error: "photoAssetPath must be an object path or null" });
+      }
+      requestedPhotoPath = body.photoAssetPath.trim();
+    } else if (body.photoAssetPath === null && body.photoUrl === undefined) {
+      // A null path alone is an explicit removal. Older clients also send a
+      // null path beside a legacy URL while saving ordinary profile text.
+      requestedPhotoPath = null;
+    } else if (body.photoUrl === null) {
+      requestedPhotoPath = null;
+    } else if (typeof body.photoUrl === "string") {
+      // Compatibility for older callers that submit the resolved storage URL
+      // or a legacy HTTPS image URL rather than the opaque asset path.
+      const legacyPhotoUrl = body.photoUrl.trim();
+      const resolvedPath = legacyPhotoUrl.match(/^\/api\/storage(\/objects\/uploads\/[A-Za-z0-9-]+)$/);
+      if (resolvedPath) {
+        requestedPhotoPath = resolvedPath[1];
+      } else if (/^\/objects\/uploads\/[A-Za-z0-9-]+$/.test(legacyPhotoUrl)) {
+        requestedPhotoPath = legacyPhotoUrl;
+      } else {
+        let parsedUrl: URL | null = null;
+        try {
+          parsedUrl = new URL(legacyPhotoUrl);
+        } catch {
+          parsedUrl = null;
+        }
+        if (!parsedUrl || parsedUrl.protocol !== "https:" || !parsedUrl.hostname ||
+            parsedUrl.username || parsedUrl.password) {
+          return res.status(400).json({ error: "Legacy photo must be a valid HTTPS URL" });
+        }
+        requestedPhotoPath = null;
+        requestedLegacyPhotoUrl = legacyPhotoUrl;
+      }
+    } else {
+      return res.status(400).json({ error: "photoUrl must be an HTTPS URL or null" });
     }
-    const value = body.photoUrl === null ? null : body.photoUrl.trim();
-    if (value && !/^https?:\/\/\S+$/i.test(value)) {
-      return res.status(400).json({ error: "Legacy profile photo must be a valid image URL" });
+    if (requestedPhotoPath === "") {
+      return res.status(400).json({ error: "photoAssetPath must be an uploaded object path or null" });
     }
-    updates.photoUrl = value;
-    if (body.photoAssetPath === undefined) updates.photoAssetPath = null;
-  }
-  if (body.photoAssetPath !== undefined) {
-    if (body.photoAssetPath !== null && typeof body.photoAssetPath !== "string") {
-      return res.status(400).json({ error: "photoAssetPath must be an object path or null" });
-    }
-    const path = body.photoAssetPath === null ? null : body.photoAssetPath.trim();
+    const path = requestedPhotoPath;
     if (path) {
       if (!/^\/objects\/uploads\/[A-Za-z0-9-]+$/.test(path)) {
         return res.status(400).json({ error: "Profile photo must be uploaded through the profile photo uploader" });
@@ -271,21 +324,21 @@ router.patch("/profile", async (req, res) => {
         return res.status(400).json({ error: "Uploaded profile photo could not be found" });
       }
     }
-    updates.photoAssetPath = path;
-    updates.photoUrl = null;
   }
-  if (Object.keys(updates).length === 0) return res.status(400).json({ error: "Nothing to update" });
-  const photoChangeRequested = updates.photoAssetPath !== undefined;
-  const requestedPhotoPath = photoChangeRequested ? updates.photoAssetPath : null;
+  if (Object.keys(updates).length === 0 && requestedPhotoPath === undefined) {
+    return res.status(400).json({ error: "Nothing to update" });
+  }
+  const photoChangeRequested = requestedPhotoPath !== undefined;
   let previousPhotoPath: string | null = null;
   try {
-    const profile = await db.transaction(async (tx) => {
-      const [existing] = await tx.select().from(networkingProfilesTable)
-        .where(eq(networkingProfilesTable.userId, userId))
+    const result = await db.transaction(async (tx) => {
+      const [account] = await tx.select().from(usersTable)
+        .where(eq(usersTable.id, userId))
         .for("update");
-      previousPhotoPath = existing?.photoAssetPath ?? null;
+      if (!account) return { profile: null, photoAssetPath: null };
+      previousPhotoPath = account.photoAssetPath;
 
-      if (photoChangeRequested && requestedPhotoPath) {
+    if (photoChangeRequested && requestedPhotoPath) {
         const [upload] = await tx.select().from(networkingPhotoUploadsTable)
           .where(and(
             eq(networkingPhotoUploadsTable.objectPath, requestedPhotoPath),
@@ -315,26 +368,46 @@ router.patch("/profile", async (req, res) => {
             ne(networkingPhotoUploadsTable.status, "deleting"),
           ));
       }
-
-      const [saved] = await tx.insert(networkingProfilesTable)
-        .values({ userId, ...updates })
-        .onConflictDoUpdate({
-          target: networkingProfilesTable.userId,
-          set: { ...updates, updatedAt: new Date() },
-        })
-        .returning();
-      return saved;
+      if (photoChangeRequested) {
+        await tx.update(usersTable)
+          .set({
+            photoAssetPath: requestedPhotoPath ?? null,
+            photoUrl: requestedLegacyPhotoUrl ?? null,
+          })
+          .where(eq(usersTable.id, userId));
+      }
+      const [existing] = await tx.select().from(networkingProfilesTable)
+        .where(eq(networkingProfilesTable.userId, userId))
+        .for("update");
+      const [saved] = Object.keys(updates).length > 0
+        ? await tx.insert(networkingProfilesTable)
+          .values({ userId, ...updates })
+          .onConflictDoUpdate({
+            target: networkingProfilesTable.userId,
+            set: { ...updates, updatedAt: new Date() },
+          })
+          .returning()
+        : existing
+          ? [existing]
+          : await tx.insert(networkingProfilesTable).values({ userId }).returning();
+      return {
+        profile: saved,
+        photo: photoChangeRequested
+          ? { photoAssetPath: requestedPhotoPath ?? null, photoUrl: requestedLegacyPhotoUrl ?? null }
+          : { photoAssetPath: account.photoAssetPath, photoUrl: account.photoUrl },
+      };
     });
+    if (!result.profile) return res.status(401).json({ error: "User not found" });
     if (photoChangeRequested && previousPhotoPath && previousPhotoPath !== requestedPhotoPath) {
       scheduleNetworkingPhotoCleanup(previousPhotoPath, userId);
     }
-    return res.json(profileResponse(profile));
+    return res.json(profileResponse(result.profile, result.photo));
   } catch (error) {
     if (error instanceof ProfilePhotoOwnershipError) {
-      scheduleNetworkingPhotoCleanup(requestedPhotoPath, userId);
+      if (requestedPhotoPath) scheduleNetworkingPhotoCleanup(requestedPhotoPath, userId);
       return res.status(400).json({ error: error.message });
     }
-    if (photoChangeRequested) scheduleNetworkingPhotoCleanup(requestedPhotoPath, userId);
+    if (photoChangeRequested && requestedPhotoPath) scheduleNetworkingPhotoCleanup(requestedPhotoPath, userId);
     req.log.error({ err: error }, "Failed to save networking profile");
     return res.status(500).json({ error: "Failed to save networking profile" });
   }
@@ -377,11 +450,12 @@ router.get("/flights/:flightId/front-member", async (req, res) => {
     }
     const [profile] = await db.select().from(networkingProfilesTable)
       .where(eq(networkingProfilesTable.userId, entry.userId));
-    if (!profile || !profileCompletion(profile).completed) return res.json({ eligible: false, member: null });
+    const photo = await userPhoto(entry.userId);
+    if (!profile || !profileCompletion(profile, photo).completed) return res.json({ eligible: false, member: null });
     return res.json({
       eligible: true,
       flightId,
-      member: { userId: entry.userId, ...publicProfile(profile) },
+      member: { userId: entry.userId, ...publicProfile(profile, false, photo) },
     });
   } catch {
     return res.status(500).json({ error: "Failed to find the front member" });
@@ -400,7 +474,11 @@ router.post("/requests", async (req, res) => {
   try {
     const [requesterProfile] = await db.select().from(networkingProfilesTable)
       .where(eq(networkingProfilesTable.userId, userId));
-    if (!requesterProfile || !profileCompletion(requesterProfile).completed) {
+    const requesterPhoto = {
+      photoAssetPath: user?.photoAssetPath ?? null,
+      photoUrl: user?.photoUrl ?? null,
+    };
+    if (!requesterProfile || !profileCompletion(requesterProfile, requesterPhoto).completed) {
       return res.status(400).json({ error: "Complete your networking profile before sending a request", code: "NETWORKING_PROFILE_INCOMPLETE" });
     }
     const [entry] = await db.select().from(queueEntriesTable).where(and(
@@ -429,7 +507,10 @@ router.post("/requests", async (req, res) => {
         id: id(), flightId, requesterId: userId, recipientId: entry.userId, message,
       }).returning())[0];
     await notify(entry.userId, "New flight connection request", `${requesterProfile.firstName} would like to connect before your flight.`, "networking_request", { requestId: request.id, flightId });
-    return res.status(existing ? 200 : 201).json({ ...request, requester: publicProfile(requesterProfile, false) });
+    return res.status(existing ? 200 : 201).json({
+      ...request,
+      requester: publicProfile(requesterProfile, false, requesterPhoto),
+    });
   } catch {
     return res.status(500).json({ error: "Failed to send connection request" });
   }
@@ -446,9 +527,10 @@ router.get("/requests/incoming", async (req, res) => {
     )).orderBy(desc(networkingRequestsTable.createdAt));
     const response = await Promise.all(rows.map(async (request) => {
       const [profile] = await db.select().from(networkingProfilesTable).where(eq(networkingProfilesTable.userId, request.requesterId));
+      const photo = await userPhoto(request.requesterId);
       const [flight] = await db.select({ fromCity: flightsTable.fromCity, toCity: flightsTable.toCity, departureDate: flightsTable.departureDate })
         .from(flightsTable).where(eq(flightsTable.id, request.flightId));
-      return { ...request, requester: publicProfile(profile ?? null), flight };
+      return { ...request, requester: publicProfile(profile ?? null, false, photo), flight };
     }));
     return res.json(response);
   } catch {
@@ -525,10 +607,15 @@ router.get("/connections", async (req, res) => {
       const otherId = await otherMember(connection, userId);
       if (await hasBlock(userId, otherId)) continue;
       const [profile] = await db.select().from(networkingProfilesTable).where(eq(networkingProfilesTable.userId, otherId));
+      const photo = await userPhoto(otherId);
       const [lastMessage] = await db.select().from(networkingMessagesTable)
         .where(eq(networkingMessagesTable.connectionId, connection.id))
         .orderBy(desc(networkingMessagesTable.createdAt)).limit(1);
-      result.push({ ...connection, member: { userId: otherId, ...publicProfile(profile ?? null, true) }, lastMessage: lastMessage ?? null });
+      result.push({
+        ...connection,
+        member: { userId: otherId, ...publicProfile(profile ?? null, true, photo) },
+        lastMessage: lastMessage ?? null,
+      });
     }
     return res.json(result);
   } catch {

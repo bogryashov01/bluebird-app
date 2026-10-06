@@ -7,7 +7,7 @@ import {
   usersTable,
   networkingProfilesTable,
 } from "@workspace/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, isNull, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import {
   ensureSimUsers,
@@ -568,12 +568,30 @@ export async function deleteNetworkingTestMember(): Promise<boolean> {
 }
 
 async function seedNetworkingProfiles(userId: string): Promise<void> {
+  // The account owns the shared photo. Never overwrite an uploaded image with
+  // the development fallback during a fixture restore.
+  await db.update(usersTable).set({
+    photoUrl: DEMO_NETWORKING_PROFILE.photoUrl,
+  }).where(and(
+    eq(usersTable.id, userId),
+    isNull(usersTable.photoAssetPath),
+    isNull(usersTable.photoUrl),
+  ));
   await db.insert(networkingProfilesTable).values({
     userId,
-    ...DEMO_NETWORKING_PROFILE,
+    firstName: DEMO_NETWORKING_PROFILE.firstName,
+    lastName: DEMO_NETWORKING_PROFILE.lastName,
+    industry: DEMO_NETWORKING_PROFILE.industry,
+    bio: DEMO_NETWORKING_PROFILE.bio,
   }).onConflictDoUpdate({
     target: networkingProfilesTable.userId,
-    set: { ...DEMO_NETWORKING_PROFILE, updatedAt: new Date() },
+    set: {
+      firstName: DEMO_NETWORKING_PROFILE.firstName,
+      lastName: DEMO_NETWORKING_PROFILE.lastName,
+      industry: DEMO_NETWORKING_PROFILE.industry,
+      bio: DEMO_NETWORKING_PROFILE.bio,
+      updatedAt: new Date(),
+    },
   });
 }
 
@@ -600,10 +618,14 @@ export async function seedNetworkingTestMember(): Promise<void> {
       referralCode: NETWORKING_TEST_MEMBER_REFERRAL_CODE,
       membershipTier: "base",
       linePassCount: 0,
+      photoUrl: NETWORKING_TEST_PROFILE.photoUrl,
     });
     await tx.insert(networkingProfilesTable).values({
       userId: NETWORKING_TEST_MEMBER_ID,
-      ...NETWORKING_TEST_PROFILE,
+      firstName: NETWORKING_TEST_PROFILE.firstName,
+      lastName: NETWORKING_TEST_PROFILE.lastName,
+      industry: NETWORKING_TEST_PROFILE.industry,
+      bio: NETWORKING_TEST_PROFILE.bio,
     });
     await tx.insert(queueEntriesTable).values({
       id: NETWORKING_TEST_MEMBER_QUEUE_ID,
