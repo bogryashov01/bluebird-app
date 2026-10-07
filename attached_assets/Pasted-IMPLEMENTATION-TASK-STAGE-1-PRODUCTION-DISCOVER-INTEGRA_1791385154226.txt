@@ -1,0 +1,314 @@
+IMPLEMENTATION TASK — STAGE 1: PRODUCTION DISCOVER INTEGRATION
+
+Goal:
+Connect the existing Bluebird React Native / Expo mobile app to the existing
+Bluebird production API for READ-ONLY flight discovery.
+
+This is the first production integration milestone.
+
+Production API origin:
+https://bluebirdjets.com
+
+Production API base:
+https://bluebirdjets.com/api
+
+IMPORTANT:
+The production backend lives in a different Replit project.
+Do NOT modify or recreate backend logic in this mobile repository.
+
+Do NOT touch:
+- authentication implementation
+- Clerk integration
+- queue mutations
+- membership purchase flows
+- payments
+- push notifications
+- passengers/pets
+- networking/community
+- backend database
+- backend routes
+- unrelated UI
+- EAS / Apple configuration
+
+Keep this task narrowly scoped.
+
+==================================================
+1. AUDIT CURRENT DISCOVER DATA FLOW
+==================================================
+
+Before changing code, inspect the current mobile implementation and identify:
+
+- where the API base URL is configured
+- how Discover currently loads flights
+- how Flight Details loads a flight
+- how the map obtains airport coordinates
+- current flight TypeScript models
+- current airport models
+- current React Query hooks / generated API client usage
+- any mock/static/demo flight data involved
+- any static airport coordinate mapping
+
+Report these findings briefly before implementation.
+
+Do not perform a large refactor.
+
+==================================================
+2. PRODUCTION API CONFIGURATION
+==================================================
+
+Create or adapt the smallest clean API configuration layer needed to support
+the production Bluebird API.
+
+Production base:
+
+https://bluebirdjets.com/api
+
+Do not silently fall back to localhost, Replit domains, or mock APIs in a
+production build.
+
+Preserve the ability to use the current local development API where useful,
+but production configuration must be explicit and fail safely if invalid.
+
+Do not add secrets.
+
+==================================================
+3. CONNECT REAL FLIGHTS
+==================================================
+
+Use the existing production endpoint:
+
+GET /api/empty-legs
+
+Authentication:
+Optional.
+
+For Stage 1 make the request anonymously.
+Do NOT implement Clerk yet.
+
+The response is a flight array, not a paginated envelope.
+
+Important fields may include:
+
+id
+tripId
+status
+
+originAirport
+originCity
+originTz
+
+destinationAirport
+destinationCity
+destinationTz
+
+departureTime
+arrivalTime
+queueClosesAt
+durationHours
+
+aircraftType
+aircraftGalleryUrls
+aircraftGalleryAlts
+aircraftTailPhotoSlot
+photoKey
+
+queueCount
+memberQueueCount
+userInQueue
+viewerQueuePosition
+lockedForFreeUsers
+
+lineSkipPriceUsd
+lineSkipSold
+viewerHasLineSkip
+
+isInternational
+internationalPassPriceUsd
+internationalPassRequired
+viewerHasInternationalPass
+
+viewerIsBookedPassenger
+viewerIsEffectiveWinner
+viewerConfirmationStatus
+awardedAt
+
+originFboName
+originFboAddress
+destinationFboName
+destinationFboAddress
+
+Nullable production fields must remain nullable.
+
+Do not restore or invent retired flight pricing.
+
+pricePerHour is no longer meaningful.
+totalPrice / msrpUsd may be null.
+
+==================================================
+4. FLIGHT DETAILS
+==================================================
+
+Connect the existing Flight Details screen to:
+
+GET /api/empty-legs/:id
+
+Use the numeric flight id.
+
+Authentication is optional for this stage.
+
+Do not change queue actions yet.
+
+If the existing screen contains UI requiring data that production does not
+return, preserve the layout where reasonable but do NOT fabricate values.
+
+==================================================
+5. AIRPORT DATA
+==================================================
+
+Replace static airport coordinates where appropriate using:
+
+GET /api/airports?codes=DAL,TEB,...
+
+Response shape:
+
+{
+  code: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  latitude: number;
+  longitude: number;
+  tz: string | null;
+  longestRunwayFt: number | null;
+}
+
+Rules:
+
+- codes is required
+- max 200 submitted codes
+- deduplicate codes before requesting
+- unknown codes may be omitted
+
+Use production latitude/longitude for the Discover map.
+
+Use server timezone information where appropriate.
+
+Do not maintain a second hardcoded coordinate database when production
+airport data is available.
+
+==================================================
+6. IMAGES
+==================================================
+
+Production flight image fields may contain relative URLs.
+
+Resolve relative aircraft image URLs against:
+
+https://bluebirdjets.com
+
+Do not break absolute URLs.
+
+Keep existing safe image fallbacks where necessary.
+
+==================================================
+7. UI BEHAVIOR
+==================================================
+
+Preserve the existing Bluebird visual design.
+
+Do not redesign Discover.
+
+Add or preserve correct:
+
+- loading state
+- empty state
+- network error state
+- retry behavior
+
+The app must not crash because of nullable production fields.
+
+Remove demo-specific Discover copy only when it becomes inaccurate with real
+production data.
+
+==================================================
+8. DO NOT ENABLE MUTATIONS
+==================================================
+
+Stage 1 is READ ONLY.
+
+Do NOT call:
+
+POST /api/empty-legs/:id/queue
+DELETE /api/empty-legs/:id/queue
+POST /api/empty-legs/:id/skip-line
+winner endpoints
+membership mutation endpoints
+payment endpoints
+
+Do not make test bookings or queue joins.
+
+==================================================
+9. TESTING
+==================================================
+
+Add/update focused tests for:
+
+- production flight response mapping
+- nullable flight fields
+- airport mapping
+- relative vs absolute image URL resolution
+- API base URL configuration where applicable
+
+Run:
+
+- relevant tests
+- TypeScript typecheck
+- existing project validation that is reasonable for this scope
+
+Do not fix unrelated failures unless your changes caused them.
+
+==================================================
+10. MANUAL VERIFICATION
+==================================================
+
+If network access is available from the development environment, verify only
+safe public GET endpoints:
+
+GET https://bluebirdjets.com/api/empty-legs
+
+and, using airport codes obtained from that response:
+
+GET https://bluebirdjets.com/api/airports?codes=...
+
+Do not probe authenticated or mutation endpoints.
+
+Do not log cookies, tokens, credentials, or sensitive headers.
+
+==================================================
+11. FINAL REPORT
+==================================================
+
+Do not commit or push yet.
+
+At completion report:
+
+1. Files changed
+2. Current Discover data flow before vs after
+3. Exact production endpoints now used
+4. Whether real production flights successfully loaded
+5. Whether production airport coordinates successfully loaded
+6. Any production/mobile schema mismatches discovered
+7. Tests/typecheck results
+8. Any remaining mock/static data in Discover
+9. Any blockers for Stage 2 (Clerk + /api/me)
+
+Success criteria:
+
+- Discover can display real Bluebird production flights
+- Flight Details can display a real production flight
+- Discover Map uses production airport coordinates
+- no authentication is required for this milestone
+- no production mutations occurred
+- no backend code was created or changed
+- existing UI remains intact
