@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Platform, Alert, ImageBackground, useWindowDimensions,
   Modal, Pressable, Linking, TextInput,
 } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -16,6 +17,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
+import {
+  fetchProductionFlight,
+  isLocalFlightReadMode,
+  mapLocalFlight,
+  parseProductionFlightId,
+  type FlightView,
+} from '@/lib/productionFlights';
 
 // ── Aircraft image matching ────────────────────────────────────────────────────
 const AIRCRAFT_IMAGES = [
@@ -24,14 +32,16 @@ const AIRCRAFT_IMAGES = [
   { match: /phenom|xls|latitude/i,                source: require('@/assets/images/aircraft-midsize.jpg') },
 ];
 const LIGHT_JET = require('@/assets/images/aircraft-light.jpg');
-function aircraftImage(type: string) {
-  for (const { match, source } of AIRCRAFT_IMAGES) if (match.test(type)) return source;
+function aircraftImage(type: string | null) {
+  for (const { match, source } of AIRCRAFT_IMAGES) if (match.test(type ?? '')) return source;
   return LIGHT_JET;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function computeArrival(departureTime: string, duration: string): string {
+function computeArrival(departureTime: string | null, duration: string | null): string | null {
+  if (!departureTime || !duration) return null;
   const [depH, depM] = departureTime.split(':').map(Number);
+  if (!Number.isFinite(depH) || !Number.isFinite(depM)) return null;
   const hours = duration.match(/(\d+)h/);
   const mins  = duration.match(/(\d+)m/);
   const totalMins = depH * 60 + depM
@@ -42,25 +52,29 @@ function computeArrival(departureTime: string, duration: string): string {
   return `${String(arrH).padStart(2, '0')}:${String(arrM).padStart(2, '0')}`;
 }
 
-function formatDate(d: string) {
+function formatDate(d: string | null) {
+  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return 'Date unavailable';
   const [y, m, day] = d.split('-').map(Number);
   return new Date(y, m - 1, day).toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
 }
 
-function formatTime12(t: string): string {
+function formatTime12(t: string | null): string {
+  if (!t || !/^\d{1,2}:\d{2}$/.test(t)) return 'Time unavailable';
   const [h, m] = t.split(':').map(Number);
   const ampm = h >= 12 ? 'PM' : 'AM';
   const hr = h % 12 === 0 ? 12 : h % 12;
   return `${hr}:${String(m).padStart(2, '0')} ${ampm}`;
 }
-function infoTiles(f: any) {
-  const tiles = [{
-    label: 'Queue',
-    value: f.status === 'available' ? 'Open to join' : 'Closed',
+function infoTiles(f: FlightView) {
+  const tiles: { label: string; value: string }[] = [{
+    label: f.source === 'production' ? 'Status' : 'Queue',
+    value: f.source === 'production'
+      ? (f.status === 'published' ? 'Published' : f.status ?? 'Unavailable')
+      : (f.status === 'available' ? 'Open to join' : 'Closed'),
   }];
-  if (f.rangeNm)      tiles.push({ label: 'Range',  value: `${Number(f.rangeNm).toLocaleString()} nm` });
+  if (f.rangeNm !== null) tiles.push({ label: 'Range', value: `${f.rangeNm.toLocaleString()} nm` });
   return tiles;
 }
 
@@ -79,11 +93,25 @@ export default function FlightDetailScreen() {
   const heroHeight = Math.round(Math.min(300, Math.max(200, windowHeight * 0.32)));
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
+  const localReadMode = isLocalFlightReadMode();
+  const numericFlightId = parseProductionFlightId(id);
   const [directionsOpen, setDirectionsOpen] = useState(false);
   const [networkMessage, setNetworkMessage] = useState('');
   const [networkError, setNetworkError] = useState('');
 
-  const { data: flight, isLoading, isError } = useGetFlight(id!);
+  const localFlightQuery = useGetFlight(id ?? '', {
+    query: { enabled: localReadMode && !!id },
+  });
+  const productionFlightQuery = useQuery({
+    queryKey: ['production-empty-leg', numericFlightId],
+    queryFn: ({ signal }) => fetchProductionFlight(numericFlightId!, { signal }),
+    enabled: !localReadMode && numericFlightId !== null,
+  });
+  const flight: FlightView | undefined = localReadMode
+    ? (localFlightQuery.data ? mapLocalFlight(localFlightQuery.data) : undefined)
+    : productionFlightQuery.data;
+  const isLoading = localReadMode ? localFlightQuery.isLoading : productionFlightQuery.isLoading;
+  const isError = localReadMode ? localFlightQuery.isError : productionFlightQuery.isError;
 
   // Fetch the user's relationship to this flight (requires auth)
   const {
@@ -91,14 +119,14 @@ export default function FlightDetailScreen() {
     isLoading: statusLoading,
   } = useGetFlightMyStatus(id!, {
     query: {
-      enabled: !!user && !!id,
+      enabled: localReadMode && !!user && !!id,
       refetchInterval: user ? 10_000 : false,
       refetchOnMount: 'always',
     },
   });
   const { data: frontMember } = useGetNetworkingFrontMember(id!, {
     query: {
-      enabled: !!user && user.membershipTier !== 'none' && !!id,
+      enabled: localReadMode && !!user && user.membershipTier !== 'none' && !!id,
       refetchInterval: 15000,
       refetchOnMount: 'always',
     },
@@ -196,8 +224,9 @@ export default function FlightDetailScreen() {
   }
 
   // f is guaranteed non-null below this point
-  const f         = flight as any;
-  const imgSource = aircraftImage(f.aircraftType);
+  const f = flight;
+  const imgSource = f.imageUrl ? { uri: f.imageUrl } : aircraftImage(f.aircraftType);
+  const readOnlyProduction = f.source === 'production';
 
   const status = myStatus?.status ?? 'none';
   // Public flight responses intentionally omit FBO details. A confirmed
@@ -233,15 +262,15 @@ export default function FlightDetailScreen() {
 
   const joinFlowParams = (extra: Record<string, string> = {}) => ({
     flightId:      f.id,
-    fromCity:      f.fromCity,
-    toCity:        f.toCity,
-    from:          f.fromAirport,
-    to:            f.toAirport,
-    departureDate: f.departureDate,
-    departureTime: f.departureTime,
-    duration:      f.duration,
-    aircraftType:  f.aircraftType,
-    flightStatus:  f.status,
+    fromCity:      f.fromCity ?? '',
+    toCity:        f.toCity ?? '',
+    from:          f.fromAirport ?? '',
+    to:            f.toAirport ?? '',
+    departureDate: f.departureDate ?? '',
+    departureTime: f.departureTime ?? '',
+    duration:      f.duration ?? '',
+    aircraftType:  f.aircraftType ?? '',
+    flightStatus:  f.status ?? '',
     international: f.international ? '1' : '',
     feeUsd:        String(f.internationalFeeUsd ?? 0),
     ...extra,
@@ -273,6 +302,23 @@ export default function FlightDetailScreen() {
 
   // ── CTA footer rendering — branched on my-status ─────────────────────────
   function renderCTA() {
+    // Stage 1 connects production flight reads only. Keep the existing action
+    // flow for local fixtures, but do not expose a production mutation path.
+    if (readOnlyProduction) {
+      return (
+        <>
+          <View style={[styles.unavailableBadge, { backgroundColor: colors.muted }]}>
+            <Text style={[styles.unavailableBadgeText, { color: colors.mutedForegroundLight }]}>
+              Flight details
+            </Text>
+          </View>
+          <Text style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}>
+            Queue requests are not available in this read-only preview.
+          </Text>
+        </>
+      );
+    }
+
     // Non-available flight: joining is impossible, so show the flight's
     // status instead of any join action. Confirmed/waiting members still see
     // their own state below (e.g. a confirmed trip on a departed flight).
@@ -448,39 +494,45 @@ export default function FlightDetailScreen() {
           {/* Route pill at bottom of hero */}
           <View style={[styles.routePill, { backgroundColor: colors.primaryForeground + '2E', borderColor: colors.primaryForeground + '4D' }]}>
             <Text style={[styles.routePillText, { color: colors.primaryForeground }]}>
-              {f.fromAirport} → {f.toAirport}
+              {f.fromAirport ?? f.fromCity ?? '—'} → {f.toAirport ?? f.toCity ?? '—'}
             </Text>
           </View>
         </ImageBackground>
 
         {/* ── Title row ── */}
         <View style={styles.titleRow}>
-          <Text style={[styles.aircraftName, { color: colors.textOnSurface }]} numberOfLines={1}>{f.aircraftType}</Text>
+          <Text style={[styles.aircraftName, { color: colors.textOnSurface }]} numberOfLines={1}>
+            {f.aircraftType ?? 'Aircraft details unavailable'}
+          </Text>
         </View>
 
         {/* ── Date · departure line ── */}
         <Text style={[styles.dateText, { color: colors.mutedForegroundLight }]}>
           {formatDate(f.departureDate)} · Departs {formatTime12(f.departureTime)}
+          {f.departureTimeZone ? ` ${f.departureTimeZone}` : ''}
         </Text>
 
         {/* ── Horizontal route card ── */}
         <View style={[styles.routeCard, { backgroundColor: colors.surface }]}>
           <View style={styles.routeEndpoint}>
-            <Text style={[styles.routeCode, { color: colors.textOnSurface }]}>{f.fromAirport}</Text>
+            <Text style={[styles.routeCode, { color: colors.textOnSurface }]}>{f.fromAirport ?? '—'}</Text>
             <Text style={[styles.routeTime, { color: colors.textOnSurface }]}>{f.departureTime}</Text>
-            <Text style={[styles.routeCity, { color: colors.mutedForegroundLight }]} numberOfLines={1}>{f.fromCity}</Text>
+            <Text style={[styles.routeCity, { color: colors.mutedForegroundLight }]} numberOfLines={1}>{f.fromCity ?? ''}</Text>
           </View>
           <View style={styles.routeCenter}>
             <View style={[styles.routeLine, { backgroundColor: colors.separator }]} />
             <View style={[styles.routeDot, { backgroundColor: colors.primary }]} />
-            <Text style={[styles.routeDuration, { color: colors.mutedForegroundLight }]}>{f.duration}</Text>
+            <Text style={[styles.routeDuration, { color: colors.mutedForegroundLight }]}>{f.duration ?? '—'}</Text>
             <View style={[styles.routeDot, { backgroundColor: colors.primary }]} />
             <View style={[styles.routeLine, { backgroundColor: colors.separator }]} />
           </View>
           <View style={[styles.routeEndpoint, { alignItems: 'flex-end' }]}>
-            <Text style={[styles.routeCode, { color: colors.textOnSurface }]}>{f.toAirport}</Text>
-            <Text style={[styles.routeTime, { color: colors.textOnSurface }]}>{computeArrival(f.departureTime, f.duration)}</Text>
-            <Text style={[styles.routeCity, { color: colors.mutedForegroundLight }]} numberOfLines={1}>{f.toCity}</Text>
+            <Text style={[styles.routeCode, { color: colors.textOnSurface }]}>{f.toAirport ?? '—'}</Text>
+            <Text style={[styles.routeTime, { color: colors.textOnSurface }]}>
+              {formatTime12(f.arrivalTime ?? computeArrival(f.departureTime, f.duration))}
+              {f.arrivalTime && f.arrivalTimeZone ? ` ${f.arrivalTimeZone}` : ''}
+            </Text>
+            <Text style={[styles.routeCity, { color: colors.mutedForegroundLight }]} numberOfLines={1}>{f.toCity ?? ''}</Text>
           </View>
         </View>
 
@@ -495,22 +547,26 @@ export default function FlightDetailScreen() {
         </View>
 
         {/* ── Compact amenity pills (WiFi / Pets) ── */}
-        <View style={styles.pillRow}>
-          {AMENITY_PILLS.map((p) => (
-            <View key={p.label} style={[styles.pill, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.pillLabel, { color: colors.mutedForegroundLight }]}>{p.label}</Text>
-              <Text style={[styles.pillValue, { color: colors.textOnSurface }]}>{p.value}</Text>
+        {!readOnlyProduction && (
+          <>
+            <View style={styles.pillRow}>
+              {AMENITY_PILLS.map((p) => (
+                <View key={p.label} style={[styles.pill, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.pillLabel, { color: colors.mutedForegroundLight }]}>{p.label}</Text>
+                  <Text style={[styles.pillValue, { color: colors.textOnSurface }]}>{p.value}</Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
 
-        <View style={[styles.baggageCard, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.baggageLabel, { color: colors.mutedForegroundLight }]}>BAGGAGE ALLOWANCE</Text>
-          <Text style={[styles.baggageValue, { color: colors.textOnSurface }]}>25 kg per passenger</Text>
-          <Text style={[styles.baggageNotice, { color: colors.mutedForegroundLight }]}>
-            Subject to aircraft capacity and operational limitations.
-          </Text>
-        </View>
+            <View style={[styles.baggageCard, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.baggageLabel, { color: colors.mutedForegroundLight }]}>BAGGAGE ALLOWANCE</Text>
+              <Text style={[styles.baggageValue, { color: colors.textOnSurface }]}>25 kg per passenger</Text>
+              <Text style={[styles.baggageNotice, { color: colors.mutedForegroundLight }]}>
+                Subject to aircraft capacity and operational limitations.
+              </Text>
+            </View>
+          </>
+        )}
 
         {!!frontMember?.eligible && frontMember.member && (
           <View style={[styles.networkCard, { backgroundColor: colors.surface, borderColor: colors.primary + '35' }]}>

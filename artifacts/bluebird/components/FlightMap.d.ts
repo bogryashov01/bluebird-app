@@ -7,10 +7,11 @@
  * type-checking for the extensionless imports used by the route screens.
  */
 import type { ComponentType } from 'react';
-import type { Flight } from '@workspace/api-client-react';
+import type { AirportRecord, FlightView } from '@/lib/productionFlights';
 
 interface FlightMapProps {
-  flights: Flight[];
+  flights: FlightView[];
+  airports: AirportRecord[];
 }
 
 declare const FlightMap: ComponentType<FlightMapProps>;

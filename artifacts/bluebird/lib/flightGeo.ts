@@ -10,26 +10,6 @@ export interface Airport extends LatLng {
   label: string;
 }
 
-/** Coordinates for all seeded airports (origins and destinations) */
-export const AIRPORT_COORDS: Record<string, Airport> = {
-  LAX: { latitude: 33.9425, longitude: -118.4081, label: 'Los Angeles' },
-  SFO: { latitude: 37.6213, longitude: -122.3790, label: 'San Francisco' },
-  JFK: { latitude: 40.6413, longitude: -73.7781, label: 'New York JFK' },
-  MIA: { latitude: 25.7959, longitude: -80.2870, label: 'Miami' },
-  ORD: { latitude: 41.9742, longitude: -87.9073, label: 'Chicago' },
-  DAL: { latitude: 32.8481, longitude: -96.8518, label: 'Dallas' },
-  LAS: { latitude: 36.0840, longitude: -115.1537, label: 'Las Vegas' },
-  BOS: { latitude: 42.3656, longitude: -71.0096, label: 'Boston' },
-  SEA: { latitude: 47.4502, longitude: -122.3088, label: 'Seattle' },
-  DEN: { latitude: 39.8561, longitude: -104.6737, label: 'Denver' },
-  ASP: { latitude: 39.2232, longitude: -106.8690, label: 'Aspen' },
-  TEB: { latitude: 40.8501, longitude: -74.0608, label: 'Teterboro' },
-  SDL: { latitude: 33.6229, longitude: -111.9105, label: 'Scottsdale' },
-  PBI: { latitude: 26.6832, longitude: -80.0956, label: 'Palm Beach' },
-  NAS: { latitude: 25.0390, longitude: -77.4662, label: 'Nassau' },
-  YYZ: { latitude: 43.6777, longitude: -79.6248, label: 'Toronto' },
-};
-
 /** Quadratic-bezier arc between two points, bowed perpendicular to the route. */
 export function arcPoints(from: LatLng, to: LatLng, segments = 48): LatLng[] {
   const mLat = (from.latitude + to.latitude) / 2;

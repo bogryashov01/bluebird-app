@@ -3,16 +3,26 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput,
   RefreshControl, ActivityIndicator, Platform, Image, ImageBackground,
 } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import {
   useListFlights, useGetQueueStatus, useListTrips,
-  type Flight, type QueueEntry, type Trip,
+  type QueueEntry, type Trip,
 } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
 import FlightMapView from '@/components/FlightMap';
+import {
+  fetchProductionAirports,
+  fetchProductionFlights,
+  getFlightAirportCodes,
+  isLocalFlightReadMode,
+  mapLocalFlight,
+  type AirportRecord,
+  type FlightView,
+} from '@/lib/productionFlights';
 
 const AIRCRAFT_IMAGES: { match: RegExp; source: any }[] = [
   { match: /gulfstream|g280|challenger|falcon/i, source: require('@/assets/images/aircraft-heavy.jpg') },
@@ -22,11 +32,9 @@ const AIRCRAFT_IMAGES: { match: RegExp; source: any }[] = [
 const LIGHT_JET = require('@/assets/images/aircraft-light.jpg');
 const HERO = require('@/assets/images/hero-aircraft.jpg');
 
-function aircraftImage(type: string) {
-  return AIRCRAFT_IMAGES.find((a) => a.match.test(type))?.source ?? LIGHT_JET;
+function aircraftImage(type: string | null) {
+  return AIRCRAFT_IMAGES.find((a) => a.match.test(type ?? ''))?.source ?? LIGHT_JET;
 }
-
-type FlightData = Flight;
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -35,19 +43,36 @@ function greeting(): string {
   return 'Good evening';
 }
 
-function formatDateTime(f: FlightData): string {
-  const d = new Date(`${f.departureDate}T${f.departureTime}:00`);
-  const day = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  let hours = d.getHours();
-  const mins = d.getMinutes().toString().padStart(2, '0');
-  const ampm = hours >= 12 ? 'P' : 'A';
-  hours = hours % 12 || 12;
-  return `${day} · ${hours}:${mins}${ampm}`;
+function formatDateTime(flight: FlightView): string {
+  const parts: string[] = [];
+  if (flight.departureDate) {
+    const [year, month, day] = flight.departureDate.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    if (!Number.isNaN(date.valueOf())) {
+      parts.push(date.toLocaleDateString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric',
+      }));
+    }
+  }
+  if (flight.departureTime) {
+    const [hourText, minuteText] = flight.departureTime.split(':');
+    const hour = Number(hourText);
+    const minute = Number(minuteText);
+    if (Number.isInteger(hour) && Number.isInteger(minute)) {
+      const ampm = hour >= 12 ? 'P' : 'A';
+      parts.push(`${hour % 12 || 12}:${String(minute).padStart(2, '0')}${ampm}${flight.departureTimeZone ? ` ${flight.departureTimeZone}` : ''}`);
+    }
+  }
+  return parts.length ? parts.join(' · ') : 'Schedule unavailable';
 }
 
-function matchesQuery(f: FlightData, q: string): boolean {
-  return [f.fromAirport, f.toAirport, f.fromCity, f.toCity, f.aircraftType]
-    .some((s) => s.toLowerCase().includes(q));
+function matchesQuery(flight: FlightView, q: string): boolean {
+  return [flight.fromAirport, flight.toAirport, flight.fromCity, flight.toCity, flight.aircraftType]
+    .some((value) => (value ?? '').toLowerCase().includes(q));
+}
+
+function airportLabel(code: string | null, city: string | null): string {
+  return code || city || '—';
 }
 
 interface HeaderProps {
@@ -55,13 +80,18 @@ interface HeaderProps {
   topPad: number;
   userName?: string;
   allCount: number;
-  featured?: FlightData;
+  productionReadOnly: boolean;
+  featured?: FlightView;
   search: string;
   onSearchChange: (t: string) => void;
   onClearSearch: () => void;
   view: 'list' | 'map';
   onViewChange: (v: 'list' | 'map') => void;
-  mapFlights: FlightData[];
+  mapFlights: FlightView[];
+  mapAirports: AirportRecord[];
+  mapLoading: boolean;
+  mapError: boolean;
+  onMapRetry: () => void;
   showEmpty: boolean;
   hasActiveQuery: boolean;
   onClearSearchFromEmpty: () => void;
@@ -73,8 +103,9 @@ interface HeaderProps {
  * search input focused while typing.
  */
 const DiscoverHeader = React.memo(function DiscoverHeader({
-  colors, topPad, userName, allCount, featured, search, onSearchChange, onClearSearch,
-  view, onViewChange, mapFlights, showEmpty, hasActiveQuery, onClearSearchFromEmpty,
+  colors, topPad, userName, allCount, productionReadOnly, featured, search, onSearchChange, onClearSearch,
+  view, onViewChange, mapFlights, mapAirports, mapLoading, mapError, onMapRetry,
+  showEmpty, hasActiveQuery, onClearSearchFromEmpty,
 }: HeaderProps) {
   return (
     <View>
@@ -100,7 +131,11 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
         {greeting()}{userName ? `, ${userName}` : ''}
       </Text>
       <Text style={[styles.subGreeting, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-        {allCount > 0 ? `${Math.min(allCount, 3)} empty legs added near you today` : 'Empty legs near you'}
+        {allCount > 0
+          ? productionReadOnly
+            ? `${allCount} published flight${allCount === 1 ? '' : 's'}`
+            : `${allCount} empty legs available`
+          : productionReadOnly ? 'Browse published empty legs' : 'Browse available empty legs'}
       </Text>
 
       {/* Featured empty leg — hidden when it doesn't match an active search */}
@@ -119,10 +154,10 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
             </View>
             <View style={styles.featuredBottom}>
               <Text style={[styles.featuredRoute, { color: '#FFFFFF', fontFamily: 'Inter_700Bold' }]}>
-                {featured.fromCity} → {featured.toCity}
+              {airportLabel(featured.fromCity, featured.fromAirport)} → {airportLabel(featured.toCity, featured.toAirport)}
               </Text>
               <Text style={[styles.featuredMeta, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_400Regular' }]}>
-                {featured.aircraftType} · {formatDateTime(featured)}
+              {featured.aircraftType ?? 'Aircraft details unavailable'} · {formatDateTime(featured)}
               </Text>
             </View>
           </ImageBackground>
@@ -180,7 +215,25 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
 
       {view === 'map' && (
         mapFlights.length > 0 ? (
-          <FlightMapView flights={mapFlights} />
+          mapError ? (
+            <View style={styles.mapPlaceholder}>
+              <Feather name="wifi-off" size={28} color={colors.mutedForeground} />
+              <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                Could not load airport locations
+              </Text>
+              <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={onMapRetry}>
+                <Text style={[styles.retryText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
+                  Try again
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : mapLoading ? (
+            <View style={styles.mapPlaceholder}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : (
+            <FlightMapView flights={mapFlights} airports={mapAirports} />
+          )
         ) : (
           <View style={styles.mapPlaceholder}>
             <Feather name="map" size={28} color={colors.mutedForeground} />
@@ -224,7 +277,20 @@ export default function DiscoverScreen() {
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
 
-  const { data: flights, isLoading: flightsLoading, isError, refetch, isRefetching } = useListFlights({});
+  const localReadMode = isLocalFlightReadMode();
+  const localFlightsQuery = useListFlights({}, { query: { enabled: localReadMode } });
+  const productionFlightsQuery = useQuery({
+    queryKey: ['production-empty-legs'],
+    queryFn: ({ signal }) => fetchProductionFlights({ signal }),
+    enabled: !localReadMode,
+  });
+  const flights: FlightView[] = localReadMode
+    ? (localFlightsQuery.data ?? []).map(mapLocalFlight)
+    : productionFlightsQuery.data ?? [];
+  const flightsLoading = localReadMode ? localFlightsQuery.isLoading : productionFlightsQuery.isLoading;
+  const flightsError = localReadMode ? localFlightsQuery.isError : productionFlightsQuery.isError;
+  const flightsRefetching = localReadMode ? localFlightsQuery.isRefetching : productionFlightsQuery.isRefetching;
+  const refetchFlights = localReadMode ? localFlightsQuery.refetch : productionFlightsQuery.refetch;
 
   // Personalized data: flights the member is already queued for or booked on
   // are hidden from Discover. Signed-out users see the full list.
@@ -255,12 +321,13 @@ export default function DiscoverScreen() {
 
   const topPad = Platform.OS === 'web' ? 40 : insets.top;
 
-  // Only joinable flights are offered — completed/departed/cancelled flights
-  // are excluded so members are never led into a join flow that can't succeed.
-  // Flights the member has already joined or booked are hidden too.
-  const all: FlightData[] = React.useMemo(
-    () => (flights ?? []).filter((f) => f.status === 'available' && !excludedFlightIds.has(f.id)),
-    [flights, excludedFlightIds],
+  // Keep the status contract source-specific. The production API's published
+  // status is a discoverability signal, not proof of queue eligibility.
+  // Flights the member has already joined or booked remain hidden as before.
+  const all: FlightView[] = React.useMemo(
+    () => (flights ?? []).filter((f) =>
+      f.status === (localReadMode ? 'available' : 'published') && !excludedFlightIds.has(f.id)),
+    [flights, excludedFlightIds, localReadMode],
   );
   const featured = all.find((f) => f.featured);
   const q = search.trim().toLowerCase();
@@ -281,21 +348,36 @@ export default function DiscoverScreen() {
     return list;
   }, [all, q]);
 
-  const onClearSearch = React.useCallback(() => setSearch(''), []);
+  const airportCodes = React.useMemo(() => getFlightAirportCodes(mapFlights), [mapFlights]);
+  const airportQuery = useQuery({
+    queryKey: ['production-airports', airportCodes],
+    queryFn: ({ signal }) => fetchProductionAirports(airportCodes, { signal }),
+    enabled: view === 'map' && airportCodes.length > 0,
+  });
 
-  const renderCard = ({ item }: { item: FlightData }) => (
+  const onClearSearch = React.useCallback(() => setSearch(''), []);
+  const onRefresh = React.useCallback(async () => {
+    const refreshes: Promise<unknown>[] = [refetchFlights()];
+    if (view === 'map' && airportCodes.length > 0) refreshes.push(airportQuery.refetch());
+    await Promise.all(refreshes);
+  }, [refetchFlights, view, airportCodes, airportQuery.refetch]);
+
+  const renderCard = ({ item }: { item: FlightView }) => (
     <TouchableOpacity
       style={[styles.card, { backgroundColor: colors.card }]}
       activeOpacity={0.8}
       onPress={() => router.push(`/flight/${item.id}`)}
     >
-      <Image source={aircraftImage(item.aircraftType)} style={styles.cardThumb} />
+      <Image
+        source={item.imageUrl ? { uri: item.imageUrl } : aircraftImage(item.aircraftType)}
+        style={styles.cardThumb}
+      />
       <View style={styles.cardBody}>
         <Text style={[styles.cardRoute, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
-          {item.fromAirport} → {item.toAirport}
+          {airportLabel(item.fromAirport, item.fromCity)} → {airportLabel(item.toAirport, item.toCity)}
         </Text>
         <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
-          {item.aircraftType} · {formatDateTime(item)}
+          {item.aircraftType ?? 'Aircraft details unavailable'} · {formatDateTime(item)}
         </Text>
       </View>
     </TouchableOpacity>
@@ -305,7 +387,7 @@ export default function DiscoverScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {isLoading ? (
         <View style={styles.centered}><ActivityIndicator color={colors.primary} size="large" /></View>
-      ) : isError ? (
+      ) : flightsError ? (
         <View style={styles.centered}>
           <Feather name="wifi-off" size={32} color={colors.mutedForeground} />
           <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
@@ -313,7 +395,7 @@ export default function DiscoverScreen() {
           </Text>
           <TouchableOpacity
             style={[styles.retryBtn, { borderColor: colors.border }]}
-            onPress={() => refetch()}
+            onPress={() => refetchFlights()}
           >
             <Text style={[styles.retryText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>Try again</Text>
           </TouchableOpacity>
@@ -328,7 +410,11 @@ export default function DiscoverScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="none"
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
+            <RefreshControl
+              refreshing={flightsRefetching || airportQuery.isRefetching}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+            />
           }
           ListHeaderComponent={
             <DiscoverHeader
@@ -336,6 +422,7 @@ export default function DiscoverScreen() {
               topPad={topPad}
               userName={user?.name?.split(' ')[0]}
               allCount={all.length}
+              productionReadOnly={!localReadMode}
               featured={showFeatured ? featured : undefined}
               search={search}
               onSearchChange={setSearch}
@@ -343,6 +430,10 @@ export default function DiscoverScreen() {
               view={view}
               onViewChange={setView}
               mapFlights={mapFlights}
+              mapAirports={airportQuery.data ?? []}
+              mapLoading={airportQuery.isLoading}
+              mapError={airportQuery.isError}
+              onMapRetry={() => airportQuery.refetch()}
               showEmpty={view === 'list' && filteredFlights.length === 0}
               hasActiveQuery={q.length > 0}
               onClearSearchFromEmpty={onClearSearch}

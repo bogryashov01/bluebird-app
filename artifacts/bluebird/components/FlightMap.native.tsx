@@ -11,9 +11,9 @@ import { View, Text, StyleSheet, Dimensions, Platform, useWindowDimensions } fro
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
-import type { Flight } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
-import { AIRPORT_COORDS, arcPoints, bearing, type LatLng } from '@/lib/flightGeo';
+import { arcPoints, bearing, type LatLng } from '@/lib/flightGeo';
+import type { AirportRecord, FlightView } from '@/lib/productionFlights';
 
 const NAVY = '#1B2A5B';
 const ORANGE = '#F5842E';
@@ -43,13 +43,12 @@ const LIGHT_MAP_STYLE = [
   { featureType: 'administrative.province', elementType: 'geometry.stroke', stylers: [{ color: '#d5d9de' }] },
 ];
 
-type FlightData = Flight;
-
 interface Props {
-  flights: FlightData[];
+  flights: FlightView[];
+  airports: AirportRecord[];
 }
 
-export default function FlightMap({ flights }: Props) {
+export default function FlightMap({ flights, airports }: Props) {
   const colors = useColors();
   const { height: screenHeight } = useWindowDimensions();
   const mapHeight = Math.round(screenHeight * 0.55);
@@ -58,35 +57,73 @@ export default function FlightMap({ flights }: Props) {
   const routeColor = isDark ? colors.paleBlue : NAVY;      // brand blue, lightened for dark tiles
   const labelColor = isDark ? colors.paleBlueFaint : NAVY;
   const halo       = isDark ? colors.backgroundMid : '#fff'; // halo matches map tiles, not theme surfaces
+  const mapRef = React.useRef<MapView | null>(null);
 
-  const routes = React.useMemo(
-    () =>
-      flights
-        .filter((f) => AIRPORT_COORDS[f.fromAirport] && AIRPORT_COORDS[f.toAirport])
-        .map((f) => {
-          const from = AIRPORT_COORDS[f.fromAirport];
-          const to = AIRPORT_COORDS[f.toAirport];
-          const pts = arcPoints(from, to);
-          const midIdx = Math.floor(pts.length / 2);
-          return {
-            flight: f,
-            pts,
-            mid: pts[midIdx],
-            rot: bearing(pts[midIdx - 2], pts[midIdx + 2]),
-            featured: !!f.featured,
-          };
-        }),
-    [flights],
+  const airportsByCode = React.useMemo(
+    () => new Map(airports.map((airport) => [airport.code, airport])),
+    [airports],
   );
 
-  const airports = React.useMemo(() => {
-    const map: Record<string, FlightData> = {};
-    for (const { flight } of routes) {
-      if (!map[flight.fromAirport]) map[flight.fromAirport] = flight;
-      if (!map[flight.toAirport]) map[flight.toAirport] = flight;
+  const routes = React.useMemo(
+    () => flights.flatMap((flight) => {
+      const fromCode = flight.fromAirport;
+      const toCode = flight.toAirport;
+      if (!fromCode || !toCode) return [];
+      const from = airportsByCode.get(fromCode);
+      const to = airportsByCode.get(toCode);
+      if (!from || !to) return [];
+      const pts = arcPoints(from, to);
+      const midIdx = Math.floor(pts.length / 2);
+      return [{
+        flight,
+        fromCode,
+        toCode,
+        pts,
+        mid: pts[midIdx],
+        rot: bearing(pts[midIdx - 2], pts[midIdx + 2]),
+        featured: flight.featured,
+      }];
+    }),
+    [flights, airportsByCode],
+  );
+
+  const routeAirports = React.useMemo(() => {
+    const touched = new Map<string, { airport: AirportRecord; flight: FlightView }>();
+    for (const { flight, fromCode, toCode } of routes) {
+      const from = airportsByCode.get(fromCode);
+      const to = airportsByCode.get(toCode);
+      if (from && !touched.has(fromCode)) touched.set(fromCode, { airport: from, flight });
+      if (to && !touched.has(toCode)) touched.set(toCode, { airport: to, flight });
     }
-    return Object.entries(map);
-  }, [routes]);
+    return [...touched.entries()];
+  }, [routes, airportsByCode]);
+  const routeCoordinates = React.useMemo(
+    () => routeAirports.map(([, { airport }]) => ({
+      latitude: airport.latitude,
+      longitude: airport.longitude,
+    })),
+    [routeAirports],
+  );
+  React.useEffect(() => {
+    const map = mapRef.current;
+    if (!map || routeCoordinates.length === 0) return;
+    if (routeCoordinates.length === 1) {
+      const [coordinate] = routeCoordinates;
+      map.animateToRegion({
+        ...coordinate,
+        latitudeDelta: 4,
+        longitudeDelta: 4,
+      }, 0);
+      return;
+    }
+    map.fitToCoordinates(routeCoordinates, {
+      edgePadding: { top: 28, right: 28, bottom: 54, left: 28 },
+      animated: false,
+    });
+  }, [routeCoordinates]);
+  const productionRoutes = routes.some(({ flight }) => flight.source === 'production');
+  const availableLocalRoutes = routes.some(({ flight }) => flight.status === 'available');
+  const featuredRoutes = routes.some(({ featured }) => featured);
 
   if (routes.length === 0) {
     return (
@@ -102,6 +139,7 @@ export default function FlightMap({ flights }: Props) {
   return (
     <View style={[styles.container, { height: mapHeight }]}>
       <MapView
+        ref={mapRef}
         style={styles.map}
         provider={PROVIDER_DEFAULT}
         customMapStyle={isDark ? DARK_MAP_STYLE : LIGHT_MAP_STYLE}
@@ -138,14 +176,18 @@ export default function FlightMap({ flights }: Props) {
           </React.Fragment>
           );
         })}
-        {airports.map(([code, flight]) => {
-          const c = AIRPORT_COORDS[code];
+        {routeAirports.map(([code, { airport, flight }]) => {
           return (
             <Marker
               key={code}
-              coordinate={{ latitude: c.latitude, longitude: c.longitude }}
+              coordinate={{ latitude: airport.latitude, longitude: airport.longitude }}
               anchor={{ x: 0.5, y: 0.35 }}
               tracksViewChanges={false}
+              title={airport.name}
+              description={[
+                airport.city,
+                airport.tz ? `Time zone: ${airport.tz}` : null,
+              ].filter(Boolean).join(' · ')}
               onPress={() => goTo(flight.id)}
             >
               <View style={styles.airportMarker}>
@@ -159,9 +201,15 @@ export default function FlightMap({ flights }: Props) {
       <View style={styles.legend}>
         <View style={[styles.legendPill, { backgroundColor: isDark ? 'rgba(13,22,54,0.92)' : 'rgba(255,255,255,0.92)' }]}>
           <View style={[styles.legendSwatch, { backgroundColor: routeColor }]} />
-          <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Available</Text>
-          <View style={[styles.legendSwatch, { backgroundColor: ORANGE, marginLeft: 10 }]} />
-          <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Featured</Text>
+          <Text style={[styles.legendText, { color: colors.mutedForeground }]}>
+            {productionRoutes ? 'Published' : availableLocalRoutes ? 'Available' : 'Flights'}
+          </Text>
+          {featuredRoutes && (
+            <>
+              <View style={[styles.legendSwatch, { backgroundColor: ORANGE, marginLeft: 10 }]} />
+              <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Featured</Text>
+            </>
+          )}
         </View>
       </View>
     </View>

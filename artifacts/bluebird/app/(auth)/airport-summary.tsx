@@ -13,10 +13,16 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { useGetAirportSummary } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
 import FlightMap from '@/components/FlightMap';
 import FlightCard from '@/components/FlightCard';
+import {
+  fetchProductionAirports,
+  getFlightAirportCodes,
+  mapLocalFlight,
+} from '@/lib/productionFlights';
 
 export default function AirportSummaryScreen() {
   const insets = useSafeAreaInsets();
@@ -26,6 +32,19 @@ export default function AirportSummaryScreen() {
 
   const { data: summary, isLoading, isError, refetch } = useGetAirportSummary(airportCode, {
     query: { enabled: airportCode.length > 0 },
+  });
+  const recentFlights = React.useMemo(
+    () => (summary?.recentFlights ?? []).map(mapLocalFlight),
+    [summary?.recentFlights],
+  );
+  const recentAirportCodes = React.useMemo(
+    () => getFlightAirportCodes(recentFlights),
+    [recentFlights],
+  );
+  const airportQuery = useQuery({
+    queryKey: ['production-airports', recentAirportCodes],
+    queryFn: ({ signal }) => fetchProductionAirports(recentAirportCodes, { signal }),
+    enabled: recentAirportCodes.length > 0,
   });
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
@@ -134,12 +153,22 @@ export default function AirportSummaryScreen() {
             )}
 
             {/* Route map */}
-            {summary.recentFlights.length > 0 && (
+            {recentFlights.length > 0 && (
               <>
                 <Text style={[styles.sectionTitle, { color: colors.textOnBrand }]}>
                   Recent routes from {summary.airport.code}
                 </Text>
-                <FlightMap flights={summary.recentFlights} />
+                {airportQuery.isLoading ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : airportQuery.isError ? (
+                  <TouchableOpacity onPress={() => airportQuery.refetch()}>
+                    <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+                      Airport locations unavailable. Tap to retry.
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <FlightMap flights={recentFlights} airports={airportQuery.data ?? []} />
+                )}
               </>
             )}
 

@@ -16,7 +16,7 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "CI=1 EXPO_NO_TELEMETRY=1 pnpm exec expo start --web --localhost --port 20105",
+    command: "CI=1 EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE=local pnpm exec expo start --web --localhost --port 20105",
     url: "http://127.0.0.1:20105",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

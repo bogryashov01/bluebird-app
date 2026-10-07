@@ -26,3 +26,4 @@
 - [Seed after migration](seed-after-migration.md) — fixtures restored after migrations must write the current canonical fields, not legacy fields awaiting promotion.
 - [Metro platform facades](flight-map-platform-resolution.md) — use declaration-only facades when native/web variants have different source extensions; runtime `.ts` re-exports can bypass platform resolution.
 - [Bluebird browser test fixtures](bluebird-browser-test-fixtures.md) — authenticated screen tests must mock global notification and queue queries as arrays so shared shell hooks don't crash.
+- [Bluebird time zone formatting](bluebird-time-zone-formatting.md) — short Intl timezone labels vary by runtime; preserve IANA zones and avoid asserting a specific abbreviation.
