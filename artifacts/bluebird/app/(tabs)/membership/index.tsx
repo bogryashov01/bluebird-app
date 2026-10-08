@@ -6,17 +6,26 @@ import {
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useGetMembership, type MembershipPlan } from '@workspace/api-client-react';
+import { useGetMembership } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { useProductionMembershipPlans } from '@/hooks/useProductionMembershipPlans';
 import { StatCard } from '@/components/StatCard';
-import { formatAnnualPrice, getTierLabel, TIER_COLORS, TIER_ORDER } from '@/lib/membershipPlans';
+import {
+  getTierLabel,
+  TIER_COLORS,
+  TIER_ORDER,
+} from '@/lib/membershipPlans';
+import {
+  formatProductionPlanPrice,
+  productionPlanPurchaseNotice,
+} from '@/lib/productionMembershipPlans';
 
 // ── Tier config ───────────────────────────────────────────────────────────────
-const TIER_META: Record<string, { label: string; blurb: string }> = {
-  base:      { label: 'Base',      blurb: '' },
-  plus:      { label: 'Plus',      blurb: '5 Skip the Line Passes, priority access to flights & international access.' },
-  concierge: { label: 'Family/Corporate', blurb: '7 Skip the Line Passes, 4 memberships in 1 & charter flight aviation advisors.' },
+const TIER_META: Record<string, { label: string }> = {
+  base:      { label: 'Base' },
+  plus:      { label: 'Plus' },
+  concierge: { label: 'Family/Corporate' },
 };
 
 function fmtUsd(n: number) {
@@ -33,15 +42,16 @@ export default function MembershipScreen() {
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { data: membership, isLoading, isError, refetch } = useGetMembership({});
+  const plansQuery = useProductionMembershipPlans();
   const mem = membership;
 
   const currentTier: string = mem?.tier ?? user?.membershipTier ?? 'base';
   const currentIdx = TIER_ORDER[currentTier] ?? -1;
-  const nextTierId = ['base', 'plus', 'concierge'][currentIdx + 1];
-  const plans: MembershipPlan[] = mem?.plans ?? [];
+  const plans = plansQuery.data?.plans ?? [];
+  const nextPublicPlan = plans.find((plan) => (TIER_ORDER[plan.tier] ?? -1) > currentIdx);
   const family = mem?.family;
 
-  const tierLabel = getTierLabel(currentTier, plans);
+  const tierLabel = getTierLabel(currentTier, mem?.plans ?? []);
 
   if (isLoading) {
     return (
@@ -91,44 +101,70 @@ export default function MembershipScreen() {
                 One membership.{'\n'}Unlimited flights.
               </Text>
               <Text style={styles.upgradeBody}>
-                You can join any flight, bring up to 5 friends with no additional costs per passenger.
+                Review the public membership plans and their current features. Membership purchases are unavailable.
               </Text>
               <View style={[styles.upgradeBtn, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.upgradeBtnText, { color: '#0A1128' }]}>See plans</Text>
+                <Text style={[styles.upgradeBtnText, { color: '#0A1128' }]}>Browse plans</Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>
 
           <Text style={[styles.becomeMemberTitle, { color: colors.textOnSurface }]}>Become a member</Text>
           <View style={styles.inlinePlans}>
-            {plans.map((plan) => (
-              <View
-                key={plan.id}
-                style={[styles.inlinePlanCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              >
-                <View style={styles.inlinePlanHeader}>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={[styles.inlinePlanName, { color: TIER_COLORS[plan.id] }]}>{plan.label}</Text>
-                    <Text style={[styles.inlinePlanPrice, { color: colors.mutedForegroundLight }]}>
-                      {formatAnnualPrice(plan.priceAnnualUsd)}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={[styles.inlineJoinButton, { backgroundColor: TIER_COLORS[plan.id] }]}
-                    activeOpacity={0.8}
-                    onPress={() => router.push(`/upgrade/${plan.id}` as any)}
-                  >
-                    <Text style={[styles.inlineJoinText, { color: colors.primaryForeground }]}>Join</Text>
-                  </TouchableOpacity>
-                </View>
-                {plan.features.map((feature) => (
-                  <View key={feature} style={styles.inlineFeatureRow}>
-                    <Text style={[styles.inlineFeatureCheck, { color: colors.primary }]}>✓</Text>
-                    <Text style={[styles.inlineFeatureText, { color: colors.textOnSurface }]}>{feature}</Text>
-                  </View>
-                ))}
+            {plansQuery.isLoading ? (
+              <ActivityIndicator color={colors.primary} size="large" />
+            ) : plansQuery.isError || !plansQuery.data ? (
+              <View style={styles.planLoadError}>
+                <Text style={[styles.planLoadErrorText, { color: colors.mutedForegroundLight }]}>
+                  Could not load production plans. Demo pricing is not shown.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => plansQuery.refetch()}
+                >
+                  <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>
+                </TouchableOpacity>
               </View>
-            ))}
+            ) : (
+              <>
+                {plans.map((plan) => {
+                  const planColor = TIER_COLORS[plan.tier as keyof typeof TIER_COLORS] ?? colors.primary;
+                  return (
+                    <View
+                      key={plan.tier}
+                      style={[styles.inlinePlanCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    >
+                      <View style={styles.inlinePlanHeader}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={[styles.inlinePlanName, { color: planColor }]}>{plan.name}</Text>
+                          <Text style={[styles.inlinePlanPrice, { color: colors.mutedForegroundLight }]}>
+                            {formatProductionPlanPrice(plan)}
+                          </Text>
+                        </View>
+                        {plan.highlight && (
+                          <Text style={[styles.planHighlight, { color: colors.primary }]}>HIGHLIGHT</Text>
+                        )}
+                      </View>
+                      <Text style={[styles.inlinePlanTagline, { color: colors.mutedForegroundLight }]}>
+                        {plan.tagline}
+                      </Text>
+                      {(plansQuery.data.cardFeatures[plan.tier] ?? []).map((feature) => (
+                        <View key={feature} style={styles.inlineFeatureRow}>
+                          <Text style={[styles.inlineFeatureCheck, { color: colors.primary }]}>✓</Text>
+                          <Text style={[styles.inlineFeatureText, { color: colors.textOnSurface }]}>{feature}</Text>
+                        </View>
+                      ))}
+                      <Text style={[styles.purchaseUnavailable, { color: colors.mutedForegroundLight }]}>
+                        Purchases unavailable
+                      </Text>
+                    </View>
+                  );
+                })}
+                <Text style={[styles.planAvailability, { color: colors.mutedForegroundLight }]}>
+                  {productionPlanPurchaseNotice(plansQuery.data.availability)}
+                </Text>
+              </>
+            )}
           </View>
           <TouchableOpacity
             activeOpacity={0.7}
@@ -236,8 +272,8 @@ export default function MembershipScreen() {
         )}
 
         {/* ── Upgrade / status card ── */}
-        {nextTierId && !family ? (
-          <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`/upgrade/${nextTierId}` as any)}>
+        {!family && nextPublicPlan ? (
+          <View>
             <LinearGradient
               colors={['#0A1128', '#1259F2']}
               start={{ x: 0, y: 0 }}
@@ -245,14 +281,31 @@ export default function MembershipScreen() {
               style={styles.upgradeCard}
             >
               <Text style={styles.upgradeEyebrow}>UPGRADE</Text>
-              <Text style={styles.upgradeTitle}>{tierLabel} → {getTierLabel(nextTierId, plans)}</Text>
-              <Text style={styles.upgradeBody}>{TIER_META[nextTierId]?.blurb ?? ''}</Text>
-              <View style={[styles.upgradeBtn, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.upgradeBtnText, { color: '#0A1128' }]}>Upgrade Now</Text>
-              </View>
+              <Text style={styles.upgradeTitle}>{tierLabel} → {nextPublicPlan.name}</Text>
+              <Text style={styles.upgradeBody}>
+                {formatProductionPlanPrice(nextPublicPlan)} · {nextPublicPlan.tagline}
+              </Text>
+              <Text style={[styles.upgradeUnavailable, { color: colors.primaryForeground }]}>
+                Membership purchases are unavailable.
+              </Text>
             </LinearGradient>
-          </TouchableOpacity>
-        ) : (
+          </View>
+        ) : !family && plansQuery.data ? (
+          <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.catalogStatusText, { color: colors.textOnSurface }]}>
+              No higher plan is currently listed in the public catalog.
+            </Text>
+          </View>
+        ) : !family && plansQuery.isError ? (
+          <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
+              Production plan details could not be loaded.
+            </Text>
+            <TouchableOpacity onPress={() => plansQuery.refetch()}>
+              <Text style={[styles.plansLinkText, { color: colors.primary }]}>Retry loading plans</Text>
+            </TouchableOpacity>
+          </View>
+        ) : family ? (
           <LinearGradient
             colors={['#0A1128', '#1259F2']}
             start={{ x: 0, y: 0 }}
@@ -260,20 +313,20 @@ export default function MembershipScreen() {
             style={styles.upgradeCard}
           >
             <Text style={styles.upgradeEyebrow}>ELITE STATUS</Text>
-            <Text style={styles.upgradeTitle}>{family ? 'Family/Corporate household' : 'Family/Corporate'}</Text>
+            <Text style={styles.upgradeTitle}>Family/Corporate household</Text>
             <Text style={styles.upgradeBody}>
-              {family
-                ? family.role === 'primary'
-                  ? 'Manage four total memberships and allocate one shared pool of seven annual Skip the Line passes.'
-                  : `You have Family Plus access and ${family.members?.[0]?.availablePasses ?? 0} assigned Skip the Line passes.`
-                : "You're on the highest tier. Enjoy four memberships and seven annual Skip the Line passes."}
+              {family.role === 'primary'
+                ? 'Manage four total memberships and allocate one shared pool of seven annual Skip the Line passes.'
+                : `You have Family Plus access and ${family.members?.[0]?.availablePasses ?? 0} assigned Skip the Line passes.`}
             </Text>
-            {family && (
-              <View style={[styles.upgradeBtn, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.upgradeBtnText, { color: '#0A1128' }]}>Open Family management</Text>
-              </View>
-            )}
+            <View style={[styles.upgradeBtn, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.upgradeBtnText, { color: '#0A1128' }]}>Open Family management</Text>
+            </View>
           </LinearGradient>
+        ) : (
+          <View style={styles.memberPlanLoading}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
         )}
 
         {/* ── Compare plans link ── */}
@@ -386,11 +439,19 @@ const styles = StyleSheet.create({
   inlinePlanHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
   inlinePlanName: { fontFamily: 'Inter_700Bold', fontSize: 18 },
   inlinePlanPrice: { fontFamily: 'Inter_500Medium', fontSize: 13, marginTop: 2 },
-  inlineJoinButton: { borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9 },
-  inlineJoinText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  inlinePlanTagline: { fontFamily: 'Inter_400Regular', fontSize: 12.5, lineHeight: 18, marginBottom: 8 },
+  planHighlight: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 0.8 },
   inlineFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
   inlineFeatureCheck: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   inlineFeatureText: { fontFamily: 'Inter_400Regular', fontSize: 13, flex: 1 },
+  planLoadError: { alignItems: 'center', paddingVertical: 14 },
+  planLoadErrorText: { fontFamily: 'Inter_400Regular', fontSize: 13, textAlign: 'center' },
+  planAvailability: { fontFamily: 'Inter_500Medium', fontSize: 12, textAlign: 'center', paddingVertical: 6 },
+  purchaseUnavailable: { fontFamily: 'Inter_600SemiBold', fontSize: 12, marginTop: 10 },
+  upgradeUnavailable: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  catalogStatusCard: { borderRadius: 18, borderWidth: 1, padding: 16, marginTop: 18 },
+  catalogStatusText: { fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 19 },
+  memberPlanLoading: { alignItems: 'center', paddingVertical: 24 },
 
   linkCard: {
     borderRadius: 18, overflow: 'hidden', marginTop: 4,
