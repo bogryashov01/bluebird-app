@@ -7,3 +7,9 @@ Rule: any new endpoint or request field must be added to `lib/api-spec/openapi.y
 **Why:** Task completion reviews rejected work twice because generated clients were hand-edited and a column existed only in the live DB, so fresh databases and validators disagreed with the server.
 
 **How to apply:** Whenever the sidekick touches api-server routes or the DB schema, require spec + codegen + ensureSchema updates and fresh-schema verification in the task brief.
+
+Post-merge setup must rely on API startup migrations rather than automatic Drizzle schema push.
+
+**Why:** Schema push requested truncation of the populated users table during unattended setup, then returned a successful process status despite a TTY prompt error. Forcing it would risk data loss.
+
+**How to apply:** Keep dependency installation non-interactive, allow adequate installation time, and let workflow reconciliation restart the API to run its explicit migrations. Never add forced schema push to merge setup.
