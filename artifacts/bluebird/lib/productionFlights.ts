@@ -74,6 +74,15 @@ export interface ProductionAirportResponse {
   longestRunwayFt: number | null;
 }
 
+export interface ProductionAirportCityGroupResponse {
+  key: string;
+  displayName: string;
+  country: string;
+  tier: number;
+  airportCodes: string[];
+  airportLabels: string[];
+}
+
 export interface FlightView {
   id: string;
   source: FlightReadMode;
@@ -365,11 +374,13 @@ export function mapProductionAirport(value: unknown): AirportRecord {
     throw new Error('Production airport response must be an object.');
   }
   const airport = value as Record<string, unknown>;
+  const code = typeof airport.code === 'string' ? airport.code.trim().toUpperCase() : '';
+  const name = typeof airport.name === 'string' ? airport.name.trim() : '';
   const latitude = getNumber(airport.latitude, 'airport.latitude');
   const longitude = getNumber(airport.longitude, 'airport.longitude');
   if (
-    typeof airport.code !== 'string' ||
-    typeof airport.name !== 'string' ||
+    !code ||
+    !name ||
     latitude === null ||
     longitude === null ||
     latitude < -90 ||
@@ -380,8 +391,8 @@ export function mapProductionAirport(value: unknown): AirportRecord {
     throw new Error('Production airport response is missing valid coordinates or identity.');
   }
   return {
-    code: airport.code.toUpperCase(),
-    name: airport.name,
+    code,
+    name,
     city: getString(airport.city, 'airport.city'),
     state: getString(airport.state, 'airport.state'),
     country: getString(airport.country, 'airport.country'),
@@ -397,6 +408,68 @@ export function mapProductionAirports(value: unknown): AirportRecord[] {
     throw new Error('Production airport lookup response must be an array.');
   }
   return value.map(mapProductionAirport);
+}
+
+function nonEmptyString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`Production airport field "${field}" must be a non-empty string.`);
+  }
+  return value.trim();
+}
+
+function mapAirportCodeArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`Production airport field "${field}" must be an array.`);
+  }
+  return value.map((entry, index) => {
+    const code = nonEmptyString(entry, `${field}[${index}]`).toUpperCase();
+    if (!/^[A-Z0-9-]{2,12}$/.test(code)) {
+      throw new Error(`Production airport field "${field}[${index}]" is not a valid airport code.`);
+    }
+    return code;
+  });
+}
+
+function mapNonEmptyStringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`Production airport field "${field}" must be an array.`);
+  }
+  return value.map((entry, index) =>
+    nonEmptyString(entry, `${field}[${index}]`),
+  );
+}
+
+export function mapProductionAirportCityGroup(
+  value: unknown,
+): ProductionAirportCityGroupResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Production airport city group must be an object.');
+  }
+  const raw = value as Record<string, unknown>;
+  const tier = getNumber(raw.tier, 'airportCityGroup.tier');
+  if (tier === null || !Number.isSafeInteger(tier) || tier < 0) {
+    throw new Error('Production airport city group tier must be a non-negative integer.');
+  }
+  return {
+    key: nonEmptyString(raw.key, 'airportCityGroup.key'),
+    displayName: nonEmptyString(raw.displayName, 'airportCityGroup.displayName'),
+    country: nonEmptyString(raw.country, 'airportCityGroup.country'),
+    tier,
+    airportCodes: mapAirportCodeArray(raw.airportCodes, 'airportCityGroup.airportCodes'),
+    airportLabels: mapNonEmptyStringArray(
+      raw.airportLabels,
+      'airportCityGroup.airportLabels',
+    ),
+  };
+}
+
+export function mapProductionAirportCityGroups(
+  value: unknown,
+): ProductionAirportCityGroupResponse[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Production airport cities response must be an array.');
+  }
+  return value.map(mapProductionAirportCityGroup);
 }
 
 export function getFlightAirportCodes(flights: readonly FlightView[]): string[] {
@@ -473,6 +546,7 @@ async function fetchJson(
   const response = await fetcher(`${baseUrl}${path}`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
+    credentials: 'omit',
     signal: options.signal,
   });
   if (!response.ok) {
@@ -523,4 +597,24 @@ export async function fetchProductionAirports(
   if (unique.length === 0) return [];
   const query = new URLSearchParams({ codes: unique.join(',') });
   return mapProductionAirports(await fetchJson(`/airports?${query.toString()}`, options));
+}
+
+export async function fetchProductionAirportSearch(
+  query: string,
+  options: ReadRequestOptions = {},
+): Promise<AirportRecord[]> {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) return [];
+  const params = new URLSearchParams({ q: normalizedQuery });
+  return mapProductionAirports(
+    await fetchJson(`/airports/search?${params.toString()}`, options),
+  );
+}
+
+export async function fetchProductionAirportCities(
+  options: ReadRequestOptions = {},
+): Promise<ProductionAirportCityGroupResponse[]> {
+  return mapProductionAirportCityGroups(
+    await fetchJson('/airports/cities', options),
+  );
 }

@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,10 +12,15 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import type { AirportGroup, AirportInfo } from '@workspace/api-client-react';
+import {
+  fetchProductionAirportCities,
+  fetchProductionAirportSearch,
+} from '@/lib/productionFlights';
 import { useColors } from '@/hooks/useColors';
 import {
   filterAirportGroups,
   groupSelectionState,
+  mapProductionSearchOptions,
   toggleAirport,
   toggleAirportGroup,
   type GroupSelectionState,
@@ -22,7 +28,16 @@ import {
 
 type ListRow =
   | { kind: 'group'; group: AirportGroup; visibleAirports: AirportInfo[] }
-  | { kind: 'airport'; airport: AirportInfo };
+  | {
+      kind: 'airport';
+      airport: AirportInfo;
+      searchInfo?: {
+        selectable: boolean;
+        sourceCode: string;
+        isAlias: boolean;
+        locationLabel: string;
+      };
+    };
 
 interface AirportMultiSelectProps {
   groups?: AirportGroup[];
@@ -57,12 +72,38 @@ export function AirportMultiSelect({
 }: AirportMultiSelectProps) {
   const colors = useColors();
   const [search, setSearch] = useState('');
-  const filteredGroups = useMemo(() => filterAirportGroups(groups ?? [], search), [groups, search]);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const normalizedSearch = search.trim();
+  const isSearching = normalizedSearch.length > 0;
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(normalizedSearch), 300);
+    return () => clearTimeout(timer);
+  }, [normalizedSearch]);
+
+  const productionAirportSearch = useQuery({
+    queryKey: ['production-airport-search', debouncedSearch],
+    queryFn: ({ signal }) => fetchProductionAirportSearch(debouncedSearch, { signal }),
+    enabled: debouncedSearch.length > 0,
+    retry: false,
+    staleTime: 30_000,
+  });
+  const productionAirportCities = useQuery({
+    queryKey: ['production-airport-cities'],
+    queryFn: ({ signal }) => fetchProductionAirportCities({ signal }),
+    enabled: isSearching,
+    retry: false,
+    staleTime: 24 * 60 * 60 * 1000,
+  });
+
+  const filteredGroups = useMemo(
+    () => filterAirportGroups(groups ?? [], normalizedSearch),
+    [groups, normalizedSearch],
+  );
   const sourceByCity = useMemo(
     () => new Map((groups ?? []).map((group) => [group.city, group])),
     [groups],
   );
-  const rows = useMemo<ListRow[]>(
+  const localRows = useMemo<ListRow[]>(
     () =>
       filteredGroups.flatMap((filteredGroup) => {
         const fullGroup = sourceByCity.get(filteredGroup.city) ?? filteredGroup;
@@ -73,6 +114,52 @@ export function AirportMultiSelect({
       }),
     [filteredGroups, sourceByCity],
   );
+  const searchOptions = useMemo(
+    () => {
+      if (!groups || !productionAirportSearch.data || !productionAirportCities.data) return [];
+      return mapProductionSearchOptions(
+        productionAirportSearch.data,
+        groups,
+        productionAirportCities.data,
+      );
+    },
+    [groups, productionAirportSearch.data, productionAirportCities.data],
+  );
+  const searchRows = useMemo<ListRow[]>(
+    () => searchOptions.map((option) => ({
+      kind: 'airport',
+      airport: option.airport,
+      searchInfo: {
+        selectable: option.selectable,
+        sourceCode: option.sourceCode,
+        isAlias: option.isAlias,
+        locationLabel: option.locationLabel,
+      },
+    })),
+    [searchOptions],
+  );
+  const rows = isSearching ? searchRows : localRows;
+  const waitingForDebounce = isSearching && normalizedSearch !== debouncedSearch;
+  const contentLoading = isSearching
+    ? waitingForDebounce ||
+      productionAirportSearch.isLoading ||
+      productionAirportCities.isLoading ||
+      isLoading
+    : isLoading;
+  const contentError = isSearching
+    ? isError || productionAirportSearch.isError || productionAirportCities.isError
+    : isError;
+  const retryContent = () => {
+    if (!isSearching) {
+      onRetry();
+      return;
+    }
+    void Promise.all([
+      onRetry(),
+      productionAirportSearch.refetch(),
+      productionAirportCities.refetch(),
+    ]);
+  };
 
   const checkbox = (state: GroupSelectionState) => (
     <View
@@ -101,20 +188,33 @@ export function AirportMultiSelect({
           onChangeText={setSearch}
           autoCorrect={false}
           autoCapitalize="none"
+          testID="airport-search-input"
         />
         {!!search && (
-          <TouchableOpacity onPress={() => setSearch('')} accessibilityLabel="Clear search" hitSlop={8}>
+          <TouchableOpacity
+            onPress={() => setSearch('')}
+            accessibilityLabel="Clear search"
+            testID="airport-search-clear"
+            hitSlop={8}
+          >
             <Feather name="x" size={17} color={colors.mutedForeground} />
           </TouchableOpacity>
         )}
       </View>
 
       <View style={styles.selectionBar}>
-        <Text style={[styles.selectionText, { color: colors.mutedForeground }]}>
-          {selected.length === 0
-            ? 'No airports selected'
-            : `${selected.length} airport${selected.length === 1 ? '' : 's'} selected`}
-        </Text>
+        <View style={styles.selectionMeta}>
+          <Text style={[styles.selectionText, { color: colors.mutedForeground }]}>
+            {selected.length === 0
+              ? 'No airports selected'
+              : `${selected.length} airport${selected.length === 1 ? '' : 's'} selected`}
+          </Text>
+          {isSearching ? (
+            <Text style={[styles.sourceText, { color: colors.mutedForeground }]}>
+              Matches from Bluebird production data
+            </Text>
+          ) : null}
+        </View>
         {selected.length > 0 && (
           <TouchableOpacity onPress={() => onChange([])} disabled={isSaving}>
             <Text style={[styles.clearText, { color: colors.primary }]}>Clear selections</Text>
@@ -124,16 +224,26 @@ export function AirportMultiSelect({
 
       {saveError ? <Text style={[styles.errorText, { color: colors.destructive }]}>{saveError}</Text> : null}
 
-      {isLoading ? (
+      {contentLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} size="large" />
-          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Loading airports…</Text>
+          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+            {isSearching ? 'Searching production airports…' : 'Loading airports…'}
+          </Text>
         </View>
-      ) : isError ? (
+      ) : contentError ? (
         <View style={styles.center}>
           <Feather name="wifi-off" size={26} color={colors.mutedForeground} />
-          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Couldn&apos;t load airports.</Text>
-          <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={onRetry}>
+          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+            {isSearching
+              ? 'Couldn’t search production airports.'
+              : 'Couldn’t load airports.'}
+          </Text>
+          <TouchableOpacity
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            onPress={retryContent}
+            testID="airport-search-retry"
+          >
             <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>
           </TouchableOpacity>
         </View>
@@ -146,7 +256,9 @@ export function AirportMultiSelect({
           ListEmptyComponent={
             <View style={styles.center}>
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                No airports match &quot;{search}&quot;
+                {isSearching
+                  ? `No production airports match "${normalizedSearch}".`
+                  : `No airports match "${normalizedSearch}".`}
               </Text>
             </View>
           }
@@ -169,13 +281,34 @@ export function AirportMultiSelect({
               );
             }
             const checked = selected.includes(item.airport.code);
+            const selectable = item.searchInfo?.selectable ?? true;
+            const locationLabel = item.searchInfo?.locationLabel;
+            const airportMeta = item.searchInfo
+              ? selectable
+                ? [
+                    locationLabel || 'Production airport',
+                    item.searchInfo.isAlias ? `Matched via ${item.searchInfo.sourceCode}` : null,
+                  ].filter(Boolean).join(' · ')
+                : [
+                    locationLabel,
+                    'Not available for home-airport preferences',
+                  ].filter(Boolean).join(' · ')
+              : `${item.airport.flightCount ?? 0} flights`;
             return (
               <TouchableOpacity
-                style={[styles.airportRow, { backgroundColor: colors.card, borderColor: checked ? colors.primary : colors.border }]}
+                style={[
+                  styles.airportRow,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: checked ? colors.primary : colors.border,
+                    opacity: selectable ? 1 : 0.65,
+                  },
+                ]}
                 onPress={() => onChange(toggleAirport(selected, item.airport.code))}
-                disabled={isSaving}
+                disabled={isSaving || !selectable}
                 accessibilityRole="checkbox"
-                accessibilityState={{ checked }}
+                accessibilityState={{ checked, disabled: !selectable }}
+                testID={item.searchInfo ? `airport-result-${item.searchInfo.sourceCode}` : `airport-option-${item.airport.code}`}
               >
                 {checkbox(checked ? 'all' : 'none')}
                 <View style={styles.codeBadge}>
@@ -186,7 +319,7 @@ export function AirportMultiSelect({
                     {item.airport.name}
                   </Text>
                   <Text style={[styles.airportMeta, { color: colors.mutedForeground }]}>
-                    {item.airport.flightCount ?? 0} flights
+                    {airportMeta}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -235,7 +368,9 @@ const styles = StyleSheet.create({
     minHeight: 34, paddingHorizontal: 20, flexDirection: 'row',
     justifyContent: 'space-between', alignItems: 'center', gap: 12,
   },
+  selectionMeta: { flex: 1, gap: 2 },
   selectionText: { fontSize: 12, fontFamily: 'Inter_400Regular', flexShrink: 1 },
+  sourceText: { fontSize: 10, fontFamily: 'Inter_400Regular' },
   clearText: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
   errorText: { fontSize: 12, lineHeight: 17, fontFamily: 'Inter_500Medium', paddingHorizontal: 20, paddingBottom: 6 },
   listContent: { paddingHorizontal: 20, gap: 8 },
