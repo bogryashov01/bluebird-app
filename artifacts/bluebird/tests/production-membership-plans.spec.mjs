@@ -65,12 +65,18 @@ assert.deepEqual(mapped.plans.map(({ tier, name, priceUsd, cadence, priceLabel, 
 })), responseFixture.plans);
 assert.equal(formatProductionPlanPrice(mapped.plans[0]), "$3,995 / year");
 assert.equal(formatProductionPlanPrice(mapped.plans[1]), "$9,995 / year");
-assert.equal(mapped.features[3].label, "5 Complimentary Skip the Line Upgrades");
+assert.equal(mapped.features[3].label, "5 Complimentary Skip the Line Passes");
 assert.equal(mapped.features[3].values.base, false);
 assert.equal(mapped.features[3].values.plus, true);
 assert.equal(productionPlanFeatureLabel(false), "Not included");
 assert.equal(productionPlanFeatureLabel("Extra Fee"), "Extra Fee");
-assert.deepEqual(mapped.cardFeatures.plus, responseFixture.cardFeatures.plus);
+assert.deepEqual(mapped.cardFeatures.plus, [
+  "Unlimited Domestic & International Empty Legs",
+  "Priority queue placement",
+  "5 Skip the Line Passes included",
+  "Concierge support- Dedicated",
+  "Cancel anytime",
+]);
 assert.deepEqual(mapped.availability, {
   signupsEnabled: true,
   charterEnabled: false,

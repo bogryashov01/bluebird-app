@@ -14,6 +14,8 @@ import { useColors } from '@/hooks/useColors';
 interface ButtonProps {
   label: string;
   onPress: () => void;
+  testID?: string;
+  accessibilityRole?: 'button';
   loading?: boolean;
   disabled?: boolean;
   /** Background override (defaults to colors.primary). */
@@ -24,7 +26,7 @@ interface ButtonProps {
 }
 
 export function PrimaryButton({
-  label, onPress, loading, disabled, backgroundColor, textColor, style,
+  label, onPress, testID, accessibilityRole, loading, disabled, backgroundColor, textColor, style,
 }: ButtonProps) {
   const colors = useColors();
   const bg = backgroundColor ?? colors.primary;
@@ -34,6 +36,8 @@ export function PrimaryButton({
       style={[styles.primary, { backgroundColor: bg }, (disabled || loading) && styles.dimmed, style]}
       onPress={onPress}
       disabled={disabled || loading}
+      testID={testID}
+      accessibilityRole={accessibilityRole}
       accessibilityState={{ disabled: !!(disabled || loading) }}
       activeOpacity={0.85}
     >
@@ -45,7 +49,7 @@ export function PrimaryButton({
 }
 
 export function SecondaryButton({
-  label, onPress, loading, disabled, backgroundColor, textColor, style,
+  label, onPress, testID, accessibilityRole, loading, disabled, backgroundColor, textColor, style,
 }: ButtonProps) {
   const colors = useColors();
   const bg = backgroundColor ?? colors.muted;
@@ -55,6 +59,8 @@ export function SecondaryButton({
       style={[styles.secondary, { backgroundColor: bg }, (disabled || loading) && styles.dimmed, style]}
       onPress={onPress}
       disabled={disabled || loading}
+      testID={testID}
+      accessibilityRole={accessibilityRole}
       accessibilityState={{ disabled: !!(disabled || loading) }}
       activeOpacity={0.85}
     >

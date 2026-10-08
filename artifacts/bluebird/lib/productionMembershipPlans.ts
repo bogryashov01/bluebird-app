@@ -66,6 +66,15 @@ function booleanValue(value: unknown, field: string): boolean {
   return value;
 }
 
+function normalizeSkipTheLineProductName(value: string): string {
+  // The public catalog still calls these "upgrades"; customer-facing copy
+  // uses the approved Skip the Line Pass name without changing plan benefits.
+  return value.replace(
+    /Skip[-\s]+the[-\s]+Line\s+upgrades?/gi,
+    (match) => `Skip the Line Pass${/upgrades$/i.test(match) ? 'es' : ''}`,
+  );
+}
+
 function mapPlan(value: unknown, index: number): ProductionPlan {
   const field = `plans[${index}]`;
   const raw = objectValue(value, field);
@@ -92,7 +101,9 @@ function mapFeatures(value: unknown, planTiers: readonly string[]): ProductionPl
   return value.map((entry, index) => {
     const field = `features[${index}]`;
     const raw = objectValue(entry, field);
-    const label = nonEmptyString(raw.label, `${field}.label`);
+    const label = normalizeSkipTheLineProductName(
+      nonEmptyString(raw.label, `${field}.label`),
+    );
     const values: Record<string, ProductionPlanFeatureValue> = {};
 
     for (const [tier, featureValue] of Object.entries(raw)) {
@@ -120,7 +131,9 @@ function mapCardFeatures(value: unknown, planTiers: readonly string[]): Record<s
       throw new Error(`Production plans field "cardFeatures.${tier}" must be an array.`);
     }
     mapped[tier] = entries.map((entry, index) =>
-      nonEmptyString(entry, `cardFeatures.${tier}[${index}]`),
+      normalizeSkipTheLineProductName(
+        nonEmptyString(entry, `cardFeatures.${tier}[${index}]`),
+      ),
     );
   }
   return mapped;

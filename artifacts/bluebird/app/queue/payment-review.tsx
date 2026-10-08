@@ -10,11 +10,13 @@ import { FloatingBackButton } from '@/components/FloatingBackButton';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPassOverlay';
 import { FlightUnavailableState } from '@/components/FlightUnavailableState';
+import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
 import { useGetFlight, useJoinQueue } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { usePersistedState } from '@/hooks/usePersistedState';
 import { INITIAL_CARDS, type MockCard } from '@/lib/paymentMethods';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import * as Haptics from 'expo-haptics';
 
 type PaymentReviewParams = {
@@ -29,13 +31,16 @@ type PaymentReviewParams = {
 
 export default function InternationalPaymentReviewScreen() {
   const colors = useColors();
+  const localDemoFlow = isLocalFlightReadMode();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<PaymentReviewParams>();
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
   const [cards, , cardsHydrated] = usePersistedState<MockCard[]>(
-    user ? `bluebird.paymentMethods.${user.id}` : 'bluebird.paymentMethods.unavailable',
-    INITIAL_CARDS,
+    localDemoFlow
+      ? (user ? `bluebird.paymentMethods.${user.id}` : 'bluebird.paymentMethods.unavailable')
+      : 'bluebird.paymentMethods.production-read-only',
+    localDemoFlow ? INITIAL_CARDS : [],
   );
   const [joinError, setJoinError] = useState<string | null>(null);
   const [rejectedUnavailable, setRejectedUnavailable] = useState(false);
@@ -53,7 +58,7 @@ export default function InternationalPaymentReviewScreen() {
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { data: liveFlight } = useGetFlight(params.flightId!, {
-    query: { enabled: !!params.flightId, queryKey: [`/api/flights/${params.flightId}`] },
+    query: { enabled: localDemoFlow && !!params.flightId, queryKey: [`/api/flights/${params.flightId}`] },
   });
   const flightUnavailable =
     rejectedUnavailable || (!!liveFlight && (liveFlight as any).status !== 'available');
@@ -132,7 +137,7 @@ export default function InternationalPaymentReviewScreen() {
   });
 
   const handleConfirm = () => {
-    if (!params.flightId || joinMutation.isPending || !cardsHydrated) return;
+    if (!localDemoFlow || !params.flightId || joinMutation.isPending || !cardsHydrated) return;
     setJoinError(null);
     if (useLinePass) setOverlayPhase('applying');
     joinMutation.mutate({
@@ -154,6 +159,10 @@ export default function InternationalPaymentReviewScreen() {
     nav?.();
   };
 
+  if (!localDemoFlow) {
+    return <ProductionReadOnlyNotice flightId={params.flightId} />;
+  }
+
   if (flightUnavailable) {
     return <FlightUnavailableState status={(liveFlight as any)?.status} bottomPad={bottomPad} />;
   }
@@ -174,6 +183,9 @@ export default function InternationalPaymentReviewScreen() {
         <Text style={[styles.title, { color: colors.textOnSurface }]}>Review your international hold</Text>
         <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
           Confirm the authorization hold before joining the waiting queue.
+        </Text>
+        <Text style={[styles.subtitle, { color: colors.mutedForegroundLight, fontWeight: '600' }]}>
+          Local demo only — no real card authorization or charge is made.
         </Text>
 
         <View style={[styles.routeCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>

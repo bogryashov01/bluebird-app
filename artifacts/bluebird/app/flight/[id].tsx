@@ -305,6 +305,11 @@ export default function FlightDetailScreen() {
     cancelled: 'Cancelled',
   };
   const statusLabel = STATUS_LABELS[f.status as string] ?? 'Unavailable';
+  const responseFlightId = readOnlyProduction ? parseProductionFlightId(f.id) : null;
+  const productionFlightId =
+    responseFlightId !== null && responseFlightId === numericFlightId
+      ? responseFlightId
+      : null;
 
   // ── CTA footer rendering — branched on my-status ─────────────────────────
   function renderCTA() {
@@ -319,8 +324,29 @@ export default function FlightDetailScreen() {
             </Text>
           </View>
           <Text style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}>
-            Queue requests are not available in this read-only preview.
+            Queue actions require production sign-in, which is not connected to this read-only preview.
           </Text>
+          <TouchableOpacity
+            testID="production-queue-read-only-cta"
+            accessibilityRole="button"
+            accessibilityLabel="View read-only queue access"
+            disabled={productionFlightId === null}
+            onPress={() => {
+              if (productionFlightId === null) return;
+              router.push({
+                pathname: '/queue/production-unavailable',
+                params: { flightId: String(productionFlightId) },
+              });
+            }}
+            style={[
+              styles.queueReadOnlyLink,
+              { backgroundColor: colors.primary, opacity: productionFlightId === null ? 0.5 : 1 },
+            ]}
+          >
+            <Text style={[styles.queueReadOnlyLinkText, { color: colors.primaryForeground }]}>
+              View read-only queue access
+            </Text>
+          </TouchableOpacity>
         </>
       );
     }
@@ -907,6 +933,8 @@ const styles = StyleSheet.create({
   },
   unavailableBadgeText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   unavailableHint: { fontFamily: 'Inter_400Regular', fontSize: 13, textAlign: 'center', paddingBottom: 4 },
+  queueReadOnlyLink: { minHeight: 46, borderRadius: 14, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
+  queueReadOnlyLinkText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
 
   conciergeLink: { alignItems: 'center', paddingBottom: 4 },
   conciergeLinkText: { fontFamily: 'Inter_500Medium', fontSize: 13 },

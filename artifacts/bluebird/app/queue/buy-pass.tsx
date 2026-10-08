@@ -12,8 +12,10 @@ import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import { useBuyLinePass, useGetMembership } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
+import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
 import * as Haptics from 'expo-haptics';
 import { formatAnnualPrice, getPlan } from '@/lib/membershipPlans';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
 
 const PLUS_BULLETS = [
   '5 Skip the Line Passes',
@@ -25,10 +27,11 @@ const PLUS_BULLETS = [
 // upgrade to Plus membership.
 export default function BuyPassScreen() {
   const colors = useColors();
+  const localDemoFlow = isLocalFlightReadMode();
   const insets = useSafeAreaInsets();
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
-  const { data: membership } = useGetMembership({});
+  const { data: membership } = useGetMembership({ query: { enabled: localDemoFlow } });
   const [purchased, setPurchased] = useState(false);
   // Optional originating queue entry (and its flight details) forwarded from
   // Queue Status; when present, a successful purchase lands the member on the
@@ -92,18 +95,22 @@ export default function BuyPassScreen() {
   // Non-member guard: pass purchases are a member feature — route straight to
   // the membership-required screen instead of showing the demo checkout.
   React.useEffect(() => {
-    if (user?.membershipTier === 'none') {
+    if (localDemoFlow && user?.membershipTier === 'none') {
       router.replace({
         pathname: '/membership/join' as any,
         params: params.flightId ? { flightId: params.flightId } : {},
       });
     }
-  }, [user?.membershipTier]);
+  }, [localDemoFlow, user?.membershipTier]);
 
   const handleBuy = () => {
-    if (buyMutation.isPending || purchased) return;
+    if (!localDemoFlow || buyMutation.isPending || purchased) return;
     buyMutation.mutate();
   };
+
+  if (!localDemoFlow) {
+    return <ProductionReadOnlyNotice flightId={params.flightId} />;
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
@@ -113,16 +120,19 @@ export default function BuyPassScreen() {
         contentContainerStyle={[styles.content, { paddingTop: topPad + 72, paddingBottom: 24 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.title, { color: colors.textOnSurface }]}>Skip the Line</Text>
+        <Text style={[styles.title, { color: colors.textOnSurface }]}>Skip the Line Pass</Text>
         <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
-          Skip the wait and confirm your seat instantly, any time.
+          Approved behavior: a pass immediately wins the flight and closes its queue.
+        </Text>
+        <Text style={[styles.subtitle, { color: colors.mutedForegroundLight, fontWeight: '600' }]}>
+          Local demo only — pass balance changes here are demo state; no real payment is taken.
         </Text>
 
         {/* Single pass */}
         <View style={[styles.passCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.passTitle, { color: colors.textOnSurface }]}>1 Skip the Line Pass</Text>
           <Text style={[styles.passSub, { color: colors.mutedForegroundLight }]}>
-            Guarantees your seat on this flight, instantly.
+            One standalone Skip the Line Pass is $2,000.
           </Text>
           <Text style={[styles.passPrice, { color: colors.textOnSurface }]}>$2,000</Text>
           <SecondaryButton

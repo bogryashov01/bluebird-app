@@ -10,6 +10,8 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import * as Haptics from 'expo-haptics';
 import { PassCelebration } from '@/components/PassCelebration';
 import { addFlightToCalendar } from '@/lib/addToCalendar';
+import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
 
 function computeArrival(departureTime?: string, duration?: string): string {
   if (!departureTime || !duration) return '';
@@ -33,6 +35,7 @@ const NEXT_STEPS = [
 // Dark "You're confirmed!" celebration screen — brand navy in both modes.
 export default function FlightConfirmedScreen() {
   const colors = useColors();
+  const localDemoFlow = isLocalFlightReadMode();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     from?: string; to?: string; fromCity?: string; toCity?: string;
@@ -41,7 +44,7 @@ export default function FlightConfirmedScreen() {
   }>();
   const passUsed = params.passUsed === '1';
   const petFeeApplies = params.petFeeUsd === '500';
-  const [celebrating, setCelebrating] = React.useState(passUsed);
+  const [celebrating, setCelebrating] = React.useState(localDemoFlow && passUsed);
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
@@ -49,13 +52,14 @@ export default function FlightConfirmedScreen() {
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   useEffect(() => {
+    if (!localDemoFlow) return;
     if (celebrating) return; // celebration handles its own haptics; animate on reveal
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     Animated.parallel([
       Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 }),
       Animated.timing(opacityAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
     ]).start();
-  }, [celebrating]);
+  }, [celebrating, localDemoFlow]);
 
   const hasRoute = !!params.from && !!params.to;
   const arrival = computeArrival(params.departureTime, params.duration);
@@ -87,6 +91,10 @@ export default function FlightConfirmedScreen() {
       router.dismissTo('/(tabs)/trips');
     }
   };
+
+  if (!localDemoFlow) {
+    return <ProductionReadOnlyNotice flightId={params.flightId} />;
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundMid }]}>

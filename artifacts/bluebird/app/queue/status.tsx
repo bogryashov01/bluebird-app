@@ -16,6 +16,8 @@ import { useGetQueueStatus, useCancelQueueEntry, useGetMembership } from '@works
 
 import { useAuth } from '@/context/AuthContext';
 import { observeQueueEntries } from '@/lib/queueCelebration';
+import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
 
 // ─── Countdown hook ───────────────────────────────────────────────────────────
 // Counts down to the decision moment: the queue engine holds a real member in
@@ -229,20 +231,21 @@ const confirmed = StyleSheet.create({
 });
 export default function QueueStatusScreen() {
   const colors = useColors();
+  const localDemoFlow = isLocalFlightReadMode();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const topPad    = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { user } = useAuth();
-  const { data: membership } = useGetMembership({});
+  const { data: membership } = useGetMembership({ query: { enabled: localDemoFlow } });
   const { entryId, flightId } = useLocalSearchParams<{ entryId?: string; flightId?: string }>();
 
   // API returns waiting + confirmed entries for the member. Poll so the
   // screen flips to the confirmed state on its own when the queue engine
   // auto-confirms the seat — no tap required.
   const { data: queueEntries, isLoading, isError, refetch } = useGetQueueStatus({
-    query: { enabled: !!user, refetchInterval: 10_000 },
+    query: { enabled: localDemoFlow && !!user, refetchInterval: 10_000 },
   });
   const allEntries = (queueEntries as QueueEntry[]) ?? [];
 
@@ -265,8 +268,9 @@ export default function QueueStatusScreen() {
   // sees the transition first — and never on revisits, since entries already
   // confirmed on mount were never observed as waiting.
   useEffect(() => {
+    if (!localDemoFlow) return;
     observeQueueEntries(allEntries, queryClient);
-  }, [allEntries, queryClient]);
+  }, [allEntries, localDemoFlow, queryClient]);
 
   const waitingEntries = visibleEntries.filter((e) => e.status === 'waiting');
   const confirmedEntries = visibleEntries.filter((e) => e.status === 'confirmed');
@@ -291,7 +295,7 @@ export default function QueueStatusScreen() {
   // auto-confirmed it since the last 10s poll, in which case the screen
   // simply updates to the confirmed banner instead of navigating.
   const handleUsePass = async (entry: QueueEntry) => {
-    if (checkingPassEntryId) return;
+    if (!localDemoFlow || checkingPassEntryId) return;
     setCheckingPassEntryId(entry.id);
     try {
       const { data: fresh } = await refetch();
@@ -335,6 +339,7 @@ export default function QueueStatusScreen() {
   };
 
   const handleCancel = async (entryId: string) => {
+    if (!localDemoFlow) return;
     const ok = await confirmDialog('Leave Queue?', 'You will lose your position in the queue.', 'Leave Queue', true);
     if (ok) cancelMutation.mutate({ id: entryId });
   };
@@ -346,6 +351,10 @@ export default function QueueStatusScreen() {
   // because queue position alone does not guarantee the seat.
   const assignedFamilyPasses = membership?.family?.members.find((member) => member.userId === user?.id)?.availablePasses ?? 0;
   const passCount = (user?.linePassCount ?? 0) + assignedFamilyPasses;
+
+  if (!localDemoFlow) {
+    return <ProductionReadOnlyNotice flightId={flightId} />;
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>

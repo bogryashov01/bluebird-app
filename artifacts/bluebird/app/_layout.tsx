@@ -105,6 +105,10 @@ function RootLayoutNav() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="queue/production-unavailable"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
         name="concierge"
         options={{
           headerShown: true,

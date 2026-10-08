@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { QueueEntry } from '@workspace/api-client-react';
 import { useGetQueueStatus } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
 
 // ─── Shared waiting→confirmed flip tracking ──────────────────────────────────
 // Every observer of the queue-status query (the Queue Status screen and the
@@ -75,6 +76,7 @@ export function observeQueueEntries(entries: QueueEntry[], queryClient: QueryCli
 export function QueueConfirmationWatcher() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const localDemoFlow = isLocalFlightReadMode();
 
   // Clear flip tracking whenever the signed-in member changes (sign-out or
   // account switch) so one member's observed queues never leak into another
@@ -89,13 +91,13 @@ export function QueueConfirmationWatcher() {
   }, [user?.id]);
 
   const { data } = useGetQueueStatus({
-    query: { enabled: !!user, refetchInterval: 10_000 },
+    query: { enabled: localDemoFlow && !!user, refetchInterval: 10_000 },
   });
 
   useEffect(() => {
-    if (!user || !data) return;
+    if (!localDemoFlow || !user || !data) return;
     observeQueueEntries((data as QueueEntry[]) ?? [], queryClient);
-  }, [data, user, queryClient]);
+  }, [data, localDemoFlow, user, queryClient]);
 
   return null;
 }

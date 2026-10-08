@@ -11,8 +11,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPassOverlay';
+import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
 import { useUseLinePassOnQueueEntry } from '@workspace/api-client-react';
 import { markQueueEntryCelebrated } from '@/lib/queueCelebration';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
 
 function shortDate(d?: string) {
   if (!d) return '';
@@ -25,6 +27,7 @@ function shortDate(d?: string) {
 // Dark "Skip the Line Pass" sheet — confirming uses a pass and wins the seat.
 export default function SkipLinePassScreen() {
   const colors = useColors();
+  const localDemoFlow = isLocalFlightReadMode();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
         entryId?: string; position?: string; bringingPet?: string;
@@ -106,7 +109,7 @@ export default function SkipLinePassScreen() {
   const isPending = usePassMutation.isPending;
 
   const handleConfirm = () => {
-    if (!params.entryId || isPending) return;
+    if (!localDemoFlow || !params.entryId || isPending) return;
     setActionError(null);
     setOverlayPhase('applying');
     usePassMutation.mutate({ id: params.entryId });
@@ -122,6 +125,10 @@ export default function SkipLinePassScreen() {
   const routeLabel = `${params.from ?? '—'} → ${params.to ?? '—'}`;
   const canConfirm = passCount > 0;
 
+  if (!localDemoFlow) {
+    return <ProductionReadOnlyNotice flightId={params.flightId} />;
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad }]}>
       {overlayPhase && (
@@ -136,11 +143,10 @@ export default function SkipLinePassScreen() {
 
       <View style={[styles.top, { paddingTop: 76 }]}>
         <Text style={[styles.title, { color: colors.mutedOnBrand }]}>
-          <Text style={{ color: colors.textOnBrand }}>Skip the Line Pass</Text> instantly wins this flight
+          <Text style={{ color: colors.textOnBrand }}>Skip the Line Pass</Text> immediately wins this flight and closes its queue
         </Text>
         <Text style={[styles.body, { color: colors.mutedOnBrand }]}>
-          Using a Skip the Line Pass moves you to the front of the queue and
-          confirms your seat immediately — no waiting for your turn.
+          The approved product behavior is to win the flight immediately and close the queue.
         </Text>
 
         <View style={[styles.balanceCard, { backgroundColor: colors.textOnBrand + '0A', borderColor: colors.textOnBrand + '14' }]}>

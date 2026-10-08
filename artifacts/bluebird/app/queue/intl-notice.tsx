@@ -10,6 +10,8 @@ import { FloatingBackButton } from '@/components/FloatingBackButton';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import { useGetFlight } from '@workspace/api-client-react';
 import { FlightUnavailableState } from '@/components/FlightUnavailableState';
+import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
 
 // Dark "International Flight Notice" — shown only to Base members joining an
 // international flight. Plus waives the fee.
@@ -23,12 +25,13 @@ export default function InternationalNoticeScreen() {
     petWeightLbs?: string;
   }>();
   const { flightId } = params;
+  const localDemoFlow = isLocalFlightReadMode();
   const bringingPet = params.bringingPet === '1';
-  const fee = parseInt(params.feeUsd ?? '1000', 10) || 1000;
+  const fee = 1000;
   // Re-check the flight's current status when the screen loads so members
   // aren't offered fee/upgrade choices for a flight they can no longer join.
   const { data: liveFlight } = useGetFlight(flightId!, {
-    query: { enabled: !!flightId, queryKey: [`/api/flights/${flightId}`] },
+    query: { enabled: localDemoFlow && !!flightId, queryKey: [`/api/flights/${flightId}`] },
   });
   const flightUnavailable =
     !!liveFlight && (liveFlight as any).status !== 'available';
@@ -36,8 +39,12 @@ export default function InternationalNoticeScreen() {
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
+  if (!localDemoFlow) {
+    return <ProductionReadOnlyNotice flightId={flightId} />;
+  }
+
   const handleContinueBase = () => {
-    if (!flightId) return;
+    if (!localDemoFlow || !flightId) return;
     router.push({
       pathname: '/queue/payment-review',
       params: {
@@ -71,19 +78,22 @@ export default function InternationalNoticeScreen() {
 
         <Text style={[styles.title, { color: colors.textOnBrand }]}>International Flight Notice</Text>
         <Text style={[styles.body, { color: colors.mutedOnBrand }]}>
-          This flight crosses an international border. As a Base member, a one-time
-          international hold applies — or upgrade to Plus to waive it and unlock more benefits.
+          This flight crosses an international border. Base members can pay a one-time
+          $1,000 fee or choose Plus, which includes five Skip the Line Passes.
+        </Text>
+        <Text style={[styles.body, { color: colors.mutedOnBrand, fontWeight: '600' }]}>
+          Local demo only — continuing records no real card authorization or payment.
         </Text>
 
         <View style={[styles.feeRow, { backgroundColor: colors.textOnBrand + '0A', borderColor: colors.textOnBrand + '14' }]}>
-          <Text style={[styles.feeLabel, { color: colors.mutedOnBrand }]}>International Hold</Text>
+          <Text style={[styles.feeLabel, { color: colors.mutedOnBrand }]}>One-time Base fee</Text>
           <Text style={[styles.feeValue, { color: colors.textOnBrand }]}>${fee.toLocaleString()}</Text>
         </View>
 
         <View style={[styles.plusCard, { backgroundColor: colors.primary + '1F', borderColor: colors.primary + '59' }]}>
-          <Text style={[styles.plusTitle, { color: colors.textOnBrand }]}>Plus Membership waives this hold</Text>
+          <Text style={[styles.plusTitle, { color: colors.textOnBrand }]}>Choose Plus instead</Text>
           <Text style={[styles.plusBody, { color: colors.mutedOnBrand }]}>
-            Plus unlocks priority notifications, earlier access and complimentary Skip the Line Passes.
+            Plus is the alternative to the one-time Base fee and includes five Skip the Line Passes.
           </Text>
         </View>
       </ScrollView>
@@ -91,7 +101,7 @@ export default function InternationalNoticeScreen() {
       <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
         <PrimaryButton label="Upgrade to Plus" onPress={() => router.push('/upgrade/plus')} />
         <SecondaryButton
-          label={`Review $${fee.toLocaleString()} authorization hold`}
+          label={`Continue with $${fee.toLocaleString()} international fee`}
           onPress={handleContinueBase}
           backgroundColor={colors.textOnBrand + '14'}
           textColor={colors.textOnBrand}

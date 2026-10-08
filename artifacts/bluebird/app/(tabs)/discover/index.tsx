@@ -296,17 +296,17 @@ export default function DiscoverScreen() {
   // Personalized data: flights the member is already queued for or booked on
   // are hidden from Discover. Signed-out users see the full list.
   const { data: queueEntries, isLoading: queueLoading } = useGetQueueStatus({
-    query: { enabled: !!user },
+    query: { enabled: localReadMode && !!user },
   });
   const { data: trips, isLoading: tripsLoading } = useListTrips({
-    query: { enabled: !!user },
+    query: { enabled: localReadMode && !!user },
   });
 
   // Avoid flashing soon-to-be-hidden flights: stay in the loading state while
   // the persisted session is being restored, and while a signed-in member's
   // queue/trips data is still loading.
   const isLoading =
-    flightsLoading || authLoading || (!!user && (queueLoading || tripsLoading));
+    flightsLoading || authLoading || (localReadMode && !!user && (queueLoading || tripsLoading));
 
   const excludedFlightIds = React.useMemo(() => {
     const ids = new Set<string>();
@@ -365,6 +365,7 @@ export default function DiscoverScreen() {
 
   const renderCard = ({ item }: { item: FlightView }) => (
     <TouchableOpacity
+      testID={item.source === 'production' ? `production-flight-card-${item.id}` : undefined}
       style={[styles.card, { backgroundColor: colors.card }]}
       activeOpacity={0.8}
       onPress={() => router.push(`/flight/${item.id}`)}

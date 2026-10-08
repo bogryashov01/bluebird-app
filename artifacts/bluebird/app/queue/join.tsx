@@ -15,10 +15,22 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPassOverlay';
+import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
 
 const POLICY_ITEMS = [
-  'Flights may be cancelled or changed due to operational requirements.',
-  'Baggage allowance is 25 kg per passenger, subject to aircraft capacity and operational limitations.',
+  {
+    id: 'pet-policy',
+    label: 'I have reviewed the pet policy and will indicate below whether I am bringing a pet.',
+  },
+  {
+    id: 'cancellation-risk',
+    label: 'Flights may be cancelled or changed due to operational requirements.',
+  },
+  {
+    id: 'baggage-limit',
+    label: 'Baggage allowance is 25 kg per passenger, subject to aircraft capacity and operational limitations.',
+  },
 ];
 
 // "Before you join the queue" — policy acknowledgment step of the join flow.
@@ -35,9 +47,10 @@ export default function JoinQueueAcknowledgeScreen() {
   const { flightId, fromCity, toCity, from, to } = params;
   const useLinePass = params.useLinePass === '1';
   const isInternational = params.international === '1';
+  const localDemoFlow = isLocalFlightReadMode();
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
-  const [checked, setChecked] = useState([false, false]);
+  const [checked, setChecked] = useState([false, false, false]);
   const [punctualityChecked, setPunctualityChecked] = useState(false);
   const [bringingPet, setBringingPet] = useState<boolean | null>(null);
   const [petFeeAcknowledged, setPetFeeAcknowledged] = useState(false);
@@ -58,7 +71,7 @@ export default function JoinQueueAcknowledgeScreen() {
   // If this lookup fails, we do NOT lock the button — the server enforces the
   // duplicate-entry guard authoritatively on join anyway.
   const { data: myStatus, isLoading: statusLoading, isError: statusError } = useGetFlightMyStatus(flightId!, {
-    query: { enabled: !!user && !!flightId },
+    query: { enabled: localDemoFlow && !!user && !!flightId },
   });
   const isConfirmed = myStatus?.status === 'confirmed';
 
@@ -66,13 +79,13 @@ export default function JoinQueueAcknowledgeScreen() {
   // unavailable (departed, cancelled, …) we show a friendly full-screen state
   // instead of letting the member fill out acknowledgments for nothing.
   const { data: liveFlight } = useGetFlight(flightId!, {
-    query: { enabled: !!flightId },
+    query: { enabled: localDemoFlow && !!flightId },
   });
   const flightUnavailable =
     rejectedUnavailable || (!!liveFlight && (liveFlight as any).status !== 'available');
   useEffect(() => {
-    if (isConfirmed && flightId) router.replace(`/flight/${flightId}`);
-  }, [isConfirmed, flightId]);
+    if (localDemoFlow && isConfirmed && flightId) router.replace(`/flight/${flightId}`);
+  }, [isConfirmed, flightId, localDemoFlow]);
 
   const joinMutation = useJoinQueue({
     mutation: {
@@ -150,7 +163,7 @@ export default function JoinQueueAcknowledgeScreen() {
   const needsIntlNotice = isInternational && user?.membershipTier === 'base';
 
   const handleContinue = () => {
-    if (!allChecked || !flightId || isConfirmed || joinMutation.isPending) return;
+    if (!localDemoFlow || !allChecked || !flightId || isConfirmed || joinMutation.isPending) return;
     if (user?.membershipTier === 'none') {
       // Non-member reached the join flow (e.g. deep link) — route to the paywall.
       router.replace({ pathname: '/membership/join' as any, params: { flightId } });
@@ -192,6 +205,10 @@ export default function JoinQueueAcknowledgeScreen() {
   // server re-checks eligibility on join, so the member is never locked out.
   const ctaDisabled = !allChecked || joinMutation.isPending || (statusLoading && !statusError) || isConfirmed;
 
+  if (!localDemoFlow) {
+    return <ProductionReadOnlyNotice flightId={flightId} />;
+  }
+
   // ── Flight no longer available: friendly full-screen state ──
   if (flightUnavailable) {
     return <FlightUnavailableState status={(liveFlight as any)?.status} bottomPad={bottomPad} />;
@@ -213,10 +230,14 @@ export default function JoinQueueAcknowledgeScreen() {
 
         {POLICY_ITEMS.map((item, i) => (
           <TouchableOpacity
-            key={i}
+            key={item.id}
+            testID={`queue-ack-${item.id}`}
             style={[styles.checkRow, { backgroundColor: colors.surface }]}
             onPress={() => setChecked((prev) => prev.map((c, j) => (j === i ? !c : c)))}
             activeOpacity={0.8}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: checked[i] }}
+            aria-checked={checked[i]}
           >
             <View style={[
               styles.checkbox,
@@ -224,7 +245,7 @@ export default function JoinQueueAcknowledgeScreen() {
             ]}>
               {checked[i] && <Feather name="check" size={14} color={colors.primaryForeground} />}
             </View>
-            <Text style={[styles.checkText, { color: colors.textOnSurface }]}>{item}</Text>
+            <Text style={[styles.checkText, { color: colors.textOnSurface }]}>{item.label}</Text>
           </TouchableOpacity>
         ))}
 
@@ -234,6 +255,8 @@ export default function JoinQueueAcknowledgeScreen() {
           activeOpacity={0.8}
           accessibilityRole="checkbox"
           accessibilityState={{ checked: punctualityChecked }}
+          aria-checked={punctualityChecked}
+          testID="queue-ack-punctuality"
         >
           <View style={styles.punctualityHeader}>
             <Feather name="clock" size={16} color={colors.primary} />
@@ -342,6 +365,8 @@ export default function JoinQueueAcknowledgeScreen() {
         )}
         <PrimaryButton
           label="I Acknowledge — Continue"
+          testID="queue-continue-button"
+          accessibilityRole="button"
           onPress={handleContinue}
           loading={joinMutation.isPending}
           disabled={ctaDisabled}

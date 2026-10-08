@@ -112,9 +112,10 @@ test("confirmed flight details still open Passenger Information", async ({ page 
 });
 
 async function acknowledgeJoin(page, { pet = false } = {}) {
-  await page.getByText("Flights may be cancelled or changed due to operational requirements.", { exact: true }).click();
-  await page.getByText("Baggage allowance is 25 kg per passenger, subject to aircraft capacity and operational limitations.", { exact: true }).click();
-  await page.getByRole("checkbox").first().click();
+  await page.getByTestId("queue-ack-pet-policy").click();
+  await page.getByTestId("queue-ack-cancellation-risk").click();
+  await page.getByTestId("queue-ack-baggage-limit").click();
+  await page.getByTestId("queue-ack-punctuality").click();
   await page.getByTestId(`bringing-pet-${pet ? "yes" : "no"}`).click();
 
   if (pet) {
@@ -124,6 +125,26 @@ async function acknowledgeJoin(page, { pet = false } = {}) {
 
   await page.getByText("I Acknowledge — Continue", { exact: true }).click();
 }
+
+test("pet, cancellation, and baggage acknowledgements start unchecked and are individually required", async ({ page }) => {
+  await mockFlightApi(page);
+  await page.goto("/queue/join?flightId=flight-1&fromCity=Seattle&toCity=San%20Francisco&from=BFI&to=SFO&international=0");
+
+  const continueButton = page.getByTestId("queue-continue-button");
+  await expect(continueButton).toBeDisabled();
+
+  for (const id of ["pet-policy", "cancellation-risk", "baggage-limit"]) {
+    const acknowledgement = page.getByTestId(`queue-ack-${id}`);
+    await expect(acknowledgement).toHaveAttribute("aria-checked", "false");
+    await acknowledgement.click();
+    await expect(acknowledgement).toHaveAttribute("aria-checked", "true");
+    await expect(continueButton).toBeDisabled();
+  }
+
+  await page.getByTestId("queue-ack-punctuality").click();
+  await page.getByTestId("bringing-pet-no").click();
+  await expect(continueButton).toBeEnabled();
+});
 
 test("pet queue joining uses the server default passenger behavior", async ({ page }) => {
   const api = await mockFlightApi(page);
@@ -135,7 +156,7 @@ test("pet queue joining uses the server default passenger behavior", async ({ pa
   expect(api.getJoinBody()).toMatchObject({ bringingPet: true });
 });
 
-test("international hold navigation does not carry a passenger count", async ({ page }) => {
+test("international fee navigation does not carry a passenger count", async ({ page }) => {
   await mockFlightApi(page, { cachedUser: baseUser });
   await page.goto("/queue/join?flightId=flight-1&fromCity=Seattle&toCity=San%20Francisco&from=BFI&to=SFO&international=1&feeUsd=1000");
 

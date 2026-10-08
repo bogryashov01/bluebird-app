@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
+import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
 
 function formatDate(d?: string) {
   if (!d) return '';
@@ -41,6 +43,7 @@ function useQueueCloseCountdown(departureDate?: string, departureTime?: string):
 // "You're in the queue" — success screen shown right after joining.
 export default function QueueJoinedScreen() {
   const colors = useColors();
+  const localDemoFlow = isLocalFlightReadMode();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     entryId?: string; position?: string; totalInQueue?: string;
@@ -53,7 +56,10 @@ export default function QueueJoinedScreen() {
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
-  const countdown = useQueueCloseCountdown(params.departureDate, params.departureTime);
+  const countdown = useQueueCloseCountdown(
+    localDemoFlow ? params.departureDate : undefined,
+    localDemoFlow ? params.departureTime : undefined,
+  );
 
   useEffect(() => {
     Animated.parallel([
@@ -65,6 +71,10 @@ export default function QueueJoinedScreen() {
   const statusLabel = params.flightStatus === 'available' ? 'Open'
     : params.flightStatus ? params.flightStatus.charAt(0).toUpperCase() + params.flightStatus.slice(1)
     : 'Open';
+
+  if (!localDemoFlow) {
+    return <ProductionReadOnlyNotice flightId={params.flightId} />;
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite, paddingTop: topPad, paddingBottom: bottomPad + 16 }]}>

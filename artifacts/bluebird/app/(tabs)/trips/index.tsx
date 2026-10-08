@@ -10,6 +10,8 @@ import { useColors } from '@/hooks/useColors';
 import { useListTrips, useGetQueueStatus, useCancelTrip } from '@workspace/api-client-react';
 import type { Trip, QueueEntry } from '@workspace/api-client-react';
 import { confirmDialog } from '@/lib/confirmDialog';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
 
 // ─── Aircraft images (same matching logic as Discover) ────────────────────────
 import { useAuth } from '@/context/AuthContext';
@@ -115,15 +117,16 @@ export default function TripsScreen() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('upcoming');
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
+  const localDemoFlow = isLocalFlightReadMode();
 
   const topPad = Platform.OS === 'web' ? 40 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { data: trips, isLoading: tripsLoading, isError: tripsError, refetch: refetchTrips } = useListTrips({
-    query: { enabled: !!user },
+    query: { enabled: localDemoFlow && !!user },
   });
   const { data: queueEntries, isLoading: queueLoading, isError: queueError, refetch: refetchQueue } = useGetQueueStatus({
-    query: { enabled: !!user },
+    query: { enabled: localDemoFlow && !!user },
   });
 
   const upcomingTrips = useMemo(() =>
@@ -167,7 +170,7 @@ export default function TripsScreen() {
   const [cancellingTripId, setCancellingTripId] = useState<string | null>(null);
 
   const handleCancelTrip = async (trip: Trip) => {
-    if (cancellingTripId) return;
+    if (!localDemoFlow || cancellingTripId) return;
     const route = trip.flight ? `${trip.flight.fromCity} → ${trip.flight.toCity}` : 'this flight';
     const ok = await confirmDialog(
       'Cancel booking?',
@@ -185,6 +188,15 @@ export default function TripsScreen() {
     { id: 'pending', label: 'Pending' },
     { id: 'past', label: 'Past' },
   ];
+
+  if (!localDemoFlow) {
+    return (
+      <ProductionReadOnlyNotice
+        title="Trips and queue data are unavailable in this preview"
+        description="This preview is not connected to production account data. It does not load trips or queue status or offer account actions."
+      />
+    );
+  }
 
   function renderContent() {
     if (isLoading) {
