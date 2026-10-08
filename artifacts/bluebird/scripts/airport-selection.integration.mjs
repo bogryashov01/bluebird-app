@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   filterAirportGroups,
+  getAirportRowMeta,
   groupSelectionState,
   mapProductionSearchOptions,
   toggleAirport,
@@ -63,6 +64,27 @@ assert.deepEqual(
 );
 
 assert.deepEqual(filterAirportGroups([dallas, newYork], "no match"), []);
+assert.equal(
+  getAirportRowMeta({ code: "DAL", name: "Dallas Love Field", city: "Dallas", flightCount: 18 }),
+  "",
+  "the home-airport catalog does not present local API inventory as production flight counts",
+);
+assert.equal(
+  getAirportRowMeta(
+    { code: "DAL", name: "Dallas Love Field", city: "Dallas", flightCount: 18 },
+    { selectable: true, sourceCode: "DAL", isAlias: false, locationLabel: "Dallas · Texas · United States" },
+  ),
+  "Dallas · Texas · United States",
+  "production search results retain their production location label",
+);
+assert.equal(
+  getAirportRowMeta(
+    { code: "KRBD", name: "Dallas Executive Airport", city: "Dallas" },
+    { selectable: false, sourceCode: "KRBD", isAlias: false, locationLabel: "Dallas · Texas · United States" },
+  ),
+  "Dallas · Texas · United States · Not available for home-airport preferences",
+  "unsupported production airports remain visibly non-selectable",
+);
 
 const saveableAirportGroups = [
   {

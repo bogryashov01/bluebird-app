@@ -3,6 +3,7 @@ import {
   fetchProductionAirports,
   fetchProductionFlight,
   fetchProductionFlights,
+  getFlightImagePresentation,
   getFlightAirportCodes,
   mapProductionAirport,
   mapProductionFlight,
@@ -127,6 +128,17 @@ assert.equal(mappedFlight.pricePerHour, null);
 assert.equal(mappedFlight.rangeNm, null);
 assert.equal(mappedFlight.seatsAvailable, null);
 assert.equal(mappedFlight.featured, null);
+assert.equal(getFlightImagePresentation(mappedFlight), "provided");
+assert.equal(
+  getFlightImagePresentation(mapProductionFlight({ ...rawFlight, aircraftGalleryUrls: null })),
+  "unavailable",
+  "production flights without a production photo do not use a local aircraft image",
+);
+assert.equal(
+  getFlightImagePresentation({ source: "local", imageUrl: null }),
+  "local-fallback",
+  "local demo flights retain their representative aircraft imagery",
+);
 
 assert.equal(
   mapProductionFlight({ ...rawFlight, aircraftGalleryUrls: ["https://cdn.example.test/a.jpg"] }).imageUrl,

@@ -14,6 +14,30 @@ export interface AirportSearchOption {
   locationLabel: string;
 }
 
+export interface AirportRowSearchInfo {
+  selectable: boolean;
+  sourceCode: string;
+  isAlias: boolean;
+  locationLabel: string;
+}
+
+export function getAirportRowMeta(
+  _airport: AirportInfo,
+  searchInfo?: AirportRowSearchInfo,
+): string {
+  if (!searchInfo) return '';
+  if (!searchInfo.selectable) {
+    return [
+      searchInfo.locationLabel,
+      'Not available for home-airport preferences',
+    ].filter(Boolean).join(' · ');
+  }
+  return [
+    searchInfo.locationLabel || 'Production airport',
+    searchInfo.isAlias ? `Matched via ${searchInfo.sourceCode}` : null,
+  ].filter(Boolean).join(' · ');
+}
+
 function normalizeAirportName(value: string): string {
   return value
     .toLowerCase()

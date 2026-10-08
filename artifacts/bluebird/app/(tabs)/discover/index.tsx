@@ -17,6 +17,7 @@ import FlightMapView from '@/components/FlightMap';
 import {
   fetchProductionAirports,
   fetchProductionFlights,
+  getFlightImagePresentation,
   getFlightAirportCodes,
   isLocalFlightReadMode,
   mapLocalFlight,
@@ -368,10 +369,20 @@ export default function DiscoverScreen() {
       activeOpacity={0.8}
       onPress={() => router.push(`/flight/${item.id}`)}
     >
-      <Image
-        source={item.imageUrl ? { uri: item.imageUrl } : aircraftImage(item.aircraftType)}
-        style={styles.cardThumb}
-      />
+      {getFlightImagePresentation(item) === 'unavailable' ? (
+        <View style={[styles.cardThumb, styles.cardThumbPlaceholder, { backgroundColor: colors.muted }]}>
+          <Feather name="image" size={20} color={colors.mutedForeground} />
+        </View>
+      ) : (
+        <Image
+          source={
+            getFlightImagePresentation(item) === 'provided'
+              ? { uri: item.imageUrl! }
+              : aircraftImage(item.aircraftType)
+          }
+          style={styles.cardThumb}
+        />
+      )}
       <View style={styles.cardBody}>
         <Text style={[styles.cardRoute, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
           {airportLabel(item.fromAirport, item.fromCity)} → {airportLabel(item.toAirport, item.toCity)}
@@ -501,6 +512,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20, marginBottom: 12,
   },
   cardThumb: { width: 74, height: 60, borderRadius: 12 },
+  cardThumbPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   cardBody: { flex: 1, minWidth: 0 },
   cardRoute: { fontSize: 15 },
   cardMeta: { fontSize: 12.5, marginTop: 2 },

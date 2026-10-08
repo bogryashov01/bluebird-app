@@ -19,6 +19,7 @@ import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
 import {
   fetchProductionFlight,
+  getFlightImagePresentation,
   isLocalFlightReadMode,
   mapLocalFlight,
   parseProductionFlightId,
@@ -225,7 +226,12 @@ export default function FlightDetailScreen() {
 
   // f is guaranteed non-null below this point
   const f = flight;
-  const imgSource = f.imageUrl ? { uri: f.imageUrl } : aircraftImage(f.aircraftType);
+  const imagePresentation = getFlightImagePresentation(f);
+  const imgSource = imagePresentation === 'provided'
+    ? { uri: f.imageUrl! }
+    : imagePresentation === 'local-fallback'
+      ? aircraftImage(f.aircraftType)
+      : null;
   const readOnlyProduction = f.source === 'production';
 
   const status = myStatus?.status ?? 'none';
@@ -477,27 +483,45 @@ export default function FlightDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Hero image with gradient ── */}
-        <ImageBackground source={imgSource} style={[styles.hero, { height: heroHeight }]}>
-          {/* Top-to-middle dark fade so back button is visible */}
-          <LinearGradient
-            colors={['rgba(6,11,31,0.50)', 'rgba(6,11,31,0.0)']}
-            locations={[0, 0.55]}
-            style={StyleSheet.absoluteFill}
-          />
-          {/* Bottom fade to the screen bg so hero blends into content below */}
-          <LinearGradient
-            colors={[colors.offWhite + '00', colors.offWhite]}
-            locations={[0.55, 1]}
-            style={StyleSheet.absoluteFill}
-          />
-
+        <View style={[styles.heroFrame, { height: heroHeight }]}>
+          {imgSource ? (
+            <ImageBackground source={imgSource} style={StyleSheet.absoluteFill}>
+              {/* Top-to-middle dark fade so back button is visible */}
+              <LinearGradient
+                colors={['rgba(6,11,31,0.50)', 'rgba(6,11,31,0.0)']}
+                locations={[0, 0.55]}
+                style={StyleSheet.absoluteFill}
+              />
+              {/* Bottom fade to the screen bg so hero blends into content below */}
+              <LinearGradient
+                colors={[colors.offWhite + '00', colors.offWhite]}
+                locations={[0.55, 1]}
+                style={StyleSheet.absoluteFill}
+              />
+            </ImageBackground>
+          ) : (
+            <View style={[styles.heroUnavailable, { backgroundColor: colors.muted }]}>
+              <Feather name="image" size={28} color={colors.mutedForeground} />
+              <Text style={[styles.heroUnavailableText, { color: colors.mutedForeground }]}>
+                Aircraft photo unavailable
+              </Text>
+            </View>
+          )}
           {/* Route pill at bottom of hero */}
-          <View style={[styles.routePill, { backgroundColor: colors.primaryForeground + '2E', borderColor: colors.primaryForeground + '4D' }]}>
-            <Text style={[styles.routePillText, { color: colors.primaryForeground }]}>
+          <View
+            style={[
+              styles.routePill,
+              {
+                backgroundColor: imgSource ? colors.primaryForeground + '2E' : colors.card,
+                borderColor: imgSource ? colors.primaryForeground + '4D' : colors.border,
+              },
+            ]}
+          >
+            <Text style={[styles.routePillText, { color: imgSource ? colors.primaryForeground : colors.foreground }]}>
               {f.fromAirport ?? f.fromCity ?? '—'} → {f.toAirport ?? f.toCity ?? '—'}
             </Text>
           </View>
-        </ImageBackground>
+        </View>
 
         {/* ── Title row ── */}
         <View style={styles.titleRow}>
@@ -716,7 +740,14 @@ const styles = StyleSheet.create({
   backChevron: { fontFamily: 'Inter_500Medium', fontSize: 22, marginTop: -2 },
 
   // Hero
-  hero: { width: '100%', justifyContent: 'flex-end' },
+  heroFrame: { width: '100%', justifyContent: 'flex-end', position: 'relative', overflow: 'hidden' },
+  heroUnavailable: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  heroUnavailableText: { fontFamily: 'Inter_500Medium', fontSize: 13 },
   routePill: {
     marginBottom: 18, alignSelf: 'center',
     borderRadius: 100, paddingHorizontal: 16, paddingVertical: 6,

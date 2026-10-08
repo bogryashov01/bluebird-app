@@ -19,6 +19,7 @@ import {
 import { useColors } from '@/hooks/useColors';
 import {
   filterAirportGroups,
+  getAirportRowMeta,
   groupSelectionState,
   mapProductionSearchOptions,
   toggleAirport,
@@ -282,18 +283,7 @@ export function AirportMultiSelect({
             }
             const checked = selected.includes(item.airport.code);
             const selectable = item.searchInfo?.selectable ?? true;
-            const locationLabel = item.searchInfo?.locationLabel;
-            const airportMeta = item.searchInfo
-              ? selectable
-                ? [
-                    locationLabel || 'Production airport',
-                    item.searchInfo.isAlias ? `Matched via ${item.searchInfo.sourceCode}` : null,
-                  ].filter(Boolean).join(' · ')
-                : [
-                    locationLabel,
-                    'Not available for home-airport preferences',
-                  ].filter(Boolean).join(' · ')
-              : `${item.airport.flightCount ?? 0} flights`;
+            const airportMeta = getAirportRowMeta(item.airport, item.searchInfo);
             return (
               <TouchableOpacity
                 style={[
@@ -318,9 +308,11 @@ export function AirportMultiSelect({
                   <Text style={[styles.airportName, { color: colors.foreground }]} numberOfLines={1}>
                     {item.airport.name}
                   </Text>
-                  <Text style={[styles.airportMeta, { color: colors.mutedForeground }]}>
-                    {airportMeta}
-                  </Text>
+                  {airportMeta ? (
+                    <Text style={[styles.airportMeta, { color: colors.mutedForeground }]}>
+                      {airportMeta}
+                    </Text>
+                  ) : null}
                 </View>
               </TouchableOpacity>
             );

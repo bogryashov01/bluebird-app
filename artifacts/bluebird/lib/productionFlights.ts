@@ -127,6 +127,15 @@ export interface FlightView {
   pricePerHour: number | null;
 }
 
+export type FlightImagePresentation = 'provided' | 'local-fallback' | 'unavailable';
+
+export function getFlightImagePresentation(
+  flight: Pick<FlightView, 'source' | 'imageUrl'>,
+): FlightImagePresentation {
+  if (flight.imageUrl) return 'provided';
+  return flight.source === 'local' ? 'local-fallback' : 'unavailable';
+}
+
 export interface AirportRecord extends ProductionAirportResponse {}
 
 export interface ReadRequestOptions {
