@@ -13,7 +13,7 @@ paths = [ "/bluebird/" ]
 localPort = 20104
 
 [services.development]
-run = "pnpm --filter @workspace/bluebird run dev"
+run = "pnpm --filter @workspace/bluebird run dev:stage1-web"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/bluebird", "run", "build" ]

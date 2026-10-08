@@ -100,12 +100,21 @@ export default function FlightMap({ flights, airports }: Props) {
   useLeafletCss();
 
   const isDark = colors.scheme === 'dark';
+  const isStage1ProductionPreview =
+    typeof __DEV__ !== 'undefined' &&
+    __DEV__ &&
+    process.env.EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE === 'production';
   const routeColor = isDark ? colors.paleBlue : NAVY;      // brand blue, lightened for dark tiles
   const labelColor = isDark ? colors.paleBlueFaint : NAVY;
   const halo       = isDark ? colors.backgroundMid : '#fff'; // halo matches map tiles, not theme surfaces
-  const tileUrl = isDark
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  const tileUrl = isStage1ProductionPreview
+    ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+    : isDark
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  const tileAttribution = isStage1ProductionPreview
+    ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+    : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
   const airportsByCode = React.useMemo(
     () => new Map(airports.map((airport) => [airport.code, airport])),
@@ -170,10 +179,10 @@ export default function FlightMap({ flights, airports }: Props) {
           style={{ height: '100%', width: '100%', background: isDark ? '#0A1128' : '#f6f7f9' }}
           scrollWheelZoom={false}
         >
-          {/* Minimal basemap (CARTO Positron / Dark Matter per theme) */}
+          {/* Use public OSM tiles for the Stage 1 preview; keep CARTO for other modes. */}
           <TileLayer
             key={colors.scheme}
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            attribution={tileAttribution}
             url={tileUrl}
           />
           <FitMapToRoutes positions={routePositions} />

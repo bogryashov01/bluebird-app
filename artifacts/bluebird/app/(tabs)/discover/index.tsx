@@ -376,8 +376,12 @@ export default function DiscoverScreen() {
         <Text style={[styles.cardRoute, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
           {airportLabel(item.fromAirport, item.fromCity)} → {airportLabel(item.toAirport, item.toCity)}
         </Text>
-        <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
-          {item.aircraftType ?? 'Aircraft details unavailable'} · {formatDateTime(item)}
+        <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={2}>
+          {item.aircraftType
+            ? `${item.aircraftType} · ${formatDateTime(item)}`
+            : item.source === 'production'
+              ? formatDateTime(item)
+              : `Aircraft details unavailable · ${formatDateTime(item)}`}
         </Text>
       </View>
     </TouchableOpacity>
