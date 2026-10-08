@@ -1,0 +1,78 @@
+STOP. Do not continue Task #285 or perform any further backend-route audit.
+
+Task #285 is not the task I asked you to execute.
+
+Stage 1 is already complete and committed locally:
+
+7426ea7fe0467a6d1c62c5cfb3d1f0d662e87a94
+feat(mobile): connect Discover to production Bluebird API
+
+Do not reopen or re-audit Stage 1.
+
+The task to execute now is:
+
+Task #286 — Implement Clerk Authentication and /api/me
+
+Execute Task #286 exactly as currently approved.
+
+IMPORTANT CONTEXT:
+
+The production backend source is NOT expected to exist in this repository.
+Do not search this repository for production /empty-legs, /airports, /plans,
+or production backend route handlers as a prerequisite for Stage 2.
+
+For Stage 2, the production backend is an external existing service.
+
+The relevant production endpoint is:
+
+GET https://bluebirdjets.com/api/me
+
+The purpose of Stage 2 is ONLY:
+
+Clerk authentication
+→ Clerk session
+→ Clerk getToken()
+→ Authorization: Bearer <token>
+→ production GET /api/me
+→ mobile viewer/auth state
+
+Do not attempt to prove the production backend architecture from the local
+Express prototype.
+
+Do not modify the local Express backend to imitate production.
+
+Do not create a new backend.
+
+Do not revisit Discover integration.
+
+Do not implement queue, membership purchases, payments, trips, push,
+networking, or other later-stage features.
+
+Start by auditing the CURRENT MOBILE AUTH implementation as specified in
+Task #286, then implement the mobile-side Clerk integration.
+
+If you reach a genuine external blocker such as:
+
+- missing Clerk publishable key
+- unknown Clerk instance
+- required Clerk dashboard configuration
+- unavailable authentication strategy
+- missing production account/configuration
+
+STOP at that specific blocker and report exactly what is required.
+
+Do NOT replace missing Clerk configuration with the local /api/auth/*
+prototype flow.
+
+Do NOT invent credentials or configuration.
+
+Do NOT commit.
+Do NOT push.
+
+At completion report using the Task #286 Stage 2 report format and finish with:
+
+STAGE 2 IMPLEMENTATION STATUS: COMPLETE
+
+or
+
+STAGE 2 IMPLEMENTATION STATUS: BLOCKED
