@@ -1,0 +1,492 @@
+IMPLEMENTATION TASK — STAGE 2: CLERK AUTH + PRODUCTION /api/me
+
+Goal:
+Replace the temporary/prototype mobile authentication path with the existing
+Bluebird Clerk authentication system and connect the mobile app to the real
+production viewer endpoint:
+
+GET https://bluebirdjets.com/api/me
+
+Stage 1 is complete and must remain intact.
+
+Stage 1 commit:
+7426ea7fe0467a6d1c62c5cfb3d1f0d662e87a94
+
+IMPORTANT:
+The real Bluebird production backend already exists in another project.
+Do NOT create a new authentication backend.
+Do NOT create a new token format.
+Do NOT modify production backend code.
+
+This task is ONLY:
+
+Clerk authentication
+→ Clerk session
+→ Bearer token
+→ production /api/me
+→ mobile auth/session state
+
+Do NOT implement Stage 3 features yet.
+
+==================================================
+0. SAFETY / SCOPE
+==================================================
+
+Do NOT touch or implement:
+
+- queue mutations
+- Skip the Line
+- membership purchases
+- payments
+- trips
+- passenger/pet mutations
+- push notifications
+- networking/community
+- production backend
+- database
+- production environment variables
+- unrelated UI redesign
+- Apple/TestFlight configuration
+
+Do NOT push to GitHub.
+
+Do NOT commit until implementation and validation are complete.
+
+Do not make authenticated production mutations.
+
+==================================================
+1. AUDIT CURRENT MOBILE AUTH FIRST
+==================================================
+
+Before modifying anything, inspect the current mobile authentication
+architecture.
+
+Identify:
+
+- current sign-in screen(s)
+- current sign-up screen(s)
+- OTP / verification flow
+- AuthContext or equivalent
+- current token storage
+- SecureStore usage, if present
+- AsyncStorage auth usage, if present
+- legacy custom JWT handling
+- current /api/auth/* usage
+- current auth-related generated hooks/client calls
+- logout implementation
+- auth guards / route redirects
+- onboarding redirects
+- web-specific auth behavior
+- any demo/dev authentication helpers
+
+Also identify which parts can be safely reused and which parts must be retired
+when Clerk becomes authoritative.
+
+Report the audit briefly before implementation.
+
+Do NOT delete large parts of the old auth system until the replacement is
+working.
+
+==================================================
+2. CLERK SDK
+==================================================
+
+Integrate Clerk using the supported Expo / React Native SDK appropriate for
+the current Expo SDK 54 project.
+
+Use the SAME Clerk instance as the existing Bluebird production backend.
+
+The mobile app must use only the Clerk publishable key.
+
+Never place any of the following in the mobile application:
+
+- Clerk secret key
+- backend credentials
+- production database credentials
+- signing secrets
+- service credentials
+
+Configure the publishable key through the existing environment/configuration
+strategy.
+
+Production must fail clearly if the required Clerk publishable key is absent.
+
+Do not hardcode credentials in source.
+
+==================================================
+3. SESSION / TOKEN ARCHITECTURE
+==================================================
+
+Clerk must become the authoritative authentication/session provider.
+
+For authenticated Bluebird API requests obtain a fresh Clerk session token
+using Clerk's supported getToken() mechanism.
+
+Send:
+
+Authorization: Bearer <Clerk session token>
+
+Do NOT implement:
+
+- custom JWT generation
+- custom refresh tokens
+- permanent bearer-token storage
+- a second authentication session
+
+Use Clerk's supported Expo token/session persistence.
+
+If SecureStore is required by the Clerk Expo integration, use the supported
+secure token-cache pattern.
+
+Preserve web compatibility where reasonably required by the existing project.
+
+Do not expose session tokens in logs.
+
+==================================================
+4. PRODUCTION /api/me
+==================================================
+
+Connect authenticated viewer state to:
+
+GET https://bluebirdjets.com/api/me
+
+Important:
+This endpoint intentionally also supports anonymous requests and returns HTTP
+200.
+
+Therefore:
+
+HTTP 200 DOES NOT MEAN AUTHENTICATED.
+
+The app must inspect:
+
+isAuthenticated
+
+Expected response shape:
+
+{
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+  isConcierge: boolean;
+  isMember: boolean;
+  memberTier: "base" | "plus" | null;
+  email?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  isProfileComplete: boolean;
+  needsPlanDecision: boolean;
+  needsSignupPhone: boolean;
+  impersonation?: null | {
+    active: boolean;
+    adminClerkUserId: string;
+    adminEmail: string | null;
+    targetClerkUserId: string;
+    targetEmail: string | null;
+    targetName: string | null;
+  };
+}
+
+Do not treat /api/me as the full profile endpoint.
+
+Do not invent missing fields.
+
+==================================================
+5. API AUTH INTEGRATION
+==================================================
+
+Stage 1 production Discover must continue to work anonymously.
+
+Do NOT force authentication onto:
+
+GET /api/empty-legs
+GET /api/empty-legs/:id
+GET /api/airports...
+
+For authenticated requests, create/adapt the smallest clean mechanism to
+supply Clerk's current token.
+
+The existing shared API client reportedly supports concepts equivalent to:
+
+setBaseUrl(...)
+setAuthTokenGetter(...)
+
+Inspect the actual current implementation before using it.
+
+Do not globally attach stale tokens to anonymous Stage 1 requests unless the
+architecture explicitly requires authenticated personalization.
+
+Keep public production reads safe and predictable.
+
+==================================================
+6. SIGN IN
+==================================================
+
+Connect the existing Bluebird mobile sign-in UI to Clerk.
+
+IMPORTANT:
+First inspect which sign-in methods are actually enabled/configured in the
+current mobile project and available Clerk configuration.
+
+The existing Bluebird backend architecture uses Clerk.
+
+Phone-code authentication has historically been part of the Bluebird flow.
+
+Do not invent a new login method.
+
+If phone-code sign-in can be implemented correctly with the available Clerk
+configuration, connect the existing UI to it.
+
+If an external configuration value or Clerk dashboard setting is genuinely
+required and unavailable, stop that portion and report the exact blocker
+rather than creating a fake workaround.
+
+Handle:
+
+- loading
+- invalid code
+- expired code
+- resend where supported
+- network errors
+- successful session activation
+
+Do not expose verification codes in production UI or logs.
+
+==================================================
+7. SIGN UP
+==================================================
+
+Inspect the existing Create Account flow and connect it to Clerk only where
+the required Clerk configuration and existing product flow are clear.
+
+Do not redesign onboarding.
+
+Do not invent backend signup logic.
+
+After a Clerk session is established, use /api/me as the authoritative
+Bluebird application-state check.
+
+Remember:
+
+Clerk authentication != completed Bluebird onboarding.
+
+The following server fields determine application state:
+
+isProfileComplete
+needsPlanDecision
+needsSignupPhone
+isMember
+memberTier
+
+Do not automatically mark onboarding complete based only on successful Clerk
+authentication.
+
+==================================================
+8. AUTH / ROUTING STATE
+==================================================
+
+Integrate Clerk state with the existing Expo Router navigation.
+
+Required high-level states:
+
+A. Clerk loading
+   → show existing safe loading/splash behavior
+
+B. Signed out
+   → auth/welcome flow
+
+C. Clerk signed in, /api/me loading
+   → authenticated loading state
+
+D. Clerk signed in, /api/me returns isAuthenticated: true
+   → use Bluebird server state for routing
+
+E. Clerk signed in but /api/me returns isAuthenticated: false
+   → treat as auth/API mismatch and fail safely
+   → do not silently treat the user as fully authenticated
+
+F. Session expired / invalid
+   → return safely to signed-out state
+
+Avoid redirect loops.
+
+==================================================
+9. LOGOUT
+==================================================
+
+Logout must use Clerk signOut().
+
+On logout:
+
+- clear viewer-specific React Query/cache state
+- clear any legacy auth state still relevant to migration
+- prevent previous member data from appearing for the next user
+- return to the signed-out flow
+
+Do not delete unrelated app preferences.
+
+==================================================
+10. LEGACY AUTH MIGRATION
+==================================================
+
+Identify legacy custom-auth code that is no longer authoritative after Clerk
+integration.
+
+Examples may include:
+
+- custom JWT token storage
+- /api/auth/login
+- /api/auth/verify
+- /api/auth/me
+- local refresh/session assumptions
+- demo OTP helpers
+
+Do NOT aggressively delete everything.
+
+Classify legacy auth code as:
+
+- replaced by Clerk and safe to remove now
+- still required for explicit local/demo development
+- used elsewhere and must remain temporarily
+- dead but should be removed in a later cleanup
+
+Remove only code that is clearly safe within Stage 2.
+
+There must be no ambiguity about which authentication system production uses:
+production = Clerk.
+
+==================================================
+11. SECURITY REQUIREMENTS
+==================================================
+
+Verify:
+
+- no Clerk secret key in mobile bundle
+- no session token written to logs
+- no permanent Clerk bearer token stored manually
+- no auth token included in screenshots/test fixtures
+- no credentials committed
+- no production user data added to tests
+- no real OTP values stored
+- no silent production fallback to demo auth
+
+Use synthetic fixtures for tests.
+
+==================================================
+12. TESTING
+==================================================
+
+Add/update focused tests for:
+
+- anonymous /api/me state
+- authenticated /api/me mapping
+- memberTier null/base/plus
+- onboarding flags
+- Clerk loading state
+- signed-out state
+- authenticated API token getter
+- logout/cache cleanup
+- missing Clerk configuration
+- malformed /api/me response
+- /api/me HTTP/network failure
+- isAuthenticated:false after Clerk sign-in
+- legacy auth not being selected in production
+
+Where Clerk itself is mocked, test our integration logic rather than Clerk's
+internal implementation.
+
+Run:
+
+- Bluebird TypeScript check
+- focused Stage 2 tests
+- existing Stage 1 production mapping tests
+- relevant existing auth/navigation tests
+- existing passenger-flow tests if reasonably applicable
+- git diff --check
+
+Do not hide unrelated failures.
+
+==================================================
+13. PRODUCTION VERIFICATION
+==================================================
+
+Be conservative.
+
+Anonymous verification of:
+
+GET https://bluebirdjets.com/api/me
+
+is safe.
+
+Expected anonymous behavior:
+
+HTTP 200
+isAuthenticated: false
+
+For authenticated production verification:
+
+DO NOT fabricate credentials.
+DO NOT extract browser cookies.
+DO NOT copy session JWTs manually.
+DO NOT use another user's account.
+
+If a legitimate existing Bluebird test/member account can be authenticated
+through the newly implemented mobile Clerk flow, it is acceptable to verify:
+
+GET /api/me
+
+through the app using the Clerk-issued session.
+
+Do NOT call authenticated mutation endpoints.
+
+If legitimate credentials/configuration are unavailable, report the blocker
+and validate authenticated behavior with mocks/tests instead.
+
+==================================================
+14. PRESERVE STAGE 1
+==================================================
+
+Re-verify that:
+
+- production Discover still loads anonymous flights
+- Flight Details still loads production flight details
+- airport coordinates still load
+- map still works
+- Stage 1 does not require sign-in
+
+Stage 2 must not regress Stage 1.
+
+==================================================
+15. FINAL REPORT
+==================================================
+
+Do NOT commit.
+Do NOT push.
+Do NOT start Queue integration.
+
+At completion report:
+
+1. Files changed
+2. Previous auth architecture
+3. New Clerk architecture
+4. Which legacy auth pieces remain and why
+5. Sign-in methods actually implemented
+6. Sign-up behavior
+7. /api/me integration behavior
+8. Routing behavior for onboarding flags
+9. Logout/cache behavior
+10. Environment/configuration required
+11. Tests and exact results
+12. Stage 1 regression results
+13. Production verification performed
+14. Any external Clerk configuration/access still required
+15. Any blocker before Stage 2 can be committed
+
+Finish with:
+
+STAGE 2 IMPLEMENTATION STATUS: COMPLETE
+
+or
+
+STAGE 2 IMPLEMENTATION STATUS: BLOCKED
+
+Do not commit or push.
