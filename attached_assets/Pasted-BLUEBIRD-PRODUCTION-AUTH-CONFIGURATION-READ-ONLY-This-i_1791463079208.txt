@@ -1,0 +1,322 @@
+BLUEBIRD PRODUCTION AUTH CONFIGURATION — READ ONLY
+
+This is a READ-ONLY investigation of the existing Bluebird production
+authentication configuration.
+
+Do NOT modify:
+- code
+- environment variables
+- Replit Secrets
+- deployment configuration
+- Clerk configuration
+- database
+- users
+- authentication settings
+
+Do NOT send SMS/email verification codes.
+Do NOT create users or sessions.
+Do NOT make production mutations.
+
+Context:
+
+The Bluebird Expo mobile app needs to authenticate against the SAME identity
+system used by:
+
+https://bluebirdjets.com
+
+An anonymous request to:
+
+GET https://bluebirdjets.com/api/me
+
+returned:
+
+HTTP 200
+x-clerk-auth-status: signed-out
+x-clerk-auth-reason: session-token-and-uat-missing
+isAuthenticated: false
+
+So production /api/me is behind Clerk middleware.
+
+We now need to identify the EXISTING production Clerk client configuration
+and actual production login/signup architecture.
+
+==================================================
+1. CONFIRM CLERK IN PRODUCTION SOURCE
+==================================================
+
+Inspect the actual production Bluebird source/configuration available in this
+workspace.
+
+Find:
+
+- Clerk packages/dependencies
+- ClerkProvider or equivalent initialization
+- Clerk middleware
+- session/user retrieval
+- getAuth(), auth(), verifyToken(), clerkClient(), or equivalents
+- frontend Clerk configuration
+- backend Clerk configuration
+
+Report file paths and high-level behavior.
+
+Do not print credentials.
+
+==================================================
+2. FIND THE PUBLISHABLE KEY CONFIGURATION
+==================================================
+
+Identify the environment variable NAME used by the production frontend for
+the Clerk publishable key.
+
+Examples:
+
+CLERK_PUBLISHABLE_KEY
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+VITE_CLERK_PUBLISHABLE_KEY
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+
+Do not assume one of these names; inspect the project.
+
+Report:
+
+Publishable key variable name: <NAME>
+Configured in this production project: YES / NO
+
+IMPORTANT:
+
+Do NOT print the actual key value.
+
+Do NOT print any Clerk secret key.
+
+If the frontend embeds the publishable key through another configuration
+mechanism, identify that mechanism without revealing the value.
+
+==================================================
+3. IDENTIFY THE EXISTING CLERK INSTANCE
+==================================================
+
+Determine whether the production project provides enough non-secret
+configuration to establish that the frontend and backend use the same Clerk
+instance.
+
+Do not reveal secrets or full tokens.
+
+If an instance/domain/issuer identifier can safely be reported without
+credentials, report it.
+
+Answer:
+
+Can the mobile app reuse this existing Clerk instance? YES / NO / UNKNOWN
+
+==================================================
+4. DETERMINE ACTUAL PRODUCTION SIGN-IN METHODS
+==================================================
+
+Inspect the CURRENT production Bluebird login/signup implementation.
+
+Do not infer from the prototype mobile app.
+
+Determine which methods are actually implemented:
+
+- phone + SMS code
+- email + verification code
+- email + password
+- magic link
+- Google
+- Apple
+- other OAuth
+- custom authentication
+- other
+
+For each implemented method, identify the relevant source files/components.
+
+==================================================
+5. PHONE / SMS ARCHITECTURE
+==================================================
+
+This is especially important.
+
+Determine whether production phone verification is handled by:
+
+A. Clerk directly
+
+B. Bluebird backend + another provider
+   (for example Quo, Sendblue, etc.)
+
+C. another architecture
+
+D. not implemented
+
+Trace the production flow at a high level:
+
+user enters phone
+→ ?
+→ verification code
+→ ?
+→ Clerk session established
+
+If another provider performs the SMS verification, determine how successful
+verification ultimately results in a Clerk-authenticated session.
+
+Do not send an SMS.
+Do not reveal phone numbers or credentials.
+
+==================================================
+6. SIGN-UP ARCHITECTURE
+==================================================
+
+Trace the production account-creation flow.
+
+Determine:
+
+- what identifier starts signup
+- how verification happens
+- when the Clerk user is created
+- when the Clerk session becomes active
+- what Bluebird-specific onboarding happens after authentication
+
+Specifically distinguish:
+
+Clerk identity/authentication
+
+from:
+
+Bluebird profile completion
+membership selection
+phone completion
+other onboarding
+
+==================================================
+7. PRODUCTION API AUTHENTICATION
+==================================================
+
+Inspect how authenticated production API endpoints validate requests.
+
+Determine whether a mobile client can authenticate using:
+
+Authorization: Bearer <Clerk session token>
+
+Look for the actual production middleware/verification implementation.
+
+Report:
+
+Bearer Clerk session token supported: YES / NO / UNKNOWN
+
+Do not generate or print a token.
+
+==================================================
+8. /api/me
+==================================================
+
+Find the actual production implementation of:
+
+GET /api/me
+
+if it exists in this workspace.
+
+Report:
+
+- source file
+- auth middleware involved
+- how Clerk user/session is resolved
+- anonymous behavior
+- authenticated behavior
+- where Bluebird member/profile/onboarding state comes from
+
+Do not return actual production user data.
+
+==================================================
+9. MOBILE REQUIREMENTS
+==================================================
+
+Based ONLY on the production implementation you inspected, tell me exactly
+what the Expo mobile app needs to reuse production authentication.
+
+For example:
+
+- Clerk publishable key
+- Clerk Expo SDK
+- token cache
+- sign-in strategy
+- redirect/deep-link configuration
+- phone verification provider integration
+- any required public configuration
+
+Separate:
+
+CAN BE PUT IN MOBILE APP
+
+from:
+
+MUST REMAIN SERVER-SIDE
+
+==================================================
+10. SECURITY
+==================================================
+
+Do not output:
+
+- CLERK_SECRET_KEY
+- complete publishable-key value
+- JWT/session tokens
+- cookies
+- SMS credentials
+- Quo credentials
+- Sendblue credentials
+- database credentials
+- user PII
+- phone numbers
+
+Do not modify anything.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Finish with exactly this structure:
+
+BLUEBIRD PRODUCTION AUTH REPORT
+
+Clerk used in production: YES / NO / UNKNOWN
+
+Publishable key variable:
+<variable name or UNKNOWN>
+
+Publishable key configured:
+YES / NO / UNKNOWN
+
+Mobile can reuse production Clerk instance:
+YES / NO / UNKNOWN
+
+Production sign-in methods:
+<methods>
+
+Production sign-up methods:
+<methods>
+
+Phone/SMS authentication:
+<Clerk / external provider / not implemented / UNKNOWN>
+
+Phone/SMS provider:
+<provider name / Clerk / NONE / UNKNOWN>
+
+How phone verification establishes Clerk session:
+<brief explanation / UNKNOWN>
+
+Backend accepts Clerk Bearer session token:
+YES / NO / UNKNOWN
+
+Production /api/me source:
+<file path / NOT AVAILABLE>
+
+Mobile configuration required:
+<concise list>
+
+External/dashboard changes required:
+<concise list or NONE>
+
+STAGE 2 CAN RESUME:
+YES / NO
+
+Reason:
+<brief reason>
