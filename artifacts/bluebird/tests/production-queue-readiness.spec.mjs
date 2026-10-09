@@ -24,6 +24,9 @@ async function installSyntheticLocalShellSession(page) {
     localStorage.setItem("bluebird_user", JSON.stringify(user));
   }, localUser);
   await page.route("**/api/auth/me", (route) => route.fulfill({ json: localUser }));
+  await page.route("**/api/notifications", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/queue/status", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/flights/airports", (route) => route.fulfill({ json: [] }));
 }
 
 function isQueueOrAccountStateRequest(requestUrl) {
@@ -118,4 +121,47 @@ test("production plans and Airport Search remain public read-only flows", async 
   expect(airports).toEqual(expect.any(Array));
   expect(airports.length).toBeGreaterThan(0);
   expect(blockedRequests).toEqual([]);
+});
+
+test("production My Trips, Trip Details, manifest and boarding pass stay unavailable without member-trip requests", async ({ page, baseURL }) => {
+  const memberTripRequests = [];
+  await installSyntheticLocalShellSession(page);
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (/\/api\/(?:trips(?:\/|$)|passengers(?:\/|$))/.test(path)) {
+      memberTripRequests.push(`${request.method()} ${path}`);
+    }
+  });
+
+  await page.goto(appUrl(baseURL, "trips"));
+  await expect(page.getByTestId("production-trips-unavailable")).toBeVisible();
+  await expect(page.getByTestId("production-trips-unavailable-title")).toHaveText("Sign in to view your trips");
+  await expect(page.getByText(/production trip and queue data are not connected/i)).toBeVisible();
+
+  await page.goto(appUrl(baseURL, "trip/21623"));
+  await expect(page.getByTestId("production-trip-details-unavailable")).toBeVisible();
+  await expect(page.getByTestId("production-trip-details-unavailable-title")).toHaveText("Trip details unavailable");
+  await expect(page.getByTestId("production-trip-details-unavailable")).not.toContainText("21623");
+  await expect(page.getByTestId("production-trip-details-unavailable")).not.toContainText(/airport|aircraft|confirmed|fbo/i);
+  await page.getByTestId("production-trip-details-unavailable-action").click();
+  await expect(page).toHaveURL(/\/trips\/?$/);
+
+  await page.goto(appUrl(baseURL, "trip/%40%40%40"));
+  await expect(page.getByTestId("trip-availability-state-title")).toHaveText("Trip details unavailable");
+  await expect(page.getByTestId("trip-availability-state-description")).toContainText("reference is invalid");
+
+  await page.goto(appUrl(baseURL, "trip/21623/passengers"));
+  await expect(page.getByTestId("production-passenger-information-unavailable")).toBeVisible();
+  await expect(page.getByTestId("production-passenger-information-unavailable")).toContainText("does not load, save, or submit passenger or pet information");
+  await expect(page.getByTestId("production-passenger-information-unavailable")).not.toContainText(/TRAVELER|Primary traveler|Weight ·|Crate ·/i);
+
+  await page.goto(appUrl(baseURL, "trip/21623/boarding-pass"));
+  await expect(page.getByTestId("boarding-pass-unavailable")).toContainText("Boarding pass unavailable");
+  await expect(page.getByTestId("boarding-pass-unavailable")).toContainText("does not generate a QR code or pass");
+  await expect(page.getByTestId("boarding-pass-unavailable")).toContainText("Apple Wallet is unavailable");
+
+  await page.goto(appUrl(baseURL, "trip/%40%40%40/passengers"));
+  await expect(page.getByTestId("trip-availability-state-title")).toHaveText("Passenger information unavailable");
+  await expect(page.getByTestId("trip-availability-state-description")).toContainText("reference is invalid");
+  expect(memberTripRequests).toEqual([]);
 });

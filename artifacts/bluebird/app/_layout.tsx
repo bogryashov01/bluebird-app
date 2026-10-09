@@ -77,6 +77,14 @@ function RootLayoutNav() {
         options={{ headerShown: true, title: 'Passenger Information', ...headerOptions }}
       />
       <Stack.Screen
+        name="trip/[id]/index"
+        options={{ headerShown: true, title: 'Trip Details', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="trip/[id]/boarding-pass"
+        options={{ headerShown: true, title: 'Boarding Pass', ...headerOptions }}
+      />
+      <Stack.Screen
         name="queue/join"
         options={{ headerShown: false }}
       />

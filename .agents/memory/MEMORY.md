@@ -26,5 +26,5 @@
 - [Networking fixture isolation](networking-fixture-isolation.md) — keep the deterministic front member on an isolated demo flight and exempt only that fixture from queue simulation.
 - [Seed after migration](seed-after-migration.md) — fixtures restored after migrations must write the current canonical fields, not legacy fields awaiting promotion.
 - [Metro platform facades](flight-map-platform-resolution.md) — use declaration-only facades when native/web variants have different source extensions; runtime `.ts` re-exports can bypass platform resolution.
-- [Bluebird browser test fixtures](bluebird-browser-test-fixtures.md) — authenticated screen tests must mock global notification and queue queries as arrays so shared shell hooks don't crash.
+- [Bluebird browser test fixtures](bluebird-browser-test-fixtures.md) — mock shared auth-query arrays and the local airport catalog separately from live public airport search.
 - [Bluebird time zone formatting](bluebird-time-zone-formatting.md) — short Intl timezone labels vary by runtime; preserve IANA zones and avoid asserting a specific abbreviation.

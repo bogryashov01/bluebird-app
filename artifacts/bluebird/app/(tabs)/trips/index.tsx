@@ -11,7 +11,7 @@ import { useListTrips, useGetQueueStatus, useCancelTrip } from '@workspace/api-c
 import type { Trip, QueueEntry } from '@workspace/api-client-react';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
-import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
+import { TripAvailabilityState } from '@/components/TripAvailabilityState';
 
 // ─── Aircraft images (same matching logic as Discover) ────────────────────────
 import { useAuth } from '@/context/AuthContext';
@@ -28,9 +28,13 @@ function aircraftImage(type: string) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmtDate(dateStr: string, timeStr: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || !timeStr) return 'Date unavailable';
   const [y, m, d] = dateStr.split('-').map(Number);
-  const label = new Date(y, m - 1, d).toLocaleDateString('en-US', {
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== dateStr) return 'Date unavailable';
+  const label = date.toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
+    timeZone: 'UTC',
   });
   return `${label} · ${timeStr}`;
 }
@@ -39,7 +43,7 @@ type ActiveTab = 'upcoming' | 'pending' | 'past';
 
 // ─── Trip Card ────────────────────────────────────────────────────────────────
 function TripCard({ flight, badge, badgeBlue, onPress, colors, onCancel, cancelling, manifestProgress, onManifest }: {
-  flight: { fromCity: string; toCity: string; aircraftType: string; departureDate: string; departureTime: string };
+  flight?: { fromCity: string; toCity: string; aircraftType: string; departureDate: string; departureTime: string };
   badge: string;
   badgeBlue: boolean;
   onPress?: () => void;
@@ -51,7 +55,7 @@ function TripCard({ flight, badge, badgeBlue, onPress, colors, onCancel, cancell
 }) {
   const mainContent = (
     <>
-      <Image source={aircraftImage(flight.aircraftType)} style={styles.cardImage} resizeMode="cover" />
+      {flight && <Image source={aircraftImage(flight.aircraftType)} style={styles.cardImage} resizeMode="cover" />}
       <View style={styles.cardBadgeWrap}>
         <View style={[
           styles.cardBadge,
@@ -61,19 +65,28 @@ function TripCard({ flight, badge, badgeBlue, onPress, colors, onCancel, cancell
         </View>
       </View>
       <View style={styles.cardBody}>
-        <Text style={[styles.cardRoute, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
-          {flight.fromCity} → {flight.toCity}
-        </Text>
-        <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
-          {flight.aircraftType} · {fmtDate(flight.departureDate, flight.departureTime)}
-        </Text>
+        {flight ? (
+          <>
+            <Text style={[styles.cardRoute, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+              {flight.fromCity || 'Airport unavailable'} → {flight.toCity || 'Airport unavailable'}
+            </Text>
+            <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
+              {[flight.aircraftType, fmtDate(flight.departureDate, flight.departureTime)].filter(Boolean).join(' · ')}
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.cardRoute, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Trip details unavailable</Text>
+            <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>Flight information is not available.</Text>
+          </>
+        )}
       </View>
     </>
   );
   return (
     <View style={[styles.card, { backgroundColor: colors.card }]}>
       {onPress ? (
-        <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
+        <TouchableOpacity testID="trip-card-open-details" accessibilityRole="button" activeOpacity={0.85} onPress={onPress}>
           {mainContent}
         </TouchableOpacity>
       ) : (
@@ -191,10 +204,30 @@ export default function TripsScreen() {
 
   if (!localDemoFlow) {
     return (
-      <ProductionReadOnlyNotice
-        title="Trips and queue data are unavailable in this preview"
-        description="This preview is not connected to production account data. It does not load trips or queue status or offer account actions."
-      />
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { paddingTop: topPad + 24 }]}>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Trips</Text>
+        </View>
+        <TripAvailabilityState
+          title="Sign in to view your trips"
+          description="Production trip and queue data are not connected to this read-only preview. No member trip data or account actions are loaded here."
+          testID="production-trips-unavailable"
+        />
+      </View>
+    );
+  }
+  if (!user) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { paddingTop: topPad + 24 }]}>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Trips</Text>
+        </View>
+        <TripAvailabilityState
+          title="Sign in to view your trips"
+          description="A member session is required. Trip and queue data are not loaded while signed out."
+          testID="trips-auth-required"
+        />
+      </View>
     );
   }
 
@@ -245,10 +278,10 @@ export default function TripsScreen() {
             <TripCard
               key={trip.id}
               colors={colors}
-              flight={trip.flight ?? emptyFlight}
-              badge="CONFIRMED"
+              flight={trip.flight}
+              badge="UPCOMING"
               badgeBlue
-              onPress={() => trip.flight && router.push(`/flight/${trip.flight.id}`)}
+              onPress={() => router.push(`/trip/${trip.id}` as any)}
               onCancel={() => handleCancelTrip(trip)}
               cancelling={cancellingTripId === trip.id}
               manifestProgress={trip.manifest ? `${trip.manifest.completedCount} of ${trip.manifest.requiredCount} completed` : undefined}
@@ -286,7 +319,7 @@ export default function TripsScreen() {
             <TripCard
               key={entry.id}
               colors={colors}
-              flight={entry.flight ?? emptyFlight}
+              flight={entry.flight}
               badge={`IN QUEUE · #${entry.position}`}
               badgeBlue={false}
               onPress={() => router.push({ pathname: '/queue/status', params: { entryId: entry.id } })}
@@ -317,10 +350,10 @@ export default function TripsScreen() {
           <TripCard
             key={trip.id}
             colors={colors}
-            flight={trip.flight ?? emptyFlight}
+            flight={trip.flight}
             badge={trip.status === 'cancelled' ? 'CANCELLED' : 'COMPLETED'}
             badgeBlue={false}
-            onPress={undefined}
+            onPress={() => router.push(`/trip/${trip.id}` as any)}
           />
         ))}
       </ScrollView>
@@ -372,12 +405,6 @@ export default function TripsScreen() {
     </View>
   );
 }
-
-// Fallback for missing flight data
-const emptyFlight = {
-  fromCity: '—', toCity: '—', aircraftType: '',
-  departureDate: '2025-01-01', departureTime: '00:00',
-};
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

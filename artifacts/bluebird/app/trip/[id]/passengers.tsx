@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetTripManifest,
@@ -25,6 +25,9 @@ import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
 import { prefillPrimaryPassenger } from '@/lib/passenger-name';
 import { MAX_OCCUPANTS, maxPassengersForBooking } from '@/lib/passengerCapacity';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { parseTripRouteId } from '@/lib/tripRoutes';
+import { TripAvailabilityState } from '@/components/TripAvailabilityState';
 type DraftPassenger = Omit<Passenger, 'dateOfBirth' | 'weightKg'> & {
   dateOfBirth: string;
   weightKg: string;
@@ -45,18 +48,20 @@ const EMPTY_PET: PetDraft = {
 };
 
 export default function PassengerListScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id: rawId } = useLocalSearchParams<{ id?: string | string[] }>();
+  const tripId = parseTripRouteId(rawId);
+  const localDemoFlow = isLocalFlightReadMode();
   const colors = useColors();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const manifestQueryKey = [`/api/trips/${id}/manifest`, user?.id ?? 'signed-out'] as const;
-  const { data, isLoading, isFetching, isError, error } = useGetTripManifest(id!, {
-    query: { enabled: !!id && !!user, queryKey: manifestQueryKey },
+  const manifestQueryKey = [`/api/trips/${tripId ?? 'invalid'}/manifest`, user?.id ?? 'signed-out'] as const;
+  const { data, isLoading, isFetching, isError, error } = useGetTripManifest(tripId ?? '', {
+    query: { enabled: localDemoFlow && !!tripId && !!user, queryKey: manifestQueryKey },
   });
   const savedPassengersQueryKey = ['/api/passengers', user?.id ?? 'signed-out'] as const;
   const { data: savedPassengers } = useListSavedPassengers({
-    query: { enabled: !!user, queryKey: savedPassengersQueryKey },
+    query: { enabled: localDemoFlow && !!tripId && !!user, queryKey: savedPassengersQueryKey },
   });
   const [passengers, setPassengers] = useState<DraftPassenger[]>([]);
   const [pet, setPet] = useState<PetDraft>(EMPTY_PET);
@@ -68,7 +73,7 @@ export default function PassengerListScreen() {
   const [savingPassengerIndex, setSavingPassengerIndex] = useState<number | null>(null);
   const resetIdentity = useRef('');
   const reviewAfterSave = useRef(false);
-  const manifestIdentity = `${user?.id ?? 'signed-out'}:${id ?? ''}`;
+  const manifestIdentity = `${user?.id ?? 'signed-out'}:${tripId ?? 'invalid'}`;
   const humanPassengerLimit = data
     ? Math.min(data.requiredCount, maxPassengersForBooking(data.bringingPet))
     : 0;
@@ -94,8 +99,8 @@ export default function PassengerListScreen() {
         setFeedback('');
         setDirty(false);
       }
-      if (!data || data.tripId !== id || isFetching) return;
-    } else if (!data || data.tripId !== id || isFetching || dirty) {
+      if (!data || data.tripId !== tripId || isFetching) return;
+    } else if (!data || data.tripId !== tripId || isFetching || dirty) {
       return;
     }
 
@@ -122,7 +127,7 @@ export default function PassengerListScreen() {
       setEditingSection(null);
       setHydratedIdentity(manifestIdentity);
     }
-  }, [data, dirty, hydratedIdentity, id, isFetching, manifestIdentity, user?.name]);
+  }, [data, dirty, hydratedIdentity, tripId, isFetching, manifestIdentity, user?.name]);
 
   const save = useSaveTripManifest({
     mutation: {
@@ -266,7 +271,7 @@ export default function PassengerListScreen() {
   };
   const savePassengerRecord = (index: number) => {
     const passenger = passengers[index];
-    if (!passenger || !passengerSaveable(passenger)) return;
+    if (!localDemoFlow || !tripId || !user || !passenger || !passengerSaveable(passenger)) return;
     setSavingPassengerIndex(index);
     setFeedback('');
     saveToPassengers.mutate({
@@ -281,13 +286,14 @@ export default function PassengerListScreen() {
   };
 
   const handleSave = () => {
+    if (!localDemoFlow || !tripId || !user) return;
     reviewAfterSave.current = false;
-    save.mutate({ id: id!, data: payload() });
+    save.mutate({ id: tripId, data: payload() });
   };
   const handleReview = () => {
-    if (!allComplete || pending) return;
+    if (!localDemoFlow || !tripId || !user || !allComplete || pending) return;
     reviewAfterSave.current = true;
-    save.mutate({ id: id!, data: payload() });
+    save.mutate({ id: tripId, data: payload() });
   };
   const edit = (section: 'passengers' | 'pet') => {
     setEditingSection(section);
@@ -295,23 +301,63 @@ export default function PassengerListScreen() {
     setMode('edit');
   };
 
+  if (!tripId) {
+    return (
+      <TripAvailabilityState
+        title="Passenger information unavailable"
+        description="This trip reference is invalid. No manifest or passenger data was requested."
+        actionLabel="Back to My Trips"
+        onAction={() => router.dismissTo('/(tabs)/trips')}
+      />
+    );
+  }
+  if (!localDemoFlow) {
+    return (
+      <TripAvailabilityState
+        title="Passenger information unavailable"
+        description="Production sign-in and the authenticated trip-manifest contract are not connected. This preview does not load, save, or submit passenger or pet information."
+        actionLabel="Back to Trip Details"
+        onAction={() => router.replace(`/trip/${tripId}` as any)}
+        testID="production-passenger-information-unavailable"
+      />
+    );
+  }
+  if (!user) {
+    return (
+      <TripAvailabilityState
+        title="Sign in to view passenger information"
+        description="A member session is required. Passenger and pet data are not loaded while signed out."
+        actionLabel="Back to Trip Details"
+        onAction={() => router.replace(`/trip/${tripId}` as any)}
+      />
+    );
+  }
   if (isLoading) {
     return <View style={[styles.center, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.primary} /></View>;
   }
-  if (isError || !data) {
+  if (isError || !data || data.tripId !== tripId) {
+    const status = (error as any)?.status ?? (error as any)?.response?.status;
+    const title = status === 409
+      ? 'Passenger information locked'
+      : status === 401
+        ? 'Sign in required'
+        : 'Passenger information unavailable';
     return (
-      <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <Feather name="lock" size={24} color={colors.mutedForeground} />
-        <Text style={[styles.errorTitle, { color: colors.foreground }]}>Passenger information unavailable</Text>
-        <Text style={[styles.errorBody, { color: colors.mutedForeground }]}>
-          {(error as any)?.data?.error || 'Only confirmed upcoming trips can access this information.'}
-        </Text>
-      </View>
+      <TripAvailabilityState
+        title={title}
+        description={
+          (error as any)?.data?.error ||
+          'Only an eligible confirmed upcoming trip can provide passenger and pet information. No local values have been substituted.'
+        }
+        actionLabel="Back to Trip Details"
+        onAction={() => router.replace(`/trip/${tripId}` as any)}
+        testID="passenger-information-unavailable"
+      />
     );
   }
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.offWhite }]}>
+    <View testID="passenger-information-screen" style={[styles.root, { backgroundColor: colors.offWhite }]}>
       <KeyboardAwareScrollViewCompat
         style={styles.root}
         contentContainerStyle={{
@@ -586,7 +632,9 @@ export default function PassengerListScreen() {
             testID="submit-passenger-list"
             disabled={!allComplete || pending || !!data.submittedAt}
             style={[styles.primary, { backgroundColor: colors.primary }, (!allComplete || pending || !!data.submittedAt) && styles.disabled]}
-            onPress={() => submit.mutate({ id: id! })}
+            onPress={() => {
+              if (localDemoFlow && tripId && user) submit.mutate({ id: tripId });
+            }}
           >
             {submit.isPending
               ? <ActivityIndicator color={colors.primaryForeground} />

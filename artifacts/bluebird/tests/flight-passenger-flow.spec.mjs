@@ -33,7 +33,35 @@ const flight = {
   createdAt: "2026-09-18T12:00:00.000Z",
 };
 
-async function mockFlightApi(page, { status = { status: "none" }, cachedUser = user } = {}) {
+const trip = {
+  id: "trip-1",
+  flightId: "21623",
+  flight: { ...flight, id: "21623" },
+  status: "upcoming",
+  bookedAt: "2026-10-01T12:00:00.000Z",
+  cleaningFeeUsd: 0,
+  manifest: {
+    requiredCount: 1,
+    completedCount: 0,
+    isComplete: false,
+    version: 0,
+  },
+};
+
+async function mockFlightApi(page, {
+  status = { status: "none" },
+  cachedUser = user,
+  trips = [trip],
+  queueEntries = [],
+  manifest = {
+    tripId: "trip-1",
+    requiredCount: 1,
+    passengers: [],
+    pet: null,
+    bringingPet: false,
+  },
+  manifestErrorStatus,
+} = {}) {
   let joinBody;
 
   await page.addInitScript(({ cachedUser }) => {
@@ -46,22 +74,22 @@ async function mockFlightApi(page, { status = { status: "none" }, cachedUser = u
     const path = new URL(request.url()).pathname;
 
     if (path === "/api/auth/me") return route.fulfill({ json: cachedUser });
-    if (path === "/api/queue/status") return route.fulfill({ json: [] });
+    if (path === "/api/trips") return route.fulfill({ json: trips });
+    if (path === "/api/notifications") return route.fulfill({ json: [] });
+    if (path === "/api/queue/status") return route.fulfill({ json: queueEntries });
     if (path === "/api/flights/flight-1") return route.fulfill({ json: flight });
     if (path === "/api/flights/flight-1/my-status") return route.fulfill({ json: status });
     if (path === "/api/networking/flights/flight-1/front-member") {
       return route.fulfill({ json: { eligible: false } });
     }
     if (path === "/api/trips/trip-1/manifest") {
-      return route.fulfill({
-        json: {
-          tripId: "trip-1",
-          requiredCount: 1,
-          passengers: [],
-          pet: null,
-          bringingPet: false,
-        },
-      });
+      if (manifestErrorStatus) {
+        return route.fulfill({
+          status: manifestErrorStatus,
+          json: { error: manifestErrorStatus === 409 ? "Passenger information is locked." : "Manifest service unavailable." },
+        });
+      }
+      return route.fulfill({ json: manifest });
     }
     if (path === "/api/passengers") return route.fulfill({ json: [] });
     if (path === "/api/queue/join" && request.method() === "POST") {
@@ -81,6 +109,42 @@ async function mockFlightApi(page, { status = { status: "none" }, cachedUser = u
 
   return { getJoinBody: () => joinBody };
 }
+
+test("My Trips shows an honest empty state when the member has no trips", async ({ page }) => {
+  await mockFlightApi(page, { trips: [] });
+  await page.goto("/trips");
+
+  await expect(page.getByText("No upcoming trips", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("trip-card-open-details")).toHaveCount(0);
+});
+
+test("past cancelled trips keep their status and do not expose passenger details", async ({ page }) => {
+  await mockFlightApi(page, { trips: [{ ...trip, status: "cancelled" }] });
+  await page.goto("/trips");
+  await page.getByText("Past", { exact: true }).click();
+
+  await expect(page.getByText("CANCELLED", { exact: true })).toBeVisible();
+  await page.getByTestId("trip-card-open-details").click();
+  await expect(page.getByTestId("trip-status")).toHaveText("Cancelled");
+  await expect(page.getByTestId("trip-passenger-information")).toHaveCount(0);
+  await expect(page.getByText("Passenger information is unavailable for this trip status.", { exact: true })).toBeVisible();
+});
+
+test("local trip detail API failures and locked manifests have explicit states", async ({ page }) => {
+  await mockFlightApi(page);
+  await page.route("**/api/trips", (route) => route.fulfill({
+    status: 503,
+    json: { error: "Trip service unavailable." },
+  }));
+  await page.goto("/trip/trip-1");
+  await expect(page.getByTestId("trip-details-api-error")).toContainText("Could not load trip details");
+
+  await page.unroute("**/api/trips");
+  await mockFlightApi(page, { manifestErrorStatus: 409 });
+  await page.goto("/trip/trip-1/passengers");
+  await expect(page.getByTestId("passenger-information-unavailable-title")).toHaveText("Passenger information locked");
+  await expect(page.getByTestId("passenger-information-unavailable")).toContainText("Passenger information is locked.");
+});
 
 test("flight details defer passenger selection until after confirmation", async ({ page }) => {
   await mockFlightApi(page);
@@ -109,6 +173,64 @@ test("confirmed flight details still open Passenger Information", async ({ page 
   await expect(passengerInformation).toBeVisible();
   await passengerInformation.click();
   await expect(page).toHaveURL(/\/trip\/trip-1\/passengers/);
+});
+
+test("My Trips opens Trip Details with the trip ID, then exposes passenger and boarding availability", async ({ page }) => {
+  await mockFlightApi(page);
+  await page.goto("/trips");
+
+  await page.getByTestId("trip-card-open-details").click();
+  await expect(page).toHaveURL(/\/trip\/trip-1$/);
+  await expect(page.getByTestId("trip-status")).toHaveText("Upcoming");
+  await expect(page.getByTestId("trip-details").getByText("Seattle → San Francisco", { exact: true })).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/trip/trip-1");
+  expect(new URL(page.url()).pathname).not.toContain("/flight/21623");
+
+  await page.getByTestId("trip-passenger-information").click();
+  await expect(page).toHaveURL(/\/trip\/trip-1\/passengers$/);
+  await expect(page.getByTestId("passenger-information-screen").getByText("Passenger Information", { exact: true })).toBeVisible();
+  await page.getByTestId("header-back").last().click();
+  await expect(page).toHaveURL(/\/trip\/trip-1$/);
+
+  await page.getByTestId("trip-boarding-pass").click();
+  await expect(page).toHaveURL(/\/trip\/trip-1\/boarding-pass$/);
+  await expect(page.getByTestId("boarding-pass-unavailable")).toContainText("Boarding pass unavailable");
+  await expect(page.getByTestId("boarding-pass-unavailable")).toContainText("Apple Wallet is unavailable");
+  await expect(page.getByTestId("boarding-pass-unavailable").locator('img, canvas, [data-testid*="qr"]')).toHaveCount(0);
+});
+
+test("pet manifest preserves its established weight and crate fields without invented pet identity fields", async ({ page }) => {
+  await mockFlightApi(page, {
+    manifest: {
+      tripId: "trip-1",
+      requiredCount: 1,
+      passengers: [],
+      pet: null,
+      bringingPet: true,
+    },
+  });
+  await page.goto("/trip/trip-1/passengers");
+
+  await expect(page.getByText("Travel crate details", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("pet-weight-lb")).toBeVisible();
+  await expect(page.getByTestId("pet-crate-length")).toBeVisible();
+  await expect(page.getByTestId("pet-crate-width")).toBeVisible();
+  await expect(page.getByTestId("pet-crate-height")).toBeVisible();
+  await expect(page.getByText(/pet name|pet type/i)).toHaveCount(0);
+});
+
+test("malformed direct passenger trip ID shows unavailable without loading trip or passenger data", async ({ page }) => {
+  const requestedTripData = [];
+  await mockFlightApi(page);
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (/\/api\/(?:trips(?:\/|$)|passengers(?:\/|$))/.test(path)) requestedTripData.push(path);
+  });
+  await page.goto("/trip/%40%40%40/passengers");
+
+  await expect(page.getByTestId("trip-availability-state-title")).toHaveText("Passenger information unavailable");
+  await expect(page.getByText("This trip reference is invalid. No manifest or passenger data was requested.", { exact: true })).toBeVisible();
+  expect(requestedTripData).toEqual([]);
 });
 
 async function acknowledgeJoin(page, { pet = false } = {}) {
