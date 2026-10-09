@@ -142,6 +142,86 @@ export interface ReadRequestOptions {
   signal?: AbortSignal;
   baseUrl?: string;
   fetcher?: typeof fetch;
+  timeoutMs?: number;
+}
+
+export const PRODUCTION_READ_TIMEOUT_MS = 10_000;
+const MAX_RETRY_AFTER_MS = 30_000;
+
+export class ProductionReadTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Production read request timed out after ${timeoutMs} ms.`);
+    this.name = 'ProductionReadTimeoutError';
+  }
+}
+
+export class ProductionReadHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly retryAfterMs: number | null,
+  ) {
+    super(`Production read request failed (HTTP ${status}).`);
+    this.name = 'ProductionReadHttpError';
+  }
+}
+
+export class ProductionReadNetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProductionReadNetworkError';
+  }
+}
+
+export class ProductionReadInvalidJsonError extends Error {
+  constructor() {
+    super('Production read response was not valid JSON.');
+    this.name = 'ProductionReadInvalidJsonError';
+  }
+}
+
+function abortError(): Error {
+  const error = new Error('Production read request was cancelled.');
+  error.name = 'AbortError';
+  return error;
+}
+
+function retryAfterMilliseconds(response: Response): number | null {
+  const value = response.headers.get('Retry-After')?.trim();
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
+}
+
+export function shouldRetryProductionRead(
+  failureCount: number,
+  error: unknown,
+): boolean {
+  if (failureCount >= 1) return false;
+  if (
+    error instanceof ProductionReadTimeoutError ||
+    error instanceof ProductionReadNetworkError
+  ) {
+    return true;
+  }
+  if (error instanceof ProductionReadHttpError) {
+    return error.status === 429 || error.status >= 500;
+  }
+  return false;
+}
+
+export function productionReadRetryDelay(
+  attemptIndex: number,
+  error: unknown,
+): number {
+  if (error instanceof ProductionReadHttpError && error.status === 429) {
+    return Math.min(
+      error.retryAfterMs ?? 1000 * 2 ** attemptIndex,
+      MAX_RETRY_AFTER_MS,
+    );
+  }
+  return Math.min(1000 * 2 ** attemptIndex, 5000);
 }
 
 function trimTrailingSlashes(value: string): string {
@@ -546,28 +626,78 @@ function getConfiguredBaseUrl(override?: string): string {
   }).baseUrl;
 }
 
-async function fetchJson(
+export async function fetchProductionJson(
   path: string,
   options: ReadRequestOptions,
 ): Promise<unknown> {
   const baseUrl = getConfiguredBaseUrl(options.baseUrl);
   const fetcher = options.fetcher ?? fetch;
-  const response = await fetcher(`${baseUrl}${path}`, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-    credentials: 'omit',
-    signal: options.signal,
-  });
-  if (!response.ok) {
-    throw new Error(`Production flight API request failed (HTTP ${response.status}).`);
+  const timeoutMs = options.timeoutMs ?? PRODUCTION_READ_TIMEOUT_MS;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new RangeError('Production read timeout must be a positive finite number.');
   }
-  return response.json();
+  if (options.signal?.aborted) throw abortError();
+
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  let rejectAbort: (reason: Error) => void = () => {};
+  const abortPromise = new Promise<never>((_resolve, reject) => {
+    rejectAbort = reject;
+  });
+  const abortFromCaller = () => {
+    controller.abort();
+    rejectAbort(abortError());
+  };
+  options.signal?.addEventListener('abort', abortFromCaller, { once: true });
+  timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+    rejectAbort(new ProductionReadTimeoutError(timeoutMs));
+  }, timeoutMs);
+
+  const request = async (): Promise<unknown> => {
+    let response: Response;
+    try {
+      response = await fetcher(`${baseUrl}${path}`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'omit',
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw timedOut ? new ProductionReadTimeoutError(timeoutMs) : abortError();
+      }
+      throw new ProductionReadNetworkError(
+        error instanceof Error ? error.message : 'Network request failed.',
+      );
+    }
+    if (!response.ok) {
+      throw new ProductionReadHttpError(response.status, retryAfterMilliseconds(response));
+    }
+    try {
+      return await response.json();
+    } catch {
+      if (controller.signal.aborted) {
+        throw timedOut ? new ProductionReadTimeoutError(timeoutMs) : abortError();
+      }
+      throw new ProductionReadInvalidJsonError();
+    }
+  };
+
+  try {
+    return await Promise.race([request(), abortPromise]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    options.signal?.removeEventListener('abort', abortFromCaller);
+  }
 }
 
 export async function fetchProductionFlights(
   options: ReadRequestOptions = {},
 ): Promise<FlightView[]> {
-  return mapProductionFlights(await fetchJson('/empty-legs', options));
+  return mapProductionFlights(await fetchProductionJson('/empty-legs', options));
 }
 
 export function parseProductionFlightId(id: string | number | null | undefined): number | null {
@@ -585,7 +715,7 @@ export async function fetchProductionFlight(
   if (!Number.isSafeInteger(id) || id <= 0) {
     throw new Error('A positive numeric production flight ID is required.');
   }
-  return mapProductionFlight(await fetchJson(`/empty-legs/${id}`, options));
+  return mapProductionFlight(await fetchProductionJson(`/empty-legs/${id}`, options));
 }
 
 export function normalizeAirportCodes(codes: readonly string[]): string[] {
@@ -605,7 +735,7 @@ export async function fetchProductionAirports(
   const unique = normalizeAirportCodes(codes);
   if (unique.length === 0) return [];
   const query = new URLSearchParams({ codes: unique.join(',') });
-  return mapProductionAirports(await fetchJson(`/airports?${query.toString()}`, options));
+  return mapProductionAirports(await fetchProductionJson(`/airports?${query.toString()}`, options));
 }
 
 export async function fetchProductionAirportSearch(
@@ -616,7 +746,7 @@ export async function fetchProductionAirportSearch(
   if (!normalizedQuery) return [];
   const params = new URLSearchParams({ q: normalizedQuery });
   return mapProductionAirports(
-    await fetchJson(`/airports/search?${params.toString()}`, options),
+    await fetchProductionJson(`/airports/search?${params.toString()}`, options),
   );
 }
 
@@ -624,6 +754,6 @@ export async function fetchProductionAirportCities(
   options: ReadRequestOptions = {},
 ): Promise<ProductionAirportCityGroupResponse[]> {
   return mapProductionAirportCityGroups(
-    await fetchJson('/airports/cities', options),
+    await fetchProductionJson('/airports/cities', options),
   );
 }

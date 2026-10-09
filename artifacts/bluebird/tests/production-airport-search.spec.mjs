@@ -72,7 +72,8 @@ assert.equal(requests[0].init.method, "GET");
 assert.equal(requests[0].init.headers.Accept, "application/json");
 assert.equal(requests[0].init.headers.Authorization, undefined);
 assert.equal(requests[0].init.credentials, "omit");
-assert.equal(requests[0].init.signal, signal);
+assert.notEqual(requests[0].init.signal, signal, "the reader composes caller cancellation with its timeout");
+assert.equal(requests[0].init.signal.aborted, false);
 
 requests.length = 0;
 assert.deepEqual(

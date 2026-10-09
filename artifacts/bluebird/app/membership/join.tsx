@@ -33,9 +33,12 @@ export default function MembershipRequiredScreen() {
           </Text>
           <TouchableOpacity
             style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+            disabled={plansQuery.isFetching}
             onPress={() => plansQuery.refetch()}
           >
-            <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>
+            {plansQuery.isFetching
+              ? <ActivityIndicator color={colors.primaryForeground} />
+              : <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>}
           </TouchableOpacity>
         </View>
       ) : (

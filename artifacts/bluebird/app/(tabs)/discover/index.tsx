@@ -21,6 +21,8 @@ import {
   getFlightAirportCodes,
   isLocalFlightReadMode,
   mapLocalFlight,
+  productionReadRetryDelay,
+  shouldRetryProductionRead,
   type AirportRecord,
   type FlightView,
 } from '@/lib/productionFlights';
@@ -216,21 +218,24 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
 
       {view === 'map' && (
         mapFlights.length > 0 ? (
-          mapError ? (
+          mapLoading ? (
+            <View style={styles.mapPlaceholder}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : mapError ? (
             <View style={styles.mapPlaceholder}>
               <Feather name="wifi-off" size={28} color={colors.mutedForeground} />
               <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
                 Could not load airport locations
               </Text>
-              <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={onMapRetry}>
+              <TouchableOpacity
+                style={[styles.retryBtn, { borderColor: colors.border }]}
+                onPress={onMapRetry}
+              >
                 <Text style={[styles.retryText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
                   Try again
                 </Text>
               </TouchableOpacity>
-            </View>
-          ) : mapLoading ? (
-            <View style={styles.mapPlaceholder}>
-              <ActivityIndicator color={colors.primary} />
             </View>
           ) : (
             <FlightMapView flights={mapFlights} airports={mapAirports} />
@@ -284,6 +289,8 @@ export default function DiscoverScreen() {
     queryKey: ['production-empty-legs'],
     queryFn: ({ signal }) => fetchProductionFlights({ signal }),
     enabled: !localReadMode,
+    retry: shouldRetryProductionRead,
+    retryDelay: productionReadRetryDelay,
   });
   const flights: FlightView[] = localReadMode
     ? (localFlightsQuery.data ?? []).map(mapLocalFlight)
@@ -354,6 +361,8 @@ export default function DiscoverScreen() {
     queryKey: ['production-airports', airportCodes],
     queryFn: ({ signal }) => fetchProductionAirports(airportCodes, { signal }),
     enabled: view === 'map' && airportCodes.length > 0,
+    retry: shouldRetryProductionRead,
+    retryDelay: productionReadRetryDelay,
   });
 
   const onClearSearch = React.useCallback(() => setSearch(''), []);
@@ -411,9 +420,12 @@ export default function DiscoverScreen() {
           </Text>
           <TouchableOpacity
             style={[styles.retryBtn, { borderColor: colors.border }]}
-            onPress={() => refetchFlights()}
+            onPress={() => void refetchFlights()}
+            disabled={flightsRefetching}
           >
-            <Text style={[styles.retryText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>Try again</Text>
+            {flightsRefetching
+              ? <ActivityIndicator color={colors.primary} />
+              : <Text style={[styles.retryText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>Try again</Text>}
           </TouchableOpacity>
         </View>
       ) : (
@@ -447,7 +459,7 @@ export default function DiscoverScreen() {
               onViewChange={setView}
               mapFlights={mapFlights}
               mapAirports={airportQuery.data ?? []}
-              mapLoading={airportQuery.isLoading}
+              mapLoading={airportQuery.isFetching}
               mapError={airportQuery.isError}
               onMapRetry={() => airportQuery.refetch()}
               showEmpty={view === 'list' && filteredFlights.length === 0}

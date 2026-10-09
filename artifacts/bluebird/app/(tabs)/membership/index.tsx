@@ -120,9 +120,12 @@ export default function MembershipScreen() {
                 </Text>
                 <TouchableOpacity
                   style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+                  disabled={plansQuery.isFetching}
                   onPress={() => plansQuery.refetch()}
                 >
-                  <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>
+                  {plansQuery.isFetching
+                    ? <ActivityIndicator color={colors.primaryForeground} />
+                    : <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>}
                 </TouchableOpacity>
               </View>
             ) : (
@@ -301,8 +304,10 @@ export default function MembershipScreen() {
             <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
               Production plan details could not be loaded.
             </Text>
-            <TouchableOpacity onPress={() => plansQuery.refetch()}>
-              <Text style={[styles.plansLinkText, { color: colors.primary }]}>Retry loading plans</Text>
+            <TouchableOpacity disabled={plansQuery.isFetching} onPress={() => plansQuery.refetch()}>
+              {plansQuery.isFetching
+                ? <ActivityIndicator color={colors.primary} />
+                : <Text style={[styles.plansLinkText, { color: colors.primary }]}>Retry loading plans</Text>}
             </TouchableOpacity>
           </View>
         ) : family ? (

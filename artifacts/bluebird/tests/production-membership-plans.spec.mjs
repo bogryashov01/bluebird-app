@@ -144,5 +144,24 @@ await assert.rejects(
   }),
   /HTTP 503/i,
 );
+let plansRequestSignal;
+await assert.rejects(
+  () => fetchProductionMembershipPlans({
+    timeoutMs: 15,
+    fetcher: async (_url, init) => {
+      plansRequestSignal = init.signal;
+      return new Promise(() => {});
+    },
+  }),
+  (error) => error.name === "ProductionReadTimeoutError",
+  "the public plans reader also has a finite timeout",
+);
+assert.equal(plansRequestSignal.aborted, true);
+await assert.rejects(
+  () => fetchProductionMembershipPlans({
+    fetcher: async () => new Response("{broken", { status: 200 }),
+  }),
+  /valid JSON/i,
+);
 
 console.log("Production membership plan read tests passed.");

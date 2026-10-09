@@ -1,4 +1,8 @@
-import { PRODUCTION_API_BASE_URL } from '@/lib/productionFlights';
+import {
+  PRODUCTION_API_BASE_URL,
+  fetchProductionJson,
+  type ReadRequestOptions,
+} from '@/lib/productionFlights';
 
 export const PRODUCTION_MEMBERSHIP_PLANS_URL = `${PRODUCTION_API_BASE_URL}/plans`;
 
@@ -33,10 +37,7 @@ export interface ProductionMembershipPlanCatalog {
   availability: ProductionPlanAvailability;
 }
 
-export interface ProductionPlanReadOptions {
-  signal?: AbortSignal;
-  fetcher?: typeof fetch;
-}
+export type ProductionPlanReadOptions = ReadRequestOptions;
 
 function objectValue(value: unknown, field: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -184,15 +185,5 @@ export function productionPlanPurchaseNotice(
 export async function fetchProductionMembershipPlans(
   options: ProductionPlanReadOptions = {},
 ): Promise<ProductionMembershipPlanCatalog> {
-  const fetcher = options.fetcher ?? fetch;
-  const response = await fetcher(PRODUCTION_MEMBERSHIP_PLANS_URL, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-    credentials: 'omit',
-    signal: options.signal,
-  });
-  if (!response.ok) {
-    throw new Error(`Production plans request failed (HTTP ${response.status}).`);
-  }
-  return mapProductionMembershipPlans(await response.json());
+  return mapProductionMembershipPlans(await fetchProductionJson('/plans', options));
 }

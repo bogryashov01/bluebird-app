@@ -15,6 +15,8 @@ import type { AirportGroup, AirportInfo } from '@workspace/api-client-react';
 import {
   fetchProductionAirportCities,
   fetchProductionAirportSearch,
+  productionReadRetryDelay,
+  shouldRetryProductionRead,
 } from '@/lib/productionFlights';
 import { useColors } from '@/hooks/useColors';
 import {
@@ -85,14 +87,16 @@ export function AirportMultiSelect({
     queryKey: ['production-airport-search', debouncedSearch],
     queryFn: ({ signal }) => fetchProductionAirportSearch(debouncedSearch, { signal }),
     enabled: debouncedSearch.length > 0,
-    retry: false,
+    retry: shouldRetryProductionRead,
+    retryDelay: productionReadRetryDelay,
     staleTime: 30_000,
   });
   const productionAirportCities = useQuery({
     queryKey: ['production-airport-cities'],
     queryFn: ({ signal }) => fetchProductionAirportCities({ signal }),
     enabled: isSearching,
-    retry: false,
+    retry: shouldRetryProductionRead,
+    retryDelay: productionReadRetryDelay,
     staleTime: 24 * 60 * 60 * 1000,
   });
 
@@ -155,11 +159,15 @@ export function AirportMultiSelect({
       onRetry();
       return;
     }
-    void Promise.all([
-      onRetry(),
-      productionAirportSearch.refetch(),
-      productionAirportCities.refetch(),
-    ]);
+    const retryRequests: Promise<unknown>[] = [];
+    if (isError) onRetry();
+    if (productionAirportSearch.isError) {
+      retryRequests.push(productionAirportSearch.refetch());
+    }
+    if (productionAirportCities.isError) {
+      retryRequests.push(productionAirportCities.refetch());
+    }
+    void Promise.all(retryRequests);
   };
 
   const checkbox = (state: GroupSelectionState) => (

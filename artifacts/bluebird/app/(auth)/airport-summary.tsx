@@ -22,6 +22,8 @@ import {
   fetchProductionAirports,
   getFlightAirportCodes,
   mapLocalFlight,
+  productionReadRetryDelay,
+  shouldRetryProductionRead,
 } from '@/lib/productionFlights';
 
 export default function AirportSummaryScreen() {
@@ -45,6 +47,8 @@ export default function AirportSummaryScreen() {
     queryKey: ['production-airports', recentAirportCodes],
     queryFn: ({ signal }) => fetchProductionAirports(recentAirportCodes, { signal }),
     enabled: recentAirportCodes.length > 0,
+    retry: shouldRetryProductionRead,
+    retryDelay: productionReadRetryDelay,
   });
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;

@@ -10,9 +10,14 @@ import {
   mapProductionFlights,
   normalizeAirportCodes,
   parseProductionFlightId,
+  productionReadRetryDelay,
   PRODUCTION_API_BASE_URL,
+  ProductionReadHttpError,
+  ProductionReadInvalidJsonError,
+  ProductionReadTimeoutError,
   resolveAircraftImageUrl,
   resolveFlightReadConfiguration,
+  shouldRetryProductionRead,
 } from "../scripts/.production-flights.test.mjs";
 
 const rawFlight = {
@@ -226,6 +231,80 @@ await assert.rejects(
   }),
   /HTTP 503/i,
   "a failed production empty-leg request does not become local demo data",
+);
+await assert.rejects(
+  () => fetchProductionFlights({
+    fetcher: async () => new Response("rate limited", {
+      status: 429,
+      headers: { "Retry-After": "2" },
+    }),
+  }),
+  (error) => {
+    assert(error instanceof ProductionReadHttpError);
+    assert.equal(error.status, 429);
+    assert.equal(error.retryAfterMs, 2000);
+    assert.equal(shouldRetryProductionRead(0, error), true);
+    assert.equal(shouldRetryProductionRead(1, error), false);
+    assert.equal(productionReadRetryDelay(0, error), 2000);
+    return true;
+  },
+  "HTTP 429 preserves Retry-After and automatic retry stays bounded",
+);
+await assert.rejects(
+  () => fetchProductionFlights({
+    fetcher: async () => new Response("server error", { status: 500 }),
+  }),
+  (error) => {
+    assert.equal(error.status, 500);
+    assert.equal(shouldRetryProductionRead(0, error), true);
+    return true;
+  },
+);
+
+let timedOutSignal;
+await assert.rejects(
+  () => fetchProductionFlights({
+    timeoutMs: 15,
+    fetcher: async (_url, init) => {
+      timedOutSignal = init.signal;
+      return new Promise(() => {});
+    },
+  }),
+  (error) => error instanceof ProductionReadTimeoutError,
+  "a stalled reader rejects after its finite timeout even when an injected fetcher stalls",
+);
+assert.equal(timedOutSignal.aborted, true);
+
+const callerController = new AbortController();
+let cancelledSignal;
+const pendingRead = fetchProductionFlights({
+  timeoutMs: 500,
+  signal: callerController.signal,
+  fetcher: async (_url, init) => {
+    cancelledSignal = init.signal;
+    return new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(new Error("fetch aborted")), { once: true });
+    });
+  },
+});
+callerController.abort();
+await assert.rejects(
+  pendingRead,
+  (error) => error.name === "AbortError",
+  "caller cancellation aborts the underlying request and is not treated as a timeout",
+);
+assert.equal(cancelledSignal.aborted, true);
+
+await assert.rejects(
+  () => fetchProductionFlights({
+    fetcher: async () => new Response("not json", { status: 200 }),
+  }),
+  (error) => {
+    assert(error instanceof ProductionReadInvalidJsonError);
+    assert.equal(shouldRetryProductionRead(0, error), false);
+    return true;
+  },
+  "invalid JSON is reported as a payload failure rather than retried as a network failure",
 );
 
 requests.length = 0;

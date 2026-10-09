@@ -23,6 +23,8 @@ import {
   isLocalFlightReadMode,
   mapLocalFlight,
   parseProductionFlightId,
+  productionReadRetryDelay,
+  shouldRetryProductionRead,
   type FlightView,
 } from '@/lib/productionFlights';
 
@@ -107,12 +109,16 @@ export default function FlightDetailScreen() {
     queryKey: ['production-empty-leg', numericFlightId],
     queryFn: ({ signal }) => fetchProductionFlight(numericFlightId!, { signal }),
     enabled: !localReadMode && numericFlightId !== null,
+    retry: shouldRetryProductionRead,
+    retryDelay: productionReadRetryDelay,
   });
   const flight: FlightView | undefined = localReadMode
     ? (localFlightQuery.data ? mapLocalFlight(localFlightQuery.data) : undefined)
     : productionFlightQuery.data;
   const isLoading = localReadMode ? localFlightQuery.isLoading : productionFlightQuery.isLoading;
   const isError = localReadMode ? localFlightQuery.isError : productionFlightQuery.isError;
+  const isRetryingFlight = localReadMode ? localFlightQuery.isFetching : productionFlightQuery.isFetching;
+  const retryFlight = localReadMode ? localFlightQuery.refetch : productionFlightQuery.refetch;
 
   // Fetch the user's relationship to this flight (requires auth)
   const {
@@ -217,9 +223,30 @@ export default function FlightDetailScreen() {
     );
   }
   if (isError || !flight) {
+    const canRetry = localReadMode ? !!id : numericFlightId !== null;
     return (
       <View style={[styles.centered, { backgroundColor: colors.offWhite }]}>
-        <Text style={[styles.errText, { color: colors.mutedForegroundLight }]}>Flight not found</Text>
+        <Text style={[styles.errText, { color: colors.mutedForegroundLight }]}>
+          {isError ? 'Could not load flight details' : 'Flight not found'}
+        </Text>
+        {isError && (
+          <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
+            Check your connection and try again.
+          </Text>
+        )}
+        {canRetry && (
+          <TouchableOpacity
+            testID="flight-detail-retry"
+            accessibilityRole="button"
+            disabled={isRetryingFlight}
+            style={[styles.retryBtn, { backgroundColor: colors.primary, opacity: isRetryingFlight ? 0.65 : 1 }]}
+            onPress={() => void retryFlight()}
+          >
+            {isRetryingFlight
+              ? <ActivityIndicator color={colors.primaryForeground} />
+              : <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try again</Text>}
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -543,7 +570,10 @@ export default function FlightDetailScreen() {
               },
             ]}
           >
-            <Text style={[styles.routePillText, { color: imgSource ? colors.primaryForeground : colors.foreground }]}>
+            <Text
+              testID="flight-detail-route"
+              style={[styles.routePillText, { color: imgSource ? colors.primaryForeground : colors.foreground }]}
+            >
               {f.fromAirport ?? f.fromCity ?? '—'} → {f.toAirport ?? f.toCity ?? '—'}
             </Text>
           </View>
@@ -756,6 +786,9 @@ const styles = StyleSheet.create({
   root:    { flex: 1 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errText: { fontFamily: 'Inter_400Regular', fontSize: 16 },
+  errorBody: { fontFamily: 'Inter_400Regular', fontSize: 14, textAlign: 'center', marginTop: 8, paddingHorizontal: 28 },
+  retryBtn: { borderRadius: 999, minHeight: 44, minWidth: 132, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 22, marginTop: 18 },
+  retryText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
 
   // Back button
   backBtn: {

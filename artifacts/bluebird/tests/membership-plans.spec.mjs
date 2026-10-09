@@ -164,7 +164,7 @@ test("plan loading errors show no demo pricing and retry the public request", as
   await setupMemberPage(page, {
     productionPlansHandler: async (route) => {
       requestCount += 1;
-      if (requestCount === 1) {
+      if (requestCount <= 2) {
         return route.fulfill({ status: 503, json: { error: "temporarily unavailable" } });
       }
       return route.fulfill({ status: 200, json: liveCatalogFixture });
@@ -177,5 +177,5 @@ test("plan loading errors show no demo pricing and retry the public request", as
   await expect(page.getByText("Base demo fallback", { exact: true })).toHaveCount(0);
   await page.getByText("Try Again", { exact: true }).click();
   await expect(page.getByText("$3,995 / year", { exact: true })).toBeVisible();
-  expect(requestCount).toBe(2);
+  expect(requestCount).toBe(3);
 });
