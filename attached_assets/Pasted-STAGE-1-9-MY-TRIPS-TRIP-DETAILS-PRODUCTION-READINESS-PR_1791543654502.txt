@@ -1,0 +1,417 @@
+STAGE 1.9 — MY TRIPS / TRIP DETAILS PRODUCTION READINESS
+
+PROJECT: Bluebird Mobile App
+
+CONTEXT
+
+The following stages are complete:
+
+Stage 1.0:
+- Production Discover
+- Production Flight Details
+- Production Airport Map
+
+Stage 1.5:
+- Production Membership Plans
+
+Stage 1.6:
+- Production Airport Search
+
+Stage 1.7:
+- Public production-data cleanup
+
+Stage 1.8:
+- Queue UI Production Readiness
+
+Production authentication (Clerk) is currently blocked
+and will be implemented separately in Stage 2.
+
+IMPORTANT RESTRICTIONS:
+
+- Do NOT implement Clerk.
+- Do NOT modify authentication.
+- Do NOT call authenticated production endpoints.
+- Do NOT perform production mutations.
+- Do NOT modify the production backend.
+- Do NOT implement payment functionality.
+- Do NOT commit.
+- Do NOT push to GitHub.
+
+GOAL
+
+Prepare the existing My Trips, Trip Details, Passengers,
+and Pets UI for future production integration.
+
+This stage focuses on:
+
+- UI readiness
+- navigation
+- state handling
+- production ID compatibility
+- removal of misleading demo data
+
+Do not implement production networking yet.
+
+==================================================
+1. AUDIT EXISTING MY TRIPS FLOW
+==================================================
+
+Inspect the existing screens and components related to:
+
+- My Trips
+- Upcoming Trips
+- Past Trips
+- Trip Details
+- Flight Confirmation
+- Passenger Information
+- Pet Information
+- Boarding Pass
+- Apple Wallet
+- Trip Checklist
+
+Identify:
+
+- existing navigation paths
+- source files
+- current API dependencies
+- local/demo data dependencies
+- assumptions about flight and trip IDs
+
+Report the existing architecture before changing it.
+
+==================================================
+2. PRODUCTION ID COMPATIBILITY
+==================================================
+
+The production backend uses numeric empty-leg IDs.
+
+Examples:
+
+21623
+21612
+
+The existing mobile UI may use local string IDs.
+
+Prepare the UI and navigation models to support
+production numeric flight/leg IDs safely.
+
+Requirements:
+
+- Preserve production IDs without modification.
+- Do not convert production IDs to local fixture IDs.
+- Do not invent trip IDs.
+- Do not assume tripId and legId are interchangeable.
+- Validate route parameters.
+- Handle invalid IDs gracefully.
+
+Do not fetch authenticated production trip data.
+
+==================================================
+3. TRIP STATE MODEL
+==================================================
+
+Inspect whether the current UI can represent:
+
+- Loading
+- No trips
+- Upcoming trip
+- Past trip
+- Cancelled trip
+- Flight won
+- Confirmation pending
+- Confirmed
+- Declined
+- Boarding pass unavailable
+- Passenger details incomplete
+- Manifest locked
+- API error
+- Authentication required
+
+Prepare missing presentation states where appropriate.
+
+Do not simulate production success.
+
+Do not fabricate trip status.
+
+==================================================
+4. REMOVE MISLEADING DEMO DATA
+==================================================
+
+Inspect all My Trips related screens.
+
+Look for:
+
+- fake upcoming trips
+- fake past trips
+- fake confirmation numbers
+- fake passenger names
+- fake boarding passes
+- fake flight statuses
+- fake FBO information
+- fake departure instructions
+- fake aircraft information
+- fake passenger manifests
+
+When running in production-read mode:
+
+Do not show these values as if they are real.
+
+Use neutral states such as:
+
+"Sign in to view your trips"
+
+"Trip details are unavailable"
+
+"Boarding pass unavailable"
+
+"Passenger information unavailable"
+
+Local demo mode may retain its existing fixtures,
+but it must remain clearly isolated from production-read mode.
+
+==================================================
+5. TRIP DETAILS READINESS
+==================================================
+
+Review Trip Details UI.
+
+Prepare the screen to display future production data:
+
+- Origin airport
+- Destination airport
+- Departure time
+- Arrival time
+- Aircraft
+- Trip status
+- Confirmation status
+- Passengers
+- Pets
+- FBO information
+- Boarding pass availability
+
+Important:
+
+Do not expose FBO information unless the
+production backend authorizes it for the viewer.
+
+Do not create placeholder FBO addresses that
+look like real operational instructions.
+
+Do not invent passenger details.
+
+==================================================
+6. PASSENGERS AND PETS
+==================================================
+
+Inspect existing passenger and pet flows.
+
+Check whether the UI supports:
+
+Passengers:
+- First name
+- Last name
+- Date of birth
+- Required passenger details
+- Edit restrictions
+- Manifest lock
+
+Pets:
+- Pet name
+- Pet type
+- Pet size
+- Crate dimensions
+- Required pet information
+- Manifest lock
+
+Do not add fields based only on assumptions.
+
+If the current production contract does not establish
+an exact field requirement, report the uncertainty.
+
+Do not implement passenger or pet API mutations.
+
+Do not build a reusable Saved Travelers feature.
+
+==================================================
+7. BOARDING PASS / APPLE WALLET
+==================================================
+
+Inspect current boarding pass functionality.
+
+Check:
+
+- Is boarding pass data local or backend-driven?
+- Is a QR code generated locally?
+- Is a boarding pass shown before confirmation?
+- Does Apple Wallet use a real backend-generated pass?
+- Can demo boarding passes appear in production-read mode?
+
+Production-read mode must NOT generate or display
+a fake boarding pass.
+
+Use an unavailable/locked state until
+authenticated production integration is implemented.
+
+Do not call the production Wallet endpoints.
+
+==================================================
+8. NAVIGATION READINESS
+==================================================
+
+Verify the following flows where currently implemented:
+
+My Trips
+→ Trip Details
+
+Trip Details
+→ Passengers
+
+Trip Details
+→ Pets
+
+Trip Details
+→ Boarding Pass
+
+Trip Details
+→ Back to My Trips
+
+Requirements:
+
+- No broken navigation.
+- No fabricated production trip data.
+- No automatic success state.
+- No local fixture ID substitution.
+
+If a flow requires production authentication,
+show a clear blocked/unavailable state.
+
+==================================================
+9. WEB PREVIEW VALIDATION
+==================================================
+
+Run the existing production-read Web Preview.
+
+Use a local/synthetic preview session only if needed
+to access the app shell.
+
+This preview session is NOT production authentication.
+
+Verify visually:
+
+- My Trips
+- Empty/auth-required state
+- Direct Trip Details route
+- Invalid trip ID
+- Boarding pass unavailable state
+- Passenger/Pet unavailable states where reachable
+
+Confirm:
+
+No authenticated production trip requests.
+
+No production trip mutations.
+
+No fabricated boarding passes.
+
+No fake passenger information.
+
+==================================================
+10. REGRESSION TESTING
+==================================================
+
+Verify existing public production flows:
+
+- Discover
+- Flight Details
+- Map
+- Membership Plans
+- Airport Search
+
+Run:
+
+- TypeScript checks
+- relevant My Trips tests
+- passenger/pet tests
+- Stage 1 production API tests
+- git diff --check
+
+Do not modify unrelated features.
+
+==================================================
+11. FINAL REPORT
+==================================================
+
+Provide a concise report with:
+
+MY TRIPS READINESS
+
+My Trips screen:
+PASS / FAIL
+
+Trip Details:
+PASS / FAIL
+
+Numeric production IDs:
+PASS / FAIL
+
+Invalid ID handling:
+PASS / FAIL
+
+Trip status presentation:
+PASS / FAIL
+
+Passengers:
+PASS / FAIL / DEFERRED
+
+Pets:
+PASS / FAIL / DEFERRED
+
+Boarding Pass:
+PASS / FAIL / DEFERRED
+
+Apple Wallet:
+PASS / FAIL / DEFERRED
+
+Fake production trips displayed:
+YES / NO
+
+Fake boarding passes displayed:
+YES / NO
+
+Fake passenger data displayed:
+YES / NO
+
+Production authenticated requests:
+NONE
+
+Production mutations:
+NONE
+
+BACKEND CONTRACT UNCERTAINTIES:
+<list>
+
+POST-STAGE-2 INTEGRATION CHECKLIST:
+<concise numbered list>
+
+FILES CHANGED:
+<list>
+
+TEST RESULTS:
+<results>
+
+TypeScript:
+PASS / FAIL
+
+git diff --check:
+PASS / FAIL
+
+Do not commit.
+Do not push.
+
+Finish exactly:
+
+STAGE 1.9 MY TRIPS READINESS: COMPLETE
+
+or
+
+STAGE 1.9 MY TRIPS READINESS: BLOCKED
