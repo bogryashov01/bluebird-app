@@ -37,7 +37,7 @@ const liveCatalogFixture = {
     { label: "Unlimited Empty Leg Access", base: true, plus: true },
     { label: "International Empty Legs", base: "Extra Fee", plus: true },
     { label: "Priority Queue Placement", base: false, plus: true },
-    { label: "5 Complimentary Skip the Line Upgrades", base: false, plus: true },
+    { label: "5 Complimentary Skip the Line Passes", base: false, plus: true },
     { label: "On Demand Charter", base: "Market Price", plus: "Transparent Cost +20%" },
     { label: "Trip Protection for Charter", base: "Extra Fee", plus: true },
   ],
@@ -51,7 +51,7 @@ const liveCatalogFixture = {
     plus: [
       "Unlimited Domestic & International Empty Legs",
       "Priority queue placement",
-      "5 Skip-The-Line upgrades included",
+      "5 Skip the Line Passes included",
       "Concierge support- Dedicated",
       "Cancel anytime",
     ],
@@ -124,8 +124,8 @@ test("membership plan surfaces render the live public catalog without purchase m
   await expect(page.getByText("$9,995 / year", { exact: true })).toBeVisible();
   await expect(page.getByText("The basics to start flying.", { exact: true })).toBeVisible();
   await expect(page.getByText("Move up the queue with priority access.", { exact: true })).toBeVisible();
-  await expect(page.getByText("5 Complimentary Skip the Line Upgrades", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("5 Skip-The-Line upgrades included", { exact: true })).toBeVisible();
+  await expect(page.getByText("5 Complimentary Skip the Line Passes", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("5 Skip the Line Passes included", { exact: true })).toBeVisible();
   await expect(page.getByText("Signups: enabled · Charter: unavailable · Buy now: unavailable")).toBeVisible();
   await expect(page.getByText("Family/Corporate", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Base demo fallback", { exact: true })).toHaveCount(0);
@@ -133,7 +133,7 @@ test("membership plan surfaces render the live public catalog without purchase m
 
   await page.goto("/membership");
   await expect(page.getByText("The basics to start flying.", { exact: true })).toBeVisible();
-  await expect(page.getByText("5 Skip-The-Line upgrades included", { exact: true })).toBeVisible();
+  await expect(page.getByText("5 Skip the Line Passes included", { exact: true })).toBeVisible();
   await expect(page.getByText("Purchases unavailable").first()).toBeVisible();
   await expect(page.getByText("Family/Corporate demo fallback", { exact: true })).toHaveCount(0);
 

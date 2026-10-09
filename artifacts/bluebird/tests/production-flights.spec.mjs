@@ -220,6 +220,13 @@ assert.equal(fetchedFlights[0].id, "98765");
 assert.equal(requests[0].url, `${PRODUCTION_API_BASE_URL}/empty-legs`);
 assert.equal(requests[0].init.method, "GET");
 assert.equal(requests[0].init.headers.Authorization, undefined);
+await assert.rejects(
+  () => fetchProductionFlights({
+    fetcher: async () => new Response("temporarily unavailable", { status: 503 }),
+  }),
+  /HTTP 503/i,
+  "a failed production empty-leg request does not become local demo data",
+);
 
 requests.length = 0;
 const fetchedFlight = await fetchProductionFlight(98765, { fetcher: mockFetcher });
@@ -228,6 +235,13 @@ assert.equal(requests[0].url, `${PRODUCTION_API_BASE_URL}/empty-legs/98765`);
 assert.equal(requests[0].init.method, "GET");
 assert.equal(requests[0].init.headers.Authorization, undefined);
 await assert.rejects(() => fetchProductionFlight(0, { fetcher: mockFetcher }), /numeric production flight ID/i);
+await assert.rejects(
+  () => fetchProductionFlight(98765, {
+    fetcher: async () => new Response("temporarily unavailable", { status: 503 }),
+  }),
+  /HTTP 503/i,
+  "a failed production flight detail request does not become local demo data",
+);
 
 requests.length = 0;
 const fetchedAirports = await fetchProductionAirports(["TST", "DST", "TST"], {

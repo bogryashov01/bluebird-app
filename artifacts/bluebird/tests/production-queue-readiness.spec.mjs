@@ -8,13 +8,25 @@ function appUrl(baseUrl, path = "") {
   return new URL(path.replace(/^\/+/, ""), `${base.origin}${mountPath}`).toString();
 }
 
+test("production-read preview starts signed out in Welcome and supports browser refresh", async ({ page, baseURL }) => {
+  await page.goto(appUrl(baseURL));
+  await expect(page.getByText("Get Started", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page).toHaveURL(/\/splash$/);
+
+  await page.getByText("Get Started", { exact: true }).click();
+  await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
+});
+
 async function installSyntheticLocalShellSession(page) {
   const localUser = {
     id: "stage1-readonly-preview-member",
+    name: "Preview Member",
+    phone: "+15555550199",
     firstName: "Preview",
     lastName: "Member",
     email: "preview-member@example.test",
-    phone: "+15555550199",
     membershipTier: "plus",
     homeAirports: ["APF"],
     linePassCount: 0,
@@ -62,10 +74,21 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   await firstCard.click();
   await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
   expect(new URL(page.url()).pathname).toMatch(new RegExp(`/flight/${flightId}$`));
+  await page.goBack();
+  await expect(page.locator(`[data-testid="production-flight-card-${flightId}"]`)).toBeVisible();
+  await page.locator(`[data-testid="production-flight-card-${flightId}"]`).click();
+  await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
 
   await page.getByTestId("production-queue-read-only-cta").click();
   await expect(page.getByTestId("production-read-only-notice")).toBeVisible();
   await expect(page.getByTestId("production-flight-id")).toHaveText(`Production flight ID: ${flightId}`);
+
+  await page.goto(appUrl(baseURL, `flight/${flightId}`));
+  await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
+  await page.goto(appUrl(baseURL, "flight/not-a-number"));
+  await expect(page.getByText("Flight not found", { exact: true })).toBeVisible();
 
   const directQueueRoutes = [
     `queue/join?flightId=${flightId}`,
@@ -107,9 +130,12 @@ test("production plans and Airport Search remain public read-only flows", async 
   });
 
   await page.goto(appUrl(baseURL, "membership/plans"));
+  await expect(page).toHaveURL(/\/membership\/plans$/);
   await expect(page.getByText("Plan features", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("5 Skip the Line Passes included", { exact: true })).toBeVisible();
   await expect(page.getByText("Membership purchases are currently unavailable.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Plan features", { exact: true }).first()).toBeVisible();
 
   await page.goto(appUrl(baseURL, "airport-picker"));
   const airportSearch = page.getByTestId("airport-search-input");

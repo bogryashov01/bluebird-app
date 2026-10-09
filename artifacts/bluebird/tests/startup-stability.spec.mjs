@@ -1,0 +1,158 @@
+import { expect, test } from "@playwright/test";
+
+const localUser = {
+  id: "startup-preview-member",
+  name: "Preview Member",
+  phone: "+15555550199",
+  email: "preview-member@example.test",
+  membershipTier: "plus",
+  linePassCount: 0,
+  homeAirports: ["APF"],
+  notificationChannel: "app",
+  createdAt: "2026-01-01T00:00:00.000Z",
+};
+
+async function seedLocalSession(page, user = localUser, token = "local-demo-session") {
+  await page.addInitScript(({ token, user }) => {
+    localStorage.setItem("bluebird_token", token);
+    localStorage.setItem("bluebird_user", JSON.stringify(user));
+  }, { token, user });
+}
+
+async function stubLocalApi(page, authResponse = { status: 200, body: localUser }) {
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === "/api/auth/me") {
+      return route.fulfill({ status: authResponse.status, json: authResponse.body });
+    }
+    if (path === "/api/networking/profile") {
+      return route.fulfill({ status: 403, json: { error: "Membership required" } });
+    }
+    if (path === "/api/membership") {
+      return route.fulfill({ json: { tier: "plus", linePassCount: 0, plans: [] } });
+    }
+    if (path === "/api/plans") return route.continue();
+    if (request.method() !== "GET") return route.fulfill({ status: 204, body: "" });
+    if (
+      path === "/api/notifications" ||
+      path === "/api/queue/status" ||
+      path === "/api/flights/airports" ||
+      path === "/api/flights" ||
+      path === "/api/trips"
+    ) {
+      return route.fulfill({ json: [] });
+    }
+    return route.fulfill({ json: {} });
+  });
+}
+
+test("fresh signed-out startup reaches Welcome and Sign In, and refresh/back stay in auth flow", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByText("Get Started", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/splash$/);
+
+  await page.getByText("Get Started", { exact: true }).click();
+  await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/welcome$/);
+
+  await page.getByText("Continue with Phone", { exact: true }).click();
+  await expect(page).toHaveURL(/\/phone$/);
+  await page.goBack();
+  await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
+
+  await page.goto("/welcome");
+  await page.reload();
+  await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
+});
+
+test("valid local demo session reaches Discover on startup, direct navigation, and refresh", async ({ page }) => {
+  await seedLocalSession(page);
+  await stubLocalApi(page);
+
+  await page.goto("/");
+  await expect(page.getByText(/Good (morning|afternoon|evening), Preview/)).toBeVisible();
+  await expect(page).toHaveURL(/\/discover$/);
+
+  await page.goto("/discover");
+  await expect(page.getByText("Browse available empty legs", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(/Good (morning|afternoon|evening), Preview/)).toBeVisible();
+
+  await page.goto("/membership");
+  const plansLink = page.getByText("Compare all plans", { exact: true });
+  await expect(plansLink).toBeVisible();
+  await plansLink.click();
+  await expect(page).toHaveURL(/\/membership\/plans$/);
+  await expect(page.getByText("Plan features", { exact: true }).first()).toBeVisible();
+
+  await page.goto("/profile");
+  const personalInformation = page.getByText("Personal Information", { exact: true }).first();
+  await expect(personalInformation).toBeVisible();
+  await personalInformation.click();
+  await expect(page).toHaveURL(/\/account\/personal-info$/);
+  await expect(page.getByText("Personal Information", { exact: true }).last()).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/profile$/);
+
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.getByText("Sign Out", { exact: true }).click();
+  await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("bluebird_token"))).toBeNull();
+});
+
+test("malformed cached session is cleared before it can open signed-in routes", async ({ page }) => {
+  let authRequests = 0;
+  await page.addInitScript(() => {
+    localStorage.setItem("bluebird_token", "malformed-local-session");
+    localStorage.setItem("bluebird_user", "{");
+  });
+  await page.route("**/api/auth/me", async (route) => {
+    authRequests += 1;
+    return route.abort("internetdisconnected");
+  });
+
+  await page.goto("/");
+  await expect(page.getByText("Get Started", { exact: true })).toBeVisible();
+  expect(authRequests).toBe(0);
+  expect(await page.evaluate(() => localStorage.getItem("bluebird_token"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("bluebird_user"))).toBeNull();
+});
+
+test("expired local session is cleared and returns to the signed-out flow", async ({ page }) => {
+  await seedLocalSession(page, localUser, "expired-local-session");
+  await stubLocalApi(page, { status: 401, body: { error: "Unauthorized" } });
+
+  await page.goto("/");
+  await expect(page.getByText("Get Started", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("bluebird_token"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("bluebird_user"))).toBeNull();
+});
+
+test("cached local session remains usable when auth validation does not respond", async ({ page }) => {
+  test.setTimeout(20_000);
+  await seedLocalSession(page);
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === "/api/auth/me") {
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      return route.fulfill({ json: localUser }).catch(() => {});
+    }
+    if (request.method() !== "GET") return route.fulfill({ status: 204, body: "" });
+    if (
+      path === "/api/notifications" ||
+      path === "/api/queue/status" ||
+      path === "/api/flights/airports" ||
+      path === "/api/flights" ||
+      path === "/api/trips"
+    ) {
+      return route.fulfill({ json: [] });
+    }
+    return route.fulfill({ json: {} });
+  });
+
+  await page.goto("/");
+  await expect(page.getByText(/Good (morning|afternoon|evening), Preview/)).toBeVisible({ timeout: 9_500 });
+  expect(await page.evaluate(() => localStorage.getItem("bluebird_token"))).toBe("local-demo-session");
+});

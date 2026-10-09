@@ -9,6 +9,7 @@ import { useRegisterNetworkingPushToken } from '@workspace/api-client-react';
 
 const TOKEN_KEY = 'bluebird_token';
 const USER_KEY = 'bluebird_user';
+const AUTH_RESTORE_TIMEOUT_MS = 8_000;
 
 export type AuthUser = User;
 interface AuthContextType {
@@ -48,37 +49,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           AsyncStorage.getItem(TOKEN_KEY),
           AsyncStorage.getItem(USER_KEY),
         ]);
-        if (storedToken && storedUser) {
+        const sessionToken = storedToken?.trim() ?? '';
+
+        if (!!sessionToken !== !!storedUser) {
+          await clearStoredSession();
+          return;
+        }
+
+        if (sessionToken && storedUser) {
+          let cachedUser: AuthUser;
+          try {
+            cachedUser = normalizeUser(JSON.parse(storedUser));
+          } catch {
+            await clearStoredSession();
+            return;
+          }
+
           // Validate the stored token against the server; stale/invalid tokens
           // (e.g. after a server secret change) are cleared so the user is
-          // sent back to sign-in instead of seeing endless 401 errors.
+          // sent back to sign-in instead of seeing endless 401 errors. A
+          // bounded request also lets a cached local session recover when the
+          // auth service is slow or temporarily unreachable.
           const baseUrl = process.env.EXPO_PUBLIC_DOMAIN
             ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
             : '';
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), AUTH_RESTORE_TIMEOUT_MS);
           try {
             const resp = await fetch(`${baseUrl}/api/auth/me`, {
-              headers: { Authorization: `Bearer ${storedToken}` },
+              headers: { Authorization: `Bearer ${sessionToken}` },
+              signal: controller.signal,
             });
             if (resp.ok) {
               const freshUser = normalizeUser(await resp.json());
-              setToken(storedToken);
+              setToken(sessionToken);
               setUser(freshUser);
               AsyncStorage.setItem(USER_KEY, JSON.stringify(freshUser)).catch(() => {});
             } else if (resp.status === 401) {
               // Token no longer valid — clear the stale session
-              await Promise.all([
-                AsyncStorage.removeItem(TOKEN_KEY),
-                AsyncStorage.removeItem(USER_KEY),
-              ]);
+              setToken(null);
+              setUser(null);
+              await clearStoredSession();
             } else {
               // Server error — keep cached session, fail open
-              setToken(storedToken);
-              setUser(normalizeUser(JSON.parse(storedUser)));
+              setToken(sessionToken);
+              setUser(cachedUser);
             }
           } catch {
             // Network error — keep cached session so offline use still works
-            setToken(storedToken);
-            setUser(normalizeUser(JSON.parse(storedUser)));
+            setToken(sessionToken);
+            setUser(cachedUser);
+          } finally {
+            clearTimeout(timeoutId);
           }
         }
       } catch {
@@ -179,16 +201,39 @@ export function useAuth() {
 }
 
 function normalizeUser(value: unknown): User {
-  const cached = value as User & { homeAirport?: string | null };
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Stored member session is not an object.');
+  }
+
+  const cached = value as Record<string, unknown>;
+  const validTiers: readonly string[] = ['none', 'base', 'plus', 'concierge'];
+  if (
+    typeof cached.id !== 'string' ||
+    !cached.id.trim() ||
+    typeof cached.name !== 'string' ||
+    !cached.name.trim() ||
+    typeof cached.membershipTier !== 'string' ||
+    !validTiers.includes(cached.membershipTier)
+  ) {
+    throw new Error('Stored member session is missing required identity fields.');
+  }
+
   return {
     ...cached,
     notificationChannel: cached.notificationChannel === 'email' || cached.notificationChannel === 'both'
       ? cached.notificationChannel
       : 'app',
     homeAirports: Array.isArray(cached.homeAirports)
-      ? cached.homeAirports
-      : cached.homeAirport
+      ? cached.homeAirports.filter((airport): airport is string => typeof airport === 'string')
+      : typeof cached.homeAirport === 'string' && cached.homeAirport
         ? [cached.homeAirport]
         : [],
-  };
+  } as User;
+}
+
+async function clearStoredSession() {
+  await Promise.all([
+    AsyncStorage.removeItem(TOKEN_KEY),
+    AsyncStorage.removeItem(USER_KEY),
+  ]);
 }

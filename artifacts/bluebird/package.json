@@ -11,6 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:flight-map-platform": "node scripts/flight-map-platform-resolution.mjs",
     "test:production-flight-api": "pnpm --filter @workspace/api-server exec esbuild '../bluebird/lib/productionFlights.ts' --bundle --platform=node --format=esm --outfile='../bluebird/scripts/.production-flights.test.mjs' && node tests/production-flights.spec.mjs; status=$?; rm -f scripts/.production-flights.test.mjs; exit $status",
+    "test:startup-stability": "playwright test tests/startup-stability.spec.mjs --workers=1",
     "test:production-airport-search": "pnpm --filter @workspace/api-server exec esbuild '../bluebird/lib/productionFlights.ts' --bundle --platform=node --format=esm --outfile='../bluebird/scripts/.production-airport-search.test.mjs' && node tests/production-airport-search.spec.mjs; status=$?; rm -f scripts/.production-airport-search.test.mjs; exit $status",
     "test:production-membership-plans": "pnpm --filter @workspace/api-server exec esbuild '../bluebird/lib/productionMembershipPlans.ts' --bundle --platform=node --format=esm --outfile='../bluebird/scripts/.production-membership-plans.test.mjs' && node tests/production-membership-plans.spec.mjs; status=$?; rm -f scripts/.production-membership-plans.test.mjs; exit $status",
     "test:production-queue-readiness": "playwright test tests/production-queue-readiness.spec.mjs --workers=1",
