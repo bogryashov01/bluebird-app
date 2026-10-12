@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     flex: 1, borderRadius: 24, padding: 20,
     justifyContent: 'space-between', overflow: 'hidden',
   },
-  previewShade: { ...StyleSheet.absoluteFillObject, opacity: 0.62 },
+  previewShade: { ...StyleSheet.absoluteFill, opacity: 0.62 },
   previewBrand: { fontFamily: 'Inter_700Bold', fontSize: 12, letterSpacing: 2.4 },
   previewCopy: { marginTop: 'auto', marginBottom: 18 },
   previewTitle: { fontFamily: 'Inter_700Bold', fontSize: 25, lineHeight: 30, letterSpacing: -0.5 },

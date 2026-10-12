@@ -490,7 +490,7 @@ const styles = StyleSheet.create({
   demoNote: { fontFamily: 'Inter_400Regular', fontSize: 12, textAlign: 'center', marginTop: 16 },
   modalRoot: { flex: 1, justifyContent: 'flex-end', alignItems: 'center' },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.52)',
   },
   sheet: {

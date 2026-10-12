@@ -7,7 +7,7 @@ import { BlurView } from 'expo-blur';
 import { isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Redirect, Tabs } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
-import { Badge, Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { SymbolView } from 'expo-symbols';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotifications';
@@ -17,25 +17,25 @@ function NativeTabLayout({ unreadCount }: { unreadCount: number }) {
     <NativeTabs>
       <NativeTabs.Trigger name="index" hidden />
       <NativeTabs.Trigger name="discover/index">
-        <Icon sf={{ default: 'paperplane', selected: 'paperplane.fill' }} />
-        <Label>Flights</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'paperplane', selected: 'paperplane.fill' }} />
+        <NativeTabs.Trigger.Label>Flights</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="trips/index">
-        <Icon sf={{ default: 'briefcase', selected: 'briefcase.fill' }} />
-        <Label>Trips</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'briefcase', selected: 'briefcase.fill' }} />
+        <NativeTabs.Trigger.Label>Trips</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="connections">
-        <Icon sf={{ default: 'person.2', selected: 'person.2.fill' }} />
-        <Label>Connections</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'person.2', selected: 'person.2.fill' }} />
+        <NativeTabs.Trigger.Label>Connections</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="membership/index">
-        <Icon sf={{ default: 'star', selected: 'star.fill' }} />
-        <Label>Membership</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'star', selected: 'star.fill' }} />
+        <NativeTabs.Trigger.Label>Membership</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile/index">
-        <Icon sf={{ default: 'person', selected: 'person.fill' }} />
-        <Label>Profile</Label>
-        <Badge hidden={unreadCount === 0}>{String(unreadCount)}</Badge>
+        <NativeTabs.Trigger.Icon sf={{ default: 'person', selected: 'person.fill' }} />
+        <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Badge hidden={unreadCount === 0}>{String(unreadCount)}</NativeTabs.Trigger.Badge>
       </NativeTabs.Trigger>
     </NativeTabs>
   );

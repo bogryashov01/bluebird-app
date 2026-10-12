@@ -492,7 +492,7 @@ const styles = StyleSheet.create({
   featuredWrap: { marginHorizontal: 20, marginBottom: 20, borderRadius: 24, overflow: 'hidden' },
   featuredImage: { height: 190, width: '100%', justifyContent: 'flex-end' },
   featuredOverlay: {
-    ...StyleSheet.absoluteFillObject, borderRadius: 24,
+    ...StyleSheet.absoluteFill, borderRadius: 24,
     backgroundColor: 'rgba(6,11,31,0.35)',
   },
   featuredBadge: {

@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
   photoSlide: { flex: 1 },
   heroImage: { width: '100%', height: '100%' },
   heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(6,11,31,0.25)',
   },
   logo: { position: 'absolute', left: 24, width: 120, height: 27 },

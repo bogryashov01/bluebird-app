@@ -11,6 +11,45 @@ production mode, profile, membership, trips, queue actions, passenger/pet
 records, and trip manifests remain unavailable instead of showing local demo
 member data as production data.
 
+## Expo SDK 57 screen migration (2026-10-12)
+
+**Baseline: Expo SDK 57.0.27, React/React DOM 19.2.3, and React Native
+0.86.3.** SDK 56 was not selected: its Hermes V1/Reanimated/Worklets memory
+regression affects this app, and Expo identifies SDK 57.0.17 and later as
+including the fix. React 19.2.3 is pinned in Bluebird only; the workspace React
+catalog is unchanged.
+
+The app migration also updates the SDK 57 NativeTabs child-component API,
+removes TypeScript 6's deprecated `baseUrl`, replaces removed
+`StyleSheet.absoluteFillObject` references, and moves native splash settings to
+the `expo-splash-screen` config plugin while preserving the web splash. Expo 57
+does not accept the old root-level `splash` field.
+
+Validation on this baseline:
+
+- `pnpm install --frozen-lockfile` — passed without peer-policy overrides.
+- `pnpm run typecheck:libs` and the Bluebird app typecheck — passed.
+- `EXPO_OFFLINE=1 CI=1 pnpm exec expo install --check` — passed against the
+  installed SDK's bundled native-module map. Expo warns that this check is less
+  reliable offline. The online map requested same-day package releases that the
+  workspace's release-age policy blocks, so those newer packages were not
+  installed and the package policy was not changed.
+- `EXPO_OFFLINE=1 pnpm dlx expo-doctor@latest` — 21/21 checks passed.
+- Expo web, iOS, and Android JavaScript exports — passed.
+- Startup stability (5), network reliability (11), production queue readiness
+  (5), membership plans (2), and flight passenger flow (11) browser tests —
+  all passed.
+- The managed browser preview starts and loads. Expo's optional React Native
+  DevTools launcher reports that `libglib-2.0.so.0` is missing in this
+  environment; Metro and the web preview continue to run.
+
+These exports and browser tests do not replace a device run. The requested
+Expo Go 57 check on an iOS simulator was not performed because it was
+unavailable during this change; native runtime behavior remains unverified. No
+Clerk provider, production authentication, or backend configuration was
+changed; successful JavaScript exports do not establish native build or
+authentication readiness.
+
 ## Clerk Expo SDK compatibility review (2026-10-12)
 
 **Outcome: blocked; do not install or activate Clerk on the current baseline.**
@@ -76,13 +115,13 @@ inside the disposable worktree: `expo-auth-session@7.0.11`,
 `expo-web-browser@15.0.11` and `expo-constants@18.0.14`. No native config
 plugins were enabled. The dependency set was not copied to the active workspace.
 
-The separate SDK 56 baseline-upgrade assessment below found a stable Expo
-baseline whose React patch satisfies those Clerk transitive peers. That is a
-compatibility candidate, not approval to migrate or activate authentication:
-the candidate currently fails Bluebird's TypeScript check and has an official
-Hermes memory regression relevant to Bluebird's Reanimated/Worklets usage.
-Do not pin Clerk internals, override peers, or change the workspace policy to
-make an incompatible graph appear compatible.
+The historical SDK 56 baseline-upgrade assessment below identified a React
+patch compatible with those Clerk transitive peers, but not a safe runtime for
+Bluebird's Reanimated/Worklets usage. The later SDK 57 screen migration is
+recorded above. It does not approve installing Clerk or activating
+authentication; first re-check the full resolved Clerk graph against the
+current baseline. Do not pin Clerk internals, override peers, or change the
+workspace policy to make an incompatible graph appear compatible.
 
 Clerk's [Expo Quickstart](https://clerk.com/docs/quickstarts/expo) recommends
 installing `expo-secure-store`, `expo-auth-session`, `expo-crypto`, and
@@ -93,9 +132,9 @@ Native API and configuring native app identifiers before making a native
 production build. These are later activation prerequisites, not changes made
 in this readiness review.
 
-## Expo SDK baseline-upgrade assessment (Task 344, 2026-10-12)
+## Historical Expo SDK baseline-upgrade assessment (Task 344, 2026-10-12)
 
-**Recommendation: do not approve the SDK 56 migration or activate Clerk yet.**
+**Historical outcome: SDK 56 was not approved, and Clerk was not activated.**
 SDK 56 is the smallest stable Expo baseline whose official React version fits
 the current stable Clerk transitive peer ranges. The isolated dependency graph
 resolves without Clerk peer conflicts, and startup tests, regression suites,
@@ -104,6 +143,8 @@ TypeScript check fails on app API changes, native builds and OAuth redirects
 were not verified, and Expo documents a Hermes v1 memory regression in SDK 56
 for apps using Reanimated/Worklets. Expo recommends SDK 57 for apps affected by
 that regression; SDK 57 was not tested in this assessment.
+The follow-up migration and its SDK 57 validation are recorded in the section
+above; this earlier assessment is retained as historical evidence.
 
 ### Candidate versions and peer evidence
 
@@ -229,12 +270,10 @@ then verify native development builds, SecureStore restoration, and hosted
 OAuth redirects. Confirm backend verification of tokens from the same Clerk
 instance before enabling authenticated production API calls.
 
-**Approval boundary:** SDK 56 is the smallest stable peer-compatible candidate,
-but it is not safe to approve as-is. First resolve the eight type errors and
-assess the documented Hermes memory regression (including an SDK 57 candidate
-if needed), then complete iOS/Android development-build and Clerk redirect
-verification. No source dependency, app config, lockfile, screen, navigation,
-API, or production authentication change was applied to the main workspace.
+**Historical approval boundary:** SDK 56 was not safe to approve as-is. At that
+time, the eight type errors and Hermes memory regression were unresolved. The
+current app baseline is SDK 57; iOS/Android device behavior, native builds, and
+Clerk redirects remain unverified and out of scope for that assessment.
 
 Sources: [Expo SDK 56 reference](https://docs.expo.dev/versions/v56.0.0/),
 [Expo SDK 55 reference](https://docs.expo.dev/versions/v55.0.0/),

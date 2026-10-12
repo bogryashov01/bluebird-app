@@ -801,7 +801,7 @@ const styles = StyleSheet.create({
   // Hero
   heroFrame: { width: '100%', justifyContent: 'flex-end', position: 'relative', overflow: 'hidden' },
   heroUnavailable: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,

@@ -7,12 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "bluebird",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/images/bluebird-logo-white.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0A1128"
-    },
     "ios": {
       "supportsTablet": false,
       "associatedDomains": [
@@ -39,13 +33,26 @@
       ]
     },
     "web": {
-      "favicon": "./assets/images/icon.png"
+      "favicon": "./assets/images/icon.png",
+      "splash": {
+        "image": "./assets/images/bluebird-logo-white.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0A1128"
+      }
     },
     "plugins": [
       [
         "expo-router",
         {
           "origin": "https://replit.com/"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/bluebird-logo-white.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0A1128"
         }
       ],
       "expo-font",
