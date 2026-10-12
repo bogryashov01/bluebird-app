@@ -48,6 +48,41 @@ No Clerk package or native auth dependency was added, and the app manifest and
 lockfile remain unchanged. No dependency override, React/Expo upgrade, forced
 install, or package-policy change was used.
 
+### Isolated compatibility recheck (2026-10-12)
+
+The registry still tags `@clerk/expo@4.10.1` as the latest stable release.
+`4.10.2-canary.v20261009234607` is a prerelease and was not treated as an
+officially supported candidate. The other stable major-line candidates checked
+were `@clerk/expo@3.0.0` and `@clerk/expo@2.19.0`.
+
+- `4.10.1` declares Expo `>=54 <58`, React/React DOM `^18 || ^19`, and React
+  Native `>=0.75`. Its isolated graph resolved `@clerk/react@6.17.8`,
+  `@clerk/shared@4.40.0`, and `@clerk/clerk-js@6.39.0`. Both React packages
+  require `^18 || ~19.0.3 || ~19.1.4 || ~19.2.3 || ~19.3.0-0`, excluding the
+  pinned `19.1.0`.
+- `3.0.0` declares Expo `>=53 <55`, React/React DOM `^18 || ^19`, and React
+  Native `>=0.73`. It resolved the same Clerk React/shared/JS versions as
+  `4.10.1`, with the same React and React DOM peer mismatch.
+- `2.19.0` declares Expo `>=53 <55`, React/React DOM `^18 || ^19`, and React
+  Native `>=0.73`. It resolved `@clerk/react@5.54.0`,
+  `@clerk/shared@3.48.0`, and `@clerk/clerk-js@5.128.0`. The React package
+  accepts `19.1.0`, but `shared` and `clerk-js` exclude it. This graph also
+  reports missing Solana wallet peers (`@solana/web3.js` and `bs58`).
+
+For the `4.10.1` probe, the official Expo 54 quickstart peers were added only
+inside the disposable worktree: `expo-auth-session@7.0.11`,
+`expo-crypto@15.0.9`, and `expo-secure-store@15.0.8`. These match Expo
+54.0.37's bundled module map; Bluebird already has compatible
+`expo-web-browser@15.0.11` and `expo-constants@18.0.14`. No native config
+plugins were enabled. The dependency set was not copied to the active workspace.
+
+The smallest viable next step is a new stable Clerk Expo/dependency graph whose
+full React and React DOM peer ranges include Expo 54's exact `19.1.0` baseline.
+Alternatively, a separately scoped Expo upgrade could be considered only if
+Expo officially supports the React patch Clerk requires. Do not pin Clerk
+internals, override peers, or change the workspace policy to make these graphs
+appear compatible.
+
 Clerk's [Expo Quickstart](https://clerk.com/docs/quickstarts/expo) recommends
 installing `expo-secure-store`, `expo-auth-session`, `expo-crypto`, and
 `expo-web-browser`, and configuring the `@clerk/expo` and
@@ -173,6 +208,27 @@ member endpoints are not requested. No production API was contacted.
 
 Current Clerk-readiness checks (2026-10-12):
 
+- Isolated worktree frozen-lockfile install for the latest stable candidate —
+  completed, but emitted the documented unmet React/React DOM peer warnings;
+  resolution success is not treated as compatibility.
+- `pnpm --filter @workspace/bluebird exec expo install --check` in the isolated
+  candidate worktree — passed; all installed Expo modules matched SDK 54.
+- `pnpm run typecheck:libs` and `pnpm --filter @workspace/bluebird run typecheck`
+  in the isolated candidate worktree — both passed.
+- `pnpm --filter @workspace/bluebird run test:production-auth-api` in the
+  isolated candidate worktree — 15 passed, 0 failed; all requests used mocks.
+- Temporary Metro import probe followed by `expo export --platform all` —
+  web, iOS, and Android JS exports completed, and source maps contained
+  `@clerk/expo@4.10.1`. The probe did not mount `ClerkProvider`.
+- `pnpm --filter @workspace/bluebird run test:startup-stability` in the
+  candidate worktree — 0 passed, 5 failed; every case hit
+  `Cannot read properties of null (reading 'useState')` in the existing
+  root-layout font hook before rendering. The same suite on the unchanged
+  workspace passed 5/5. This candidate-worktree regression is an additional
+  reason not to apply the dependency set.
+- `git diff --check` — passed in the isolated worktree. No native iOS/Android
+  build or device sign-in test was available; Metro exports do not establish
+  native compatibility.
 - `pnpm run typecheck:libs` — passed.
 - `pnpm --filter @workspace/bluebird run typecheck` — passed.
 - `pnpm --filter @workspace/bluebird run test:production-auth-api` — 15 passed,

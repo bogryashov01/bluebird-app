@@ -7,17 +7,19 @@ approved.
 
 ## Current compatibility finding
 
-As reviewed on 2026-10-12, the current Expo 54.0.37 / React 19.1.0 /
-React Native 0.81.5 baseline is **not ready for a Clerk dependency**. The latest
-stable `@clerk/expo@4.10.1` resolves `@clerk/react@6.17.8` and
-`@clerk/shared@4.40.0`, whose React peer ranges exclude 19.1.0. The older
-`@clerk/expo@2.19.0` graph resolves `@clerk/clerk-js@5.128.0` and
-`@clerk/shared@3.48.0`, which also exclude 19.1.0, and its required
-`expo-auth-session` peer is absent. No Clerk dependency was installed. Recheck
-the complete graph under the unchanged workspace package policy before any
-future activation attempt; do not silence these peer warnings with overrides.
-See [the readiness report](./AUTHENTICATED-API-READINESS.md) for resolved
-versions and details.
+The 2026-10-12 isolated recheck confirms that Expo 54.0.37 / React 19.1.0 /
+React Native 0.81.5 is **not ready for a Clerk dependency**. Latest stable
+`@clerk/expo@4.10.1` and stable `3.0.0` both resolve Clerk React/shared packages
+whose React and React DOM peers exclude 19.1.0. Stable `2.19.0` resolves
+`@clerk/shared@3.48.0` and `@clerk/clerk-js@5.128.0`, which also exclude 19.1.0,
+and reports missing wallet peers. A temporary 4.10.1 installation also failed
+all five startup checks with a React `useState` render error, while the
+unchanged workspace passed all five. No dependency or lockfile changes were
+applied to Bluebird. Recheck the full graph after a compatible stable Clerk
+release or a separately approved Expo baseline change; do not silence peer
+warnings with overrides. See
+[the readiness report](./AUTHENTICATED-API-READINESS.md) for versions and
+verification details.
 
 - [ ] Confirm a Clerk instance exists for the intended environment and its
       account, application, and allowed origins are correct.
