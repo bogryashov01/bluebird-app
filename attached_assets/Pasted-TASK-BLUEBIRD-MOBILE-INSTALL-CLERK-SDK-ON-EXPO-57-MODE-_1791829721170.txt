@@ -1,0 +1,110 @@
+TASK: BLUEBIRD MOBILE — INSTALL CLERK SDK ON EXPO 57
+
+MODE: BUILD / EXECUTE
+
+CONTEXT:
+
+Bluebird Mobile has been upgraded to Expo SDK 57.0.27.
+
+The migration passed:
+- Expo Doctor: 21/21
+- Library and application typechecks
+- 34 regression tests
+- Web, iOS and Android Metro exports
+
+Clerk SDK is not installed yet.
+
+GOAL:
+
+Verify compatibility and safely install the latest
+stable @clerk/expo version supported by the current
+Expo SDK 57 dependency baseline.
+
+STEP 1 — COMPATIBILITY
+
+Inspect the actual installed versions of:
+
+- Expo
+- React
+- React DOM
+- React Native
+- Expo Router
+- TypeScript
+
+Check the current stable @clerk/expo release
+and its complete transitive peer dependency graph.
+
+Verify that all required React, React Native
+and Expo peer dependencies are satisfied.
+
+Respect the existing package release-age policy.
+
+Do not use force installation, peer overrides
+or prerelease packages.
+
+STEP 2 — ISOLATED VERIFICATION
+
+Before modifying the main workspace:
+
+- Create an isolated worktree.
+- Install the compatible Clerk SDK.
+- Install required Expo-compatible peer dependencies.
+- Run Expo dependency validation.
+- Run library and application typechecks.
+- Run all existing regression tests.
+- Run web, iOS and Android Metro exports.
+
+Investigate any dependency or React runtime errors.
+
+Do not proceed if startup stability fails.
+
+STEP 3 — INSTALLATION
+
+If all compatibility checks pass:
+
+- Apply the minimal dependency changes
+  to the main workspace.
+- Update package manifests and lockfile.
+- Run frozen-lockfile installation.
+- Repeat all relevant verification checks.
+
+If compatibility cannot be demonstrated,
+leave the main workspace unchanged.
+
+STEP 4 — SECURITY
+
+Do not mount ClerkProvider.
+
+Do not replace AuthContext.
+
+Do not connect VerifiedProductionTokenProvider.
+
+Do not activate authenticated screens.
+
+Do not add Clerk keys or secrets.
+
+Do not make production authenticated requests.
+
+Do not send SMS or initiate payments.
+
+STEP 5 — FINAL REPORT
+
+Report:
+
+1. Installed Clerk SDK version
+2. Required peer dependencies
+3. Dependency compatibility results
+4. Files changed
+5. Typecheck results
+6. Regression test results
+7. Metro export results
+8. Remaining native verification requirements
+9. Whether ClerkProvider integration is ready
+
+Do not deploy, commit or push.
+
+SUCCESS CRITERIA:
+
+Clerk SDK is installed with compatible dependencies,
+all existing tests pass, and production authentication
+remains disabled.
