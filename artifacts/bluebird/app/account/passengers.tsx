@@ -24,6 +24,8 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
 
 type FormState = SavedPassengerInput;
 const EMPTY_FORM: FormState = { firstName: '', lastName: '', phone: '', email: '', weightKg: 70 };
@@ -36,12 +38,13 @@ export default function PassengersScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const localDemoFlow = isLocalFlightReadMode();
   const queryClient = useQueryClient();
   const memberKey = user?.id ?? 'signed-out';
   const passengersQueryKey = ['/api/passengers', memberKey] as const;
   const { data, isLoading, isFetching, isError, error, refetch } = useListSavedPassengers({
     query: {
-      enabled: !!user,
+      enabled: localDemoFlow && !!user,
       queryKey: passengersQueryKey,
     },
   });
@@ -131,6 +134,15 @@ export default function PassengersScreen() {
   const passengers = data ?? [];
   const pending = saveMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
   const bottomPad = (Platform.OS === 'web' ? 34 : insets.bottom) + 36;
+
+  if (!localDemoFlow) {
+    return (
+      <ProductionAuthenticatedUnavailableNotice
+        title="Saved passengers unavailable"
+        testID="production-saved-passengers-unavailable"
+      />
+    );
+  }
 
   if (isLoading || !user) {
     return <View style={[styles.center, { backgroundColor: colors.offWhite }]}><ActivityIndicator color={colors.primary} /></View>;

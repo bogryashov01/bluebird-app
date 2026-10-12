@@ -12,6 +12,33 @@ const localUser = {
   createdAt: "2026-01-01T00:00:00.000Z",
 };
 
+const plansCatalog = {
+  plans: [{
+    tier: "base",
+    name: "Base",
+    priceUsd: 3995,
+    cadence: "annual",
+    priceLabel: "$3,995",
+    cadenceLabel: "/ year",
+    tagline: "The basics to start flying.",
+    highlight: false,
+  }, {
+    tier: "plus",
+    name: "Plus",
+    priceUsd: 9995,
+    cadence: "annual",
+    priceLabel: "$9,995",
+    cadenceLabel: "/ year",
+    tagline: "Move up the queue with priority access.",
+    highlight: true,
+  }],
+  features: [],
+  cardFeatures: { base: [], plus: [] },
+  signupsEnabled: true,
+  charterEnabled: false,
+  buyNowEnabled: false,
+};
+
 async function seedLocalSession(page, user = localUser, token = "local-demo-session") {
   await page.addInitScript(({ token, user }) => {
     localStorage.setItem("bluebird_token", token);
@@ -32,7 +59,7 @@ async function stubLocalApi(page, authResponse = { status: 200, body: localUser 
     if (path === "/api/membership") {
       return route.fulfill({ json: { tier: "plus", linePassCount: 0, plans: [] } });
     }
-    if (path === "/api/plans") return route.continue();
+    if (path === "/api/plans") return route.fulfill({ json: plansCatalog });
     if (request.method() !== "GET") return route.fulfill({ status: 204, body: "" });
     if (
       path === "/api/notifications" ||

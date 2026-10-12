@@ -2,6 +2,96 @@ import { expect, test } from "@playwright/test";
 
 test.setTimeout(120_000);
 
+const productionReadFlightFixture = {
+  id: 81001,
+  status: "published",
+  queueClosesAt: "2026-10-31T10:00:00.000Z",
+  queueCount: 0,
+  memberQueueCount: 0,
+  userInQueue: false,
+  viewerQueuePosition: 0,
+  lockedForFreeUsers: false,
+  lineSkipPriceUsd: 2000,
+  lineSkipSold: false,
+  viewerHasLineSkip: false,
+  internationalPassPriceUsd: 0,
+  internationalPassRequired: false,
+  viewerHasInternationalPass: false,
+  viewerIsBookedPassenger: false,
+  viewerIsEffectiveWinner: false,
+  viewerConfirmationStatus: "not_applicable",
+  awardedAt: "",
+  originAirport: "DAL",
+  originCity: "Dallas",
+  destinationAirport: "SFO",
+  destinationCity: "San Francisco",
+  originTz: "America/Chicago",
+  destinationTz: "America/Los_Angeles",
+  departureTime: "2026-11-01T10:00:00.000Z",
+  arrivalTime: "2026-11-01T13:00:00.000Z",
+  aircraftGalleryUrls: [],
+  durationHours: 3,
+  aircraftType: "Citation Latitude",
+  isInternational: false,
+  totalPrice: 2000,
+  msrpUsd: 30000,
+  pricePerHour: 6667,
+};
+
+const publicPlansFixture = {
+  plans: [{
+    tier: "base",
+    name: "Base",
+    priceUsd: 3995,
+    cadence: "annual",
+    priceLabel: "$3,995",
+    cadenceLabel: "/ year",
+    tagline: "The basics to start flying.",
+    highlight: false,
+  }, {
+    tier: "plus",
+    name: "Plus",
+    priceUsd: 9995,
+    cadence: "annual",
+    priceLabel: "$9,995",
+    cadenceLabel: "/ year",
+    tagline: "Move up the queue with priority access.",
+    highlight: true,
+  }],
+  features: [],
+  cardFeatures: {
+    base: [],
+    plus: ["5 Skip the Line Passes included"],
+  },
+  signupsEnabled: true,
+  charterEnabled: false,
+  buyNowEnabled: false,
+};
+
+const airportFixture = {
+  code: "DAL",
+  name: "Dallas Love Field",
+  city: "Dallas",
+  state: "Texas",
+  country: "United States",
+  latitude: 32.844776,
+  longitude: -96.84766,
+  tz: "America/Chicago",
+  longestRunwayFt: null,
+};
+
+const destinationAirportFixture = {
+  code: "SFO",
+  name: "San Francisco International",
+  city: "San Francisco",
+  state: "California",
+  country: "United States",
+  latitude: 37.6213,
+  longitude: -122.379,
+  tz: "America/Los_Angeles",
+  longestRunwayFt: null,
+};
+
 function appUrl(baseUrl, path = "") {
   const base = new URL(baseUrl);
   const mountPath = base.pathname.endsWith("/") ? base.pathname : `${base.pathname}/`;
@@ -39,6 +129,19 @@ async function installSyntheticLocalShellSession(page) {
   await page.route("**/api/notifications", (route) => route.fulfill({ json: [] }));
   await page.route("**/api/queue/status", (route) => route.fulfill({ json: [] }));
   await page.route("**/api/flights/airports", (route) => route.fulfill({ json: [] }));
+  await page.route("https://bluebirdjets.com/api/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (route.request().method() !== "GET") {
+      return route.fulfill({ status: 405, json: { error: "Production requests are read-only in this test." } });
+    }
+    if (path === "/api/empty-legs") return route.fulfill({ json: [productionReadFlightFixture] });
+    if (/^\/api\/empty-legs\/\d+$/.test(path)) return route.fulfill({ json: productionReadFlightFixture });
+    if (path === "/api/plans") return route.fulfill({ json: publicPlansFixture });
+    if (path === "/api/airports/search") return route.fulfill({ json: [airportFixture] });
+    if (path === "/api/airports/cities") return route.fulfill({ json: [] });
+    if (path === "/api/airports") return route.fulfill({ json: [airportFixture, destinationAirportFixture] });
+    return route.fulfill({ status: 404, json: { error: "Unmocked production endpoint." } });
+  });
 }
 
 function isQueueOrAccountStateRequest(requestUrl) {
@@ -162,7 +265,7 @@ test("production My Trips, Trip Details, manifest and boarding pass stay unavail
   await page.goto(appUrl(baseURL, "trips"));
   await expect(page.getByTestId("production-trips-unavailable")).toBeVisible();
   await expect(page.getByTestId("production-trips-unavailable-title")).toHaveText("Sign in to view your trips");
-  await expect(page.getByText(/production trip and queue data are not connected/i)).toBeVisible();
+  await expect(page.getByTestId("production-trips-unavailable")).toContainText(/authenticated production data is unavailable/i);
 
   await page.goto(appUrl(baseURL, "trip/21623"));
   await expect(page.getByTestId("production-trip-details-unavailable")).toBeVisible();
@@ -178,7 +281,7 @@ test("production My Trips, Trip Details, manifest and boarding pass stay unavail
 
   await page.goto(appUrl(baseURL, "trip/21623/passengers"));
   await expect(page.getByTestId("production-passenger-information-unavailable")).toBeVisible();
-  await expect(page.getByTestId("production-passenger-information-unavailable")).toContainText("does not load, save, or submit passenger or pet information");
+  await expect(page.getByTestId("production-passenger-information-unavailable")).toContainText("does not load, save, or submit those details");
   await expect(page.getByTestId("production-passenger-information-unavailable")).not.toContainText(/TRAVELER|Primary traveler|Weight ·|Crate ·/i);
 
   await page.goto(appUrl(baseURL, "trip/21623/boarding-pass"));
@@ -190,4 +293,36 @@ test("production My Trips, Trip Details, manifest and boarding pass stay unavail
   await expect(page.getByTestId("trip-availability-state-title")).toHaveText("Passenger information unavailable");
   await expect(page.getByTestId("trip-availability-state-description")).toContainText("reference is invalid");
   expect(memberTripRequests).toEqual([]);
+});
+
+test("production profile, membership and saved-passenger screens never fall back to demo account data", async ({ page, baseURL }) => {
+  const authenticatedDataRequests = [];
+  await installSyntheticLocalShellSession(page);
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    const appMemberData =
+      /\/api\/(?:membership(?:\/|$)|trips(?:\/|$)|passengers(?:\/|$)|queue(?:\/|$)|notifications(?:\/|$))/.test(url.pathname);
+    const productionAuthenticated =
+      url.hostname === "bluebirdjets.com" &&
+      /\/api\/(?:auth\/me|membership(?:\/|$)|trips(?:\/|$)|passengers(?:\/|$)|queue(?:\/|$))/.test(url.pathname);
+    if (appMemberData || productionAuthenticated) {
+      authenticatedDataRequests.push(`${request.method()} ${url.hostname}${url.pathname}`);
+    }
+  });
+
+  await page.goto(appUrl(baseURL, "profile"));
+  await expect(page.getByTestId("production-profile-unavailable")).toBeVisible();
+  await expect(page.getByText("Preview Member", { exact: true })).toHaveCount(0);
+
+  await page.goto(appUrl(baseURL, "account/personal-info"));
+  await expect(page.getByTestId("production-personal-info-unavailable")).toBeVisible();
+  await page.goto(appUrl(baseURL, "account/passengers"));
+  await expect(page.getByTestId("production-saved-passengers-unavailable")).toBeVisible();
+  await page.goto(appUrl(baseURL, "membership"));
+  await expect(page.getByTestId("production-membership-unavailable")).toBeVisible();
+  await page.getByTestId("production-membership-unavailable-action").click();
+  await expect(page).toHaveURL(/\/membership\/plans$/);
+  await expect(page.getByText("Plan features", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
+
+  expect(authenticatedDataRequests).toEqual([]);
 });

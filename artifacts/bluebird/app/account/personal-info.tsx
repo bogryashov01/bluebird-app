@@ -20,6 +20,8 @@ import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { uploadProfilePhoto } from '@/lib/profile-photo-upload';
 import { selectProfilePhoto } from '@/lib/profile-photo-selection';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
 
 function toPhotoUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
@@ -36,6 +38,7 @@ export default function PersonalInfoScreen() {
   const colors = useColors();
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
+  const localDemoFlow = isLocalFlightReadMode();
   const [cameraPermission, requestCameraPermission] = ImagePicker.useCameraPermissions();
   const [libraryPermission, requestLibraryPermission] = ImagePicker.useMediaLibraryPermissions();
 
@@ -62,7 +65,7 @@ export default function PersonalInfoScreen() {
     isError: networkingError,
     refetch: refetchNetworking,
   } = useGetNetworkingProfile({
-    query: { enabled: networkingEnabled, refetchOnMount: 'always' },
+    query: { enabled: localDemoFlow && networkingEnabled, refetchOnMount: 'always' },
   });
   const networkingSave = useUpdateNetworkingProfile();
   const uploadPhoto = useRequestUploadUrl();
@@ -309,6 +312,15 @@ export default function PersonalInfoScreen() {
     </React.Fragment>
   );
   const bottomPadding = (Platform.OS === 'web' ? 34 : insets.bottom) + 40;
+
+  if (!localDemoFlow) {
+    return (
+      <ProductionAuthenticatedUnavailableNotice
+        title="Profile unavailable in production preview"
+        testID="production-personal-info-unavailable"
+      />
+    );
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.offWhite }]}>

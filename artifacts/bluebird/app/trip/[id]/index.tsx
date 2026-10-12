@@ -7,6 +7,7 @@ import { TripAvailabilityState } from '@/components/TripAvailabilityState';
 import { useColors } from '@/hooks/useColors';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { parseTripRouteId } from '@/lib/tripRoutes';
+import { PRODUCTION_AUTH_UNAVAILABLE_MESSAGE } from '@/lib/productionAuthState';
 
 function tripStatusLabel(status: string): string {
   switch (status) {
@@ -59,7 +60,7 @@ export default function TripDetailsScreen() {
     return (
       <TripAvailabilityState
         title="Trip details unavailable"
-        description="Production sign-in and member trip data are not connected to this read-only preview. No trip or manifest request is made."
+        description={`${PRODUCTION_AUTH_UNAVAILABLE_MESSAGE} No trip or manifest request is made.`}
         actionLabel="Back to My Trips"
         onAction={backToTrips}
         testID="production-trip-details-unavailable"

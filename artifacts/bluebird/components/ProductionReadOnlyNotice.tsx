@@ -14,7 +14,7 @@ interface ProductionReadOnlyNoticeProps {
 export function ProductionReadOnlyNotice({
   flightId,
   title = 'Queue unavailable in this preview',
-  description = 'Production sign-in is not connected here, so queue status and actions are not loaded. You can view the flight, but cannot join or leave a queue, use a pass, or confirm or decline a win.',
+  description = 'Authenticated production access is unavailable here, so queue status and actions are not loaded. The checked-in queue engine confirms eligible members automatically; it defines no winner confirm/decline action. You can view the flight, but cannot join or leave a queue or use a pass.',
 }: ProductionReadOnlyNoticeProps) {
   const colors = useColors();
   const validatedFlightId = parseProductionFlightId(flightId);

@@ -13,15 +13,21 @@ import {
   productionPlanFeatureLabel,
   productionPlanPurchaseNotice,
 } from '@/lib/productionMembershipPlans';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
 
 export default function AllPlansScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { user } = useAuth();
+  const localDemoFlow = isLocalFlightReadMode();
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
-  const { data: membership } = useGetMembership({});
+  const { data: membership } = useGetMembership({
+    query: { enabled: localDemoFlow && !!user },
+  });
   const plansQuery = useProductionMembershipPlans();
-  const currentTier: string | null = membership?.tier ?? user?.membershipTier ?? null;
+  const currentTier: string | null = localDemoFlow
+    ? membership?.tier ?? user?.membershipTier ?? null
+    : null;
   const currentIdx = currentTier ? (TIER_ORDER[currentTier] ?? -1) : -1;
 
   if (plansQuery.isLoading) {

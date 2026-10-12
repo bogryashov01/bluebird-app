@@ -1,6 +1,7 @@
 import { useListNotifications } from '@workspace/api-client-react';
 import type { Notification } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
 
 /**
  * Number of unread notifications for the signed-in member.
@@ -9,12 +10,15 @@ import { useAuth } from '@/context/AuthContext';
  */
 export function useUnreadNotificationsCount(): number {
   const { user } = useAuth();
+  const localDemoFlow = isLocalFlightReadMode();
   const { data } = useListNotifications({
     query: {
-      enabled: !!user,
+      enabled: localDemoFlow && !!user,
       refetchInterval: 15000,
       refetchIntervalInBackground: false,
     },
   });
-  return ((data as Notification[]) ?? []).filter((n) => !n.read).length;
+  return localDemoFlow
+    ? ((data as Notification[]) ?? []).filter((n) => !n.read).length
+    : 0;
 }

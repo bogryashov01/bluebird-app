@@ -13,6 +13,8 @@ import { notificationRoute } from '@/lib/notificationRoute';
 import { SettingsGroup } from '@/components/SettingsGroup';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { useTheme, type ThemePreference } from '@/context/ThemeContext';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; hint: string }[] = [
   { value: 'light',  label: 'Light',  hint: 'Always use the light theme' },
@@ -75,8 +77,11 @@ export default function ProfileScreen() {
   const colors = useColors();
   const { user, signOut } = useAuth();
   const { preference } = useTheme();
+  const localDemoFlow = isLocalFlightReadMode();
   const [appearanceOpen, setAppearanceOpen] = React.useState(false);
-  const { data: membership } = useGetMembership({});
+  const { data: membership } = useGetMembership({
+    query: { enabled: localDemoFlow && !!user },
+  });
 
   const topPad    = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -85,6 +90,7 @@ export default function ProfileScreen() {
     query: {
       refetchInterval: 15000,
       refetchIntervalInBackground: false,
+      enabled: localDemoFlow && !!user,
     },
   });
   const notifList = (notifications as Notification[]) ?? [];
@@ -102,6 +108,15 @@ export default function ProfileScreen() {
   const memberSince = user?.createdAt
     ? new Date(user.createdAt).getFullYear()
     : new Date().getFullYear();
+
+  if (!localDemoFlow) {
+    return (
+      <ProductionAuthenticatedUnavailableNotice
+        title="Profile unavailable in production preview"
+        testID="production-profile-unavailable"
+      />
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>

@@ -20,6 +20,8 @@ import {
   formatProductionPlanPrice,
   productionPlanPurchaseNotice,
 } from '@/lib/productionMembershipPlans';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
 
 // ── Tier config ───────────────────────────────────────────────────────────────
 const TIER_META: Record<string, { label: string }> = {
@@ -37,12 +39,15 @@ export default function MembershipScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { user } = useAuth();
+  const localDemoFlow = isLocalFlightReadMode();
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { data: membership, isLoading, isError, refetch } = useGetMembership({});
-  const plansQuery = useProductionMembershipPlans();
+  const { data: membership, isLoading, isError, refetch } = useGetMembership({
+    query: { enabled: localDemoFlow && !!user },
+  });
+  const plansQuery = useProductionMembershipPlans({ enabled: localDemoFlow });
   const mem = membership;
 
   const currentTier: string = mem?.tier ?? user?.membershipTier ?? 'base';
@@ -52,6 +57,18 @@ export default function MembershipScreen() {
   const family = mem?.family;
 
   const tierLabel = getTierLabel(currentTier, mem?.plans ?? []);
+
+  if (!localDemoFlow) {
+    return (
+      <ProductionAuthenticatedUnavailableNotice
+        title="Membership status unavailable"
+        description="No member tier, pass balance, family status, or usage data is loaded in this production preview. Public plan details remain available on Compare all plans."
+        testID="production-membership-unavailable"
+        actionLabel="Compare all plans"
+        onAction={() => router.push('/membership/plans' as any)}
+      />
+    );
+  }
 
   if (isLoading) {
     return (

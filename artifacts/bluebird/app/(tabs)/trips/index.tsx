@@ -12,6 +12,7 @@ import type { Trip, QueueEntry } from '@workspace/api-client-react';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { TripAvailabilityState } from '@/components/TripAvailabilityState';
+import { PRODUCTION_AUTH_UNAVAILABLE_MESSAGE } from '@/lib/productionAuthState';
 
 // ─── Aircraft images (same matching logic as Discover) ────────────────────────
 import { useAuth } from '@/context/AuthContext';
@@ -210,7 +211,7 @@ export default function TripsScreen() {
         </View>
         <TripAvailabilityState
           title="Sign in to view your trips"
-          description="Production trip and queue data are not connected to this read-only preview. No member trip data or account actions are loaded here."
+          description={`${PRODUCTION_AUTH_UNAVAILABLE_MESSAGE} No member trip or queue data is loaded here.`}
           testID="production-trips-unavailable"
         />
       </View>

@@ -28,6 +28,7 @@ import { MAX_OCCUPANTS, maxPassengersForBooking } from '@/lib/passengerCapacity'
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { parseTripRouteId } from '@/lib/tripRoutes';
 import { TripAvailabilityState } from '@/components/TripAvailabilityState';
+import { PRODUCTION_AUTH_UNAVAILABLE_MESSAGE } from '@/lib/productionAuthState';
 type DraftPassenger = Omit<Passenger, 'dateOfBirth' | 'weightKg'> & {
   dateOfBirth: string;
   weightKg: string;
@@ -315,7 +316,7 @@ export default function PassengerListScreen() {
     return (
       <TripAvailabilityState
         title="Passenger information unavailable"
-        description="Production sign-in and the authenticated trip-manifest contract are not connected. This preview does not load, save, or submit passenger or pet information."
+        description={`${PRODUCTION_AUTH_UNAVAILABLE_MESSAGE} The checked-in contract only supports passenger and pet data on an owned confirmed trip manifest, not a per-empty-leg endpoint. This preview does not load, save, or submit those details.`}
         actionLabel="Back to Trip Details"
         onAction={() => router.replace(`/trip/${tripId}` as any)}
         testID="production-passenger-information-unavailable"

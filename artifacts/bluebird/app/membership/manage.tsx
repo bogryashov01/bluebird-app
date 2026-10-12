@@ -9,6 +9,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useGetMembership, useChangeMembership, type MembershipPlan } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
 import { formatAnnualPrice, getPlan, getTierLabel, TIER_COLORS, TIER_ORDER } from '@/lib/membershipPlans';
+import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
 
 type PendingAction =
   | { action: 'downgrade'; tier: 'base' | 'plus' }
@@ -18,10 +20,13 @@ type PendingAction =
 export default function ManagePlanScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const localDemoFlow = isLocalFlightReadMode();
   const queryClient = useQueryClient();
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { data: membership, isLoading, isError, refetch } = useGetMembership({});
+  const { data: membership, isLoading, isError, refetch } = useGetMembership({
+    query: { enabled: localDemoFlow },
+  });
   const mem = membership as any;
 
   const [confirming, setConfirming] = React.useState<PendingAction | null>(null);
@@ -40,6 +45,16 @@ export default function ManagePlanScreen() {
       },
     },
   });
+
+  if (!localDemoFlow) {
+    return (
+      <ProductionAuthenticatedUnavailableNotice
+        title="Membership management unavailable"
+        description="Membership status and changes are not connected to a verified production token provider. No membership action is available in this preview."
+        testID="production-membership-management-unavailable"
+      />
+    );
+  }
 
   if (isLoading) {
     return (
