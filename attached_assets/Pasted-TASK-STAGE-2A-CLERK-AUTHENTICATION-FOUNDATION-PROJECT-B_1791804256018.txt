@@ -1,0 +1,330 @@
+TASK: STAGE 2A — CLERK AUTHENTICATION FOUNDATION
+
+PROJECT: Bluebird Mobile App
+ENVIRONMENT: Mobile Replit
+FRAMEWORK: Expo / React Native / Expo Router
+
+GOAL:
+Prepare the Bluebird mobile application to reuse the existing
+production Clerk authentication system used by bluebirdjets.com.
+
+This is a FOUNDATION stage only.
+
+Do NOT activate production Clerk authentication yet.
+
+==================================================
+IMPORTANT CONTEXT
+==================================================
+
+The existing Bluebird production backend already uses Clerk.
+
+Production API:
+https://bluebirdjets.com/api
+
+Production frontend publishable key variable:
+VITE_CLERK_PUBLISHABLE_KEY
+
+Production backend publishable key variable:
+CLERK_PUBLISHABLE_KEY
+
+The mobile application will eventually use:
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+
+Production backend authentication:
+Clerk session token sent via:
+
+Authorization: Bearer <token>
+
+The existing GET /api/me endpoint returns user authentication
+and membership state.
+
+However, the following remain UNVERIFIED:
+
+- Production frontend/backend Clerk instance parity
+- Enabled production Clerk sign-in methods
+- Clerk Native API configuration
+- Native OAuth redirect configuration
+
+Therefore, do not enable real production sign-in yet.
+
+==================================================
+STRICT RULES
+==================================================
+
+1. Work ONLY in the Bluebird mobile application.
+
+2. Do NOT modify the production Bluebird website or backend.
+
+3. Do NOT create a new Clerk instance.
+
+4. Do NOT request or use CLERK_SECRET_KEY.
+
+5. Do NOT copy production credentials into source files.
+
+6. Do NOT modify existing Replit Secrets.
+
+7. Do NOT activate Clerk authentication.
+
+8. Do NOT replace or remove the current working
+   local/demo authentication implementation.
+
+9. Do NOT modify queue, trips, payments, membership
+   purchases, or other authenticated production actions.
+
+10. Do NOT commit or push to GitHub.
+
+11. Do NOT create another EAS project.
+
+12. Preserve the existing production public-data integration.
+
+==================================================
+STEP 1 — EXPO COMPATIBILITY
+==================================================
+
+Inspect:
+
+- Expo SDK version
+- React Native version
+- Expo Router version
+- expo-secure-store version
+- Existing authentication dependencies
+- Current package manager and lockfile
+
+Run:
+
+npx expo install --check
+
+Determine the Clerk Expo SDK version compatible with
+the project's installed Expo SDK.
+
+The project was previously using Expo SDK 54.
+
+Do not upgrade Expo to SDK 55 or later.
+
+Do not blindly install the latest Clerk version.
+
+If dependency compatibility is uncertain,
+report the blocker instead of forcing installation.
+
+==================================================
+STEP 2 — INSTALL CLERK SDK
+==================================================
+
+If compatibility is confirmed:
+
+Install the compatible @clerk/expo version and any
+required peer dependencies.
+
+Use the project's existing package manager.
+
+Update the appropriate lockfile.
+
+Do not modify unrelated dependencies.
+
+==================================================
+STEP 3 — CLERK PROVIDER FOUNDATION
+==================================================
+
+Create an isolated Clerk provider implementation.
+
+Requirements:
+
+- Use ClerkProvider from @clerk/expo.
+- Use tokenCache from @clerk/expo/token-cache.
+- Use expo-secure-store through Clerk's supported token cache.
+- Do not manually persist Clerk session tokens.
+- Do not hardcode the publishable key.
+
+Read the publishable key from:
+
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+
+IMPORTANT:
+
+The provider must remain DISABLED unless an explicit
+future activation step enables it.
+
+Do not mount ClerkProvider in the currently active
+application tree yet.
+
+Do not interfere with the existing AuthContext.
+
+==================================================
+STEP 4 — PRODUCTION AUTH API FOUNDATION
+==================================================
+
+Prepare an isolated authenticated API client.
+
+Requirements:
+
+- Accept an async getToken() function.
+- Retrieve the current Clerk session token.
+- Attach:
+
+  Authorization: Bearer <token>
+
+- Use the existing production API base URL configuration.
+- Do not duplicate or bypass existing URL safety checks.
+- Do not persist tokens.
+- Do not log tokens.
+- Do not use browser cookies for authentication.
+
+Prepare support for:
+
+GET /api/me
+
+Do not automatically call /api/me yet.
+
+Do not make authenticated production requests during
+this stage.
+
+==================================================
+STEP 5 — AUTHENTICATION STATE MODEL
+==================================================
+
+Prepare TypeScript types or isolated utilities for
+the future production authentication flow.
+
+Account for:
+
+- Clerk provider loading
+- Signed out
+- Clerk signed in
+- /api/me loading
+- /api/me authenticated
+- /api/me returns isAuthenticated: false
+- Network failure
+- Invalid or expired session
+- Logout
+
+Production /api/me fields include:
+
+- isAuthenticated
+- isAdmin
+- isConcierge
+- isMember
+- memberTier
+- isProfileComplete
+- needsPlanDecision
+- needsSignupPhone
+
+IMPORTANT:
+
+HTTP 200 does NOT automatically mean authenticated.
+
+Only:
+
+isAuthenticated === true
+
+confirms backend authentication.
+
+Do not invent additional production user fields.
+
+Do not use local/demo authentication state as proof
+of production authentication.
+
+==================================================
+STEP 6 — FUTURE ACTIVATION DESIGN
+==================================================
+
+Document the minimum steps required for Stage 2B.
+
+Include:
+
+- Configuring EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+- Confirming the correct Clerk production instance
+- Confirming Native API configuration
+- Confirming enabled sign-in methods
+- Configuring native deep links for OAuth if required
+- Mounting ClerkProvider
+- Connecting real Sign In / Sign Out
+- Calling GET /api/me with a real Clerk token
+- Handling incomplete profiles and membership gates
+- Removing production dependence on local/demo sessions
+
+Do not implement these activation steps now.
+
+==================================================
+STEP 7 — REGRESSION TESTING
+==================================================
+
+Run:
+
+- TypeScript checks
+- Expo dependency compatibility checks
+- Existing startup/navigation tests
+- Production Discover tests
+- Flight Details tests
+- Airport Search tests
+- Membership Plans tests
+- Queue UI readiness tests
+- My Trips UI readiness tests
+- Network reliability tests
+- git diff --check
+
+Verify:
+
+- Existing local/demo login still works.
+- Production public API reads still work.
+- No Clerk login UI is active.
+- No new authenticated production requests occur.
+- No secrets are exposed.
+- No production backend files were changed.
+
+If a test cannot run, report why.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Provide:
+
+EXPO SDK:
+<version>
+
+CLERK SDK:
+<version or not installed>
+
+DEPENDENCY COMPATIBILITY:
+PASS / BLOCKED
+
+CLERK PROVIDER FOUNDATION:
+READY / BLOCKED
+
+TOKEN CACHE:
+READY / BLOCKED
+
+AUTH API CLIENT:
+READY / BLOCKED
+
+API /me STATE MODEL:
+READY / BLOCKED
+
+PRODUCTION CLERK ACTIVATED:
+NO
+
+EXISTING AUTH PRESERVED:
+YES / NO
+
+REGRESSION TESTS:
+<results>
+
+FILES MODIFIED:
+<list>
+
+STAGE 2B BLOCKERS:
+<list>
+
+GIT COMMIT:
+NONE
+
+GIT PUSH:
+NONE
+
+Finish exactly:
+
+STAGE 2A CLERK FOUNDATION: COMPLETE
+
+or
+
+STAGE 2A CLERK FOUNDATION: BLOCKED

@@ -1,0 +1,219 @@
+TASK — STAGE 2A: CLERK FOUNDATION IMPLEMENTATION
+
+PROJECT: Bluebird Mobile App
+FRAMEWORK: Expo SDK 54 / React Native
+
+CONTEXT:
+
+The Expo SDK 54 compatibility issues have been resolved.
+
+Current verified baseline:
+
+- Expo 54.0.37
+- expo-clipboard 8.0.8
+- react-native-maps 1.20.1
+- expo-constants 18.0.14
+
+TypeScript and existing regression tests pass.
+
+The production Bluebird backend already supports
+Clerk Bearer session tokens.
+
+Production API:
+https://bluebirdjets.com/api
+
+GOAL:
+
+Implement the isolated Clerk authentication foundation
+without activating production authentication.
+
+==================================================
+STRICT RULES
+==================================================
+
+- Do not upgrade Expo SDK.
+- Do not upgrade or downgrade React.
+- Do not modify the production backend.
+- Do not modify existing authentication behavior.
+- Do not remove the local/demo auth implementation.
+- Do not activate Clerk sign-in.
+- Do not modify Replit Secrets.
+- Do not hardcode credentials.
+- Do not create a new Clerk instance.
+- Do not implement OAuth yet.
+- Do not modify queue, trips, payments, or memberships.
+- Do not commit or push.
+
+==================================================
+STEP 1 — CLERK DEPENDENCY COMPATIBILITY
+==================================================
+
+Inspect:
+
+- Expo version
+- React version
+- React Native version
+- Current package manager
+- Available @clerk/expo versions
+
+Identify a Clerk Expo SDK version compatible with
+Expo SDK 54 and React 19.1.0.
+
+Prefer the documented compatible Clerk Expo v3.1.x
+version if supported by the current dependency graph.
+
+Do not blindly install the latest version.
+
+Attempt installation only if the dependency graph
+is compatible.
+
+Do not use:
+
+--force
+--legacy-peer-deps
+
+Do not bypass package firewall restrictions.
+
+If installation is blocked, stop and report the exact
+dependency or package restriction.
+
+==================================================
+STEP 2 — CLERK PROVIDER
+==================================================
+
+If installation succeeds:
+
+Create an isolated Clerk provider module.
+
+Use:
+
+- ClerkProvider
+- tokenCache from @clerk/expo/token-cache
+- EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+
+Do not mount the provider in the active app yet.
+
+Do not modify the existing AuthContext.
+
+==================================================
+STEP 3 — AUTHENTICATED API CLIENT
+==================================================
+
+Create an isolated production auth API client.
+
+Requirements:
+
+- Accept an async getToken() callback.
+- Send Clerk session tokens as Bearer tokens.
+- Use the existing production API base URL.
+- Preserve existing production URL safety validation.
+- Never log or persist session tokens.
+- Never rely on browser cookies.
+
+Prepare support for:
+
+GET /api/me
+
+Do not call production /api/me automatically.
+
+==================================================
+STEP 4 — AUTH STATE TYPES
+==================================================
+
+Prepare an isolated production auth state model.
+
+Include:
+
+- loading
+- signed_out
+- signed_in
+- backend_verifying
+- authenticated
+- backend_signed_out
+- network_error
+- session_expired
+
+Account for these /api/me fields:
+
+isAuthenticated
+isAdmin
+isConcierge
+isMember
+memberTier
+isProfileComplete
+needsPlanDecision
+needsSignupPhone
+
+HTTP 200 alone must not indicate authentication.
+
+Only isAuthenticated === true confirms
+backend authentication.
+
+==================================================
+STEP 5 — TESTING
+==================================================
+
+Run:
+
+- Expo compatibility check
+- Workspace library typecheck/build if required
+- Bluebird TypeScript check
+- Startup tests
+- Queue readiness tests
+- Network reliability tests
+- Trips/passenger tests
+- Production API reader tests
+- git diff --check
+
+Verify that existing auth behavior is unchanged.
+
+==================================================
+FINAL REPORT
+==================================================
+
+CLERK SDK:
+<version>
+
+DEPENDENCY INSTALL:
+PASS / BLOCKED
+
+CLERK PROVIDER:
+READY / BLOCKED
+
+TOKEN CACHE:
+READY / BLOCKED
+
+AUTH API CLIENT:
+READY / BLOCKED
+
+AUTH STATE MODEL:
+READY / BLOCKED
+
+PRODUCTION AUTH ACTIVE:
+NO
+
+EXISTING AUTH PRESERVED:
+YES / NO
+
+TEST RESULTS:
+<details>
+
+FILES MODIFIED:
+<list>
+
+REMAINING BLOCKERS:
+<list>
+
+GIT COMMIT:
+NONE
+
+GIT PUSH:
+NONE
+
+Finish exactly:
+
+STAGE 2A CLERK FOUNDATION: COMPLETE
+
+or
+
+STAGE 2A CLERK FOUNDATION: BLOCKED
