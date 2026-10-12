@@ -7,17 +7,19 @@ approved.
 
 ## Current compatibility finding
 
-The 2026-10-12 isolated recheck confirms that Expo 54.0.37 / React 19.1.0 /
-React Native 0.81.5 is **not ready for a Clerk dependency**. Latest stable
-`@clerk/expo@4.10.1` and stable `3.0.0` both resolve Clerk React/shared packages
-whose React and React DOM peers exclude 19.1.0. Stable `2.19.0` resolves
-`@clerk/shared@3.48.0` and `@clerk/clerk-js@5.128.0`, which also exclude 19.1.0,
-and reports missing wallet peers. A temporary 4.10.1 installation also failed
-all five startup checks with a React `useState` render error, while the
-unchanged workspace passed all five. No dependency or lockfile changes were
-applied to Bluebird. Recheck the full graph after a compatible stable Clerk
-release or a separately approved Expo baseline change; do not silence peer
-warnings with overrides. See
+The current Expo 54.0.37 / React 19.1.0 / React Native 0.81.5 baseline remains
+**incompatible with the stable Clerk dependency graph** because Clerk's
+transitive React peers exclude 19.1.0. A separate SDK 56.0.23 candidate aligns
+the peers with React/React DOM 19.2.3, but it is **not approved for migration or
+authentication activation**: Bluebird's typecheck still reports eight errors
+across its native-tabs layout and five screens, and Expo documents a Hermes
+memory regression affecting Bluebird's Reanimated/Worklets packages. The SDK 56
+candidate passed startup and product regression checks, including the earlier
+null-`useState` investigation; however, no native development build, SecureStore
+restore, or hosted-auth redirect was verified. Expo recommends considering SDK
+57 for the memory regression. No app source, dependency, or lockfile changes
+were applied to the main workspace. Do not silence peer warnings with
+overrides. See
 [the readiness report](./AUTHENTICATED-API-READINESS.md) for versions and
 verification details.
 
@@ -25,9 +27,12 @@ verification details.
       account, application, and allowed origins are correct.
 - [ ] Configure the matching `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` for that
       environment; do not commit environment values.
-- [ ] Resolve an `@clerk/expo` dependency graph compatible with the pinned
-      Expo SDK 54 / React 19.1.0 baseline without peer overrides, forced
-      installs, or package-policy bypasses.
+- [ ] Choose and validate an `@clerk/expo` graph against a separately approved
+      Expo baseline without peer overrides, forced installs, or package-policy
+      bypasses; the SDK 56 candidate is not yet approved.
+- [ ] Resolve the SDK 56 TypeScript and native-tabs/style type errors, assess
+      the documented Reanimated/Worklets memory regression, and verify native
+      development builds before considering the SDK migration ready.
 - [ ] Verify Clerk's supported Expo SecureStore token-cache setup in the
       actual native app configuration.
 - [ ] Add a dormant token adapter only in a separately approved activation:

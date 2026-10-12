@@ -76,12 +76,13 @@ inside the disposable worktree: `expo-auth-session@7.0.11`,
 `expo-web-browser@15.0.11` and `expo-constants@18.0.14`. No native config
 plugins were enabled. The dependency set was not copied to the active workspace.
 
-The smallest viable next step is a new stable Clerk Expo/dependency graph whose
-full React and React DOM peer ranges include Expo 54's exact `19.1.0` baseline.
-Alternatively, a separately scoped Expo upgrade could be considered only if
-Expo officially supports the React patch Clerk requires. Do not pin Clerk
-internals, override peers, or change the workspace policy to make these graphs
-appear compatible.
+The separate SDK 56 baseline-upgrade assessment below found a stable Expo
+baseline whose React patch satisfies those Clerk transitive peers. That is a
+compatibility candidate, not approval to migrate or activate authentication:
+the candidate currently fails Bluebird's TypeScript check and has an official
+Hermes memory regression relevant to Bluebird's Reanimated/Worklets usage.
+Do not pin Clerk internals, override peers, or change the workspace policy to
+make an incompatible graph appear compatible.
 
 Clerk's [Expo Quickstart](https://clerk.com/docs/quickstarts/expo) recommends
 installing `expo-secure-store`, `expo-auth-session`, `expo-crypto`, and
@@ -91,6 +92,161 @@ packages (`expo-web-browser`). The quickstart also requires enabling Clerk's
 Native API and configuring native app identifiers before making a native
 production build. These are later activation prerequisites, not changes made
 in this readiness review.
+
+## Expo SDK baseline-upgrade assessment (Task 344, 2026-10-12)
+
+**Recommendation: do not approve the SDK 56 migration or activate Clerk yet.**
+SDK 56 is the smallest stable Expo baseline whose official React version fits
+the current stable Clerk transitive peer ranges. The isolated dependency graph
+resolves without Clerk peer conflicts, and startup tests, regression suites,
+and Metro exports work, but the Bluebird
+TypeScript check fails on app API changes, native builds and OAuth redirects
+were not verified, and Expo documents a Hermes v1 memory regression in SDK 56
+for apps using Reanimated/Worklets. Expo recommends SDK 57 for apps affected by
+that regression; SDK 57 was not tested in this assessment.
+
+### Candidate versions and peer evidence
+
+Expo SDK 55 is not enough: the stable `expo@55.0.31` line's official baseline
+is React/React DOM 19.2.0 and React Native 0.83, while the resolved stable
+`@clerk/react@6.17.8` and
+`@clerk/shared@4.40.0` both require React and React DOM `^18 || ~19.0.3 ||
+~19.1.4 || ~19.2.3 || ~19.3.0-0`. The `~19.2.3` range excludes 19.2.0.
+Expo SDK 56's bundled React 19.2.3 is the first tested stable Expo baseline in
+that range.
+
+| Package | SDK 56 candidate | Evidence |
+| --- | --- | --- |
+| Expo | `56.0.23` | Stable SDK 56 package and bundled module map |
+| Expo CLI | `56.1.26` | Resolved stable CLI for the candidate |
+| Expo Router | `56.2.21` (`~56.2.21`) | SDK 56 recommended version |
+| React / React DOM | `19.2.3` / `19.2.3` | SDK 56 bundled versions; both satisfy Clerk transitive peers |
+| React Native | `0.85.3` | SDK 56 bundled version; its peer requires React `^19.2.3` |
+| React types / DOM types | `19.2.17` / `19.2.3` | SDK 56 `expo install --fix` recommendations |
+| TypeScript | `6.0.3` | SDK 56 recommendation |
+| Node.js | `24.13.0` | Candidate runtime satisfies React Native 0.85.3's declared Node engine |
+| `@clerk/expo` | `4.10.1` | Latest stable package examined; prereleases were not considered |
+| Clerk transitive graph | `@clerk/react@6.17.8`, `@clerk/shared@4.40.0`, `@clerk/clerk-js@6.39.0` | Resolved from the candidate lockfile |
+
+Published `@clerk/expo@4.10.1` metadata declares Expo `>=54 <58`, React and
+React DOM `^18 || ^19`, and React Native `>=0.75`. Its required Expo peers
+include `expo-auth-session >=5`, `expo-crypto >=12`,
+`expo-secure-store >=12.4.0`, `expo-web-browser >=12.5.0`, and
+`expo-constants >=12`; the SDK 56 candidate installed compatible versions.
+The published metadata marks passkey (`@clerk/expo-passkeys >=0.0.6`),
+biometrics (`@clerk/expo-biometrics >=0.1.0`), Google sign-in
+(`@clerk/expo-google-signin >=0.1.0`), Apple authentication
+(`expo-apple-authentication >=7.0.0`), and local authentication
+(`expo-local-authentication >=13.5.0`) as optional peers; none are needed for
+this baseline compatibility probe.
+
+The candidate also adopted SDK 56's recommended Expo/native module set. Key
+resolved versions were `expo-auth-session@56.0.19`, `expo-crypto@56.0.5`,
+`expo-secure-store@56.0.4`, `expo-web-browser@56.0.6`,
+`expo-constants@56.0.27`, `expo-calendar@56.0.10`,
+`expo-notifications@56.0.26`, `expo-file-system@56.0.11`,
+`react-native-maps@1.27.2`, `react-native-reanimated@4.3.1`,
+`react-native-worklets@0.8.3`, `react-native-gesture-handler@2.31.2`,
+`react-native-keyboard-controller@1.21.6`,
+`react-native-safe-area-context@5.7.0`, and `react-native-screens@4.26.2`.
+`expo install --fix` additionally updated the SDK 56 packages for clipboard,
+blur, font, glass effect, haptics, image, image picker, linear gradient,
+linking, location, splash screen, status bar, symbols, system UI, SVG, and the
+React type packages. The candidate's `expo install --check` reported all Expo
+dependencies up to date.
+
+### Router, app, and native readiness
+
+Bluebird does not directly import `@react-navigation/*` from app code, so the
+SDK 56 Router restriction on those external imports did not identify another
+existing migration. However, the current tabs layout imports `Badge`, `Icon`,
+and `Label` as named exports from `expo-router/unstable-native-tabs`; those
+exports are absent in Router 56. The SDK 56 API documents
+`NativeTabs.Trigger.Badge`, `NativeTabs.Trigger.Icon`, and
+`NativeTabs.Trigger.Label` instead. This is a required navigation-file
+migration, and a Metro export is not a substitute for the failed typecheck.
+
+The current app config already uses the `bluebird` URL scheme, the Expo Router
+plugin, and the New Architecture. It has no iOS `bundleIdentifier` or Android
+`package`/`namespace`. Clerk's official Expo quickstart requires those native
+identifiers, the `@clerk/expo` and `expo-secure-store` config plugins, and the
+Clerk Native API for native integration; its hosted-auth callback is derived
+from the identifiers. The documented SecureStore token cache is imported from
+`@clerk/expo/token-cache`. These were assessed only: no Clerk plugin, provider,
+token cache, callback, or production auth flow was configured or tested.
+
+Clerk's documentation distinguishes hosted authentication (which can use Expo
+Go) from prebuilt native components (which require a development build). Expo's
+SDK 56 release notes state that SDK 56 Expo Go is not available in the Apple
+App Store or Google Play Store, set minimum Xcode to 26.4 and iOS to 16.4, and
+document a Hermes v1 memory increase when importing Reanimated or Worklets.
+Bluebird uses both packages; the release notes recommend SDK 57 to resolve that
+regression. The candidate's Metro exports do not verify native module linking,
+SecureStore persistence, sign-in redirects, or device performance.
+
+No `ios/` or `android/` project directories are present in the candidate, and
+`xcodebuild`, `adb`, and `gradle` are unavailable in this environment.
+Therefore no iOS or Android development build, simulator/device test,
+SecureStore token restore, or OAuth redirect test could be performed. A
+development build on supported native tooling remains mandatory before any
+migration or activation approval.
+
+### Candidate TypeScript blockers and React investigation
+
+Expo SDK 56's TypeScript 6.0.3 first reports TS5101 for the existing
+`baseUrl` setting in `artifacts/bluebird/tsconfig.json`. Removing `baseUrl` in
+the disposable candidate only (rather than suppressing the deprecation) exposes
+eight remaining errors across six files:
+
+- `app/(tabs)/_layout.tsx`: `Badge`, `Icon`, and `Label` are no longer named
+  exports from the SDK 56 native-tabs module.
+- `app/(auth)/welcome-tour.tsx`, `app/(tabs)/discover/index.tsx`,
+  `app/account/payment-methods.tsx`, `app/flight/[id].tsx`, and
+  `app/referral.tsx`: React Native 0.85.3's `StyleSheet` type no longer exposes
+  `absoluteFillObject`.
+
+The earlier SDK 54 Clerk probe's `Cannot read properties of null (reading
+'useState')` startup failure was not reproduced: the full-workspace SDK 56
+candidate passed startup stability 5/5. React resolution was checked for the
+app, React DOM, React Native, Expo Router, Clerk Expo/React, Reanimated, and
+Worklets; all resolved the same React 19.2.3 file. No duplicate React was found
+in this candidate, so the cause of the earlier SDK 54 probe failure is not
+established. Do not treat that old error as an SDK 56 regression.
+
+### Migration boundary and next steps
+
+If a migration is separately approved, its minimum dependency/configuration
+scope is `artifacts/bluebird/package.json` and `pnpm-lock.yaml`, using the
+tested SDK 56 versions above and the SDK 56 native-module recommendations.
+Keep React 19.2.3 local to Bluebird rather than changing the shared workspace
+React catalog, which currently pins React 19.1.0 for other artifacts. The
+Bluebird source migration must also update
+`artifacts/bluebird/tsconfig.json`,
+`artifacts/bluebird/app/(tabs)/_layout.tsx`, and the five style files listed
+above. Before Clerk activation, separately configure approved native app
+identifiers and the Clerk/SecureStore plugins in `artifacts/bluebird/app.json`,
+then verify native development builds, SecureStore restoration, and hosted
+OAuth redirects. Confirm backend verification of tokens from the same Clerk
+instance before enabling authenticated production API calls.
+
+**Approval boundary:** SDK 56 is the smallest stable peer-compatible candidate,
+but it is not safe to approve as-is. First resolve the eight type errors and
+assess the documented Hermes memory regression (including an SDK 57 candidate
+if needed), then complete iOS/Android development-build and Clerk redirect
+verification. No source dependency, app config, lockfile, screen, navigation,
+API, or production authentication change was applied to the main workspace.
+
+Sources: [Expo SDK 56 reference](https://docs.expo.dev/versions/v56.0.0/),
+[Expo SDK 55 reference](https://docs.expo.dev/versions/v55.0.0/),
+[Expo SDK 56 release notes](https://expo.dev/changelog/sdk-56),
+[Expo Router SDK 56 reference](https://docs.expo.dev/versions/v56.0.0/sdk/router/),
+[Expo Router native tabs](https://docs.expo.dev/versions/v56.0.0/sdk/router/native-tabs/),
+[Expo Router SDK 55-to-56 migration](https://docs.expo.dev/router/migrate/sdk-55-to-56/),
+[Clerk Expo quickstart](https://clerk.com/docs/expo/getting-started/quickstart),
+and the published npm metadata for
+[`@clerk/expo@4.10.1`](https://www.npmjs.com/package/@clerk/expo/v/4.10.1),
+[`@clerk/react@6.17.8`](https://www.npmjs.com/package/@clerk/react/v/6.17.8),
+and [`@clerk/shared@4.40.0`](https://www.npmjs.com/package/@clerk/shared/v/4.40.0).
 
 ## Dormant Clerk token bridge design
 
@@ -206,7 +362,7 @@ All authenticated-client cases use injected mock fetch only. Production-mode
 browser checks intercept public endpoint fixtures and assert that authenticated
 member endpoints are not requested. No production API was contacted.
 
-Current Clerk-readiness checks (2026-10-12):
+Earlier SDK 54 Clerk-readiness checks (2026-10-12):
 
 - Isolated worktree frozen-lockfile install for the latest stable candidate —
   completed, but emitted the documented unmet React/React DOM peer warnings;
@@ -224,11 +380,49 @@ Current Clerk-readiness checks (2026-10-12):
   candidate worktree — 0 passed, 5 failed; every case hit
   `Cannot read properties of null (reading 'useState')` in the existing
   root-layout font hook before rendering. The same suite on the unchanged
-  workspace passed 5/5. This candidate-worktree regression is an additional
-  reason not to apply the dependency set.
+  workspace passed 5/5. This was the SDK 54 probe; the SDK 56 candidate
+  investigation and passing result are recorded above.
 - `git diff --check` — passed in the isolated worktree. No native iOS/Android
   build or device sign-in test was available; Metro exports do not establish
   native compatibility.
+- SDK 56 candidate `pnpm install --frozen-lockfile` — passed across all
+  workspace packages under the existing package-manager policy; no peer
+  override, force flag, or warning suppression was used.
+- The initial filtered adds reported missing `@react-native/metro-config` and
+  `@testing-library/dom` peers before the full-workspace frozen install. The
+  completed frozen install emitted no peer-conflict warnings. Existing
+  unapproved package scripts remained blocked by pnpm; the policy was not
+  changed.
+- SDK 56 candidate `pnpm --filter @workspace/bluebird exec expo install --check`
+  — passed: dependencies up to date.
+- SDK 56 candidate `pnpm run typecheck:libs` — passed.
+- SDK 56 candidate `pnpm --filter @workspace/bluebird run typecheck` — failed:
+  after removing deprecated `baseUrl` in the disposable candidate, 8 errors
+  remained across 6 files (three obsolete native-tabs named exports and five
+  `StyleSheet.absoluteFillObject` references).
+- SDK 56 candidate `pnpm --filter @workspace/bluebird run test:production-auth-api`
+  — 15 passed, 0 failed.
+- SDK 56 candidate `pnpm --filter @workspace/bluebird run test:startup-stability`
+  — 5 passed, 0 failed; the earlier null-`useState` error did not recur.
+- SDK 56 candidate `pnpm --filter @workspace/bluebird run test:network-reliability`
+  — 11 passed, 0 failed.
+- SDK 56 candidate `pnpm --filter @workspace/bluebird run test:production-membership-plans`
+  — passed.
+- SDK 56 candidate `pnpm --filter @workspace/bluebird run test:production-queue-readiness`
+  — 5 passed, 0 failed.
+- SDK 56 candidate `pnpm --filter @workspace/bluebird run test:membership-plans`
+  — 2 passed, 0 failed.
+- SDK 56 candidate `pnpm --filter @workspace/bluebird exec playwright test tests/flight-passenger-flow.spec.mjs --workers=1`
+  — 11 passed, 0 failed.
+- SDK 56 candidate `expo export --platform web`, `--platform ios`, and
+  `--platform android` — all completed. These are Metro/JS exports only, not
+  native builds.
+- SDK 56 candidate React path inspection — app, React DOM, React Native, Expo
+  Router, Clerk Expo/React, Reanimated, and Worklets all resolved the same
+  React 19.2.3 installation; no duplicate React was found.
+- SDK 56 candidate `git diff --check` — passed. No native build was available:
+  `ios/` and `android/` directories were absent and `xcodebuild`, `adb`, and
+  `gradle` were unavailable.
 - `pnpm run typecheck:libs` — passed.
 - `pnpm --filter @workspace/bluebird run typecheck` — passed.
 - `pnpm --filter @workspace/bluebird run test:production-auth-api` — 15 passed,
@@ -269,3 +463,4 @@ Changed in this readiness review:
 - `artifacts/bluebird/STAGE_2B_ACTIVATION_CHECKLIST.md`
 - `artifacts/bluebird/tests/production-auth-api.spec.mjs`
 - `.agents/memory/clerk-expo-sdk54-peers.md`
+- `.agents/memory/MEMORY.md`

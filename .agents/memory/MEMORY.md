@@ -30,4 +30,4 @@
 - [Metro platform facades](flight-map-platform-resolution.md) — use declaration-only facades when native/web variants have different source extensions; runtime `.ts` re-exports can bypass platform resolution.
 - [Bluebird browser test fixtures](bluebird-browser-test-fixtures.md) — mock shared auth-query arrays and the local airport catalog separately from live public airport search.
 - [Bluebird time zone formatting](bluebird-time-zone-formatting.md) — short Intl timezone labels vary by runtime; preserve IANA zones and avoid asserting a specific abbreviation.
-- [Clerk Expo SDK 54 peers](clerk-expo-sdk54-peers.md) — verify Clerk's transitive React peers against Bluebird's Expo-pinned React before installing; don't bypass the package firewall.
+- [Clerk Expo compatibility](clerk-expo-sdk54-peers.md) — verify transitive React peers and native-runtime risks for the selected Expo baseline; Metro exports alone are insufficient.
