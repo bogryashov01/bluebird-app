@@ -148,7 +148,8 @@ function isQueueOrAccountStateRequest(requestUrl) {
   const path = new URL(requestUrl).pathname;
   return (
     /\/api\/(?:queue(?:\/|$)|trips(?:\/|$)|flights\/[^/]+\/my-status(?:\/|$))/.test(path) ||
-    /\/api\/empty-legs\/\d+\/(?:queue(?:\/|$)|skip-line(?:\/|$)|winner(?:\/|$))/.test(path)
+    /\/api\/(?:me(?:\/|$)|membership(?:\/|$)|passengers(?:\/|$)|pets(?:\/|$))/.test(path) ||
+    /\/api\/empty-legs\/\d+\/(?:queue(?:\/|$)|skip-line(?:\/|$)|winner(?:\/|$)|passengers(?:\/|$)|pets(?:\/|$))/.test(path)
   );
 }
 
@@ -301,10 +302,11 @@ test("production profile, membership and saved-passenger screens never fall back
   page.on("request", (request) => {
     const url = new URL(request.url());
     const appMemberData =
-      /\/api\/(?:membership(?:\/|$)|trips(?:\/|$)|passengers(?:\/|$)|queue(?:\/|$)|notifications(?:\/|$))/.test(url.pathname);
+      /\/api\/(?:me(?:\/|$)|membership(?:\/|$)|trips(?:\/|$)|passengers(?:\/|$)|pets(?:\/|$)|queue(?:\/|$)|notifications(?:\/|$))/.test(url.pathname) ||
+      /\/api\/empty-legs\/\d+\/(?:queue(?:\/|$)|skip-line(?:\/|$)|winner(?:\/|$)|passengers(?:\/|$)|pets(?:\/|$))/.test(url.pathname);
     const productionAuthenticated =
       url.hostname === "bluebirdjets.com" &&
-      /\/api\/(?:auth\/me|membership(?:\/|$)|trips(?:\/|$)|passengers(?:\/|$)|queue(?:\/|$))/.test(url.pathname);
+      /\/api\/(?:auth\/me|me(?:\/|$)|membership(?:\/|$)|trips(?:\/|$)|passengers(?:\/|$)|pets(?:\/|$)|queue(?:\/|$))/.test(url.pathname);
     if (appMemberData || productionAuthenticated) {
       authenticatedDataRequests.push(`${request.method()} ${url.hostname}${url.pathname}`);
     }

@@ -11,81 +11,261 @@ import {
   ProductionAuthTimeoutError,
 } from "../scripts/.production-auth-api.test.mjs";
 
-const secretToken = "mock-only-token-never-log";
+const mockOnlyToken = "mock-only-token-never-log";
 
-const user = {
-  id: "member-7",
-  name: "Preview Member",
-  phone: "+15555550123",
+const anonymous = {
+  isAuthenticated: false,
+  isAdmin: false,
+  isConcierge: false,
+  isMember: false,
+  memberTier: null,
+  email: null,
+  firstName: null,
+  lastName: null,
+  isProfileComplete: false,
+  needsPlanDecision: false,
+  needsSignupPhone: false,
+  impersonation: null,
+};
+
+const currentUser = {
+  isAuthenticated: true,
+  isAdmin: false,
+  isConcierge: false,
+  isMember: true,
+  memberTier: "plus",
   email: "member@example.test",
-  photoAssetPath: null,
-  photoUrl: null,
-  weightKg: 70,
-  membershipTier: "plus",
-  linePassCount: 2,
-  referralCode: "MEMBER7",
-  homeAirports: ["APF"],
-  notificationChannel: "app",
-  createdAt: "2026-01-02T03:04:05.000Z",
+  firstName: "Preview",
+  lastName: "Member",
+  isProfileComplete: true,
+  needsPlanDecision: false,
+  needsSignupPhone: false,
+  impersonation: null,
+};
+
+const notificationPrefs = {
+  mode: "specific",
+  allChannels: null,
+  emptyLegHomeAirport: "email",
+  departingFavorite: null,
+  arrivingFavorite: null,
+  queueUpdates: "email",
+  winningNotifications: "email",
+};
+
+const profile = {
+  firstName: "Preview",
+  lastName: "Member",
+  dob: "1990-01-02",
+  gender: "male",
+  homeAirportCode: "APF",
+  homeAirportLabel: "Naples Municipal",
+  favoriteAirportCodes: ["MIA"],
+  favoriteAirportLabels: ["Miami International"],
+  favoriteCityKeys: ["miami"],
+  favoriteCityLabels: ["Miami"],
+  phoneE164: "+15555550123",
+  phoneCountry: "US",
+  phoneVerifiedAt: "2026-01-01T00:00:00.000Z",
+  phoneVerificationRequired: false,
+  notificationPrefs,
+  smsConsent: false,
+  smsConsentAt: null,
+  smsConsentRevokedAt: null,
+  email: "member@example.test",
+  emailLocked: true,
+  signupChannel: "email",
+  isComplete: true,
+  upgradeCreditBalances: { skipTheLine: 1, internationalPass: 0 },
+  weightLbs: 170,
+  updatedAt: "2026-09-01T00:00:00.000Z",
+};
+
+const profileUpdate = {
+  firstName: "Preview",
+  lastName: "Member",
+  dob: "1990-01-02",
+  gender: "male",
+  homeAirportCode: "APF",
+  favoriteCityKeys: ["miami"],
+  phoneE164: "+15555550123",
+  phoneCountry: "US",
+  notificationPrefs,
+  smsConsent: false,
+  email: "member@example.test",
+  weightLbs: 170,
 };
 
 const membership = {
+  isMember: true,
   tier: "plus",
-  plans: [{ id: "plus", label: "Plus" }],
-  linePassCount: 2,
-  renewalDate: "2027-01-02",
-  features: ["Member queue access"],
-  totalSavedUsd: 1000,
-  lifetimeCompletedFlights: 1,
-  annualFlightAllowance: 10,
-  flightsThisYear: 1,
+  status: "active",
+  cancelAtPeriodEnd: false,
+  currentPeriodStart: "2026-01-01T00:00:00.000Z",
+  currentPeriodEnd: "2027-01-01T00:00:00.000Z",
+  paymentStatus: "succeeded",
+  paymentMethod: {
+    brand: "visa",
+    last4: "4242",
+    expMonth: "01",
+    expYear: "2028",
+    billingName: "Preview Member",
+    billingAddress: {
+      line1: "1 Main St",
+      line2: null,
+      city: "Naples",
+      region: "FL",
+      postalCode: "34102",
+      country: "US",
+    },
+  },
+  scheduledTierChange: null,
+  recentEvents: [{
+    id: 11,
+    eventType: "activated",
+    fromTier: null,
+    toTier: "plus",
+    source: "self",
+    occurredAt: "2026-01-01T00:00:00.000Z",
+  }],
+  lastPaidAmountCents: 999500,
+  lastDiscountPercent: null,
+  metaPurchase: null,
 };
 
 const trip = {
-  id: "trip-7",
-  flightId: "flight-22",
-  status: "upcoming",
-  bookedAt: "2026-06-01T12:00:00.000Z",
-  cleaningFeeUsd: 0,
-  flight: { id: "flight-22", fromAirport: "APF", toAirport: "MIA" },
+  leg: {
+    id: 81001,
+    originAirport: "APF",
+    destinationAirport: "MIA",
+    originCity: "Naples",
+    destinationCity: "Miami",
+    departureTime: "2026-11-01T10:00:00.000Z",
+    arrivalTime: "2026-11-01T11:00:00.000Z",
+    tailNumber: "N123BB",
+    aircraftType: "Citation Latitude",
+    originFboName: null,
+    originFboAddress: null,
+    destinationFboName: null,
+    destinationFboAddress: null,
+    queueClosesAt: "2026-10-31T10:00:00.000Z",
+  },
+  checklist: {
+    emptyLegId: 81001,
+    confirmedAt: "2026-10-01T00:00:00.000Z",
+    fboVerifiedAt: null,
+    manifestAckAt: null,
+    policyAckAt: null,
+    passLinkSentAt: null,
+    manifestLockedAt: null,
+    manifestLocked: false,
+    boardingPassUrl: null,
+    remainingSteps: ["fboVerified", "manifestAck", "policyAck"],
+    passengerCount: 1,
+    awarded: true,
+  },
 };
 
-const manifest = {
-  tripId: "trip-7",
-  requiredCount: 1,
-  completedCount: 0,
-  isComplete: false,
-  international: false,
-  bringingPet: false,
-  pet: null,
-  passengers: [{ passengerOrder: 1, firstName: "Preview", lastName: "Member" }],
-  version: 1,
-  submittedAt: null,
-  deliveryStatus: null,
-  operationsNotified: false,
-};
-
-const savedPassenger = {
-  id: "passenger-7",
-  firstName: "Casey",
-  lastName: "Traveler",
-  phone: null,
-  email: null,
-  weightKg: 64,
-  createdAt: "2026-05-01T00:00:00.000Z",
-  updatedAt: "2026-05-01T00:00:00.000Z",
-};
+const trips = { current: [trip], past: [] };
 
 const queueEntry = {
-  id: "queue-7",
-  flightId: "flight-22",
-  flight: { id: "flight-22", fromAirport: "APF", toAirport: "MIA" },
+  emptyLegId: 81001,
+  joinedAt: "2026-10-01T00:00:00.000Z",
   position: 1,
-  totalInQueue: 1,
-  status: "waiting",
-  createdAt: "2026-07-01T00:00:00.000Z",
-  bringingPet: false,
-  queueMembers: [{ initials: "PM", position: 1 }],
+  queueCount: 1,
+  memberQueueCount: 1,
+  userInQueue: true,
+  userTier: "plus",
+  userHasLineSkip: false,
+  userHasInternationalPass: false,
+};
+
+const queueStatus = {
+  emptyLegId: 81001,
+  queueCount: 0,
+  memberQueueCount: 0,
+  userInQueue: false,
+  lockedForFreeUsers: false,
+};
+
+const publicQueue = [{
+  position: 1,
+  initials: "PM",
+  tier: "plus",
+  hasLineSkip: false,
+  isViewer: true,
+}];
+
+const passengerInput = {
+  firstName: "Casey",
+  middleName: null,
+  lastName: "Traveler",
+  weight: 165,
+  gender: "female",
+  dob: "1988-04-05",
+  notes: null,
+};
+
+const passengerList = {
+  passengers: [{
+    id: 71,
+    emptyLegId: 81001,
+    fullName: "Casey Traveler",
+    firstName: "Casey",
+    middleName: null,
+    lastName: "Traveler",
+    weight: 165,
+    isAccountHolder: false,
+    gender: "female",
+    dob: "1988-04-05",
+    notes: null,
+    createdAt: "2026-10-01T00:00:00.000Z",
+  }],
+  passengerCap: 5,
+  pets: [{
+    id: 91,
+    emptyLegId: 81001,
+    breed: "Golden Retriever",
+    weight: 55,
+    createdAt: "2026-10-01T00:00:00.000Z",
+  }],
+};
+
+const emptyLeg = {
+  id: 81001,
+  originAirport: "APF",
+  destinationAirport: "MIA",
+  departureTime: "2026-11-01T10:00:00.000Z",
+  isInternational: false,
+  status: "published",
+  pricePerHour: 0,
+  queueCount: 1,
+  memberQueueCount: 1,
+  userInQueue: true,
+  lockedForFreeUsers: false,
+  lineSkipPriceUsd: 0,
+  lineSkipSold: false,
+  viewerHasLineSkip: false,
+  internationalPassPriceUsd: 0,
+  internationalPassRequired: false,
+  viewerHasInternationalPass: false,
+  viewerIsEffectiveWinner: true,
+  changeFlagSeverity: "none",
+  aircraftGalleryUrls: [],
+  aircraftGalleryAlts: [],
+  createdAt: "2026-09-01T00:00:00.000Z",
+  updatedAt: "2026-09-01T00:00:00.000Z",
+  totalPrice: null,
+  msrpUsd: null,
+};
+
+const phoneVerificationStatus = {
+  method: "pin",
+  expiresAt: "2026-10-12T12:00:00.000Z",
+  cooldownSeconds: 30,
+  status: "pending",
+  clerkWarning: null,
+  profile: null,
 };
 
 function jsonResponse(body, status = 200) {
@@ -98,46 +278,51 @@ function jsonResponse(body, status = 200) {
 
 function makeClient(fetcher, overrides = {}) {
   return createAuthenticatedProductionApiClient({
-    tokenProvider: { getVerifiedAccessToken: async () => secretToken },
+    tokenProvider: { getVerifiedAccessToken: async () => mockOnlyToken },
     fetcher,
     ...overrides,
   });
 }
 
-test("client construction does not acquire a token or issue a request", async () => {
+function contractPath(url) {
+  return new URL(url).pathname.replace(/^\/api/, "");
+}
+
+test("construction is inert and /api/me HTTP 200 false is a signed-out result", async () => {
   let tokenReads = 0;
   let requests = 0;
   const client = createAuthenticatedProductionApiClient({
     tokenProvider: {
       getVerifiedAccessToken: async () => {
         tokenReads += 1;
-        return secretToken;
+        return mockOnlyToken;
       },
     },
     fetcher: async () => {
       requests += 1;
-      return jsonResponse(user);
+      return jsonResponse(anonymous);
     },
   });
 
   assert.equal(tokenReads, 0);
   assert.equal(requests, 0);
-  assert.deepEqual(await client.getMe(), user);
+  const result = await client.getMe();
+  assert.equal(result.isAuthenticated, false);
+  assert.equal(result.memberTier, null);
   assert.equal(tokenReads, 1);
   assert.equal(requests, 1);
 });
 
-test("the request layer follows the checked-in auth path and reuses production URL safety", async () => {
+test("base URL safety and bearer-only request headers are preserved", async () => {
   let request;
   const client = makeClient(async (url, init) => {
     request = { url, init };
-    return jsonResponse(user);
+    return jsonResponse(currentUser);
   });
-
-  assert.deepEqual(await client.getMe(), user);
-  assert.equal(request.url, "https://bluebirdjets.com/api/auth/me");
+  assert.equal((await client.getMe()).isAuthenticated, true);
+  assert.equal(request.url, "https://bluebirdjets.com/api/me");
   assert.equal(request.init.method, "GET");
-  assert.equal(request.init.headers.Authorization, `Bearer ${secretToken}`);
+  assert.equal(request.init.headers.Authorization, `Bearer ${mockOnlyToken}`);
   assert.equal(request.init.headers.Accept, "application/json");
   assert.equal(request.init.credentials, "omit");
   assert.equal(request.init.headers.Cookie, undefined);
@@ -151,109 +336,222 @@ test("the request layer follows the checked-in auth path and reuses production U
   ]) {
     assert.throws(
       () => createAuthenticatedProductionApiClient({
-        tokenProvider: { getVerifiedAccessToken: async () => secretToken },
+        tokenProvider: { getVerifiedAccessToken: async () => mockOnlyToken },
         baseUrl,
-        fetcher: async () => jsonResponse(user),
+        fetcher: async () => jsonResponse(anonymous),
       }),
       /production flight API/i,
     );
   }
 });
 
-test("all typed methods use only documented contract routes and verbs", async () => {
+test("documented member methods use the production paths, verbs, and bodies", async () => {
   const requests = [];
   const client = makeClient(async (url, init) => {
-    requests.push({ path: new URL(url).pathname.replace("/api", ""), method: init.method, body: init.body });
-    if (init.method === "GET" && url.endsWith("/auth/me")) return jsonResponse(user);
-    if (init.method === "PATCH") return jsonResponse(user);
-    if (url.endsWith("/membership")) return jsonResponse(membership);
-    if (url.endsWith("/trips")) return jsonResponse([trip]);
-    if (url.endsWith("/trips/trip-7/cancel")) {
-      return jsonResponse({ success: true, passRefunded: false, linePassCount: 2, trip });
-    }
-    if (url.endsWith("/manifest/submit") || url.endsWith("/manifest")) return jsonResponse(manifest);
-    if (url.endsWith("/passengers") && init.method === "GET") return jsonResponse([savedPassenger]);
-    if (url.endsWith("/passengers") && init.method === "POST") return jsonResponse(savedPassenger, 201);
-    if (url.endsWith("/passengers/passenger-7") && init.method === "PUT") return jsonResponse(savedPassenger);
-    if (url.endsWith("/passengers/passenger-7") && init.method === "DELETE") return jsonResponse({ success: true });
-    if (url.endsWith("/queue/status")) return jsonResponse([queueEntry]);
-    if (url.endsWith("/queue/join")) return jsonResponse(queueEntry, 201);
-    if (url.endsWith("/queue/queue-7/use-pass")) return jsonResponse({ ...queueEntry, status: "confirmed", linePassCount: 1 });
-    if (url.endsWith("/queue/queue-7")) return jsonResponse({ success: true });
-    throw new Error("Unexpected mocked route");
+    const path = contractPath(url);
+    requests.push({ path, method: init.method, body: init.body });
+    if (path === "/me") return jsonResponse(currentUser);
+    if (path === "/me/profile" && init.method === "GET") return jsonResponse(profile);
+    if (path === "/me/profile" && init.method === "PUT") return jsonResponse(profile);
+    if (path === "/membership") return jsonResponse(membership);
+    if (path === "/trips") return jsonResponse(trips);
+    if (path === "/empty-legs/81001/queue" && init.method === "GET") return jsonResponse(publicQueue);
+    if (path === "/empty-legs/81001/queue" && init.method === "POST") return jsonResponse(queueEntry);
+    if (path === "/empty-legs/81001/queue" && init.method === "DELETE") return jsonResponse(queueStatus);
+    if (path === "/empty-legs/81001/skip-line") return jsonResponse(emptyLeg);
+    if (path === "/empty-legs/81001/passengers" && init.method === "GET") return jsonResponse(passengerList);
+    if (path === "/empty-legs/81001/passengers" && init.method === "POST") return jsonResponse(passengerList);
+    if (path === "/empty-legs/81001/passengers/71" && init.method === "PATCH") return jsonResponse(passengerList);
+    if (path === "/empty-legs/81001/passengers/71" && init.method === "DELETE") return jsonResponse(passengerList);
+    if (path === "/empty-legs/81001/pets" && init.method === "POST") return jsonResponse(passengerList);
+    if (path === "/empty-legs/81001/pets/91" && init.method === "PATCH") return jsonResponse(passengerList);
+    if (path === "/empty-legs/81001/pets/91" && init.method === "DELETE") return jsonResponse(passengerList);
+    if (path === "/empty-legs/81001/passengers/71/weight") return jsonResponse(passengerList);
+    if (path === "/empty-legs/81001/winner/confirm") return jsonResponse(emptyLeg);
+    if (path === "/empty-legs/81001/winner/decline") return jsonResponse(emptyLeg);
+    if (path === "/me/phone-verification/start") return jsonResponse({ ok: true, cooldownSeconds: 30 });
+    if (path === "/me/phone-verification/check") return jsonResponse(phoneVerificationStatus);
+    if (path === "/me/phone-verification/status") return jsonResponse(phoneVerificationStatus);
+    throw new Error(`Unexpected mocked route ${init.method} ${path}`);
   });
 
-  await client.getMe();
-  await client.updateMe({ name: "Updated Member" });
-  const status = await client.getMembership();
-  assert.equal(status.tier, "plus");
-  assert.equal(status.plans[0].id, "plus");
-  const trips = await client.listTrips();
-  assert.equal(trips[0].id, "trip-7");
-  assert.equal(trips[0].flightId, "flight-22");
-  assert.equal((await client.cancelTrip("trip-7")).success, true);
-  await client.getTripManifest("trip-7");
-  await client.saveTripManifest("trip-7", { passengers: manifest.passengers });
-  await client.submitTripManifest("trip-7");
-  await client.listSavedPassengers();
-  await client.createSavedPassenger({ firstName: "Casey", lastName: "Traveler", weightKg: 64 });
-  await client.updateSavedPassenger("passenger-7", { firstName: "Casey", lastName: "Traveler", weightKg: 64 });
-  await client.deleteSavedPassenger("passenger-7");
-  await client.getQueueStatus();
-  await client.joinQueue({ flightId: "flight-22", bringingPet: false });
-  await client.leaveQueue("queue-7");
-  const passResult = await client.useLinePass("queue-7");
-  assert.equal(passResult.status, "confirmed");
+  assert.equal((await client.getMe()).isAuthenticated, true);
+  assert.equal((await client.getProfile()).weightLbs, 170);
+  await client.updateProfile({ ...profileUpdate, localOnlyField: "must not escape" });
+  assert.equal((await client.getMembership()).paymentMethod.last4, "4242");
+  const tripResponse = await client.listTrips();
+  assert.deepEqual(Object.keys(tripResponse), ["current", "past"]);
+  assert.equal(tripResponse.current[0].leg.id, 81001);
+  assert.equal(tripResponse.current[0].checklist.awarded, true);
+  assert.deepEqual(await client.getEmptyLegQueue(81001), publicQueue);
+  await client.joinEmptyLegQueue(81001, {
+    internationalPassAuthorized: true,
+    useInternationalPassCredit: true,
+  });
+  await client.leaveEmptyLegQueue(81001);
+  assert.equal((await client.skipLine(81001, { useCredit: true, checkoutUrl: "must not escape" })).pricePerHour, 0);
+  await client.getEmptyLegPassengers(81001);
+  await client.addEmptyLegPassenger(81001, passengerInput);
+  await client.updateEmptyLegPassenger(81001, 71, { ...passengerInput, passengerOrder: 3 });
+  await client.removeEmptyLegPassenger(81001, 71);
+  await client.addEmptyLegPet(81001, { breed: "Golden Retriever", weight: 55 });
+  await client.updateEmptyLegPet(81001, 91, { breed: "Golden Retriever", weight: 55, species: "must not escape" });
+  await client.removeEmptyLegPet(81001, 91);
+  await client.updateEmptyLegPassengerWeight(81001, 71, { weight: 170 });
+  await client.confirmEmptyLegWinner(81001);
+  await client.declineEmptyLegWinner(81001);
+  await client.startPhoneVerification({ countryIso2: "US", phoneE164: "+15555550123" });
+  await client.checkPhoneVerification({ phoneE164: "+15555550123", code: "123456" });
+  await client.getPhoneVerificationStatus("+15555550123");
 
   assert.deepEqual(requests.map(({ method, path }) => `${method} ${path}`), [
-    "GET /auth/me",
-    "PATCH /auth/me",
+    "GET /me",
+    "GET /me/profile",
+    "PUT /me/profile",
     "GET /membership",
     "GET /trips",
-    "POST /trips/trip-7/cancel",
-    "GET /trips/trip-7/manifest",
-    "PUT /trips/trip-7/manifest",
-    "POST /trips/trip-7/manifest/submit",
-    "GET /passengers",
-    "POST /passengers",
-    "PUT /passengers/passenger-7",
-    "DELETE /passengers/passenger-7",
-    "GET /queue/status",
-    "POST /queue/join",
-    "DELETE /queue/queue-7",
-    "POST /queue/queue-7/use-pass",
+    "GET /empty-legs/81001/queue",
+    "POST /empty-legs/81001/queue",
+    "DELETE /empty-legs/81001/queue",
+    "POST /empty-legs/81001/skip-line",
+    "GET /empty-legs/81001/passengers",
+    "POST /empty-legs/81001/passengers",
+    "PATCH /empty-legs/81001/passengers/71",
+    "DELETE /empty-legs/81001/passengers/71",
+    "POST /empty-legs/81001/pets",
+    "PATCH /empty-legs/81001/pets/91",
+    "DELETE /empty-legs/81001/pets/91",
+    "PATCH /empty-legs/81001/passengers/71/weight",
+    "POST /empty-legs/81001/winner/confirm",
+    "POST /empty-legs/81001/winner/decline",
+    "POST /me/phone-verification/start",
+    "POST /me/phone-verification/check",
+    "GET /me/phone-verification/status",
   ]);
-  assert.equal(requests.some(({ path }) => /phone|winner|confirm|decline/i.test(path)), false);
+
+  assert.deepEqual(JSON.parse(requests[2].body), profileUpdate);
+  assert.deepEqual(JSON.parse(requests[6].body), {
+    internationalPassAuthorized: true,
+    useInternationalPassCredit: true,
+  });
+  assert.deepEqual(JSON.parse(requests[8].body), { useCredit: true });
+  assert.deepEqual(JSON.parse(requests[11].body), passengerInput);
+  assert.deepEqual(JSON.parse(requests[14].body), { breed: "Golden Retriever", weight: 55 });
+  assert.deepEqual(JSON.parse(requests[16].body), { weight: 170 });
+  assert.equal(requests[21].path, "/me/phone-verification/status");
 });
 
-test("contract arrays may be empty and trip IDs remain distinct from flight IDs", async () => {
-  const client = makeClient(async () => jsonResponse([]));
-  assert.deepEqual(await client.listTrips(), []);
-  assert.deepEqual(await client.listSavedPassengers(), []);
-  assert.deepEqual(await client.getQueueStatus(), []);
+test("phone status encodes query data and profile weight/body rules are enforced", async () => {
+  let requestedUrl;
+  const client = makeClient(async (url) => {
+    requestedUrl = url;
+    return jsonResponse(phoneVerificationStatus);
+  });
+  await client.getPhoneVerificationStatus("+15555550123");
+  assert.equal(new URL(requestedUrl).searchParams.get("phoneE164"), "+15555550123");
 
-  const tripClient = makeClient(async () => jsonResponse([trip]));
-  const [result] = await tripClient.listTrips();
-  assert.equal(result.id, "trip-7");
-  assert.equal(result.flightId, "flight-22");
-  assert.notEqual(result.id, result.flightId);
+  let requests = 0;
+  const guardedClient = makeClient(async () => {
+    requests += 1;
+    return jsonResponse(profile);
+  });
+  assert.throws(() => guardedClient.updateProfile({ ...profileUpdate, firstName: undefined }), TypeError);
+  assert.throws(() => guardedClient.updateProfile({ ...profileUpdate, weightLbs: 170.5 }), TypeError);
+  assert.throws(() => guardedClient.updateProfile({ ...profileUpdate, favoriteCityKeys: [] }), TypeError);
+  assert.throws(() => guardedClient.addEmptyLegPassenger(81001, { ...passengerInput, weight: 165.5 }), TypeError);
+  assert.throws(() => guardedClient.addEmptyLegPassenger(81001, { ...passengerInput, dob: "04/05/1988" }), TypeError);
+  assert.throws(() => guardedClient.addEmptyLegPet(81001, { breed: "Dog", weight: 55.2 }), TypeError);
+  assert.throws(() => guardedClient.checkPhoneVerification({ phoneE164: "+15555550123", code: "12ab56" }), TypeError);
+  assert.equal(requests, 0);
 });
 
-test("unauthorized and expired sessions produce a structured 401 error", async () => {
-  const client = makeClient(async () => jsonResponse({ error: "Invalid or expired token" }, 401));
+test("all Empty Leg and passenger/pet path identifiers are positive safe integers", async () => {
+  let requests = 0;
+  const client = makeClient(async () => {
+    requests += 1;
+    return jsonResponse(publicQueue);
+  });
+  for (const invalid of [0, -1, 1.2, Number.MAX_SAFE_INTEGER + 1, "81001"]) {
+    assert.throws(() => client.getEmptyLegQueue(invalid), /positive integer/i);
+  }
+  assert.throws(() => client.removeEmptyLegPassenger(81001, 0), /positive integer/i);
+  assert.throws(() => client.removeEmptyLegPet(81001, -3), /positive integer/i);
+  assert.equal(requests, 0);
+});
+
+test("trips use numeric Empty Leg identifiers and reject invented trip/status/UUID fields", async () => {
+  const client = makeClient(async () => jsonResponse(trips));
+  const parsed = await client.listTrips();
+  assert.deepEqual(parsed, trips);
+  assert.equal(parsed.current[0].leg.id, 81001);
+  assert.equal("id" in parsed.current[0], false);
+  assert.equal("status" in parsed.current[0], false);
+
+  const sourceWithUnmodeledFields = makeClient(async () => jsonResponse({
+    current: [{ ...trip, id: "trip-uuid", status: "upcoming" }],
+    past: [],
+  }));
+  const response = await sourceWithUnmodeledFields.listTrips();
+  assert.equal("id" in response.current[0], false);
+  assert.equal("status" in response.current[0], false);
+});
+
+test("membership and profile parsers reject fields with the wrong documented shape", async () => {
+  const badMembership = makeClient(async () => jsonResponse({ ...membership, tier: "concierge" }));
+  await assert.rejects(badMembership.getMembership(), ProductionAuthSchemaError);
+
+  const badProfile = makeClient(async () => jsonResponse({ ...profile, weightLbs: 170.5 }));
+  await assert.rejects(badProfile.getProfile(), ProductionAuthSchemaError);
+
+  const altered = { ...trip, leg: { ...trip.leg, id: "81001" } };
+  const badLeg = makeClient(async () => jsonResponse({ current: [altered], past: [] }));
+  await assert.rejects(badLeg.listTrips(), ProductionAuthSchemaError);
+});
+
+test("phone verification distinguishes its verified profile from UserProfile", async () => {
+  const { upgradeCreditBalances, ...phoneVerifiedProfile } = profile;
+  const verified = {
+    ...phoneVerificationStatus,
+    status: "verified",
+    profile: phoneVerifiedProfile,
+  };
+  const client = makeClient(async () => jsonResponse(verified));
+  const result = await client.checkPhoneVerification({ phoneE164: "+15555550123", code: "123456" });
+  assert.equal(result.status, "verified");
+  assert.equal(result.profile.weightLbs, 170);
+  assert.equal("upgradeCreditBalances" in result.profile, false);
+
+  const wrongProjection = makeClient(async () => jsonResponse({
+    ...verified,
+    profile,
+  }));
+  // Extra source properties are tolerated by the server's ordinary object
+  // parsing, but this client projection deliberately doesn't expose balances.
+  const parsed = await wrongProjection.checkPhoneVerification({ phoneE164: "+15555550123", code: "123456" });
+  assert.equal("upgradeCreditBalances" in parsed.profile, false);
+  assert.equal("upgradeCreditBalances" in profile, true);
+});
+
+test("HTTP errors and session expiration remain sanitized", async () => {
+  const expiredClient = makeClient(async () => jsonResponse({ error: "unauthorized" }, 401));
   await assert.rejects(
-    client.getMe(),
+    expiredClient.getProfile(),
     (error) => error instanceof ProductionAuthHttpError &&
       error.status === 401 &&
       error.code === "session_expired",
   );
+  const serverErrorClient = makeClient(async () => jsonResponse({ error: "not stable" }, 500));
+  await assert.rejects(
+    serverErrorClient.getMembership(),
+    (error) => error instanceof ProductionAuthHttpError && error.status === 500 && error.code === "http",
+  );
 });
 
-test("missing or failed token acquisition never sends a request", async () => {
+test("missing or failed token acquisition never reaches the injected fetcher", async () => {
   let requests = 0;
   const fetcher = async () => {
     requests += 1;
-    return jsonResponse(user);
+    return jsonResponse(anonymous);
   };
   const missing = createAuthenticatedProductionApiClient({
     tokenProvider: { getVerifiedAccessToken: async () => null },
@@ -262,29 +560,26 @@ test("missing or failed token acquisition never sends a request", async () => {
   await assert.rejects(missing.getMe(), (error) => error.code === "token");
 
   const failed = createAuthenticatedProductionApiClient({
-    tokenProvider: { getVerifiedAccessToken: async () => { throw new Error(secretToken); } },
+    tokenProvider: { getVerifiedAccessToken: async () => { throw new Error(mockOnlyToken); } },
     fetcher,
   });
   await assert.rejects(failed.getMe(), (error) => error.code === "token");
   assert.equal(requests, 0);
 });
 
-test("network, timeout and caller cancellation are distinct sanitized errors", async () => {
-  const networkClient = makeClient(async () => { throw new Error(`failed ${secretToken}`); });
-  await assert.rejects(networkClient.getMe(), (error) => error instanceof ProductionAuthNetworkError);
+test("network, timeout, and caller cancellation are distinct sanitized errors", async () => {
+  const networkClient = makeClient(async () => { throw new Error(`failed ${mockOnlyToken}`); });
+  await assert.rejects(networkClient.getMe(), ProductionAuthNetworkError);
 
-  const timeoutClient = makeClient(
-    async () => new Promise(() => {}),
-    { timeoutMs: 5 },
-  );
-  await assert.rejects(timeoutClient.getMe(), (error) => error instanceof ProductionAuthTimeoutError);
+  const timeoutClient = makeClient(async () => new Promise(() => {}), { timeoutMs: 5 });
+  await assert.rejects(timeoutClient.getMe(), ProductionAuthTimeoutError);
 
   const controller = new AbortController();
   let wasAborted = false;
-  let startedFetch;
-  const fetchStarted = new Promise((resolve) => { startedFetch = resolve; });
+  let startFetch;
+  const fetchStarted = new Promise((resolve) => { startFetch = resolve; });
   const cancelClient = makeClient((url, init) => new Promise((_, reject) => {
-    startedFetch();
+    startFetch();
     init.signal.addEventListener("abort", () => {
       wasAborted = true;
       reject(new Error("aborted"));
@@ -293,12 +588,12 @@ test("network, timeout and caller cancellation are distinct sanitized errors", a
   const cancelled = cancelClient.getMe({ signal: controller.signal });
   await fetchStarted;
   controller.abort();
-  await assert.rejects(cancelled, (error) => error instanceof ProductionAuthCancelledError);
+  await assert.rejects(cancelled, ProductionAuthCancelledError);
   assert.equal(wasAborted, true);
   await assert.rejects(cancelClient.getMe({ signal: AbortSignal.abort() }), ProductionAuthCancelledError);
 });
 
-test("invalid JSON and contract-shape responses are rejected with structured errors", async () => {
+test("invalid JSON and malformed source contracts produce typed errors", async () => {
   const invalidJsonClient = makeClient(async () => ({
     ok: true,
     status: 200,
@@ -306,30 +601,50 @@ test("invalid JSON and contract-shape responses are rejected with structured err
   }));
   await assert.rejects(invalidJsonClient.getMe(), ProductionAuthInvalidJsonError);
 
-  const malformedClient = makeClient(async () => jsonResponse({
-    ...user,
-    membershipTier: "imaginary",
-  }));
-  await assert.rejects(
-    malformedClient.getMe(),
-    (error) => error instanceof ProductionAuthSchemaError && error.code === "invalid_schema",
-  );
+  const malformedMe = makeClient(async () => jsonResponse({ ...anonymous, isAdmin: "false" }));
+  await assert.rejects(malformedMe.getMe(), ProductionAuthSchemaError);
 
-  const malformedListClient = makeClient(async () => jsonResponse([{
-    ...trip,
-    status: "waiting",
-  }]));
-  await assert.rejects(malformedListClient.listTrips(), ProductionAuthSchemaError);
+  const malformedPassengers = makeClient(async () => jsonResponse({
+    ...passengerList,
+    passengers: [{ ...passengerList.passengers[0], id: "71" }],
+  }));
+  await assert.rejects(malformedPassengers.getEmptyLegPassengers(81001), ProductionAuthSchemaError);
+
+  const malformedWinner = makeClient(async () => jsonResponse({ ...emptyLeg, pricePerHour: 1.25 }));
+  await assert.rejects(malformedWinner.confirmEmptyLegWinner(81001), ProductionAuthSchemaError);
 });
 
-test("errors and console output never disclose the token", async () => {
+test("side-effecting GETs are never invoked during setup or used as probes", async () => {
+  const requests = [];
+  const client = makeClient(async (url, init) => {
+    requests.push(`${init.method} ${contractPath(url)}`);
+    if (contractPath(url) === "/me/profile") return jsonResponse(profile);
+    if (contractPath(url) === "/empty-legs/81001/passengers") return jsonResponse(passengerList);
+    if (contractPath(url).startsWith("/me/phone-verification/status")) return jsonResponse(phoneVerificationStatus);
+    throw new Error("Unexpected mock URL");
+  });
+  assert.deepEqual(requests, []);
+  assert.equal(requests.some((request) => /me\/profile|passengers|phone-verification\/status/.test(request)), false);
+  // Each potentially mutating GET is issued only because the test explicitly
+  // invokes that method, and only against the injected mock fetcher.
+  await client.getProfile();
+  await client.getEmptyLegPassengers(81001);
+  await client.getPhoneVerificationStatus("+15555550123");
+  assert.deepEqual(requests, [
+    "GET /me/profile",
+    "GET /empty-legs/81001/passengers",
+    "GET /me/phone-verification/status",
+  ]);
+});
+
+test("token values are not exposed in errors, logs, or authenticated query keys", async () => {
   const logged = [];
   const methods = ["debug", "info", "log", "warn", "error"];
   const original = Object.fromEntries(methods.map((method) => [method, console[method]]));
   for (const method of methods) console[method] = (...args) => logged.push(args.join(" "));
   let error;
   try {
-    const client = makeClient(async () => { throw new Error(`network rejected ${secretToken}`); });
+    const client = makeClient(async () => { throw new Error(`network rejected ${mockOnlyToken}`); });
     try {
       await client.getMe();
     } catch (caught) {
@@ -338,17 +653,15 @@ test("errors and console output never disclose the token", async () => {
   } finally {
     for (const method of methods) console[method] = original[method];
   }
-  assert.equal(JSON.stringify(error).includes(secretToken), false);
-  assert.equal(String(error).includes(secretToken), false);
+  assert.equal(JSON.stringify(error).includes(mockOnlyToken), false);
+  assert.equal(String(error).includes(mockOnlyToken), false);
   assert.deepEqual(logged, []);
-});
 
-test("authenticated cache keys are member-scoped and do not include token values", () => {
   const first = productionAuthenticatedQueryKey("member-a", "trips");
   const second = productionAuthenticatedQueryKey("member-b", "trips");
   assert.deepEqual(first, ["production-auth", "member-a", "trips"]);
   assert.deepEqual(second, ["production-auth", "member-b", "trips"]);
   assert.notDeepEqual(first, second);
   assert.throws(() => productionAuthenticatedQueryKey("  ", "trips"), /member ID/i);
-  assert.equal(JSON.stringify(first).includes(secretToken), false);
+  assert.equal(JSON.stringify(first).includes(mockOnlyToken), false);
 });

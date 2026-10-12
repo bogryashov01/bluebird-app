@@ -1,92 +1,113 @@
-# Bluebird authenticated API readiness
+# Bluebird authenticated production API readiness
 
 ## Status
 
-The client layer is prepared for the checked-in authenticated API contract, but
-production member data and actions remain unavailable in the app. No screen
-constructs or calls the authenticated production client. Production screens
-show an unavailable state rather than falling back to a local `AuthContext`
-member, demo API response, or fabricated production record. Existing local/demo
-flows are unchanged when local flight-read mode is selected.
+The dormant authenticated client now models the supplied member contract. It
+is not connected to `AuthContext`, no screen constructs it, and production
+member reads and writes remain unavailable until a verified Clerk token
+provider and server token compatibility are established. In local flight-read
+mode, existing demo screens continue using their existing local adapters. In
+production mode, profile, membership, trips, queue actions, passenger/pet
+records, and trip manifests remain unavailable instead of showing local demo
+member data as production data.
 
-| Feature area | Status | Contract/readiness |
-| --- | --- | --- |
-| Profile read and update | Ready at client layer; blocked in production UI | `GET` and `PATCH /auth/me`; the authenticated response is the contract `User`. Phone is not editable through this route. |
-| Membership status | Ready at client layer; blocked in production UI | `GET /membership`; only member status uses this authenticated operation. |
-| Public membership plans | Ready and separate | Existing public `GET /plans` reader remains independent of member status. It does not authorize a purchase or establish membership. |
-| Trip list and cancellation | Ready at client layer; blocked in production UI | `GET /trips` and `POST /trips/{tripId}/cancel`; trip ID remains distinct from its flight ID. |
-| Passenger manifest | Ready at client layer; blocked in production UI | `GET` and `PUT /trips/{tripId}/manifest`, plus the contract's `POST /trips/{tripId}/manifest/submit`. These apply to an owned, confirmed upcoming trip, not an empty leg directly. |
-| Saved passengers | Ready at client layer; blocked in production UI | `GET` and `POST /passengers`, `PUT` and `DELETE /passengers/{passengerId}`. |
-| Queue status and actions | Ready at client layer; blocked in production UI | `GET /queue/status`, `POST /queue/join`, `DELETE /queue/{entryId}`, and `POST /queue/{entryId}/use-pass`. Each action must be invoked explicitly. |
-| Phone ownership verification/change | Blocked | No phone-change/ownership-confirmation API is defined. Existing sign-in verification is not a substitute for changing a member's phone. |
-| Per-empty-leg passenger/pet roster | Blocked | No per-flight passenger or pet endpoints are defined. The supported manifest is attached to an owned, confirmed trip. Queue join carries only the contract's initial occupant count and supported pet details. |
-| Winner confirm/decline | Unsupported; automatic confirmation is the contract | The queue engine confirms eligible members automatically. There is no manual winner confirmation or decline operation. |
+## Supported member contract
 
-## Authentication compatibility
+All paths below are relative to `https://bluebirdjets.com/api`. IDs in
+`empty-legs` paths and their passenger/pet subpaths are positive safe numeric
+IDs. Passenger and pet weights are whole pounds.
 
-The new client accepts only an explicit `VerifiedProductionTokenProvider`; it
-does not read `AuthContext`, browser storage, or the demo token. Client
-construction is inert. Every request requires a caller-invoked method and a
-non-empty provider token, uses the existing production API URL validator, and
-supports cancellation, a timeout, and structured HTTP, JSON, schema, token,
-network, and session-expiration errors. It does not log or persist tokens.
+| Feature | Supported method and response |
+| --- | --- |
+| Signed-in state | `GET /me` returns the documented `CurrentUser`; a valid HTTP 200 response with `isAuthenticated: false` is an anonymous/signed-out result. No `userId` is added. |
+| Profile | `GET /me/profile` and complete `PUT /me/profile`. The PUT requires first/last name, date-only DOB, gender, home airport, and at least one favorite city; optional phone, notification, consent, email, and `weightLbs` fields use source limits. Phone country is required when a phone is supplied. |
+| Membership | `GET /membership` models the effective membership state, payment status, documented saved-payment projection, tier changes, and recent events. It is not the public plan catalog or a checkout API. |
+| Trips | `GET /trips` returns `{ current, past }` of `{ leg, checklist }`. Leg IDs are numeric Empty Leg IDs; no trip UUID or booking-status field is modeled. |
+| Queue | `GET /empty-legs/{id}/queue` returns the public queue array; `POST` joins and returns `QueueEntry`; `DELETE` leaves and returns `QueueStatus`. Join body only permits the documented international-pass authorization/credit options. |
+| Skip line and winner | `POST /empty-legs/{id}/skip-line` accepts only optional `useCredit` and returns the neutralized `EmptyLeg`. Winner confirm and decline are `POST /empty-legs/{id}/winner/{confirm\|decline}` and also return `EmptyLeg`. |
+| Empty Leg passenger/pet roster | `GET` and `POST /empty-legs/{id}/passengers`; `PATCH`/`DELETE /empty-legs/{id}/passengers/{passengerId}`; `POST /empty-legs/{id}/pets`; `PATCH`/`DELETE /empty-legs/{id}/pets/{petId}`; and `PATCH /empty-legs/{id}/passengers/{passengerId}/weight`. Both passenger and pet PATCH bodies include their full required input fields. |
+| Phone ownership verification | `POST /me/phone-verification/start`, `POST /me/phone-verification/check`, and `GET /me/phone-verification/status?phoneE164=...` use the documented PIN status/results. This Bluebird Quo phone PIN is distinct from Clerk sign-in. |
 
-The checked-in API middleware verifies JWTs signed with `JWT_SECRET` (falling
-back to `SESSION_SECRET`) and checks its own revocation store. This does not
-establish that Clerk-issued tokens are accepted. Clerk is not installed or
-mounted, and no token bypass or backend change was made. Do not activate
-production authenticated calls until a verified provider and server token
-compatibility are established.
+The API server remains authoritative for eligibility and transitions. Queue
+join requires a complete profile and active membership, an eligible published
+open leg, and compliance with the one-queue-per-local-day/family rule. Members
+cannot supply rank or tier. Skip-line eligibility and available credits are
+rechecked by the server. A closed/departed queue cannot be left; a winner
+declines instead. Winner confirmation is idempotent for the member already
+awarded the leg; declining can promote the next winner. No method starts a
+checkout or payment.
 
-## Isolation and verification
+Public membership plans remain independent through the existing public plan
+reader. The plan catalog can render without authenticated member data; purchase
+behavior remains unavailable.
 
-Authenticated client tests inject a mock fetcher; they do not use the network.
-Mutations are exercised only against that mock. Production-mode browser tests
-stub the public production-read endpoints as well as the local API, assert that
-no production or member-data requests escape, and do not display synthetic
-demo account data. The public plan catalog remains a separate read-only API.
+## Side effects and screen readiness
 
-No Clerk dependency/provider, React or Expo dependency, `AuthContext`, API
-server, OpenAPI contract, generated client, secret, database, or deployment
-configuration was changed. No commit or push was made.
+The client constructor is inert. Requests occur only when a caller explicitly
+invokes a method and provides a non-empty token from `VerifiedProductionTokenProvider`.
+The existing URL allowlist, bearer-only headers, omitted cookies, cancellation,
+timeout, structured errors, response validation, and token secrecy are
+preserved.
 
-## Test results
+Three documented GETs can have side effects and are not called from app setup,
+screen rendering, or readiness probes:
 
-All browser tests intercepted local API requests and stubbed public
-`bluebirdjets.com/api` reads; all authenticated-client tests injected a mock
-fetcher. No production API request was made.
+- `GET /me/profile` can synchronize verified phone fields into the profile.
+- `GET /empty-legs/{id}/passengers` can insert the account-holder passenger.
+- `GET /me/phone-verification/status` can update profile/Clerk verification
+  data and synchronize a Sendblue contact.
+
+The profile, membership, trips, queue, saved-passenger, and trip-passenger
+screens remain guarded in production. They do not use this client and do not
+show local demo account details as production data. Existing navigation and
+screen appearance were not changed. The public plan catalog and public airport
+search remain independent read-only flows. No phone verification, queue,
+winner, passenger/pet mutation, SMS, or payment request was made.
+
+## Remaining blockers and source limits
+
+- Clerk is not activated in Bluebird's app session. `AuthContext` and demo
+  tokens are not connected to the production client.
+- The checked-in API server still signs/verifies its own `JWT_SECRET` or
+  `SESSION_SECRET` tokens; it does not establish that the app's future Clerk
+  session tokens are accepted. The supplied document describes Clerk bearer
+  auth, but production Clerk instance parity and token compatibility remain
+  unverified. The production UI stays disabled.
+- The exact response body for expired/malformed-token middleware errors,
+  production session lifetime, and some caught identity/provider failures are
+  unknown. The client exposes HTTP 401 as a session-expiration/authentication
+  error without assuming an error JSON shape.
+- The supplied document's generated `NotificationPrefs.mode` schema lists
+  boolean `false`, while its verified request-handler validator accepts the
+  strings `off`, `all`, and `specific`. The client follows the handler's
+  runtime strings; the source-document discrepancy remains unresolved.
+- Admin/concierge manifest routes, charter passenger routes, trip cancellation,
+  and a reusable saved-passenger library are not part of the supported member
+  contract here and were not added.
+- Contract shapes were source-reviewed only; no production runtime request
+  was made.
+
+## Verification
+
+All authenticated-client cases use injected mock fetch only. Production-mode
+browser checks intercept public endpoint fixtures and assert that authenticated
+member endpoints are not requested. No production API was contacted.
 
 - `pnpm run typecheck:libs` — passed.
-- `pnpm --filter @workspace/bluebird run typecheck` — passed.
-- `pnpm --filter @workspace/bluebird run test:production-auth-api` — 10 passed.
+- `pnpm --filter @workspace/bluebird run typecheck` — passed after the library
+  typecheck.
+- `pnpm --filter @workspace/bluebird run test:production-auth-api` — 14 passed.
 - `pnpm --filter @workspace/bluebird run test:production-membership-plans` — passed.
 - `pnpm --filter @workspace/bluebird run test:startup-stability` — 5 passed.
 - `pnpm --filter @workspace/bluebird run test:network-reliability` — 11 passed.
-- `pnpm --filter @workspace/bluebird run test:production-queue-readiness` — 5 passed.
+- `EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE=production pnpm --filter @workspace/bluebird run test:production-queue-readiness` — 5 passed.
 - `pnpm --filter @workspace/bluebird run test:membership-plans` — 2 passed.
 - `pnpm --filter @workspace/bluebird exec playwright test tests/flight-passenger-flow.spec.mjs --workers=1` — 11 passed.
 - `git diff --check` — passed.
 
 ## Changed files
 
-- `artifacts/bluebird/AUTHENTICATED-API-READINESS.md`
-- `artifacts/bluebird/app/(tabs)/membership/index.tsx`
-- `artifacts/bluebird/app/(tabs)/profile/index.tsx`
-- `artifacts/bluebird/app/(tabs)/trips/index.tsx`
-- `artifacts/bluebird/app/account/passengers.tsx`
-- `artifacts/bluebird/app/account/personal-info.tsx`
-- `artifacts/bluebird/app/membership/manage.tsx`
-- `artifacts/bluebird/app/membership/plans.tsx`
-- `artifacts/bluebird/app/trip/[id]/index.tsx`
-- `artifacts/bluebird/app/trip/[id]/passengers.tsx`
-- `artifacts/bluebird/components/ProductionAuthenticatedUnavailableNotice.tsx`
-- `artifacts/bluebird/components/ProductionReadOnlyNotice.tsx`
-- `artifacts/bluebird/hooks/useProductionMembershipPlans.ts`
-- `artifacts/bluebird/hooks/useUnreadNotifications.ts`
 - `artifacts/bluebird/lib/productionAuthApi.ts`
-- `artifacts/bluebird/lib/productionAuthState.ts`
-- `.agents/memory/MEMORY.md`
-- `.agents/memory/production-auth-availability.md`
 - `artifacts/bluebird/tests/production-auth-api.spec.mjs`
 - `artifacts/bluebird/tests/production-queue-readiness.spec.mjs`
-- `artifacts/bluebird/tests/startup-stability.spec.mjs`
+- `artifacts/bluebird/AUTHENTICATED-API-READINESS.md`
