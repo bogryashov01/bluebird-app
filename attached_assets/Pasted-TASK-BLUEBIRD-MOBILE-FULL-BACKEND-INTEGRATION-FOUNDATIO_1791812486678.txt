@@ -1,0 +1,416 @@
+TASK — BLUEBIRD MOBILE FULL BACKEND INTEGRATION
+FOUNDATION (PRE-CLERK)
+
+PROJECT:
+Bluebird Expo React Native Mobile Application
+
+CONTEXT:
+
+We have completed the public production API
+integration for:
+
+- Discover
+- Flight Details
+- Airports
+- Public Membership Plans
+
+We have also implemented:
+
+- Isolated authenticated API client
+- Async getToken() support
+- GET /api/me client
+- Typed authentication states
+- Authentication API tests
+
+The existing Bluebird production backend already
+supports Clerk Bearer session tokens.
+
+However, Clerk is NOT yet installed in the
+mobile application due to Expo/React compatibility
+constraints.
+
+GOAL:
+
+Prepare and integrate ALL available authenticated
+Bluebird backend functionality into the mobile app,
+without activating Clerk yet.
+
+The goal is to make future Clerk integration as
+simple as connecting a real session token provider.
+
+IMPORTANT:
+
+Implement real production API contracts and
+integrate them into existing mobile screens.
+
+Do NOT invent API responses, fake user data,
+fake membership status, fake queue positions,
+or fake trips.
+
+Do NOT activate authenticated production requests
+without a real verified Clerk session.
+
+==================================================
+STRICT SAFETY RULES
+==================================================
+
+- Do not install Clerk.
+- Do not change React or React DOM versions.
+- Do not upgrade Expo.
+- Do not modify the production backend.
+- Do not modify existing AuthContext behavior.
+- Do not use demo/local tokens for production APIs.
+- Do not send authenticated production requests.
+- Do not perform production POST/PUT/PATCH/DELETE.
+- Do not send SMS messages.
+- Do not initiate payments.
+- Do not create queue entries.
+- Do not modify production membership data.
+- Do not commit or push.
+
+Preserve existing working functionality.
+
+==================================================
+STEP 1 — SHARED AUTHENTICATED API INFRASTRUCTURE
+==================================================
+
+Inspect the existing:
+
+lib/productionAuthApi.ts
+lib/productionAuthState.ts
+
+Reuse these modules.
+
+Do not create a second competing auth API client.
+
+Implement a shared authenticated request layer
+that accepts:
+
+getToken: () => Promise<string | null>
+
+Requirements:
+
+- Bearer token authorization
+- Explicit request execution only
+- Existing production API URL validation
+- Timeouts and cancellation
+- Structured API errors
+- 401/session-expired handling
+- No token logging
+- No token persistence
+- No automatic requests without authentication
+
+Ensure demo/local authentication tokens
+cannot be passed into production requests.
+
+==================================================
+STEP 2 — PROFILE API
+==================================================
+
+Implement typed clients for:
+
+GET /api/me/profile
+PUT /api/me/profile
+
+Inspect the actual available API schemas and
+existing mobile profile forms.
+
+Support:
+
+- Profile loading
+- Profile update preparation
+- Validation
+- Missing profile fields
+- Onboarding requirements
+- Error states
+- Session expiration
+
+Integrate the data model with the existing
+Profile screen.
+
+Do not activate production requests.
+
+Do not submit profile updates.
+
+==================================================
+STEP 3 — MEMBERSHIP API
+==================================================
+
+Implement typed clients for:
+
+GET /api/membership
+
+Keep public membership plans separate from
+authenticated membership status.
+
+Prepare UI support for:
+
+- Current membership status
+- Base / Plus tier
+- Membership details
+- Loading state
+- No active membership
+- API errors
+
+Do not activate:
+
+- Membership purchases
+- Membership upgrades
+- Cancellation
+- Payment methods
+
+Do not display fabricated membership information.
+
+==================================================
+STEP 4 — MY TRIPS API
+==================================================
+
+Implement typed client for:
+
+GET /api/trips
+
+Inspect the actual backend response schema.
+
+Prepare existing My Trips screens for:
+
+- Real trip lists
+- Empty trip lists
+- Trip details
+- Loading state
+- Network errors
+- Session expiration
+
+Preserve the distinction between:
+
+Trip ID
+Flight / Empty Leg ID
+
+Do not fabricate bookings, boarding passes,
+or confirmed flight status.
+
+==================================================
+STEP 5 — FLIGHT QUEUE API
+==================================================
+
+Implement typed clients for:
+
+GET /api/empty-legs/:id/queue
+POST /api/empty-legs/:id/queue
+DELETE /api/empty-legs/:id/queue
+
+Also prepare the existing endpoints for:
+
+POST /api/empty-legs/:id/skip-line
+POST /api/empty-legs/:id/winner/confirm
+POST /api/empty-legs/:id/winner/decline
+
+Inspect actual backend request and response schemas.
+
+Prepare existing Queue UI for:
+
+- Real queue state
+- User queue membership
+- Queue position if actually provided
+- Eligibility errors
+- Required acknowledgments
+- Skip the Line eligibility
+- Winner confirmation states
+
+Do not invent queue probabilities.
+
+Do not activate production queue mutations.
+
+Do not automatically execute any queue actions.
+
+==================================================
+STEP 6 — PASSENGERS AND PETS
+==================================================
+
+Implement typed clients for:
+
+GET /api/empty-legs/:id/passengers
+POST /api/empty-legs/:id/passengers
+
+PATCH /api/empty-legs/:id/passengers/:passengerId
+DELETE /api/empty-legs/:id/passengers/:passengerId
+
+PATCH /api/empty-legs/:id/passengers/:passengerId/weight
+
+POST /api/empty-legs/:id/pets
+
+PATCH /api/empty-legs/:id/pets/:petId
+DELETE /api/empty-legs/:id/pets/:petId
+
+IMPORTANT:
+
+The passenger-list GET endpoint may create
+an account-holder manifest row.
+
+Therefore, treat it as a potentially
+state-changing endpoint.
+
+Do not call it against production during
+this preparation stage.
+
+Prepare UI support for:
+
+- Passenger details
+- Date of birth
+- Passenger weight
+- Pet details
+- Pet size
+- Crate dimensions
+- Required fields
+- Validation errors
+- Manifest lock restrictions
+
+Do not invent backend fields.
+
+Do not submit production mutations.
+
+==================================================
+STEP 7 — PHONE VERIFICATION API
+==================================================
+
+Prepare typed clients for:
+
+POST /api/me/phone-verification/start
+POST /api/me/phone-verification/check
+GET /api/me/phone-verification/status
+
+IMPORTANT:
+
+This is Bluebird's separate phone ownership
+verification system, backed by Quo.
+
+It is NOT Clerk authentication.
+
+Do not send SMS.
+Do not verify real phone numbers.
+Do not change Quo configuration.
+
+Prepare the client and response models only.
+
+==================================================
+STEP 8 — SCREEN INTEGRATION
+==================================================
+
+Connect the prepared API modules to the
+existing mobile screen architecture.
+
+Requirements:
+
+- Preserve current UI and navigation.
+- Preserve public production data.
+- Do not replace unavailable authenticated
+  data with fake/demo information.
+- Do not automatically call protected endpoints.
+- Show appropriate signed-out or unavailable
+  states until Clerk is activated.
+- Keep production mutations disabled.
+- Ensure the future auth provider can be
+  connected without rewriting each screen.
+
+Do not expose unfinished authenticated
+features as if they were live.
+
+==================================================
+STEP 9 — TESTING
+==================================================
+
+Add focused tests for each API module.
+
+Use mocked HTTP responses.
+
+Test:
+
+- Successful responses
+- Empty responses
+- Unauthorized responses
+- Session expiration
+- Network failures
+- Invalid JSON
+- Invalid response schemas
+- Cancellation
+- No automatic requests
+- No production mutations
+- No cross-user cached data
+
+Run:
+
+pnpm run typecheck:libs
+
+Bluebird TypeScript check
+
+Existing public API reader tests
+
+Startup tests
+
+Network reliability tests
+
+Queue readiness tests
+
+Trips/passenger tests
+
+Membership tests
+
+git diff --check
+
+==================================================
+STEP 10 — FINAL REPORT
+==================================================
+
+Report each module:
+
+PROFILE:
+READY / BLOCKED
+
+MEMBERSHIP:
+READY / BLOCKED
+
+MY TRIPS:
+READY / BLOCKED
+
+FLIGHT QUEUE:
+READY / BLOCKED
+
+PASSENGERS:
+READY / BLOCKED
+
+PETS:
+READY / BLOCKED
+
+PHONE VERIFICATION:
+READY / BLOCKED
+
+SCREEN INTEGRATION:
+READY / PARTIAL / BLOCKED
+
+CLERK SDK:
+NOT INSTALLED
+
+PRODUCTION AUTH:
+NOT ACTIVATED
+
+PRODUCTION MUTATIONS:
+NONE
+
+TEST RESULTS:
+<details>
+
+FILES MODIFIED:
+<exact list>
+
+REMAINING CLERK DEPENDENCIES:
+<details>
+
+GIT COMMIT:
+NONE
+
+GIT PUSH:
+NONE
+
+FINAL STATUS:
+
+PRE-CLERK BACKEND INTEGRATION:
+COMPLETE / PARTIAL / BLOCKED
