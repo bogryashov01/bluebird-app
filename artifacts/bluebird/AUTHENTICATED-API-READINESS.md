@@ -11,6 +11,84 @@ production mode, profile, membership, trips, queue actions, passenger/pet
 records, and trip manifests remain unavailable instead of showing local demo
 member data as production data.
 
+## Clerk Expo SDK compatibility review (2026-10-12)
+
+**Outcome: blocked; do not install or activate Clerk on the current baseline.**
+
+| Package | Bluebird declaration | Lockfile version |
+| --- | --- | --- |
+| Expo | `~54.0.37` | `54.0.37` |
+| React | `catalog:` (workspace catalog pins `19.1.0`) | `19.1.0` |
+| React DOM | `catalog:` (workspace catalog pins `19.1.0`) | `19.1.0` |
+| React Native | `0.81.5` | `0.81.5` |
+| Expo Router | `~6.0.17` | `6.0.24` |
+| `@types/react` | `~19.1.10` | `19.1.17` |
+
+The latest stable `@clerk/expo@4.10.1` advertises Expo `>=54 <58`,
+React `^18 || ^19`, and React Native `>=0.75`. Resolving it with pnpm 10.26.1
+under this workspace's existing policy selects `@clerk/react@6.17.8`,
+`@clerk/shared@4.40.0`, and `@clerk/clerk-js@6.39.0`. Both `@clerk/react` and
+`@clerk/shared` require React/React DOM `^18 || ~19.0.3 || ~19.1.4 ||
+~19.2.3 || ~19.3.0-0`; Bluebird's `19.1.0` is outside those peer ranges.
+The SDK's broad top-level React peer therefore does not establish compatibility.
+
+I also resolved `@clerk/expo@2.19.0`, whose Expo peer range is `>=53 <55` and
+whose top-level React peer accepts React 19. Under the current workspace policy,
+its transitive graph resolves `@clerk/react@5.54.0`,
+`@clerk/clerk-js@5.128.0`, and `@clerk/shared@3.48.0`. The latter two have
+React/React DOM peer ranges that exclude `19.1.0`; pnpm reports these as
+unmet peers. This older candidate also reports a missing required
+`expo-auth-session@>=5` peer in Bluebird. The currently declared
+`expo-web-browser` does not satisfy that peer.
+
+The workspace sets `strict-peer-dependencies=false`, so pnpm completes these
+lockfile-only probes with warnings rather than rejecting them. The full
+transitive peer warnings were reviewed manually; neither candidate is accepted.
+No Clerk package or native auth dependency was added, and the app manifest and
+lockfile remain unchanged. No dependency override, React/Expo upgrade, forced
+install, or package-policy change was used.
+
+Clerk's [Expo Quickstart](https://clerk.com/docs/quickstarts/expo) recommends
+installing `expo-secure-store`, `expo-auth-session`, `expo-crypto`, and
+`expo-web-browser`, and configuring the `@clerk/expo` and
+`expo-secure-store` plugins. Bluebird currently has only the last of those
+packages (`expo-web-browser`). The quickstart also requires enabling Clerk's
+Native API and configuring native app identifiers before making a native
+production build. These are later activation prerequisites, not changes made
+in this readiness review.
+
+## Dormant Clerk token bridge design
+
+For a separately approved activation, configure only
+`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`, and use the publishable key for the exact
+Clerk instance whose session tokens the production backend is configured to
+verify. It is a public client key; never place a Clerk secret key in the mobile
+app or an `EXPO_PUBLIC_` variable.
+
+The future adapter should use Clerk's supported Expo `tokenCache` backed by
+`expo-secure-store` rather than manually persisting session tokens. From a
+Clerk-aware hook/context, implement `VerifiedProductionTokenProvider` by
+calling Clerk's `useAuth().getToken()` for each explicit authenticated API
+request. Do not cache a raw token in `AuthContext`, AsyncStorage, query keys, or
+logs. The production API client accepts the provider only when explicitly
+constructed; it is currently not constructed by any screen.
+
+When Clerk is loaded but signed out, or `getToken()` returns `null`, the future
+provider must return `null`; the client rejects the request as a token error
+before calling fetch. An HTTP 401 is exposed as `session_expired`; the app must
+discard that identity's authenticated data and require a valid signed-in
+session before retrying. It must not fall back to the demo token or retry with
+stale credentials. Authenticated query keys already include a member identity
+(`productionAuthenticatedQueryKey(memberId, ...)`). When Clerk reports an
+account change or sign-out, clear the prior identity's React Query data and
+other member-scoped local state before exposing the new account.
+
+This is a design only. `AuthContext` remains the active local/demo auth path;
+no Clerk provider, Clerk token adapter, or authenticated production request is
+connected. The checked-in API server still validates its own
+`JWT_SECRET`/`SESSION_SECRET`-signed tokens, so server-side acceptance of
+Clerk-issued tokens and Clerk-instance parity remain unverified blockers.
+
 ## Supported member contract
 
 All paths below are relative to `https://bluebirdjets.com/api`. IDs in
@@ -93,10 +171,22 @@ All authenticated-client cases use injected mock fetch only. Production-mode
 browser checks intercept public endpoint fixtures and assert that authenticated
 member endpoints are not requested. No production API was contacted.
 
+Current Clerk-readiness checks (2026-10-12):
+
+- `pnpm run typecheck:libs` — passed.
+- `pnpm --filter @workspace/bluebird run typecheck` — passed.
+- `pnpm --filter @workspace/bluebird run test:production-auth-api` — 15 passed,
+  0 failed. All tokens and HTTP responses in this suite are mocks.
+- `git diff --check` — passed.
+- Confirmed `artifacts/bluebird/package.json` and `pnpm-lock.yaml` are unchanged.
+- Confirmed the local/demo `AuthProvider` remains mounted and no Clerk provider
+  or production token provider is connected to app screens.
+
 - `pnpm run typecheck:libs` — passed.
 - `pnpm --filter @workspace/bluebird run typecheck` — passed after the library
   typecheck.
-- `pnpm --filter @workspace/bluebird run test:production-auth-api` — 14 passed.
+- `pnpm --filter @workspace/bluebird run test:production-auth-api` — 14 passed
+  in the earlier authenticated-client review.
 - `pnpm --filter @workspace/bluebird run test:production-membership-plans` — passed.
 - `pnpm --filter @workspace/bluebird run test:startup-stability` — 5 passed.
 - `pnpm --filter @workspace/bluebird run test:network-reliability` — 11 passed.
@@ -105,9 +195,21 @@ member endpoints are not requested. No production API was contacted.
 - `pnpm --filter @workspace/bluebird exec playwright test tests/flight-passenger-flow.spec.mjs --workers=1` — 11 passed.
 - `git diff --check` — passed.
 
+The compatibility probes used `pnpm add --lockfile-only` in disposable
+worktrees. The active workspace's `artifacts/bluebird/package.json` and
+`pnpm-lock.yaml` were not changed.
+
 ## Changed files
+
+Existing authenticated-client foundations:
 
 - `artifacts/bluebird/lib/productionAuthApi.ts`
 - `artifacts/bluebird/tests/production-auth-api.spec.mjs`
 - `artifacts/bluebird/tests/production-queue-readiness.spec.mjs`
+
+Changed in this readiness review:
+
 - `artifacts/bluebird/AUTHENTICATED-API-READINESS.md`
+- `artifacts/bluebird/STAGE_2B_ACTIVATION_CHECKLIST.md`
+- `artifacts/bluebird/tests/production-auth-api.spec.mjs`
+- `.agents/memory/clerk-expo-sdk54-peers.md`

@@ -567,6 +567,29 @@ test("missing or failed token acquisition never reaches the injected fetcher", a
   assert.equal(requests, 0);
 });
 
+test("retrieves a fresh verified token for each explicit request", async () => {
+  let tokenReads = 0;
+  const authorizationHeaders = [];
+  const client = createAuthenticatedProductionApiClient({
+    tokenProvider: {
+      getVerifiedAccessToken: async () => `mock-session-token-${++tokenReads}`,
+    },
+    fetcher: async (url, init) => {
+      authorizationHeaders.push(init.headers.Authorization);
+      return jsonResponse(anonymous);
+    },
+  });
+
+  await client.getMe();
+  await client.getMe();
+
+  assert.equal(tokenReads, 2);
+  assert.deepEqual(authorizationHeaders, [
+    "Bearer mock-session-token-1",
+    "Bearer mock-session-token-2",
+  ]);
+});
+
 test("network, timeout, and caller cancellation are distinct sanitized errors", async () => {
   const networkClient = makeClient(async () => { throw new Error(`failed ${mockOnlyToken}`); });
   await assert.rejects(networkClient.getMe(), ProductionAuthNetworkError);
