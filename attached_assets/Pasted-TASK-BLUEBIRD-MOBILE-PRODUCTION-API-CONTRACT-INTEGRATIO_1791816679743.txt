@@ -1,0 +1,325 @@
+TASK: BLUEBIRD MOBILE — PRODUCTION API CONTRACT INTEGRATION
+
+MODE: IMPLEMENTATION / BUILD
+
+PROJECT: Bluebird Mobile (Expo / React Native)
+
+IMPORTANT:
+This is an implementation task, NOT a planning task.
+Do not stop after creating or updating a task.
+Implement the code and run verification.
+
+SOURCE OF TRUTH:
+
+BLUEBIRD_MOBILE_PRODUCTION_API_CONTRACT.md
+
+This document was exported from the MAIN Bluebird
+backend source code.
+
+It describes the actual Clerk-based backend API.
+
+The mobile project's checked-in OpenAPI and local
+JWT-based API server are NOT authoritative for
+production authenticated integrations.
+
+GOAL:
+
+Replace the incorrect authenticated production
+API contracts introduced in Task #316 with
+the actual main Bluebird backend contracts.
+
+Keep the existing authenticated production
+client dormant until Clerk is activated.
+
+PHASE 1 — INSPECT EXISTING IMPLEMENTATION
+
+Inspect:
+
+artifacts/bluebird/lib/productionAuthApi.ts
+artifacts/bluebird/lib/productionAuthState.ts
+artifacts/bluebird/lib/productionApi.ts
+
+Also inspect existing production readers,
+authentication context, screens and tests.
+
+Identify the actual existing paths before editing.
+
+Do not duplicate the existing API infrastructure.
+
+PHASE 2 — CORRECT AUTHENTICATION CONTRACT
+
+Use:
+
+GET /api/me
+
+Do NOT use:
+
+GET /api/auth/me
+
+Important:
+
+GET /api/me may return HTTP 200 with:
+
+isAuthenticated: false
+
+Treat this as an unauthenticated session.
+
+Use the exact CurrentUser schema from the
+production contract document.
+
+Preserve the existing VerifiedProductionTokenProvider
+architecture.
+
+Do not connect the demo JWT session.
+
+PHASE 3 — PROFILE API
+
+Implement typed methods for:
+
+GET /api/me/profile
+PUT /api/me/profile
+
+Use exact production request/response schemas.
+
+Do not use PATCH /api/auth/me.
+
+Preserve:
+
+- Required profile fields
+- Date of birth validation
+- Home airport
+- Favorite cities
+- Phone verification requirements
+- Notification preferences
+- SMS consent
+- Weight in pounds
+
+Do not activate production profile requests.
+
+PHASE 4 — MEMBERSHIP API
+
+Implement:
+
+GET /api/membership
+
+Use the actual production Membership schema.
+
+Preserve:
+
+- Base / Plus tiers
+- Membership status
+- Payment status
+- Active membership eligibility
+- Skip the Line credits
+- Renewal and cancellation information
+
+Do not infer active membership from tier alone.
+
+Keep public membership plans working.
+
+PHASE 5 — MY TRIPS API
+
+Implement:
+
+GET /api/trips
+
+Use the production response structure:
+
+{
+  "current": [],
+  "past": []
+}
+
+Use the actual TripDetail schema.
+
+Do not invent trip UUIDs or booking status fields.
+
+Use the numeric Empty Leg identifier where
+required by the contract.
+
+Preserve existing trip screens and navigation.
+
+PHASE 6 — FLIGHT QUEUE API
+
+Implement typed methods for:
+
+GET /api/empty-legs/{id}/queue
+POST /api/empty-legs/{id}/queue
+DELETE /api/empty-legs/{id}/queue
+POST /api/empty-legs/{id}/skip-line
+
+Also prepare:
+
+POST /api/empty-legs/{id}/winner/confirm
+POST /api/empty-legs/{id}/winner/decline
+
+Use exact production payloads and response schemas.
+
+Preserve:
+
+- Queue eligibility rules
+- Membership requirements
+- Profile completeness requirements
+- Skip the Line credit behavior
+- Winner confirmation and decline
+- Queue closing restrictions
+
+Do not activate queue mutations.
+
+Do not initiate payments.
+
+PHASE 7 — PASSENGERS AND PETS
+
+Implement the member passenger and pet methods
+documented in the production contract.
+
+Use Empty Leg scoped identifiers.
+
+Use the actual passenger and pet schemas.
+
+Important:
+
+- Passenger and pet IDs are numeric.
+- Weight is measured in pounds.
+- Pet details use breed and weight.
+- Passenger and pet PATCH bodies are not sparse.
+- Passenger limits must be respected.
+- Manifest locking must be respected.
+- Lead passenger cannot be deleted.
+
+CRITICAL:
+
+GET /api/empty-legs/{id}/passengers
+can create a lead passenger record.
+
+Do not invoke this endpoint against production
+during preparation or automated verification.
+
+PHASE 8 — PHONE VERIFICATION
+
+Implement typed API methods for:
+
+POST /api/me/phone-verification/start
+POST /api/me/phone-verification/check
+GET /api/me/phone-verification/status
+
+This is Quo phone ownership verification.
+
+It is NOT Clerk login authentication.
+
+Preserve:
+
+- E.164 phone format
+- Country validation
+- Six-digit PIN
+- Rate limits
+- Retry-after behavior
+- Verification status
+
+Do not send SMS messages.
+
+Do not automatically retry ambiguous SMS sends.
+
+The status GET may have backend side effects.
+
+Do not invoke it against production.
+
+PHASE 9 — SCREEN READINESS
+
+Review existing:
+
+Profile
+Membership
+My Trips
+Flight Queue
+Passengers
+Pets
+
+Prepare screen-level data adapters and
+mock-backed state handling where supported.
+
+Preserve existing navigation and visual design.
+
+Do not show local demo account data as
+real production user information.
+
+Keep authenticated production UI disabled
+until verified Clerk authentication is available.
+
+Do not call protected production endpoints.
+
+PHASE 10 — TESTING
+
+Add focused mocked HTTP tests for:
+
+- Authentication response handling
+- Profile
+- Membership
+- Trips
+- Queue
+- Passengers
+- Pets
+- Phone verification
+- HTTP errors
+- Session expiration
+- Response validation
+- Cancellation and timeouts
+
+Run:
+
+pnpm run typecheck:libs
+
+Then run the Bluebird application typecheck.
+
+Run existing regression tests.
+
+Run:
+
+git diff --check
+
+IMPORTANT RESTRICTIONS:
+
+Do not install Clerk yet.
+
+Do not modify React or Expo versions.
+
+Do not modify the existing AuthContext.
+
+Do not modify the main Bluebird backend.
+
+Do not modify the local API server.
+
+Do not make authenticated production requests.
+
+Do not perform production mutations.
+
+Do not send SMS.
+
+Do not initiate payments.
+
+Do not commit.
+
+Do not push.
+
+Do not invent missing API fields.
+
+Use the uploaded production contract as the
+authoritative source for authenticated API models.
+
+If a schema is UNKNOWN, preserve that uncertainty
+and report it instead of guessing.
+
+FINAL REPORT:
+
+1. Files modified
+2. Corrected production endpoints
+3. Implemented API methods
+4. Screen integration readiness
+5. Remaining Clerk dependencies
+6. Unsupported or unknown fields
+7. Tests executed and results
+8. Confirmation that no production
+   mutations or authenticated requests occurred
+
+Do not mark this implementation complete
+until the code and tests are verified.
