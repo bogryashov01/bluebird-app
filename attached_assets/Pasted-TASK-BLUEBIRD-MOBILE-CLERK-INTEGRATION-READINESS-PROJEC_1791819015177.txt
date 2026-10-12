@@ -1,0 +1,110 @@
+TASK — BLUEBIRD MOBILE CLERK INTEGRATION READINESS
+
+PROJECT: Bluebird Mobile (Expo / React Native)
+
+MODE: IMPLEMENTATION WITH MOCK TESTS
+
+CONTEXT:
+
+Task #336 completed the production API contract correction.
+
+The production API client is ready but dormant.
+
+The MAIN Bluebird backend uses Clerk session tokens.
+
+The mobile app currently uses local/demo authentication.
+
+A previous attempt to install @clerk/expo encountered
+React peer dependency incompatibility with Expo SDK 54.
+
+GOAL:
+
+Determine the safest supported Clerk integration
+for the CURRENT mobile dependency versions.
+
+Do not activate production authentication yet.
+
+STEP 1 — INSPECT DEPENDENCIES
+
+Inspect:
+
+- Expo SDK version
+- React version
+- React Native version
+- package.json
+- pnpm-lock.yaml
+- Existing AuthContext
+- Production auth token-provider interface
+
+STEP 2 — CLERK COMPATIBILITY
+
+Determine whether a compatible @clerk/expo version
+can be installed without:
+
+- React upgrades
+- Expo upgrades
+- Dependency overrides
+- --force
+- --legacy-peer-deps
+
+Do not install incompatible dependencies.
+
+STEP 3 — PRODUCTION AUTH ARCHITECTURE
+
+Prepare an integration design using:
+
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+
+The mobile app must use the SAME Clerk instance
+as the main Bluebird backend.
+
+Never use CLERK_SECRET_KEY in mobile.
+
+Preserve the existing local/demo AuthContext
+until production authentication is verified.
+
+STEP 4 — TOKEN INTEGRATION
+
+Review how a future Clerk session token can be
+supplied to the existing VerifiedProductionTokenProvider.
+
+The provider must:
+
+- Retrieve current session tokens securely
+- Avoid storing raw tokens manually
+- Avoid logging tokens
+- Handle signed-out sessions
+- Handle token expiration
+- Clear identity-scoped caches on account changes
+
+Do not connect the provider to production yet.
+
+STEP 5 — TESTING
+
+Run available dependency compatibility checks,
+typechecks and existing authentication tests.
+
+Do not perform production authenticated requests.
+
+RESTRICTIONS:
+
+Do not modify the main backend.
+Do not modify the local API server.
+Do not change Expo or React versions.
+Do not use dependency overrides.
+Do not activate production member screens.
+Do not send SMS.
+Do not initiate payments.
+Do not commit.
+Do not push.
+
+FINAL REPORT:
+
+1. Current dependency versions
+2. Compatible Clerk SDK version, if available
+3. Installation feasibility
+4. Required mobile configuration
+5. Token-provider integration plan
+6. Remaining blockers
+7. Files modified
+8. Tests executed
