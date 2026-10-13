@@ -2,14 +2,128 @@
 
 ## Status
 
-The dormant authenticated client now models the supplied member contract. It
-is not connected to `AuthContext`, no screen constructs it, and production
-member reads and writes remain unavailable until a verified Clerk token
-provider and server token compatibility are established. In local flight-read
-mode, existing demo screens continue using their existing local adapters. In
-production mode, profile, membership, trips, queue actions, passenger/pet
-records, and trip manifests remain unavailable instead of showing local demo
-member data as production data.
+The dormant authenticated client now models the supplied member contract. A
+Clerk token-provider adapter is prepared but not connected to `AuthContext` or
+any screen. Production member reads and writes remain unavailable until that
+provider is separately approved and native behavior plus server token
+compatibility are established. In local flight-read mode, existing demo screens
+continue using their existing local adapters. In production mode, profile,
+membership, trips, queue actions, passenger/pet records, and trip manifests
+remain unavailable instead of showing local demo member data as production
+data.
+
+## Dormant Clerk token bridge (2026-10-13)
+
+**Status: prepared, intentionally inactive.** Bluebird now has a Clerk Expo
+provider entry point and production-token adapter, but `ClerkProvider` is not
+mounted from `app/_layout.tsx`; `AuthContext`, sign-in screens, navigation, and
+production authentication are unchanged. No authenticated production request
+was made.
+
+### Integration and security boundary
+
+- `DormantClerkProvider` in `lib/dormantClerkIntegration.tsx` reads its key
+  exclusively from `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`. A missing or blank key
+  is considered unconfigured; mounting the dormant provider without a key
+  throws a clear configuration error. No Clerk secret key is used or embedded.
+- The entry point passes Clerk Expo's supported `tokenCache` from
+  `@clerk/expo/token-cache`. Clerk implements that cache with
+  `expo-secure-store` on native; the Clerk package reports no token cache on
+  web. Raw session tokens are never persisted by this adapter.
+- `useDormantClerkProductionTokenProvider()` exposes the isolated bridge for a
+  future consumer under that provider. Its adapter satisfies
+  `VerifiedProductionTokenProvider`, checks current Clerk loaded/signed-in
+  state, and calls Clerk `getToken()` for every explicit request. It returns
+  `null` if Clerk is still loading, signed out, or has no nonblank token. It
+  does not read `AuthContext`, `bluebird_token`, AsyncStorage, or any demo JWT.
+- `clearClerkSession()` delegates to Clerk `signOut()`, allowing Clerk to clear
+  its own session and token-cache state. Identity-scoped app/query data cleanup
+  remains an activation responsibility before account switching is exposed.
+- The checked-in API server still verifies its own
+  `JWT_SECRET`/`SESSION_SECRET`-signed tokens. Acceptance of tokens from the
+  intended Clerk instance and claim/audience compatibility are unverified, so
+  `PRODUCTION_AUTH_AVAILABILITY` correctly remains `unavailable`.
+
+### Requirements still unknown
+
+The task specifies using the existing production Clerk instance, but includes
+no additional requirements from Nick and this work did not inspect Clerk
+dashboard settings or key values; the configured value of
+`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` was not read. Confirm with Nick and the
+production owner which Clerk environment/instance and token template,
+audience/scopes, identity mapping, and acceptance criteria are required. Do not
+infer those values from the presence of the SDK or this adapter.
+
+### Verification (2026-10-13)
+
+- `pnpm run typecheck:libs` — passed; then
+  `pnpm --filter @workspace/bluebird run typecheck` — passed. The first app
+  typecheck, before rebuilding shared libraries, reported 191 stale generated
+  API-client/type errors in 37 files. Rebuilding with `typecheck:libs` cleared
+  them; the final app typecheck passed.
+- `pnpm --filter @workspace/bluebird run test:clerk-bridge` — 6 passed, 0
+  failed. Tests mock Clerk session methods and use only an injected API fetcher:
+  missing key, unloaded/signed-out state, fresh/refreshed tokens, Clerk sign-out
+  cleanup, no demo-token fallback, and bearer authorization.
+- `pnpm --filter @workspace/bluebird run test:production-auth-api` — 15 passed,
+  0 failed; token and response handling remained mock-only.
+- `pnpm --filter @workspace/bluebird run test:startup-stability` — 5 passed,
+  0 failed.
+- `pnpm --filter @workspace/bluebird run test:network-reliability` — 11
+  passed, 0 failed.
+- Local browser regression group — 31 passed, 2 failed. The failures were
+  `family-mobile.spec.mjs` (“primary holder can open Family management,
+  invite a member, and reallocate passes”; invitation-success text not found)
+  and `networking-samples.spec.mjs` (“development networking samples use the
+  real API-backed connection flows”; `route.continue` rejected a protocol
+  change, followed by a timed-out tab click). Both match the baseline failures
+  already recorded in the SDK 57 dependency review; they are not Clerk bridge
+  test failures.
+- Production queue readiness — 5 passed, 0 failed. Production flight API,
+  production airport search, production membership plans, flight-map platform
+  resolution, profile-photo native (1), profile-photo selection (5), airport
+  selection, and passenger-name prefill checks all passed.
+- Expo Metro JavaScript exports with a temporary probe that imported the
+  dormant provider module but never mounted it: web — passed; iOS — passed;
+  Android — passed. These exports validate bundling only, not native runtime
+  behavior. The temporary probe was removed.
+- The managed Bluebird Expo workflow restarted and Metro bundled the web app.
+  The preview screenshot stayed blank during capture; the startup Playwright
+  checks rendered and exercised the existing app routes. The Expo DevTools
+  launcher also reported the previously noted missing `libglib-2.0.so.0`;
+  this did not prevent Metro or the web workflow from running.
+- `git diff --check` — passed. No iOS/Android development build, simulator or
+  device test was run. SecureStore persistence, Clerk session restoration,
+  sign-in/sign-out behavior, refresh and redirect callbacks still require
+  native verification before activation.
+
+### Files changed for this bridge
+
+- `artifacts/bluebird/lib/clerkProductionTokenProvider.ts`
+- `artifacts/bluebird/lib/dormantClerkIntegration.tsx`
+- `artifacts/bluebird/tests/clerk-production-token-provider.spec.mjs`
+- `artifacts/bluebird/package.json` (mock test command only)
+- `artifacts/bluebird/AUTHENTICATED-API-READINESS.md`
+- `artifacts/bluebird/STAGE_2B_ACTIVATION_CHECKLIST.md`
+
+`app/_layout.tsx`, `app.json`, `context/AuthContext.tsx`, `pnpm-lock.yaml`,
+active screens, and the production-auth availability state were not changed.
+
+### Before activation
+
+1. Confirm the required environment's publishable key and Clerk instance with
+   Nick/the production owner; never add a secret key to the mobile app.
+2. Verify the same Clerk instance's token claims, audience, and issuer against
+   the production backend, and document the backend's authenticated, signed-out,
+   and expired-session behavior.
+3. Add and verify approved SecureStore/config-plugin and native app-identifier
+   configuration, then build and test session persistence, token refresh,
+   sign-out, account switching, and auth redirects on supported iOS and Android
+   development builds/devices.
+4. Review cache clearing and 401 handling, then separately approve mounting
+   `DormantClerkProvider`, connecting the token adapter to a production API
+   client, and any screens/AuthContext changes. Do not enable authenticated
+   production requests before those approvals and checks pass.
 
 ## Expo SDK 57 screen migration (2026-10-12)
 
@@ -435,7 +549,7 @@ and the published npm metadata for
 [`@clerk/react@6.17.8`](https://www.npmjs.com/package/@clerk/react/v/6.17.8),
 and [`@clerk/shared@4.40.0`](https://www.npmjs.com/package/@clerk/shared/v/4.40.0).
 
-## Dormant Clerk token bridge design
+## Earlier dormant Clerk token bridge design
 
 For a separately approved activation, configure only
 `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`, and use the publishable key for the exact
@@ -461,11 +575,11 @@ stale credentials. Authenticated query keys already include a member identity
 account change or sign-out, clear the prior identity's React Query data and
 other member-scoped local state before exposing the new account.
 
-This is a design only. `AuthContext` remains the active local/demo auth path;
-no Clerk provider, Clerk token adapter, or authenticated production request is
-connected. The checked-in API server still validates its own
-`JWT_SECRET`/`SESSION_SECRET`-signed tokens, so server-side acceptance of
-Clerk-issued tokens and Clerk-instance parity remain unverified blockers.
+The implementation and current verification are documented in the
+[2026-10-13 bridge section](#dormant-clerk-token-bridge-2026-10-13). This
+earlier design statement is retained as history; production auth remains
+inactive, and server-side acceptance of Clerk-issued tokens is still an
+activation blocker.
 
 ## Supported member contract
 
@@ -616,8 +730,8 @@ Earlier SDK 54 Clerk-readiness checks (2026-10-12):
   0 failed. All tokens and HTTP responses in this suite are mocks.
 - `git diff --check` — passed.
 - Confirmed `artifacts/bluebird/package.json` and `pnpm-lock.yaml` are unchanged.
-- Confirmed the local/demo `AuthProvider` remains mounted and no Clerk provider
-  or production token provider is connected to app screens.
+- Confirmed the local/demo `AuthProvider` remains mounted; the subsequently
+  added Clerk provider and token adapter remain unconnected to app screens.
 
 - `pnpm run typecheck:libs` — passed.
 - `pnpm --filter @workspace/bluebird run typecheck` — passed after the library

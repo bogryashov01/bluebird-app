@@ -1,0 +1,48 @@
+import type { VerifiedProductionTokenProvider } from './productionAuthApi';
+
+export interface ClerkSessionSnapshot {
+  isLoaded: boolean;
+  isSignedIn: boolean | undefined;
+  getToken: () => Promise<string | null>;
+  signOut: () => Promise<void>;
+}
+
+export interface ClerkSessionSource {
+  getCurrentSession: () => ClerkSessionSnapshot;
+}
+
+export interface ClerkProductionTokenProvider extends VerifiedProductionTokenProvider {
+  /** Calls Clerk signOut so Clerk can remove its own session and SecureStore state. */
+  clearClerkSession: () => Promise<void>;
+}
+
+/**
+ * Read only the Expo-public Clerk key. This value is intentionally not sourced
+ * from the demo AuthContext, AsyncStorage, or a server-only secret.
+ */
+export function getClerkPublishableKey(): string | null {
+  const key = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+  return key || null;
+}
+
+/**
+ * Adapt Clerk's current session to the production API contract without
+ * retaining tokens. The session source is read for every operation so a
+ * provider kept by a future API client still observes Clerk state changes.
+ */
+export function createClerkProductionTokenProvider(
+  sessionSource: ClerkSessionSource,
+): ClerkProductionTokenProvider {
+  return {
+    getVerifiedAccessToken: async () => {
+      const session = sessionSource.getCurrentSession();
+      if (!session.isLoaded || session.isSignedIn !== true) return null;
+
+      const token = await session.getToken();
+      return typeof token === 'string' && token.trim() ? token : null;
+    },
+    clearClerkSession: async () => {
+      await sessionSource.getCurrentSession().signOut();
+    },
+  };
+}
