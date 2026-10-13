@@ -50,9 +50,155 @@ Clerk provider, production authentication, or backend configuration was
 changed; successful JavaScript exports do not establish native build or
 authentication readiness.
 
-## Clerk Expo SDK compatibility review (2026-10-12)
+## Clerk Expo SDK 57 dependency installation (2026-10-12)
 
-**Outcome: blocked; do not install or activate Clerk on the current baseline.**
+**Decision: installed `@clerk/expo@4.10.1` with the three absent Expo
+quickstart peers.** The complete resolved graph satisfies Bluebird's current
+Expo/React/React Native peer requirements, and the isolated startup, TypeScript,
+and three-platform Metro-import checks passed. This installs the SDK only:
+`ClerkProvider` is not mounted, and production authentication remains disabled.
+
+### Baseline and package policy
+
+| Package | Bluebird declaration | Installed version |
+| --- | --- | --- |
+| Expo | `~57.0.27` | `57.0.27` |
+| React / React DOM | `19.2.3` / `19.2.3` | `19.2.3` / `19.2.3` |
+| React Native | `0.86.3` | `0.86.3` |
+| Expo Router | `~57.0.25` | `57.0.25` |
+| TypeScript | `~6.0.3` | `6.0.3` |
+| React type packages | `@types/react ~19.2.4`; `@types/react-dom ~19.2.3` | `19.2.4`; `19.2.3` |
+
+The stable `@clerk/expo@4.10.1` release was published on 2026-10-09
+(`@clerk/react@6.17.8`, `@clerk/shared@4.40.0`, and
+`@clerk/clerk-js@6.39.0` were published the same day), older than the
+workspace's existing one-day minimum. The workspace still uses pnpm 10.26.1,
+`minimumReleaseAge: 1440`, `.npmrc` `auto-install-peers=false`, and
+`strict-peer-dependencies=false`. None of those settings changed. No peer
+override, force/legacy-peer option, prerelease, or release-age bypass was used.
+
+### Full Clerk peer graph and Expo module compatibility
+
+| Resolved package | Direct peer requirements | Bluebird resolution |
+| --- | --- | --- |
+| `@clerk/expo@4.10.1` | Expo `>=54 <58`; React `^18 || ^19`; React Native `>=0.75` | Expo `57.0.27`; React `19.2.3`; RN `0.86.3` — satisfied |
+| `@clerk/expo@4.10.1` optional runtime peers | React DOM `^18 || ^19`; Expo Auth Session `>=5`; Constants `>=12`; Crypto `>=12`; Secure Store `>=12.4.0`; Web Browser `>=12.5.0` | React DOM `19.2.3`; SDK 57 packages `57.0.14`, `57.0.21`, `57.0.3`, `57.0.4`, `57.0.3` respectively — all satisfied |
+| `@clerk/react@6.17.8` | React and React DOM `^18 || ~19.0.3 || ~19.1.4 || ~19.2.3 || ~19.3.0-0` | React / React DOM `19.2.3` / `19.2.3` — satisfied |
+| `@clerk/shared@4.40.0` | The same React and React DOM ranges, both optional | React / React DOM `19.2.3` / `19.2.3` — satisfied |
+| `@clerk/clerk-js@6.39.0` | No peer dependencies | No additional peer constraint |
+
+The optional feature peers `@clerk/expo-passkeys >=0.0.6`,
+`@clerk/expo-biometrics >=0.1.0`, `@clerk/expo-google-signin >=0.1.0`,
+`expo-apple-authentication >=7.0.0`, and
+`expo-local-authentication >=13.5.0` were reviewed and intentionally omitted;
+Bluebird is not using those features. The full frozen install emitted no Clerk
+peer conflict, and the isolated dependency tree showed the app, React DOM,
+React Native, Expo, Router, Clerk React, and shared packages using the same
+React 19.2.3 installation. Clerk declares no TypeScript peer; Bluebird's
+TypeScript `6.0.3` check passed.
+
+Clerk's [Expo quickstart](https://clerk.com/docs/expo/getting-started/quickstart)
+uses `expo-secure-store`, `expo-auth-session`, `expo-crypto`, and
+`expo-web-browser` for session storage and hosted browser sign-in. The SDK also
+declares `expo-constants`; Bluebird already had compatible
+`expo-web-browser@57.0.3` and `expo-constants@57.0.21`. Only the three absent
+quickstart packages were added:
+
+- `expo-auth-session@~57.0.14`
+- `expo-crypto@~57.0.3`
+- `expo-secure-store@~57.0.4`
+
+Expo 57.0.27's installed `bundledNativeModules.json` map recommends Auth
+Session `~57.0.14`, Crypto `~57.0.3`, Secure Store `~57.0.4`, Constants
+`~57.0.21`, and Web Browser `~57.0.3`; all five installed versions match it.
+The optional passkey, biometric, Google sign-in, Apple authentication, and
+local-authentication peers were not installed because Bluebird is not using
+those features. Expo SDK 57.0.17 updated React Native to 0.86.3 to resolve the
+documented SDK 56 Hermes V1/Reanimated/Worklets memory regression; Bluebird is
+on 57.0.27. See the
+[Expo SDK 57 release notes](https://expo.dev/changelog/sdk-57).
+
+The online `expo install --check` still reports six SDK package updates:
+`expo-auth-session@57.0.15`, `expo-crypto@57.0.4`, `expo@57.0.28`,
+`expo-location@57.0.21`, `expo-router@57.0.26`, and
+`expo-splash-screen@57.0.10`. The directly relevant newer peer releases
+(`expo-auth-session@57.0.15` and `expo-crypto@57.0.4`) and the Expo patch
+`57.0.28` were published on 2026-10-12, only hours before validation, so the
+1440-minute release-age policy correctly blocks those updates. The other three
+are unrelated baseline patch updates and were not changed. The offline check
+passes against SDK 57.0.27's bundled module map, but Expo explicitly warns that
+offline dependency validation is less reliable; the online warning is recorded
+as an unresolved validation limitation, not a passing online check.
+
+### Native verification boundary and later Clerk approval
+
+Isolated tests imported `ClerkProvider` from a temporary Expo Router probe and
+exported web/iOS/Android bundles; the probe only referenced the symbol and did
+not render a provider. No plugin configuration, app identifiers, hosted-auth
+redirects, Clerk Native API setting, `AuthContext`,
+`VerifiedProductionTokenProvider`, production-authenticated screen/request,
+backend, secret, SMS, or payment code was changed. The temporary probe route
+is removed.
+
+Native builds and device checks could not be run here: Bluebird has no checked-in
+`ios/` or `android/` directories, and `xcodebuild`, `adb`, and `gradle` are
+unavailable. SecureStore behavior, config-plugin output, browser return URLs,
+and native sign-in therefore still need iOS/Android development-build and
+device verification. The dependency install is ready for a separately approved
+ClerkProvider implementation review, but **production authentication is not
+ready to activate** until native behavior and backend Clerk-token validation
+are separately established.
+
+Files changed for this installation:
+
+- `artifacts/bluebird/package.json`
+- `pnpm-lock.yaml`
+- `artifacts/bluebird/AUTHENTICATED-API-READINESS.md`
+
+### Verification results (2026-10-12)
+
+- Disposable worktree: installed the same four-package manifest set under the
+  existing pnpm policy; frozen-lockfile install, library/app typechecks, and
+  web/iOS/Android Metro exports with a temporary `@clerk/expo` import all
+  passed. The startup-stability suite passed 5/5.
+- Main workspace: `pnpm install --frozen-lockfile`, `pnpm run typecheck:libs`,
+  and `pnpm --filter @workspace/bluebird run typecheck` passed. All three
+  Metro exports passed again with the temporary Clerk import present.
+- The Expo offline dependency check passed against SDK 57.0.27's bundled map
+  with Expo's warning that offline checking is less reliable. The online check
+  did not pass: it requests the six newer versions listed above. The newer
+  `expo-auth-session@57.0.15`, `expo-crypto@57.0.4`, `expo@57.0.28`,
+  `expo-location@57.0.21`, `expo-router@57.0.26`, and
+  `expo-splash-screen@57.0.10` were all published on 2026-10-12, under the
+  one-day age limit at validation time. They were not installed.
+- Every Bluebird package test script and every browser regression spec was
+  exercised after installation. All nine non-browser script checks passed.
+  The local browser group passed 36/38 tests; the production-mode group passed
+  16/16. Startup stability specifically passed 5/5. The two local failures
+  also reproduce on the unchanged baseline:
+  - `test:family-mobile`, “primary holder can open Family management, invite a
+    member, and reallocate passes”: after clicking “Create invitation”, the
+    expected “Invitation created. Share the acceptance link with the invited
+    member.” message was not found.
+  - `test:networking-samples`, “development networking samples use the real
+    API-backed connection flows”: Playwright failed with
+    `route.continue: New URL must have same protocol as overridden URL`, then
+    the test's tab click timed out.
+  These are reported as existing regression failures, not passes; the baseline
+  comparison found the same failures without Clerk installed.
+- Restarted `artifacts/bluebird: expo`; Metro started and bundled the web app.
+  The workflow also logs a non-fatal React Native DevTools launcher error
+  because this environment lacks `libglib-2.0.so.0`. Preview screenshots
+  remained blank during the short capture window; a direct browser check after
+  8 seconds rendered Bluebird's “Private aviation, redefined. Get Started”
+  entry screen with HTTP 200 and no page errors. Browser preview and native
+  behavior are not substitutes for native builds or device verification.
+
+## Historical Clerk Expo compatibility review (SDK 54 baseline; 2026-10-12)
+
+**Historical outcome for the then-current Expo 54 / React 19.1.0 baseline:
+blocked.** That assessment is superseded by the SDK 57 dependency installation
+above; its version table and peer findings are retained as history.
 
 | Package | Bluebird declaration | Lockfile version |
 | --- | --- | --- |
@@ -82,12 +228,13 @@ unmet peers. This older candidate also reports a missing required
 
 The workspace sets `strict-peer-dependencies=false`, so pnpm completes these
 lockfile-only probes with warnings rather than rejecting them. The full
-transitive peer warnings were reviewed manually; neither candidate is accepted.
-No Clerk package or native auth dependency was added, and the app manifest and
-lockfile remain unchanged. No dependency override, React/Expo upgrade, forced
-install, or package-policy change was used.
+transitive peer warnings were reviewed manually; neither SDK 54 candidate was
+accepted. At that point no Clerk package was added and the manifest/lockfile
+were unchanged; the later SDK 57 installation is documented above. No
+dependency override, React/Expo upgrade, forced install, or package-policy
+change was used.
 
-### Isolated compatibility recheck (2026-10-12)
+### Historical isolated compatibility recheck (SDK 54 baseline; 2026-10-12)
 
 The registry still tags `@clerk/expo@4.10.1` as the latest stable release.
 `4.10.2-canary.v20261009234607` is a prerelease and was not treated as an
@@ -117,20 +264,21 @@ plugins were enabled. The dependency set was not copied to the active workspace.
 
 The historical SDK 56 baseline-upgrade assessment below identified a React
 patch compatible with those Clerk transitive peers, but not a safe runtime for
-Bluebird's Reanimated/Worklets usage. The later SDK 57 screen migration is
-recorded above. It does not approve installing Clerk or activating
-authentication; first re-check the full resolved Clerk graph against the
-current baseline. Do not pin Clerk internals, override peers, or change the
-workspace policy to make an incompatible graph appear compatible.
+Bluebird's Reanimated/Worklets usage. The later SDK 57 screen migration alone
+did not approve installing Clerk; the separate current SDK 57 dependency
+review above records the subsequent full-graph validation and minimal install.
+Do not pin Clerk internals, override peers, or change the workspace policy to
+make an incompatible graph appear compatible.
 
-Clerk's [Expo Quickstart](https://clerk.com/docs/quickstarts/expo) recommends
+At the time of this historical SDK 54 review, Clerk's
+[Expo Quickstart](https://clerk.com/docs/quickstarts/expo) recommended
 installing `expo-secure-store`, `expo-auth-session`, `expo-crypto`, and
 `expo-web-browser`, and configuring the `@clerk/expo` and
-`expo-secure-store` plugins. Bluebird currently has only the last of those
-packages (`expo-web-browser`). The quickstart also requires enabling Clerk's
-Native API and configuring native app identifiers before making a native
-production build. These are later activation prerequisites, not changes made
-in this readiness review.
+`expo-secure-store` plugins. Bluebird then had only `expo-web-browser`; the SDK
+57 installation above adds the three missing quickstart packages. Enabling
+Clerk's Native API, configuring native app identifiers, and adding config
+plugins remain later activation prerequisites, not changes made in this
+dependency-only task.
 
 ## Historical Expo SDK baseline-upgrade assessment (Task 344, 2026-10-12)
 
@@ -395,7 +543,7 @@ winner, passenger/pet mutation, SMS, or payment request was made.
 - Contract shapes were source-reviewed only; no production runtime request
   was made.
 
-## Verification
+## Earlier verification history (before the SDK 57 Clerk installation)
 
 All authenticated-client cases use injected mock fetch only. Production-mode
 browser checks intercept public endpoint fixtures and assert that authenticated
@@ -484,9 +632,10 @@ Earlier SDK 54 Clerk-readiness checks (2026-10-12):
 - `pnpm --filter @workspace/bluebird exec playwright test tests/flight-passenger-flow.spec.mjs --workers=1` — 11 passed.
 - `git diff --check` — passed.
 
-The compatibility probes used `pnpm add --lockfile-only` in disposable
-worktrees. The active workspace's `artifacts/bluebird/package.json` and
-`pnpm-lock.yaml` were not changed.
+The earlier SDK 54/56 compatibility probes used disposable worktrees; at that
+time, the active workspace's Bluebird manifest and lockfile were unchanged.
+The separate SDK 57 Clerk installation and its current results are recorded
+above and in the current verification section.
 
 ## Changed files
 
@@ -503,3 +652,9 @@ Changed in this readiness review:
 - `artifacts/bluebird/tests/production-auth-api.spec.mjs`
 - `.agents/memory/clerk-expo-sdk54-peers.md`
 - `.agents/memory/MEMORY.md`
+
+Changed for this SDK 57 Clerk dependency installation:
+
+- `artifacts/bluebird/package.json`
+- `pnpm-lock.yaml`
+- `artifacts/bluebird/AUTHENTICATED-API-READINESS.md`
