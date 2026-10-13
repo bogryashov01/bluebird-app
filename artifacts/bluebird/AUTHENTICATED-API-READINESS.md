@@ -20,110 +20,181 @@ mounted from `app/_layout.tsx`; `AuthContext`, sign-in screens, navigation, and
 production authentication are unchanged. No authenticated production request
 was made.
 
-### Integration and security boundary
+### Verified mobile path and boundary
 
 - `DormantClerkProvider` in `lib/dormantClerkIntegration.tsx` reads its key
   exclusively from `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`. A missing or blank key
   is considered unconfigured; mounting the dormant provider without a key
-  throws a clear configuration error. No Clerk secret key is used or embedded.
-- The entry point passes Clerk Expo's supported `tokenCache` from
-  `@clerk/expo/token-cache`. Clerk implements that cache with
-  `expo-secure-store` on native; the Clerk package reports no token cache on
-  web. Raw session tokens are never persisted by this adapter.
+  throws a configuration error. The code does not read the configured value,
+  so the exact value/environment and the production Clerk instance are not
+  verified. No Clerk secret key is used or embedded.
+- The entry point passes Clerk Expo's `tokenCache` from
+  `@clerk/expo/token-cache`. The installed SDK implementation uses
+  `expo-secure-store` on native (including its configured
+  `AFTER_FIRST_UNLOCK` accessibility option) and exports no token cache on
+  web. This source evidence does not verify SecureStore persistence or restore
+  on an iOS/Android device.
 - `useDormantClerkProductionTokenProvider()` exposes the isolated bridge for a
   future consumer under that provider. Its adapter satisfies
   `VerifiedProductionTokenProvider`, checks current Clerk loaded/signed-in
   state, and calls Clerk `getToken()` for every explicit request. It returns
-  `null` if Clerk is still loading, signed out, or has no nonblank token. It
-  does not read `AuthContext`, `bluebird_token`, AsyncStorage, or any demo JWT.
-- `clearClerkSession()` delegates to Clerk `signOut()`, allowing Clerk to clear
-  its own session and token-cache state. Identity-scoped app/query data cleanup
-  remains an activation responsibility before account switching is exposed.
-- The checked-in API server still verifies its own
-  `JWT_SECRET`/`SESSION_SECRET`-signed tokens. Acceptance of tokens from the
-  intended Clerk instance and claim/audience compatibility are unverified, so
-  `PRODUCTION_AUTH_AVAILABILITY` correctly remains `unavailable`.
+  `null` if Clerk is still loading, signed out, or returns no nonblank token.
+  It retains no token and does not read `AuthContext`, `bluebird_token`,
+  AsyncStorage, or any demo JWT. `getToken()` is called without a template
+  argument; the required production token type/template and claims are not
+  specified by the mobile code.
+- `clearClerkSession()` delegates to Clerk `signOut()`. It is not wired to
+  active `AuthContext.signOut()`, which continues to call the demo API logout,
+  remove the demo token/user from AsyncStorage, clear query data, and navigate
+  to the existing welcome route. Clerk sign-out, app/query cache clearing, and
+  account-switch ordering must be integrated and tested separately before
+  activation.
+- `createAuthenticatedProductionApiClient()` asks its injected provider for a
+  token for each explicit request, rejects missing/blank/whitespace tokens
+  before fetch, sends `Authorization: Bearer <token>` with
+  `credentials: 'omit'`, and validates the production base URL. It does not
+  send cookies. A non-2xx HTTP 401 is normalized locally to
+  `ProductionAuthHttpError` with code `session_expired`; there is no automatic
+  refresh/retry or Clerk sign-out in that client. This mapping describes client
+  code only, not the deployed server's response to an expired token.
 
-### Requirements still unknown
+### Supplied contract comparison
 
-The task specifies using the existing production Clerk instance, but includes
-no additional requirements from Nick and this work did not inspect Clerk
-dashboard settings or key values; the configured value of
-`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` was not read. Confirm with Nick and the
-production owner which Clerk environment/instance and token template,
-audience/scopes, identity mapping, and acceptance criteria are required. Do not
-infer those values from the presence of the SDK or this adapter.
+The supplied `0_BLUEBIRD_MOBILE_PRODUCTION_API_CONTRACT` is a source-derived
+snapshot dated 2026-10-12 and explicitly says production runtime was not tested.
+Its authentication section requires HTTPS
+`Authorization: Bearer <Clerk session token>`, says Clerk validates expiration
+and the SDK refreshes/gets tokens (no custom refresh endpoint), and describes
+protected routes as returning 401 when identity is unresolved. It says
+`GET /api/me` is the exception: it is optional-auth and returns HTTP 200
+signed-out data with `isAuthenticated: false`, including for caught identity
+lookup failures. The contract also explicitly leaves exact expired/malformed
+token responses and production session TTL unknown and warns not to assume all
+expired tokens return JSON 401.
+
+The client models `/api/me` at its production `/api` base path, requires a
+token before every call (including `getMe()`), and validates/returns the
+`isAuthenticated` boolean without turning `false` into an error. Therefore:
+
+- A **no-token** call cannot exercise the contract's anonymous `/api/me`
+  response through this authenticated client: token acquisition fails before
+  fetch. A separate unauthenticated request path would be needed if the app
+  must use `/api/me` to discover signed-out state before Clerk sign-in.
+- A **token-bearing HTTP 200** whose JSON says `isAuthenticated: false` is
+  parsed as a signed-out result; callers must check that field before treating
+  the response as an authenticated identity.
+- For protected operations, the client treats an HTTP 401 as a local
+  `session_expired` error, but it neither proves what the server returns nor
+  retries with a refreshed Clerk token. The contract's exact deployed
+  expired-token behavior remains unknown.
+
+These distinctions are covered only by local mocks: the bridge test supplies a
+mock Clerk session and injected fetcher, and the API test separately verifies
+that a null token prevents its injected fetcher from running. A mocked HTTP 200
+is not evidence of a production route, Clerk instance, or server acceptance.
+
+### Backend and production unknowns
+
+The supplied contract describes a Clerk-based backend source snapshot and
+states that production runtime was not tested. The checked-in
+`artifacts/api-server/src/middlewares/auth.ts` is a separate implementation:
+it signs `{ userId }` tokens with `JWT_SECRET` or `SESSION_SECRET` (development
+fallback only in development), then verifies that token with the same secret
+and checks a local revoked-token table. Missing/malformed or unverifiable
+tokens produce local 401 responses. This source does not show Clerk
+verification, an issuer/audience check, or acceptance of Clerk session tokens.
+It must not be used to claim that the supplied contract's server, or production,
+accepts tokens issued by the intended Clerk instance. Its local 401 behavior
+also does not resolve the contract's deployed-expiry unknown.
+
+Before activation, Nick or the production API owner must answer and provide
+evidence for all of the following:
+
+1. Which exact Clerk instance/environment (development, staging, production)
+   is intended, and which app/account/origins and native identifiers are
+   registered for Bluebird?
+2. Which environment-specific `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` belongs to
+   that instance? Confirm its environment and matching issuer without posting
+   the key in chat, source, or logs; this audit did not read any configured
+   value.
+3. Must the app send the default Clerk session token or a named JWT template?
+   What exact issuer, audience, authorized-party/origin, subject/identity mapping,
+   and other required claims does the API validate? Is an explicit Clerk
+   `getToken({ template: ... })` call required?
+4. Which deployed backend validates those tokens, and what change/configuration
+   makes it accept only the intended issuer/claims while mapping the Clerk
+   identity to a Bluebird account? Confirm that `/api/me` and the member
+   routes in the contract are deployed on the same service as the mobile base
+   URL; the checked-in API-server middleware is not proof.
+5. What exact deployed responses/statuses should the app expect for missing,
+   malformed, expired, revoked, pending, and otherwise unresolvable sessions?
+   In particular, confirm `/api/me`'s anonymous 200/`isAuthenticated: false`,
+   protected-route 401 behavior, response bodies, and whether a fresh Clerk
+   token is accepted after an expiry response.
+
+No answer to these production-specific questions is established by the
+publishable-key variable name, installed SDK, contract snapshot, local server
+source, or mocked tests.
+
+### Remaining native and security gates
+
+Still required are native iOS and Android development-build checks for
+SecureStore writes/restoration, hosted sign-in return URLs, fresh token behavior,
+sign-out, account switching, and app data/query-cache clearing. Expo web/iOS/
+Android Metro exports only establish JavaScript bundling and are not runtime
+verification. Do not log or persist bearer tokens outside Clerk's supported
+secure cache; do not add a secret key to the app; keep production URL validation
+and `credentials: 'omit'`; and do not silently route demo tokens into production
+requests.
 
 ### Verification (2026-10-13)
 
-- `pnpm run typecheck:libs` — passed; then
-  `pnpm --filter @workspace/bluebird run typecheck` — passed. The first app
-  typecheck, before rebuilding shared libraries, reported 191 stale generated
-  API-client/type errors in 37 files. Rebuilding with `typecheck:libs` cleared
-  them; the final app typecheck passed.
 - `pnpm --filter @workspace/bluebird run test:clerk-bridge` — 6 passed, 0
-  failed. Tests mock Clerk session methods and use only an injected API fetcher:
-  missing key, unloaded/signed-out state, fresh/refreshed tokens, Clerk sign-out
-  cleanup, no demo-token fallback, and bearer authorization.
-- `pnpm --filter @workspace/bluebird run test:production-auth-api` — 15 passed,
-  0 failed; token and response handling remained mock-only.
-- `pnpm --filter @workspace/bluebird run test:startup-stability` — 5 passed,
-  0 failed.
-- `pnpm --filter @workspace/bluebird run test:network-reliability` — 11
+  failed.
+- `pnpm --filter @workspace/bluebird run test:production-auth-api` — 15
   passed, 0 failed.
-- Local browser regression group — 31 passed, 2 failed. The failures were
-  `family-mobile.spec.mjs` (“primary holder can open Family management,
-  invite a member, and reallocate passes”; invitation-success text not found)
-  and `networking-samples.spec.mjs` (“development networking samples use the
-  real API-backed connection flows”; `route.continue` rejected a protocol
-  change, followed by a timed-out tab click). Both match the baseline failures
-  already recorded in the SDK 57 dependency review; they are not Clerk bridge
-  test failures.
-- Production queue readiness — 5 passed, 0 failed. Production flight API,
-  production airport search, production membership plans, flight-map platform
-  resolution, profile-photo native (1), profile-photo selection (5), airport
-  selection, and passenger-name prefill checks all passed.
-- Expo Metro JavaScript exports with a temporary probe that imported the
-  dormant provider module but never mounted it: web — passed; iOS — passed;
-  Android — passed. These exports validate bundling only, not native runtime
-  behavior. The temporary probe was removed.
-- The managed Bluebird Expo workflow restarted and Metro bundled the web app.
-  The preview screenshot stayed blank during capture; the startup Playwright
-  checks rendered and exercised the existing app routes. The Expo DevTools
-  launcher also reported the previously noted missing `libglib-2.0.so.0`;
-  this did not prevent Metro or the web workflow from running.
-- `git diff --check` — passed. No iOS/Android development build, simulator or
-  device test was run. SecureStore persistence, Clerk session restoration,
-  sign-in/sign-out behavior, refresh and redirect callbacks still require
-  native verification before activation.
+- Both suites compile the local TypeScript modules and run Node tests with
+  injected mock sessions/fetchers. They do not use production credentials or
+  make network requests.
+- The test coverage confirms missing/blank key handling, no token request while
+  Clerk is unloaded or signed out, fresh token acquisition per request,
+  delegated Clerk sign-out, no demo-token fallback, Bearer header, mocked
+  `/api/me` false result, and no fetch when the provider has no token. It does
+  not confirm production `/api/me` behavior or server acceptance.
+- No production request, Clerk Dashboard inspection, credential read, SMS,
+  payment, deployment, native iOS/Android build, simulator, or device test was
+  performed. Native persistence, restore, redirects, and sign-in/sign-out still
+  require device verification.
 
 ### Files changed for this bridge
 
-- `artifacts/bluebird/lib/clerkProductionTokenProvider.ts`
-- `artifacts/bluebird/lib/dormantClerkIntegration.tsx`
-- `artifacts/bluebird/tests/clerk-production-token-provider.spec.mjs`
-- `artifacts/bluebird/package.json` (mock test command only)
 - `artifacts/bluebird/AUTHENTICATED-API-READINESS.md`
 - `artifacts/bluebird/STAGE_2B_ACTIVATION_CHECKLIST.md`
 
-`app/_layout.tsx`, `app.json`, `context/AuthContext.tsx`, `pnpm-lock.yaml`,
-active screens, and the production-auth availability state were not changed.
+The audit changed documentation only. `app/_layout.tsx`, `app.json`,
+`context/AuthContext.tsx`, the token bridge, API server, active screens, and
+production-auth availability state were not changed.
 
 ### Before activation
 
-1. Confirm the required environment's publishable key and Clerk instance with
-   Nick/the production owner; never add a secret key to the mobile app.
-2. Verify the same Clerk instance's token claims, audience, and issuer against
-   the production backend, and document the backend's authenticated, signed-out,
-   and expired-session behavior.
-3. Add and verify approved SecureStore/config-plugin and native app-identifier
-   configuration, then build and test session persistence, token refresh,
-   sign-out, account switching, and auth redirects on supported iOS and Android
-   development builds/devices.
-4. Review cache clearing and 401 handling, then separately approve mounting
-   `DormantClerkProvider`, connecting the token adapter to a production API
-   client, and any screens/AuthContext changes. Do not enable authenticated
-   production requests before those approvals and checks pass.
+1. Get the instance, environment-specific key configuration, token type/template,
+   required claims, identity mapping, and deployment ownership confirmed in
+   writing by Nick/the production API owner.
+2. Have the production API owner confirm server-side issuer/signature/audience
+   validation and exact `/api/me`, protected-route, and expired-session
+   semantics using an approved non-production test environment. Keep any
+   production runtime verification separate and explicitly authorized.
+3. Complete native SecureStore/config-plugin/app-identifier and deep-link
+   checks on supported iOS and Android development builds. Verify fresh token
+   retrieval, restore, sign-out, account switching, and data/cache isolation.
+4. Resolve the no-token `/api/me` contract mismatch and decide how the app
+   distinguishes anonymous 200 from authenticated state before connecting any
+   screens.
+5. Review error handling, cache clearing, privacy/logging, and token handling;
+   separately approve mounting `DormantClerkProvider`, connecting the provider
+   to the production API client, and any `AuthContext`, navigation, or screen
+   changes. Keep `PRODUCTION_AUTH_AVAILABILITY` unavailable until each gate is
+   evidenced; activate only in a separate approved change.
 
 ## Expo SDK 57 screen migration (2026-10-12)
 
