@@ -1,11 +1,54 @@
 # Bluebird authenticated production API readiness
 
+## Feature-flagged Clerk UI preparation (2026-10-13)
+
+**Status: prepared and inactive by default; production authentication is not
+ready.** Bluebird now has separate Clerk sign-in and sign-up routes and a
+conditional Clerk provider mount. `EXPO_PUBLIC_ENABLE_CLERK_AUTH` must equal
+the literal string `true`, and `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` must match
+the expected public-key format. A key alone, a missing flag, another flag
+value, or a blank/invalid key leaves Clerk out of the active provider and
+navigation trees. Direct access to disabled routes redirects to the existing
+phone/demo welcome screen.
+
+The Clerk management status was `not_configured` during this preparation, so
+no Clerk instance or enabled authentication method could be confirmed. The
+screens intentionally offer no email, password, phone, SMS, or OAuth actions
+and do not call Clerk sign-in/sign-up APIs or create accounts. They show
+loading, signed-out, signed-in, and sign-out-error states, and provide explicit
+Clerk sign-out when a session exists. The existing phone onboarding and
+`AuthContext` remain unchanged.
+
+When enabled with a valid key, Clerk Expo's `tokenCache` (SecureStore-backed
+on native) is used for the isolated UI session. This does not connect Clerk to
+the demo JWT getter, `AuthContext`, generated API client, or production member
+requests. The routes make no member/API calls; production auth remains
+`unavailable`, and no authenticated production request was made.
+
+### Owner confirmations and activation blockers
+
+- Nick/product owner and API owner must identify the intended Clerk
+  instance/environment and confirm its enabled sign-in methods. Only methods
+  explicitly confirmed for that instance may be added.
+- Confirm the matching environment-specific public key without posting it in
+  source or chat. Never add a Clerk secret key to mobile.
+- Confirm native app identifiers, redirect/return URLs, and SecureStore
+  persistence/restoration using iOS and Android development builds.
+- Confirm backend token verification, token/template/claims, identity mapping,
+  `/api/me` semantics, and protected-route/expiry responses in an approved
+  non-production environment before considering a production API connection.
+
+Keep the flag disabled in release configuration until these confirmations and
+native checks are complete. Enabling it only mounts the isolated provider and
+shows the no-method status; it does not activate production member
+authentication.
+
 ## Status
 
 The dormant authenticated client now models the supplied member contract. A
 Clerk token-provider adapter is prepared but not connected to `AuthContext` or
-any screen. Production member reads and writes remain unavailable until that
-provider is separately approved and native behavior plus server token
+any production request. Production member reads and writes remain unavailable
+until that provider is separately approved and native behavior plus server token
 compatibility are established. In local flight-read mode, existing demo screens
 continue using their existing local adapters. In production mode, profile,
 membership, trips, queue actions, passenger/pet records, and trip manifests
@@ -14,20 +57,19 @@ data.
 
 ## Dormant Clerk token bridge (2026-10-13)
 
-**Status: prepared, intentionally inactive.** Bluebird now has a Clerk Expo
-provider entry point and production-token adapter, but `ClerkProvider` is not
-mounted from `app/_layout.tsx`; `AuthContext`, sign-in screens, navigation, and
-production authentication are unchanged. No authenticated production request
-was made.
+**Status: adapter prepared; production API integration intentionally inactive.**
+The root layout conditionally mounts the Clerk Expo provider only for the
+explicitly enabled, syntactically valid public configuration described above.
+The adapter is not connected to `AuthContext` or any API request. Production
+authenticated requests remain unavailable.
 
 ### Verified mobile path and boundary
 
-- `DormantClerkProvider` in `lib/dormantClerkIntegration.tsx` reads its key
-  exclusively from `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`. A missing or blank key
-  is considered unconfigured; mounting the dormant provider without a key
-  throws a configuration error. The code does not read the configured value,
-  so the exact value/environment and the production Clerk instance are not
-  verified. No Clerk secret key is used or embedded.
+- `DormantClerkProvider` in `lib/dormantClerkIntegration.tsx` mounts only when
+  the exact opt-in flag is set and the public key matches the expected
+  `pk_test_…`/`pk_live_…` format. This is structural validation only; it does
+  not establish the key value, instance, environment, or enabled methods. No
+  Clerk secret key is used or embedded.
 - The entry point passes Clerk Expo's `tokenCache` from
   `@clerk/expo/token-cache`. The installed SDK implementation uses
   `expo-secure-store` on native (including its configured
@@ -43,12 +85,13 @@ was made.
   AsyncStorage, or any demo JWT. `getToken()` is called without a template
   argument; the required production token type/template and claims are not
   specified by the mobile code.
-- `clearClerkSession()` delegates to Clerk `signOut()`. It is not wired to
-  active `AuthContext.signOut()`, which continues to call the demo API logout,
-  remove the demo token/user from AsyncStorage, clear query data, and navigate
-  to the existing welcome route. Clerk sign-out, app/query cache clearing, and
-  account-switch ordering must be integrated and tested separately before
-  activation.
+- `clearClerkSession()` delegates to Clerk `signOut()`. The isolated Clerk
+  routes also offer Clerk-only sign-out when a session is present. Neither is
+  wired to active `AuthContext.signOut()`, which continues to call the demo
+  API logout, remove the demo token/user from AsyncStorage, clear query data,
+  and navigate to the existing welcome route. Clerk sign-out, app/query cache
+  clearing, and account-switch ordering must be integrated and tested
+  separately before activation.
 - `createAuthenticatedProductionApiClient()` asks its injected provider for a
   token for each explicit request, rejects missing/blank/whitespace tokens
   before fetch, sends `Authorization: Bearer <token>` with
@@ -166,12 +209,13 @@ requests.
   performed. Native persistence, restore, redirects, and sign-in/sign-out still
   require device verification.
 
-### Files changed for this bridge
+### Earlier bridge audit scope
 
 - `artifacts/bluebird/AUTHENTICATED-API-READINESS.md`
 - `artifacts/bluebird/STAGE_2B_ACTIVATION_CHECKLIST.md`
 
-The audit changed documentation only. `app/_layout.tsx`, `app.json`,
+The 2026-10-13 bridge audit changed documentation only. At that point,
+`app/_layout.tsx`, `app.json`,
 `context/AuthContext.tsx`, the token bridge, API server, active screens, and
 production-auth availability state were not changed.
 
@@ -191,10 +235,31 @@ production-auth availability state were not changed.
    distinguishes anonymous 200 from authenticated state before connecting any
    screens.
 5. Review error handling, cache clearing, privacy/logging, and token handling;
-   separately approve mounting `DormantClerkProvider`, connecting the provider
-   to the production API client, and any `AuthContext`, navigation, or screen
-   changes. Keep `PRODUCTION_AUTH_AVAILABILITY` unavailable until each gate is
-   evidenced; activate only in a separate approved change.
+   separately approve connecting the UI-only provider to the production API
+   client and any `AuthContext`, navigation, or screen changes. Keep
+   `PRODUCTION_AUTH_AVAILABILITY` unavailable until each gate is evidenced;
+   activate only in a separate approved change.
+
+## Clerk UI preparation verification (2026-10-13)
+
+- `pnpm run typecheck:libs` — passed; followed by
+  `pnpm --filter @workspace/bluebird run typecheck` — passed.
+- `pnpm --filter @workspace/bluebird run test:clerk-auth-ui` — 5 passed,
+  covering strict flag/key gating, provider/route access conditions, auth
+  loading/errors/signed-out/signed-in state, Clerk sign-out success/failure,
+  and no network request during sign-out.
+- `pnpm --filter @workspace/bluebird run test:clerk-bridge` — 6 passed;
+  `pnpm --filter @workspace/bluebird run test:production-auth-api` — 15
+  passed. Both are mock-only and do not make production requests.
+- Startup stability — 6 passed, including direct disabled-route redirects to
+  the demo welcome screen with zero API calls. Network reliability — 11 passed;
+  production queue readiness — 5; membership plans — 2; passenger flow — 11.
+- Expo web, iOS, and Android JavaScript exports all passed with the Clerk flag
+  explicitly false and the public key blank. These validate bundling only.
+- No real Clerk credentials or methods were configured or used. No production
+  API request was made. Native iOS/Android device sign-in, SecureStore
+  persistence/restoration, deep links, and sign-out were not verified; these
+  remain activation blockers.
 
 ## Expo SDK 57 screen migration (2026-10-12)
 

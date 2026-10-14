@@ -3,19 +3,22 @@ import { ClerkProvider, useAuth } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import {
   createClerkProductionTokenProvider,
-  getClerkPublishableKey,
   type ClerkProductionTokenProvider,
   type ClerkSessionSnapshot,
 } from './clerkProductionTokenProvider';
+import {
+  CLERK_AUTH_CONFIGURATION,
+  shouldMountClerkProvider,
+} from './clerkAuthConfig';
 
 /**
- * Prepared integration entry point for a separately approved activation.
- * Intentionally not mounted from app/_layout.tsx.
+ * The isolated Clerk UI can mount this provider only after both the explicit
+ * feature flag and a structurally valid Expo-public key are present.
  */
 export function DormantClerkProvider({ children }: { children: React.ReactNode }) {
-  const publishableKey = getClerkPublishableKey();
-  if (!publishableKey) {
-    throw new Error('Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY for Clerk integration.');
+  const { publishableKey } = CLERK_AUTH_CONFIGURATION;
+  if (!shouldMountClerkProvider(CLERK_AUTH_CONFIGURATION) || !publishableKey) {
+    return <>{children}</>;
   }
 
   return (

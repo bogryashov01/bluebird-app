@@ -1,18 +1,30 @@
 # Stage 2B Authentication Activation Checklist
 
-Production authentication remains inactive. Do not mount a Clerk provider,
-replace the current `AuthContext`, or make authenticated production requests
-until every prerequisite below is verified and activation is separately
-approved.
+Production authentication remains inactive. The mobile app may mount its
+isolated Clerk provider only when `EXPO_PUBLIC_ENABLE_CLERK_AUTH` is exactly
+`true` and a syntactically valid `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` is
+present. This gates the prepared UI only. Do not connect Clerk to `AuthContext`
+or make authenticated production requests until every prerequisite below is
+verified and activation is separately approved.
 
 ## Audit finding
 
-Bluebird has an isolated Clerk Expo entry point and a production-token adapter,
-but `ClerkProvider` is not mounted. Demo/local `AuthContext`, screens, and
-navigation remain unchanged; `PRODUCTION_AUTH_AVAILABILITY` remains
-`unavailable`. The SDK's token cache uses Expo SecureStore on native, but
-persistence/restoration has not been tested on a device. Bridge and API tests
-use injected sessions/fetchers only; they are not production verification.
+Bluebird has an isolated Clerk Expo provider/token adapter plus feature-flagged
+sign-in and sign-up routes. The provider is absent unless the exact opt-in flag
+and a structurally valid public key are both present. No Clerk instance or
+enabled authentication method is currently confirmed, so the routes make no
+sign-in/sign-up call and do not create accounts; signed-in sessions can be
+explicitly signed out through Clerk. Demo/local `AuthContext`, onboarding,
+token getter, API client, and `PRODUCTION_AUTH_AVAILABILITY` remain unchanged
+(`unavailable`). The SDK token cache uses Expo SecureStore on native, but
+persistence/restoration has not been tested on a device. All bridge/UI tests
+use injected mock sessions/configuration/fetchers only.
+
+The Clerk management check returned `not_configured`. Nick/product owner and
+the production API owner must confirm the intended instance/environment,
+enabled sign-in methods, public key provenance, native redirect settings, and
+token contract before a method is implemented or the feature flag is enabled
+in a release. Unknown methods are not assumed or invoked.
 
 The supplied API contract is a dated source snapshot, not a production test.
 It specifies HTTPS Clerk Bearer sessions, optional-auth `GET /api/me` with
@@ -92,10 +104,11 @@ behavior. For the full source comparison and evidence, see the
 
 - [ ] Nick/product owner and API owner approve activation only after Gates 1–3
       are complete and evidence is recorded.
-- [ ] In a separate change, explicitly mount `DormantClerkProvider`, connect
-      the Clerk adapter to approved production requests, handle signed-out
+- [ ] In a separate approved change, connect the current UI-only provider and
+      Clerk adapter to approved production requests, handle signed-out
       `/api/me` semantics, and make any `AuthContext`, screen, or navigation
-      changes required by the approved design.
+      changes required by the approved design. The current flag-gated provider
+      is UI-only and must not be treated as this activation.
 - [ ] Keep `PRODUCTION_AUTH_AVAILABILITY` unavailable until backend acceptance,
       native behavior, error handling, and cache isolation are verified. Review
       every production-authenticated screen and shared member-data hook before

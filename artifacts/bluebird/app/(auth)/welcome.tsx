@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
@@ -38,6 +39,31 @@ export default function WelcomeScreen() {
             <Text style={[styles.pillText, { color: colors.primaryForeground }]}>Continue with Phone</Text>
           </View>
         </TouchableOpacity>
+
+        {CLERK_AUTH_CONFIGURATION.enabled && (
+          <View style={styles.clerkActions}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              onPress={() => router.push('/(clerk-auth)/sign-in' as never)}
+              activeOpacity={0.85}
+              testID="clerk-sign-in-entry"
+            >
+              <Text style={[styles.clerkLink, { color: colors.paleBlue }]}>
+                Clerk sign in
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              onPress={() => router.push('/(clerk-auth)/sign-up' as never)}
+              activeOpacity={0.85}
+              testID="clerk-sign-up-entry"
+            >
+              <Text style={[styles.clerkLink, { color: colors.paleBlue }]}>
+                Create account with Clerk
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
       </View>
 
@@ -73,6 +99,8 @@ const styles = StyleSheet.create({
   },
   pillInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pillText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+  clerkActions: { alignItems: 'center', gap: 16, marginTop: 24 },
+  clerkLink: { fontSize: 14, fontFamily: 'Inter_500Medium' },
   footerText: {
     fontSize: 12, fontFamily: 'Inter_400Regular',
     textAlign: 'center', lineHeight: 18, paddingHorizontal: 12,

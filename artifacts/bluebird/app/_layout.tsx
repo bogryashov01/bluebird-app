@@ -20,6 +20,8 @@ import { AuthProvider } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { useColors } from '@/hooks/useColors';
 import { QueueConfirmationWatcher } from '@/lib/queueCelebration';
+import { DormantClerkProvider } from '@/lib/dormantClerkIntegration';
+import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 import { StatusBar } from 'expo-status-bar';
 
 SplashScreen.preventAutoHideAsync();
@@ -58,6 +60,9 @@ function RootLayoutNav() {
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      {CLERK_AUTH_CONFIGURATION.enabled && (
+        <Stack.Screen name="(clerk-auth)" options={{ headerShown: false }} />
+      )}
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="join/[code]" options={{ headerShown: false }} />
       <Stack.Screen
@@ -225,7 +230,7 @@ export default function RootLayout() {
 
   if (!fontsLoaded && !fontError) return null;
 
-  return (
+  const app = (
     <SafeAreaProvider>
       <ThemeProvider>
         <ErrorBoundary>
@@ -242,4 +247,8 @@ export default function RootLayout() {
       </ThemeProvider>
     </SafeAreaProvider>
   );
+
+  return CLERK_AUTH_CONFIGURATION.enabled
+    ? <DormantClerkProvider>{app}</DormantClerkProvider>
+    : app;
 }

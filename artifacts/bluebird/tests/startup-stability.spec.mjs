@@ -93,6 +93,23 @@ test("fresh signed-out startup reaches Welcome and Sign In, and refresh/back sta
   await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
 });
 
+test("disabled Clerk routes redirect to the unchanged demo sign-in flow without API calls", async ({ page }) => {
+  const memberApiCalls = [];
+  await page.route("**/api/**", async (route) => {
+    memberApiCalls.push(route.request().url());
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  await page.goto("/sign-in");
+  await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
+  await expect(page.getByText("Continue with Phone", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sign in with Clerk", { exact: true })).toHaveCount(0);
+
+  await page.goto("/sign-up");
+  await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
+  expect(memberApiCalls).toEqual([]);
+});
+
 test("valid local demo session reaches Discover on startup, direct navigation, and refresh", async ({ page }) => {
   await seedLocalSession(page);
   await stubLocalApi(page);
