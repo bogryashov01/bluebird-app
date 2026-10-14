@@ -1,0 +1,119 @@
+We have made an architectural decision:
+
+CLERK IS THE ONLY AUTHENTICATION PROVIDER
+FOR BLUEBIRD MOBILE.
+
+The legacy Bluebird-issued JWT authentication
+must not be used as an alternative authentication
+mechanism in the final mobile application.
+
+Current state:
+
+- Clerk Development phone sign-up works.
+- Clerk Development phone sign-in works.
+- Clerk sessions activate successfully.
+- Clerk authentication is currently isolated.
+- The main application still relies on legacy AuthContext.
+- Production backend Clerk token acceptance is not yet verified.
+
+TARGET ARCHITECTURE:
+
+1. ClerkProvider manages authentication.
+
+2. Clerk SDK manages session persistence.
+
+3. useAuth() determines Clerk authentication state.
+
+4. getToken() supplies fresh Clerk session tokens
+   for authenticated API requests.
+
+5. Never manually persist Clerk JWTs in AsyncStorage.
+
+6. Never exchange Clerk tokens for legacy
+   Bluebird-issued JWTs.
+
+7. Never fall back to legacy authentication
+   when Clerk authentication fails.
+
+8. The Bluebird backend remains responsible for
+   resolving Clerk identities to Bluebird members.
+
+TASK:
+
+Prepare the mobile application for Clerk-only
+authentication.
+
+PHASE 1 — MOBILE AUTH FOUNDATION
+
+1. Inspect existing AuthContext and route guards.
+
+2. Implement a Clerk-based authentication state
+   adapter for the main application.
+
+3. Use Clerk as the sole source of authentication
+   state in the new flow.
+
+4. Integrate fresh Clerk token retrieval into
+   the production API client.
+
+5. Ensure authenticated API requests use:
+
+   Authorization: Bearer <Clerk session token>
+
+6. Preserve public API requests without
+   authentication.
+
+7. Handle Clerk session loading, sign-out,
+   expiration, and account switching.
+
+8. Ensure member-specific cached data is cleared
+   on sign-out or account changes.
+
+9. Remove the Clerk-only confirmation screen
+   from the intended user journey.
+
+10. Prepare navigation:
+
+    Welcome
+      → Phone
+      → SMS
+      → Clerk Session
+      → Main App
+
+IMPORTANT SAFETY BOUNDARY:
+
+Production backend acceptance is NOT verified.
+
+Do not enable authenticated production member
+requests until backend compatibility is confirmed.
+
+Do not assume that a valid Clerk session means
+a Bluebird member account has been resolved.
+
+Do not expose member-specific data based solely
+on isSignedIn.
+
+If backend member resolution is unavailable,
+show an appropriate pending/unlinked state.
+
+Preserve existing member data and do not
+automatically link accounts by phone number.
+
+Do not modify the production backend.
+
+Do not modify Clerk Dashboard settings.
+
+Do not send real SMS.
+
+Do not deploy or publish.
+
+Do not delete legacy authentication code until
+the Clerk-only flow is tested and approved.
+
+Implement the mobile-side foundation behind
+a Development-only feature flag.
+
+Add mocked tests and run TypeScript checks.
+
+Report what is ready and what remains blocked
+by backend verification.
