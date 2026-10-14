@@ -54,7 +54,7 @@ Evidence: `artifacts/bluebird/app/(auth)/verify-code.tsx`; `artifacts/bluebird/a
 5. `ClerkSignedInScreen` renders **“Bluebird member not linked”** and keeps ambiguous projections in the pending/unresolved state. The resolver may call `GET /api/me`, but neither a positive `isMember` projection nor a negative/anonymous projection confirms linking or registration. Request failures are shown as errors, never as missing-member evidence. See `components/ClerkSignedInScreen.tsx` and `lib/clerkMemberResolution.ts`.
 6. The tab layout independently redirects Clerk-mode tabs to the signed-in Clerk route or sign-in. See `app/(tabs)/_layout.tsx` lines 153–175. Legacy auth screens also redirect to Clerk while the feature is enabled.
 
-**Conclusion:** the app now performs a Clerk-token-backed `/api/me` projection check, but the checked-in response contains no authoritative Bluebird member identifier or explicit linked/missing/onboarding result. Every successful projection therefore remains unresolved. The route guard and `PRODUCTION_AUTH_AVAILABILITY` remain closed (`provider_not_connected` and `backend_token_compatibility_unverified` in `lib/productionAuthState.ts`).
+**Conclusion:** the app now performs a Clerk-token-backed `/api/me` projection check, but the checked-in response contains no authoritative Bluebird member identifier or explicit linked/missing/onboarding result. Every successful projection therefore remains unresolved. The route guard and `PRODUCTION_AUTH_AVAILABILITY` remain closed (`clerk_token_acceptance_unverified` and `member_identity_mapping_unverified` in `lib/productionAuthState.ts`).
 
 ## C. Endpoint inventory and contract comparison
 

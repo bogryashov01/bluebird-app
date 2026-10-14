@@ -67,6 +67,33 @@ Until those requirements are met and independently verified, the prepared
 semantic states and route destinations are inert: no account is created or
 linked, no legacy-JWT-dependent registration/onboarding route is opened, and
 the pending/unlinked screen remains the only Clerk signed-in destination.
+The mobile navigation adapter additionally requires an explicit readiness
+capability for each destination; all three capabilities remain false. Even a
+future semantic result cannot open Discover, Registration, or Onboarding while
+its corresponding runtime prerequisites are closed.
+
+### Mobile screen and endpoint boundary
+
+- The Clerk resolver uses the existing production API client and Clerk token
+  provider for `GET /api/me` only. The response is a projection, not an account
+  ownership or registration decision. `isAuthenticated`, `isMember`,
+  `memberTier`, missing fields, `isProfileComplete`, and matching contact
+  details do not establish identity or choose a route.
+- The current Registration screen submits through the legacy phone-registration
+  mutation and expects a legacy Bluebird JWT. The current Onboarding screen
+  reads the legacy `AuthContext` token and writes through the legacy `/me`
+  client. Neither screen is a Clerk-safe destination yet.
+- Profile, Membership, Trips, notification badges, Discover personalization,
+  and the queue watcher require the local demo flow plus a legacy-auth user.
+  Clerk mode cannot enable those queries, even if a stale legacy user value is
+  accidentally present. The Clerk root route guard also keeps their routes
+  closed and identity changes/sign-out clear the query cache.
+- Do not call profile or member endpoints as a readiness probe. In particular,
+  the supplied contract documents that `GET /me/profile` can synchronize
+  verified phone state. Before any future profile read is allowed, the API
+  owner must confirm the deployed endpoint's exact behavior is non-mutating
+  for the selected Clerk token and account state. No profile, membership, or
+  trips endpoint is called by this mobile-only resolution flow.
 
 ### Verification and remaining blockers
 

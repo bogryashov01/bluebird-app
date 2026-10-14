@@ -96,7 +96,14 @@ export type ClerkMemberDestination =
   | '/(auth)/onboarding'
   | '/(tabs)/discover';
 
-/** Prepared destination mapping; actual routing remains closed by the auth gate. */
+/** Explicit capabilities required before a semantic outcome can open its route. */
+export interface ClerkMemberNavigationReadiness {
+  linkedMember: boolean;
+  registration: boolean;
+  onboarding: boolean;
+}
+
+/** Prepared semantic destination mapping; the app keeps these capabilities closed. */
 export function getClerkMemberDestination(
   resolution: ClerkMemberResolution,
 ): ClerkMemberDestination | null {
@@ -110,6 +117,21 @@ export function getClerkMemberDestination(
     default:
       return null;
   }
+}
+
+/**
+ * A semantic outcome alone is not permission to enter a screen. In particular,
+ * registration and onboarding currently depend on the legacy Bluebird JWT.
+ */
+export function getAvailableClerkMemberDestination(
+  resolution: ClerkMemberResolution,
+  readiness: ClerkMemberNavigationReadiness,
+): ClerkMemberDestination | null {
+  const destination = getClerkMemberDestination(resolution);
+  if (!destination) return null;
+  if (destination === '/(tabs)/discover') return readiness.linkedMember ? destination : null;
+  if (destination === '/(auth)/complete-registration') return readiness.registration ? destination : null;
+  return readiness.onboarding ? destination : null;
 }
 
 function getResolutionErrorReason(error: unknown): Extract<ClerkMemberResolution, { status: 'error' }>['reason'] {

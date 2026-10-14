@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  getAvailableClerkMemberDestination,
   getClerkMemberDestination,
   mapAuthoritativeMemberDecision,
   resolveClerkMember,
@@ -67,6 +68,12 @@ test("negative or anonymous /api/me projections never imply registration is requ
     { ...projection, isAuthenticated: false, isMember: false, memberTier: null },
     { ...projection, isMember: false, memberTier: null },
     { ...projection, isAuthenticated: false },
+    {
+      ...projection,
+      isProfileComplete: false,
+      email: "same@example.test",
+      phoneE164: "+15555550123",
+    },
   ]) {
     const result = await resolveClerkMember({
       session: makeSession(),
@@ -74,6 +81,14 @@ test("negative or anonymous /api/me projections never imply registration is requ
     });
     assert.deepEqual(result, { status: "unresolved", reason: "projection_only" });
   }
+
+  assert.deepEqual(
+    await resolveClerkMember({
+      session: makeSession(),
+      fetcher: async () => jsonResponse({ isAuthenticated: true }),
+    }),
+    { status: "error", reason: "invalid_response" },
+  );
 
   assert.deepEqual(mapAuthoritativeMemberDecision(null), {
     status: "unresolved",
@@ -92,10 +107,42 @@ test("explicit semantic decisions map to existing destinations without inventing
   assert.equal(getClerkMemberDestination(linked), "/(tabs)/discover");
   assert.equal(getClerkMemberDestination(registration), "/(auth)/complete-registration");
   assert.equal(getClerkMemberDestination(onboarding), "/(auth)/onboarding");
+  const closedReadiness = {
+    linkedMember: false,
+    registration: false,
+    onboarding: false,
+  };
+  for (const decision of [linked, registration, onboarding]) {
+    assert.equal(getAvailableClerkMemberDestination(decision, closedReadiness), null);
+  }
+  const approvedReadiness = {
+    linkedMember: true,
+    registration: true,
+    onboarding: true,
+  };
+  assert.equal(getAvailableClerkMemberDestination(linked, approvedReadiness), "/(tabs)/discover");
+  assert.equal(
+    getAvailableClerkMemberDestination(registration, approvedReadiness),
+    "/(auth)/complete-registration",
+  );
+  assert.equal(
+    getAvailableClerkMemberDestination(onboarding, approvedReadiness),
+    "/(auth)/onboarding",
+  );
   assert.equal(
     getClerkMemberDestination({ status: "unresolved", reason: "projection_only" }),
     null,
   );
+  for (const pending of [
+    { status: "unresolved", reason: "projection_only" },
+    { status: "unresolved", reason: "missing_authoritative_decision" },
+    { status: "error", reason: "backend" },
+    { status: "error", reason: "unauthorized" },
+    { status: "resolving" },
+    { status: "signed_out" },
+  ]) {
+    assert.equal(getAvailableClerkMemberDestination(pending, approvedReadiness), null);
+  }
   assert.deepEqual(
     mapAuthoritativeMemberDecision({ status: "linked", memberId: "  " }),
     { status: "unresolved", reason: "missing_authoritative_decision" },

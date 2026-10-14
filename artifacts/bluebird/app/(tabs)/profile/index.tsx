@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
+import { isLegacyMemberQueryEnabled } from '@/lib/clerkAuthSession';
 import { useGetMembership, useListNotifications } from '@workspace/api-client-react';
 import type { Notification } from '@workspace/api-client-react';
 import { notificationRoute } from '@/lib/notificationRoute';
@@ -75,12 +76,17 @@ function resolvePhotoUrl(path: string | null | undefined): string | null {
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { user, signOut } = useAuth();
+  const { user, signOut, authMode } = useAuth();
   const { preference } = useTheme();
   const localDemoFlow = isLocalFlightReadMode();
+  const memberQueryEnabled = isLegacyMemberQueryEnabled({
+    authMode,
+    localDemoFlow,
+    hasLegacyUser: !!user,
+  });
   const [appearanceOpen, setAppearanceOpen] = React.useState(false);
   const { data: membership } = useGetMembership({
-    query: { enabled: localDemoFlow && !!user },
+    query: { enabled: memberQueryEnabled },
   });
 
   const topPad    = Platform.OS === 'web' ? 67 : insets.top;
@@ -90,7 +96,7 @@ export default function ProfileScreen() {
     query: {
       refetchInterval: 15000,
       refetchIntervalInBackground: false,
-      enabled: localDemoFlow && !!user,
+      enabled: memberQueryEnabled,
     },
   });
   const notifList = (notifications as Notification[]) ?? [];

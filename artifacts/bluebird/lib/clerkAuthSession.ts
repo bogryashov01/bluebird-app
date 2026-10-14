@@ -58,6 +58,14 @@ export function shouldRedirectClerkRoute(
   return true;
 }
 
+export function isLegacyMemberQueryEnabled(input: {
+  authMode: 'legacy' | 'clerk';
+  localDemoFlow: boolean;
+  hasLegacyUser: boolean;
+}): boolean {
+  return input.authMode === 'legacy' && input.localDemoFlow && input.hasLegacyUser;
+}
+
 export function shouldClearClerkMemberCache(
   previousIdentity: string | null | undefined,
   nextIdentity: string | null,

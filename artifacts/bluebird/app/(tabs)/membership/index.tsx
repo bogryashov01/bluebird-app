@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGetMembership } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
+import { isLegacyMemberQueryEnabled } from '@/lib/clerkAuthSession';
 import { useColors } from '@/hooks/useColors';
 import { useProductionMembershipPlans } from '@/hooks/useProductionMembershipPlans';
 import { StatCard } from '@/components/StatCard';
@@ -38,14 +39,19 @@ function fmtUsd(n: number) {
 export default function MembershipScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { user } = useAuth();
+  const { user, authMode } = useAuth();
   const localDemoFlow = isLocalFlightReadMode();
+  const memberQueryEnabled = isLegacyMemberQueryEnabled({
+    authMode,
+    localDemoFlow,
+    hasLegacyUser: !!user,
+  });
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { data: membership, isLoading, isError, refetch } = useGetMembership({
-    query: { enabled: localDemoFlow && !!user },
+    query: { enabled: memberQueryEnabled },
   });
   const plansQuery = useProductionMembershipPlans({ enabled: localDemoFlow });
   const mem = membership;

@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { QueueEntry } from '@workspace/api-client-react';
 import { useGetQueueStatus } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
+import { isLegacyMemberQueryEnabled } from '@/lib/clerkAuthSession';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 
 // ─── Shared waiting→confirmed flip tracking ──────────────────────────────────
@@ -74,9 +75,14 @@ export function observeQueueEntries(entries: QueueEntry[], queryClient: QueryCli
 // member browsing Discover, Trips, or Concierge still lands on the
 // celebration when the queue engine auto-confirms their seat.
 export function QueueConfirmationWatcher() {
-  const { user } = useAuth();
+  const { user, authMode } = useAuth();
   const queryClient = useQueryClient();
   const localDemoFlow = isLocalFlightReadMode();
+  const memberQueryEnabled = isLegacyMemberQueryEnabled({
+    authMode,
+    localDemoFlow,
+    hasLegacyUser: !!user,
+  });
 
   // Clear flip tracking whenever the signed-in member changes (sign-out or
   // account switch) so one member's observed queues never leak into another
@@ -91,13 +97,13 @@ export function QueueConfirmationWatcher() {
   }, [user?.id]);
 
   const { data } = useGetQueueStatus({
-    query: { enabled: localDemoFlow && !!user, refetchInterval: 10_000 },
+    query: { enabled: memberQueryEnabled, refetchInterval: 10_000 },
   });
 
   useEffect(() => {
-    if (!localDemoFlow || !user || !data) return;
+    if (!memberQueryEnabled || !user || !data) return;
     observeQueueEntries((data as QueueEntry[]) ?? [], queryClient);
-  }, [data, localDemoFlow, user, queryClient]);
+  }, [data, memberQueryEnabled, user, queryClient]);
 
   return null;
 }

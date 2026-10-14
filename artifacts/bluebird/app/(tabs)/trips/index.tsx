@@ -16,6 +16,7 @@ import { PRODUCTION_AUTH_UNAVAILABLE_MESSAGE } from '@/lib/productionAuthState';
 
 // ─── Aircraft images (same matching logic as Discover) ────────────────────────
 import { useAuth } from '@/context/AuthContext';
+import { isLegacyMemberQueryEnabled } from '@/lib/clerkAuthSession';
 const AIRCRAFT_IMAGES: { match: RegExp; source: any }[] = [
   { match: /gulfstream|g280|challenger|falcon/i, source: require('@/assets/images/aircraft-heavy.jpg') },
   { match: /king air|pilatus|pc-12|turboprop/i,  source: require('@/assets/images/aircraft-turboprop.jpg') },
@@ -129,18 +130,23 @@ export default function TripsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<ActiveTab>('upcoming');
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, authMode } = useAuth();
   const queryClient = useQueryClient();
   const localDemoFlow = isLocalFlightReadMode();
+  const memberQueryEnabled = isLegacyMemberQueryEnabled({
+    authMode,
+    localDemoFlow,
+    hasLegacyUser: !!user,
+  });
 
   const topPad = Platform.OS === 'web' ? 40 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { data: trips, isLoading: tripsLoading, isError: tripsError, refetch: refetchTrips } = useListTrips({
-    query: { enabled: localDemoFlow && !!user },
+    query: { enabled: memberQueryEnabled },
   });
   const { data: queueEntries, isLoading: queueLoading, isError: queueError, refetch: refetchQueue } = useGetQueueStatus({
-    query: { enabled: localDemoFlow && !!user },
+    query: { enabled: memberQueryEnabled },
   });
 
   const upcomingTrips = useMemo(() =>

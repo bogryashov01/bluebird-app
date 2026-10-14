@@ -13,6 +13,7 @@ import {
   type QueueEntry, type Trip,
 } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
+import { isLegacyMemberQueryEnabled } from '@/lib/clerkAuthSession';
 import FlightMapView from '@/components/FlightMap';
 import {
   fetchProductionAirports,
@@ -279,11 +280,16 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
 export default function DiscoverScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, authMode } = useAuth();
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
 
   const localReadMode = isLocalFlightReadMode();
+  const memberQueryEnabled = isLegacyMemberQueryEnabled({
+    authMode,
+    localDemoFlow: localReadMode,
+    hasLegacyUser: !!user,
+  });
   const localFlightsQuery = useListFlights({}, { query: { enabled: localReadMode } });
   const productionFlightsQuery = useQuery({
     queryKey: ['production-empty-legs'],
@@ -303,10 +309,10 @@ export default function DiscoverScreen() {
   // Personalized data: flights the member is already queued for or booked on
   // are hidden from Discover. Signed-out users see the full list.
   const { data: queueEntries, isLoading: queueLoading } = useGetQueueStatus({
-    query: { enabled: localReadMode && !!user },
+    query: { enabled: memberQueryEnabled },
   });
   const { data: trips, isLoading: tripsLoading } = useListTrips({
-    query: { enabled: localReadMode && !!user },
+    query: { enabled: memberQueryEnabled },
   });
 
   // Avoid flashing soon-to-be-hidden flights: stay in the loading state while

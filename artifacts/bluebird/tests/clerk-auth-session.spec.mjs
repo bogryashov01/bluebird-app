@@ -5,6 +5,7 @@ import {
   clearClerkMemberCacheOnIdentityChange,
   createLegacyAuthTokenGetter,
   getClerkEntryState,
+  isLegacyMemberQueryEnabled,
   shouldRedirectClerkRoute,
   shouldClearClerkMemberCache,
 } from "../scripts/.clerk-auth-session.test.mjs";
@@ -12,7 +13,10 @@ import {
   customFetch,
   setAuthTokenGetter,
 } from "../scripts/.custom-fetch.test.mjs";
-import { PRODUCTION_AUTH_AVAILABILITY } from "../scripts/.production-auth-state.test.mjs";
+import {
+  CLERK_MEMBER_NAVIGATION_READINESS,
+  PRODUCTION_AUTH_AVAILABILITY,
+} from "../scripts/.production-auth-state.test.mjs";
 
 test("central Clerk resolution states gate member screens and distinguish outcomes", () => {
   assert.equal(getClerkEntryState({ isLoaded: false, isSignedIn: undefined }), "loading");
@@ -63,10 +67,47 @@ test("central Clerk resolution states gate member screens and distinguish outcom
     false,
   );
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], false), true);
+  assert.equal(shouldRedirectClerkRoute(["(tabs)", "profile"], false), true);
   assert.equal(shouldRedirectClerkRoute(["notifications"], false), true);
+  assert.equal(shouldRedirectClerkRoute(["(auth)", "complete-registration"], false), true);
+  assert.equal(shouldRedirectClerkRoute(["(auth)", "onboarding"], false), true);
   assert.equal(shouldRedirectClerkRoute(["(auth)", "welcome"], false), false);
   assert.equal(shouldRedirectClerkRoute(["(clerk-auth)", "sign-in"], false), false);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], true), false);
+});
+
+test("member-data query gates require local demo mode and a legacy-auth member", () => {
+  assert.equal(isLegacyMemberQueryEnabled({
+    authMode: "clerk",
+    localDemoFlow: true,
+    hasLegacyUser: true,
+  }), false);
+  assert.equal(isLegacyMemberQueryEnabled({
+    authMode: "legacy",
+    localDemoFlow: false,
+    hasLegacyUser: true,
+  }), false);
+  assert.equal(isLegacyMemberQueryEnabled({
+    authMode: "legacy",
+    localDemoFlow: true,
+    hasLegacyUser: false,
+  }), false);
+  assert.equal(isLegacyMemberQueryEnabled({
+    authMode: "legacy",
+    localDemoFlow: true,
+    hasLegacyUser: true,
+  }), true);
+
+  let authenticatedMemberRequests = 0;
+  const clerkGateClosed = isLegacyMemberQueryEnabled({
+    authMode: "clerk",
+    localDemoFlow: true,
+    hasLegacyUser: true,
+  });
+  for (const _path of ["/me/profile", "/membership", "/trips", "/notifications"]) {
+    if (clerkGateClosed) authenticatedMemberRequests += 1;
+  }
+  assert.equal(authenticatedMemberRequests, 0);
 });
 
 test("identity changes and sign-out clear member cache; unchanged and loading states do not", () => {
@@ -120,7 +161,12 @@ test("shared public API requests omit Authorization in Clerk mode", async () => 
 test("authenticated production calls remain unavailable until backend acceptance is confirmed", () => {
   assert.equal(PRODUCTION_AUTH_AVAILABILITY.status, "unavailable");
   assert.deepEqual(PRODUCTION_AUTH_AVAILABILITY.reasons, [
-    "provider_not_connected",
-    "backend_token_compatibility_unverified",
+    "clerk_token_acceptance_unverified",
+    "member_identity_mapping_unverified",
   ]);
+  assert.deepEqual(CLERK_MEMBER_NAVIGATION_READINESS, {
+    linkedMember: false,
+    registration: false,
+    onboarding: false,
+  });
 });
