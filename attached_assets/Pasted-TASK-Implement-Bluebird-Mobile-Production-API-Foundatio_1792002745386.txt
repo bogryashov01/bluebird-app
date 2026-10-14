@@ -1,0 +1,88 @@
+TASK: Implement Bluebird Mobile Production API Foundation
+
+We have completed Task #391 and created:
+
+artifacts/bluebird/BLUEBIRD-MOBILE-CLEANUP-MAP.md
+
+This document defines the target architecture.
+
+ARCHITECTURAL DECISIONS:
+
+1. Clerk is the ONLY authentication provider.
+2. The ONLY intended real backend is:
+   https://bluebirdjets.com/api
+3. Legacy Bluebird JWT authentication is deprecated.
+4. The local artifacts/api-server is not part of
+   the intended production mobile architecture.
+5. Existing mobile UI screens must be preserved.
+
+IMPLEMENTATION:
+
+1. Review the cleanup map from Task #391.
+
+2. Identify the existing production API client.
+
+3. Create or consolidate a single production API
+   transport layer.
+
+4. Use https://bluebirdjets.com/api as the
+   production API base URL.
+
+5. Integrate Clerk getToken() as the token source
+   for authenticated requests.
+
+6. Never store Clerk JWTs manually.
+
+7. Never use legacy Bluebird JWTs as fallback.
+
+8. Keep public endpoints unauthenticated.
+
+9. Implement centralized handling for:
+   - Network errors
+   - Unauthorized responses
+   - Expired Clerk sessions
+   - Invalid API responses
+
+10. Prepare a member-resolution API adapter
+    for GET /api/me.
+
+11. Do not interpret isMember:false as a
+    missing Bluebird account.
+
+12. Do not interpret isAuthenticated:false as
+    proof that registration is required.
+
+13. Keep authenticated production member requests
+    DISABLED until backend token acceptance
+    and identity mapping are confirmed.
+
+14. Preserve the current Pending / Unlinked
+    state while member resolution is unavailable.
+
+15. Add mocked tests for:
+    - Public API requests
+    - Clerk token retrieval
+    - Authorization headers
+    - Missing sessions
+    - HTTP 401
+    - Network failures
+    - Invalid response bodies
+
+16. Run TypeScript and relevant tests.
+
+RESTRICTIONS:
+
+- Do not delete the legacy API Server yet.
+- Do not remove existing screens.
+- Do not modify production backend.
+- Do not make authenticated production requests.
+- Do not send SMS.
+- Do not deploy or publish.
+- Do not activate member-data access.
+
+DELIVERABLE:
+
+A clean production API foundation ready
+for verified Clerk member resolution.
+
+Report all remaining blockers.
