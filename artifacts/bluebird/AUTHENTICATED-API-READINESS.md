@@ -1,5 +1,72 @@
 # Bluebird authenticated production API readiness
 
+## Clerk Development SMS manual-test preparation (2026-10-14)
+
+**Status: local Development UI is ready to inspect; live sign-up remains
+blocked on Clerk Dashboard policy confirmation.** The environment secret store
+confirms that `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` exists. A redacted check in
+the running Development process confirmed a valid publishable-key shape, a
+`pk_test_` prefix, and a Clerk development-host format; the key value was never
+printed or copied. This establishes Development-key compatibility, but the
+specific Clerk instance could not be cross-checked against its Dashboard.
+
+`EXPO_PUBLIC_ENABLE_CLERK_AUTH=true` is set in Replit Development only. A
+Development environment check confirmed the flag is `true` there and unset in
+shared and production. The existing publishable-key secret was not changed.
+The Expo Development workflow restarted and rendered the Welcome, sign-in, and
+sign-up screens. Both Welcome links navigated to their Clerk screens; direct
+`/sign-in` and `/sign-up` routes rendered as well. An enabled-preview browser
+check observed zero phone-auth request endpoints while opening those screens;
+the request button was never clicked. The existing demo-phone option remains
+visible when Clerk is enabled.
+
+The Clerk Dashboard is not available to this workspace for independent
+inspection. The previous supplied-settings report says phone-code sign-in and
+sign-up were enabled, but says required phone verification at sign-up was
+disabled. Those are reported settings, not a current live Dashboard
+verification. Treat required sign-up verification as a blocker: do not perform
+a live sign-up test until the Clerk Development owner confirms the current
+phone-code, SMS, and required-verification settings. No Dashboard setting was
+changed or bypassed.
+
+### Verification performed
+
+- `pnpm run typecheck:libs` followed by
+  `pnpm --filter @workspace/bluebird run typecheck` — passed.
+- `pnpm --filter @workspace/bluebird run test:clerk-auth-ui` — 5 passed.
+- `pnpm --filter @workspace/bluebird run test:clerk-phone-auth` — 10 passed.
+- `pnpm --filter @workspace/bluebird run test:clerk-bridge` — 6 passed.
+- `EXPO_PUBLIC_ENABLE_CLERK_AUTH=false pnpm --filter @workspace/bluebird run test:startup-stability`
+  — 6 passed, including direct disabled-route redirects and the existing
+  demo-phone entry path. Clerk phone-auth lifecycle tests use injected mock
+  resources and synthetic data.
+- Browser navigation in the enabled Development preview confirmed both Welcome
+  links and both direct routes; zero phone-auth request endpoints were observed.
+
+No real phone number or code was entered, no SMS was requested, and no live
+sign-in or sign-up was performed. This verifies the web preview only; native
+iOS/Android device behavior and Clerk's actual live policy remain unverified.
+No backend, shared/production variable, Dashboard policy, or deployment was
+changed.
+
+### Manual SMS runbook
+
+1. Open the local Bluebird Development preview, choose **Get Started**, then
+   choose **Clerk sign in** or **Create account with Clerk**.
+2. For sign-in, enter an existing Clerk Development test account's phone
+   number. For sign-up, use a new test number only after the owner confirms
+   that phone-code/SMS sign-up and required phone verification are enabled in
+   the Development Dashboard.
+3. Nothing sends an SMS while the route is merely open or while a phone number
+   is being entered. To request one, explicitly tap **Send verification code**.
+4. Enter the received code and tap **Verify and continue**. Confirm the
+   separate Clerk-only signed-in screen appears. For sign-up, confirm Clerk
+   reports the phone as verified; an unverified/incomplete result must remain
+   signed out.
+5. If needed, use **Resend code** to explicitly request another SMS, or
+   **Edit phone number** to return to the phone field. Use **Sign out of Clerk**
+   to end the isolated Clerk session and return to the Bluebird welcome flow.
+
 ## Clerk phone-auth readiness assessment (2026-10-14)
 
 **Decision: isolated phone-code authentication is implemented behind the
