@@ -1,4 +1,13 @@
 export type ClerkPhoneAuthMode = 'sign-in' | 'sign-up';
+export type ClerkPhoneAuthFailureStage =
+  | 'input'
+  | 'create'
+  | 'code-preparation'
+  | 'response'
+  | 'verification'
+  | 'session-activation'
+  | 'resend'
+  | 'navigation';
 
 export interface ClerkPhoneAuthAttempt {
   status: string | null;
@@ -7,7 +16,7 @@ export interface ClerkPhoneAuthAttempt {
 }
 
 export interface ClerkPhoneAuthActions {
-  startSignIn: (phoneNumber: string) => Promise<void>;
+  startSignIn: (phoneNumber: string) => Promise<ClerkPhoneAuthAttempt>;
   startSignUp: (phoneNumber: string) => Promise<void>;
   resendSignIn: () => Promise<void>;
   resendSignUp: () => Promise<void>;
@@ -17,6 +26,7 @@ export interface ClerkPhoneAuthActions {
 }
 
 export interface ClerkSignInPhoneAttempt extends ClerkPhoneAuthAttempt {
+  firstFactorVerification: { status: string | null };
   prepareFirstFactor: (params: { strategy: 'phone_code' }) => Promise<ClerkSignInPhoneAttempt>;
 }
 
@@ -44,30 +54,51 @@ export function createClerkPhoneAuthActions(input: {
 }): ClerkPhoneAuthActions {
   return {
     startSignIn: async (phoneNumber) => {
-      const attempt = await input.signIn.create({ strategy: 'phone_code', identifier: phoneNumber });
-      await attempt.prepareFirstFactor({ strategy: 'phone_code' });
+      const attempt = await runAtStage('create', () =>
+        input.signIn.create({ strategy: 'phone_code', identifier: phoneNumber }),
+      );
+      const prepared = await runAtStage('code-preparation', () =>
+        attempt.prepareFirstFactor({ strategy: 'phone_code' }),
+      );
+      return {
+        status: prepared.status,
+        createdSessionId: prepared.createdSessionId,
+        phoneVerificationStatus: prepared.firstFactorVerification.status,
+      };
     },
     startSignUp: async (phoneNumber) => {
-      const attempt = await input.signUp.create({ phoneNumber });
+      const attempt = await runAtStage('create', () => input.signUp.create({ phoneNumber }));
       try {
         await attempt.preparePhoneNumberVerification({ strategy: 'phone_code' });
       } catch (error) {
-        if (isClerkNetworkFailure(error)) throw error;
-        throw { code: 'signup_phone_verification_unavailable' };
+        if (isClerkNetworkFailure(error)) {
+          throw new ClerkPhoneAuthStageError('code-preparation', error);
+        }
+        throw new ClerkPhoneAuthStageError('code-preparation', {
+          code: 'signup_phone_verification_unavailable',
+        });
       }
     },
     resendSignIn: async () => {
-      await input.signIn.prepareFirstFactor({ strategy: 'phone_code' });
+      await runAtStage('resend', () =>
+        input.signIn.prepareFirstFactor({ strategy: 'phone_code' }),
+      );
     },
     resendSignUp: async () => {
-      await input.signUp.preparePhoneNumberVerification({ strategy: 'phone_code' });
+      await runAtStage('resend', () =>
+        input.signUp.preparePhoneNumberVerification({ strategy: 'phone_code' }),
+      );
     },
     attemptSignIn: async (code) => {
-      const attempt = await input.signIn.attemptFirstFactor({ strategy: 'phone_code', code });
+      const attempt = await runAtStage('verification', () =>
+        input.signIn.attemptFirstFactor({ strategy: 'phone_code', code }),
+      );
       return { status: attempt.status, createdSessionId: attempt.createdSessionId };
     },
     attemptSignUp: async (code) => {
-      const attempt = await input.signUp.attemptPhoneNumberVerification({ code });
+      const attempt = await runAtStage('verification', () =>
+        input.signUp.attemptPhoneNumberVerification({ code }),
+      );
       return {
         status: attempt.status,
         createdSessionId: attempt.createdSessionId,
@@ -75,14 +106,55 @@ export function createClerkPhoneAuthActions(input: {
       };
     },
     setActive: async (sessionId) => {
-      await input.setActive({ session: sessionId });
+      await runAtStage('session-activation', () => input.setActive({ session: sessionId }));
     },
   };
 }
 
-export type ClerkPhoneAuthResult =
-  | { ok: true; phoneNumber?: string }
-  | { ok: false; message: string };
+export type ClerkPhoneAuthFailure = {
+  ok: false;
+  stage: ClerkPhoneAuthFailureStage;
+  message: string;
+};
+
+export type ClerkPhoneAuthStartResult =
+  | ClerkPhoneAuthFailure
+  | { ok: true; nextStep: 'code'; phoneNumber?: string; verificationPending?: boolean };
+
+export type ClerkPhoneAuthResult = ClerkPhoneAuthFailure | { ok: true };
+
+class ClerkPhoneAuthStageError extends Error {
+  constructor(
+    readonly stage: ClerkPhoneAuthFailureStage,
+    readonly originalError: unknown,
+  ) {
+    super('Clerk phone authentication stage failed.');
+    this.name = 'ClerkPhoneAuthStageError';
+  }
+}
+
+async function runAtStage<T>(
+  stage: ClerkPhoneAuthFailureStage,
+  action: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof ClerkPhoneAuthStageError) throw error;
+    throw new ClerkPhoneAuthStageError(stage, error);
+  }
+}
+
+function unwrapStageError(error: unknown): unknown {
+  return error instanceof ClerkPhoneAuthStageError ? error.originalError : error;
+}
+
+function getFailureStage(
+  error: unknown,
+  fallback: ClerkPhoneAuthFailureStage,
+): ClerkPhoneAuthFailureStage {
+  return error instanceof ClerkPhoneAuthStageError ? error.stage : fallback;
+}
 
 export function normalizeClerkPhoneNumber(input: string): string | null {
   const trimmed = input.trim();
@@ -98,8 +170,14 @@ export function normalizeClerkPhoneNumber(input: string): string | null {
   return null;
 }
 
-export function getClerkAuthErrorMessage(error: unknown, mode?: ClerkPhoneAuthMode): string {
-  const code = getClerkErrorCode(error);
+export function getClerkAuthErrorMessage(
+  error: unknown,
+  mode?: ClerkPhoneAuthMode,
+  fallbackStage: ClerkPhoneAuthFailureStage = 'verification',
+): string {
+  const stage = getFailureStage(error, fallbackStage);
+  const originalError = unwrapStageError(error);
+  const code = getClerkErrorCode(originalError);
 
   if (code === 'form_identifier_exists' || code === 'identifier_exists' || code === 'form_phone_number_exists') {
     return 'That phone number already has a Clerk account. Sign in instead.';
@@ -117,8 +195,10 @@ export function getClerkAuthErrorMessage(error: unknown, mode?: ClerkPhoneAuthMo
   if (code === 'form_param_format_invalid' || code === 'form_identifier_invalid') {
     return 'Enter a valid phone number, including the country code for numbers outside the US.';
   }
-  if (isClerkNetworkFailure(error)) {
-    return 'Clerk could not be reached. Check your connection and try again.';
+  if (isClerkNetworkFailure(originalError)) {
+    return stage === 'verification'
+      ? 'Clerk could not verify the code because the service could not be reached. Check your connection or request a new code.'
+      : 'Clerk could not be reached. Check your connection and try again.';
   }
   if (
     code === 'verification_strategy_not_enabled' ||
@@ -132,6 +212,28 @@ export function getClerkAuthErrorMessage(error: unknown, mode?: ClerkPhoneAuthMo
     return 'Too many attempts. Wait a moment, then try again.';
   }
 
+  if (stage === 'create') {
+    return 'Clerk could not start sign-in. Check the phone number and try again.';
+  }
+  if (stage === 'code-preparation') {
+    return 'Clerk could not prepare the verification code. Try sending the code again.';
+  }
+  if (stage === 'response') {
+    return 'Clerk did not confirm that phone verification is pending. Try sending a new code or check the phone number.';
+  }
+  if (stage === 'resend') {
+    return 'Clerk could not resend the verification code. Check your connection and try again.';
+  }
+  if (stage === 'verification') {
+    return 'Clerk could not verify this code. Check it or request a new code.';
+  }
+  if (stage === 'session-activation') {
+    return 'Clerk accepted the code but could not activate your session. You remain signed out; try verifying again.';
+  }
+  if (stage === 'navigation') {
+    return 'Your Clerk session is active, but the signed-in screen could not be opened. Try returning to the app home screen.';
+  }
+
   return 'Clerk authentication could not be completed. Please try again.';
 }
 
@@ -139,21 +241,44 @@ export async function beginClerkPhoneAuth(
   mode: ClerkPhoneAuthMode,
   phoneInput: string,
   actions: ClerkPhoneAuthActions,
-): Promise<ClerkPhoneAuthResult> {
+): Promise<ClerkPhoneAuthStartResult> {
   const phoneNumber = normalizeClerkPhoneNumber(phoneInput);
   if (!phoneNumber) {
     return {
       ok: false,
+      stage: 'input',
       message: 'Enter a valid phone number. Use 10 US digits or include an international country code starting with +.',
     };
   }
 
   try {
-    if (mode === 'sign-in') await actions.startSignIn(phoneNumber);
-    else await actions.startSignUp(phoneNumber);
-    return { ok: true, phoneNumber };
+    if (mode === 'sign-in') {
+      const attempt = await actions.startSignIn(phoneNumber);
+      const verificationPending =
+        attempt.status === 'needs_first_factor' &&
+        attempt.phoneVerificationStatus === 'unverified';
+      if (!verificationPending) {
+        return {
+          ok: false,
+          stage: 'response',
+          message: getClerkAuthErrorMessage(null, mode, 'response'),
+        };
+      }
+      return {
+        ok: true,
+        nextStep: 'code',
+        phoneNumber,
+        verificationPending,
+      };
+    }
+    await actions.startSignUp(phoneNumber);
+    return { ok: true, nextStep: 'code', phoneNumber };
   } catch (error) {
-    return { ok: false, message: getClerkAuthErrorMessage(error, mode) };
+    return {
+      ok: false,
+      stage: getFailureStage(error, 'create'),
+      message: getClerkAuthErrorMessage(error, mode, 'create'),
+    };
   }
 }
 
@@ -166,7 +291,11 @@ export async function resendClerkPhoneCode(
     else await actions.resendSignUp();
     return { ok: true };
   } catch (error) {
-    return { ok: false, message: getClerkAuthErrorMessage(error, mode) };
+    return {
+      ok: false,
+      stage: getFailureStage(error, 'resend'),
+      message: getClerkAuthErrorMessage(error, mode, 'resend'),
+    };
   }
 }
 
@@ -177,7 +306,11 @@ export async function verifyClerkPhoneCode(
 ): Promise<ClerkPhoneAuthResult> {
   const code = codeInput.trim();
   if (!/^\d{4,8}$/.test(code)) {
-    return { ok: false, message: 'Enter the verification code from the SMS.' };
+    return {
+      ok: false,
+      stage: 'verification',
+      message: 'Enter the verification code from the SMS.',
+    };
   }
 
   try {
@@ -188,12 +321,14 @@ export async function verifyClerkPhoneCode(
     if (mode === 'sign-up' && attempt.phoneVerificationStatus !== 'verified') {
       return {
         ok: false,
+        stage: 'verification',
         message: 'Clerk has not confirmed this phone number. You remain signed out. Request another code or ask the app owner to check the Clerk sign-up verification settings.',
       };
     }
     if (attempt.status !== 'complete' || !attempt.createdSessionId) {
       return {
         ok: false,
+        stage: 'verification',
         message: mode === 'sign-in'
           ? 'Clerk needs another sign-in step that this screen cannot complete. You remain signed out; contact the app owner for help.'
           : 'Clerk requires additional sign-up information. You remain signed out; contact the app owner for help.',
@@ -203,11 +338,16 @@ export async function verifyClerkPhoneCode(
     await actions.setActive(attempt.createdSessionId);
     return { ok: true };
   } catch (error) {
-    return { ok: false, message: getClerkAuthErrorMessage(error, mode) };
+    return {
+      ok: false,
+      stage: getFailureStage(error, 'verification'),
+      message: getClerkAuthErrorMessage(error, mode, 'verification'),
+    };
   }
 }
 
 function getClerkErrorCode(error: unknown): string | null {
+  error = unwrapStageError(error);
   if (typeof error !== 'object' || error === null) return null;
   if ('code' in error && typeof error.code === 'string') return error.code;
   if ('errors' in error && Array.isArray(error.errors)) {
@@ -225,6 +365,7 @@ function getClerkErrorCode(error: unknown): string | null {
 }
 
 export function isClerkNetworkFailure(error: unknown): boolean {
+  error = unwrapStageError(error);
   if (error instanceof TypeError) return true;
   if (typeof error !== 'object' || error === null) return false;
   if (

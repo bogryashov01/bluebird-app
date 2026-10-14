@@ -22,6 +22,7 @@ import {
   resendClerkPhoneCode,
   verifyClerkPhoneCode,
   type ClerkPhoneAuthMode,
+  type ClerkPhoneAuthFailureStage,
   type ClerkSignInPhoneResource,
   type ClerkSignUpPhoneResource,
 } from '@/lib/clerkPhoneAuth';
@@ -39,6 +40,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
   const [step, setStep] = useState<FormStep>('phone');
   const [busyAction, setBusyAction] = useState<'request' | 'verify' | 'resend' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorStage, setErrorStage] = useState<ClerkPhoneAuthFailureStage | null>(null);
   const isSignIn = mode === 'sign-in';
   const resourcesLoaded =
     signInResource.isLoaded &&
@@ -60,7 +62,10 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
-      router.replace('/(clerk-auth)/signed-in' as never);
+      navigateToClerkSignedIn(() => {
+        setErrorStage('navigation');
+        setError('Your Clerk session is active, but the signed-in screen could not be opened.');
+      });
     }
   }, [isLoaded, isSignedIn]);
 
@@ -68,36 +73,47 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
     if (busyAction || !actions) return;
     setBusyAction('request');
     setError(null);
+    setErrorStage(null);
     const result = await beginClerkPhoneAuth(mode, phone, actions);
     setBusyAction(null);
     if (!result.ok) {
       setError(result.message);
+      setErrorStage(result.stage);
       return;
     }
     setCode('');
-    setStep('code');
+    setStep(result.nextStep);
   };
 
   const handleVerifyCode = async () => {
     if (busyAction || !actions) return;
     setBusyAction('verify');
     setError(null);
+    setErrorStage(null);
     const result = await verifyClerkPhoneCode(mode, code, actions);
     setBusyAction(null);
     if (!result.ok) {
       setError(result.message);
+      setErrorStage(result.stage);
       return;
     }
-    router.replace('/(clerk-auth)/signed-in' as never);
+    navigateToClerkSignedIn(() => {
+      setErrorStage('navigation');
+      setError('Your Clerk session is active, but the signed-in screen could not be opened.');
+    });
   };
 
   const handleResendCode = async () => {
     if (busyAction || !actions) return;
     setBusyAction('resend');
     setError(null);
+    setErrorStage(null);
     const result = await resendClerkPhoneCode(mode, actions);
     setBusyAction(null);
-    if (!result.ok) setError(result.message);
+    if (!result.ok) {
+      setError(result.message);
+      setErrorStage(result.stage);
+    }
     else setCode('');
   };
 
@@ -178,7 +194,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
                   </Text>
                 </View>
               ) : (
-                <View style={styles.fieldGroup}>
+                <View style={styles.fieldGroup} testID="clerk-code-entry">
                   <Text style={[styles.label, { color: colors.mutedOnBrand }]}>SMS verification code</Text>
                   <Text style={[styles.helperText, { color: colors.mutedOnBrand }]}>
                     Enter the code Clerk sent to your phone. Your number is not shown here.
@@ -215,7 +231,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
                   testID="clerk-auth-error"
                 >
                   <Text style={[styles.messageTitle, { color: colors.destructive }]}>
-                    Authentication issue
+                    {getErrorTitle(errorStage)}
                   </Text>
                   <Text style={[styles.stateText, { color: colors.textOnBrand }]}>{error}</Text>
                 </View>
@@ -264,6 +280,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
                       setStep('phone');
                       setCode('');
                       setError(null);
+                      setErrorStage(null);
                     }}
                     style={styles.secondaryAction}
                     testID="clerk-edit-phone"
@@ -273,6 +290,33 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
                 </View>
               )}
             </>
+          )}
+          {isSignedIn === true && errorStage === 'navigation' && error && (
+            <View
+              accessibilityLiveRegion="polite"
+              style={[styles.messageBox, { borderColor: colors.destructive }]}
+              testID="clerk-auth-error"
+            >
+              <Text style={[styles.messageTitle, { color: colors.destructive }]}>
+                {getErrorTitle(errorStage)}
+              </Text>
+              <Text style={[styles.stateText, { color: colors.textOnBrand }]}>{error}</Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  navigateToClerkSignedIn(() => {
+                    setErrorStage('navigation');
+                    setError('Your Clerk session is active, but the signed-in screen could not be opened.');
+                  })
+                }
+                style={styles.secondaryAction}
+                testID="clerk-retry-navigation"
+              >
+                <Text style={[styles.linkText, { color: colors.paleBlue }]}>
+                  Retry opening the signed-in screen
+                </Text>
+              </Pressable>
+            </View>
           )}
         </View>
 
@@ -320,3 +364,34 @@ const styles = StyleSheet.create({
   footerText: { fontSize: 13, fontFamily: 'Inter_400Regular' },
   linkText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
 });
+
+function getErrorTitle(stage: ClerkPhoneAuthFailureStage | null): string {
+  switch (stage) {
+    case 'input':
+      return 'Check your phone number';
+    case 'create':
+      return 'Could not start sign-in';
+    case 'code-preparation':
+      return 'Could not prepare the code';
+    case 'response':
+      return 'Could not confirm the verification step';
+    case 'verification':
+      return 'Could not verify the code';
+    case 'session-activation':
+      return 'Could not activate your session';
+    case 'resend':
+      return 'Could not resend the code';
+    case 'navigation':
+      return 'Could not open the signed-in screen';
+    default:
+      return 'Authentication issue';
+  }
+}
+
+function navigateToClerkSignedIn(onFailure: () => void): void {
+  try {
+    router.replace('/(clerk-auth)/signed-in' as never);
+  } catch {
+    onFailure();
+  }
+}
