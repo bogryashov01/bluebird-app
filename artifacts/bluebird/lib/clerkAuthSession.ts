@@ -1,14 +1,16 @@
-export type ClerkMemberResolution =
-  | { status: 'pending' }
-  | { status: 'unlinked' }
-  | { status: 'linked'; memberId: string };
+import type { ClerkMemberResolution } from './clerkMemberResolution';
+
+export type { ClerkMemberResolution } from './clerkMemberResolution';
 
 export type ClerkEntryState =
   | 'loading'
   | 'signed-out'
   | 'member-pending'
   | 'member-unlinked'
-  | 'member-linked';
+  | 'member-linked'
+  | 'registration-required'
+  | 'onboarding-required'
+  | 'error';
 
 export function getClerkEntryState(input: {
   isLoaded: boolean;
@@ -17,12 +19,23 @@ export function getClerkEntryState(input: {
 }): ClerkEntryState {
   if (!input.isLoaded) return 'loading';
   if (input.isSignedIn !== true) return 'signed-out';
-  const resolution = input.memberResolution ?? { status: 'pending' };
-  if (resolution.status === 'linked' && resolution.memberId.trim()) return 'member-linked';
-  if (resolution.status === 'unlinked' || (resolution.status === 'linked' && !resolution.memberId.trim())) {
-    return 'member-unlinked';
+  const resolution = input.memberResolution ?? { status: 'resolving' };
+  switch (resolution.status) {
+    case 'linked':
+      return resolution.memberId.trim() ? 'member-linked' : 'member-unlinked';
+    case 'registration_required':
+      return 'registration-required';
+    case 'onboarding_required':
+      return 'onboarding-required';
+    case 'error':
+      return 'error';
+    case 'unresolved':
+      return 'member-unlinked';
+    case 'signed_out':
+      return 'signed-out';
+    case 'resolving':
+      return 'member-pending';
   }
-  return 'member-pending';
 }
 
 export function canAccessClerkMemberScreens(input: {

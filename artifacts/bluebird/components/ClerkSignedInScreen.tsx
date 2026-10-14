@@ -3,17 +3,19 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from '
 import { Redirect, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuth } from '@clerk/expo';
+import { useAuth as useClerkAuth } from '@clerk/expo';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useDormantClerkProductionTokenProvider } from '@/lib/dormantClerkIntegration';
 import { getClerkAuthErrorMessage, performClerkSignOut } from '@/lib/clerkAuthConfig';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth as useBluebirdAuth } from '@/context/AuthContext';
 
 export function ClerkSignedInScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useClerkAuth();
+  const { clerkMemberResolution, retryClerkMemberResolution } = useBluebirdAuth();
   const queryClient = useQueryClient();
   const clerkTokenProvider = useDormantClerkProductionTokenProvider();
   const [error, setError] = useState<string | null>(null);
@@ -59,8 +61,18 @@ export function ClerkSignedInScreen() {
           Your Clerk session is active, but Bluebird has not confirmed a matching member account. Member screens and cached member data stay unavailable until the backend can verify this connection.
         </Text>
         <Text style={[styles.pending, { color: colors.mutedOnBrand }]} testID="clerk-member-pending">
-          Account status: pending link confirmation. No authenticated Bluebird API request has been made.
+          {getResolutionMessage(clerkMemberResolution)}
         </Text>
+        {clerkMemberResolution.status === 'error' && (
+          <Pressable
+            accessibilityRole="button"
+            onPress={retryClerkMemberResolution}
+            style={[styles.retryButton, { borderColor: colors.border }]}
+            testID="clerk-member-retry"
+          >
+            <Text style={[styles.retryButtonText, { color: colors.textOnBrand }]}>Try membership check again</Text>
+          </Pressable>
+        )}
         {error && (
           <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.destructive }]} testID="clerk-sign-out-error">
             {error}
@@ -87,6 +99,27 @@ export function ClerkSignedInScreen() {
   );
 }
 
+function getResolutionMessage(resolution: ReturnType<typeof useBluebirdAuth>['clerkMemberResolution']): string {
+  switch (resolution.status) {
+    case 'signed_out':
+      return 'Account status: signed out.';
+    case 'resolving':
+      return 'Account status: checking for a confirmed Bluebird member link.';
+    case 'linked':
+      return 'Account status: a Bluebird member identity was confirmed.';
+    case 'registration_required':
+      return 'Account status: the backend confirmed that registration is required.';
+    case 'onboarding_required':
+      return 'Account status: the backend confirmed that onboarding is required.';
+    case 'unresolved':
+      return 'Account status: pending link confirmation. The current API response does not include an authoritative Bluebird member identity.';
+    case 'error':
+      return resolution.reason === 'unauthorized'
+        ? 'Account status: the backend did not accept this session. No member identity was resolved.'
+        : 'Account status: Bluebird could not verify the member link. No registration or member access was inferred.';
+  }
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 24 },
   centered: { justifyContent: 'center', alignItems: 'center' },
@@ -95,6 +128,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
   body: { fontSize: 15, fontFamily: 'Inter_400Regular', lineHeight: 22, marginTop: 10, marginBottom: 24 },
   pending: { fontSize: 13, fontFamily: 'Inter_500Medium', lineHeight: 20, marginBottom: 24 },
+  retryButton: { minHeight: 46, borderWidth: 1, borderRadius: 999, justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
+  retryButtonText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
   error: { fontSize: 14, fontFamily: 'Inter_400Regular', lineHeight: 21, marginBottom: 14 },
   primaryButton: { minHeight: 50, borderRadius: 999, justifyContent: 'center', alignItems: 'center' },
   primaryButtonText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },

@@ -54,20 +54,6 @@ export interface ProductionCurrentUser {
   impersonation?: Nullable<ProductionImpersonation>;
 }
 
-/**
- * Projection-only result for the current `/api/me` contract. Even the positive
- * branch has no Bluebird member ID and must not open the production access gate.
- */
-export type ProductionMemberResolution =
-  | {
-      status: 'pending';
-      currentUser: ProductionCurrentUser;
-    }
-  | {
-      status: 'authenticated_member';
-      currentUser: ProductionCurrentUser;
-    };
-
 export interface ProductionNotificationPrefs {
   mode: 'off' | 'all' | 'specific';
   allChannels: Nullable<NotificationChannel>;
@@ -1182,19 +1168,6 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
   return {
     getMe: (requestOptions?: ProductionRequestOptions) =>
       request(PRODUCTION_AUTH_PATHS.me, 'GET', parseCurrentUser, requestOptions),
-    resolveCurrentMember: async (
-      requestOptions?: ProductionRequestOptions,
-    ): Promise<ProductionMemberResolution> => {
-      const currentUser = await request(
-        PRODUCTION_AUTH_PATHS.me,
-        'GET',
-        parseCurrentUser,
-        requestOptions,
-      );
-      return currentUser.isAuthenticated && currentUser.isMember
-        ? { status: 'authenticated_member', currentUser }
-        : { status: 'pending', currentUser };
-    },
     getProfile: (requestOptions?: ProductionRequestOptions) =>
       request(PRODUCTION_AUTH_PATHS.profile, 'GET', parseProfile, requestOptions),
     updateProfile: (data: UpdateProductionUserProfileRequest, requestOptions?: ProductionRequestOptions) => {

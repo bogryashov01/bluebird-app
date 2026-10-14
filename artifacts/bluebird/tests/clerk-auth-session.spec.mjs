@@ -14,7 +14,7 @@ import {
 } from "../scripts/.custom-fetch.test.mjs";
 import { PRODUCTION_AUTH_AVAILABILITY } from "../scripts/.production-auth-state.test.mjs";
 
-test("Clerk loading, signed-out, pending, unlinked, and linked states gate member screens", () => {
+test("central Clerk resolution states gate member screens and distinguish outcomes", () => {
   assert.equal(getClerkEntryState({ isLoaded: false, isSignedIn: undefined }), "loading");
   assert.equal(getClerkEntryState({ isLoaded: true, isSignedIn: false }), "signed-out");
   assert.equal(getClerkEntryState({ isLoaded: true, isSignedIn: true }), "member-pending");
@@ -22,9 +22,33 @@ test("Clerk loading, signed-out, pending, unlinked, and linked states gate membe
     getClerkEntryState({
       isLoaded: true,
       isSignedIn: true,
-      memberResolution: { status: "unlinked" },
+      memberResolution: { status: "unresolved", reason: "projection_only" },
     }),
     "member-unlinked",
+  );
+  assert.equal(
+    getClerkEntryState({
+      isLoaded: true,
+      isSignedIn: true,
+      memberResolution: { status: "registration_required" },
+    }),
+    "registration-required",
+  );
+  assert.equal(
+    getClerkEntryState({
+      isLoaded: true,
+      isSignedIn: true,
+      memberResolution: { status: "onboarding_required" },
+    }),
+    "onboarding-required",
+  );
+  assert.equal(
+    getClerkEntryState({
+      isLoaded: true,
+      isSignedIn: true,
+      memberResolution: { status: "error", reason: "backend" },
+    }),
+    "error",
   );
   assert.equal(
     canAccessClerkMemberScreens({

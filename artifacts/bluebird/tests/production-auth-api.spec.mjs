@@ -313,25 +313,21 @@ test("construction is inert and /api/me HTTP 200 false is a signed-out result", 
   assert.equal(requests, 1);
 });
 
-test("/api/me resolution stays pending for anonymous or non-member projections", async () => {
+test("/api/me returns projections without inferring linked or registration state", async () => {
   for (const projection of [
     anonymous,
     { ...currentUser, isMember: false, memberTier: null },
     { ...currentUser, isAuthenticated: false },
   ]) {
     const client = makeClient(async () => jsonResponse(projection));
-    const result = await client.resolveCurrentMember();
-    assert.equal(result.status, "pending");
-    assert.deepEqual(result.currentUser, projection);
-    assert.equal("registrationRequired" in result, false);
-    assert.equal("accountLinkRequired" in result, false);
+    const result = await client.getMe();
+    assert.deepEqual(result, projection);
   }
 
   const memberClient = makeClient(async () => jsonResponse(currentUser));
-  const memberResult = await memberClient.resolveCurrentMember();
-  assert.equal(memberResult.status, "authenticated_member");
-  assert.equal(memberResult.currentUser.isAuthenticated, true);
-  assert.equal(memberResult.currentUser.isMember, true);
+  const memberResult = await memberClient.getMe();
+  assert.equal(memberResult.isAuthenticated, true);
+  assert.equal(memberResult.isMember, true);
   assert.equal("memberId" in memberResult, false);
 });
 

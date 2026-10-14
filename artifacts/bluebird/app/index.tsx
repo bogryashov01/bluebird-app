@@ -2,9 +2,18 @@ import { Redirect } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { getClerkMemberDestination } from '@/lib/clerkMemberResolution';
 
 export default function Index() {
-  const { token, user, isLoading, authMode, clerkSignedIn } = useAuth();
+  const {
+    token,
+    user,
+    isLoading,
+    authMode,
+    clerkSignedIn,
+    clerkMemberResolution,
+    memberAccessResolved,
+  } = useAuth();
   const colors = useColors();
 
   if (isLoading) {
@@ -16,6 +25,8 @@ export default function Index() {
   }
 
   if (authMode === 'clerk') {
+    const destination = getClerkMemberDestination(clerkMemberResolution);
+    if (memberAccessResolved && destination) return <Redirect href={destination} />;
     return clerkSignedIn
       ? <Redirect href="/(clerk-auth)/signed-in" />
       : <Redirect href="/(auth)/splash" />;

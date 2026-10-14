@@ -3,7 +3,8 @@
 ## Development-only Clerk session wiring (2026-10-14)
 
 **Current status: the opt-in Clerk session flow is connected to mobile auth,
-but Bluebird member resolution and authenticated production requests remain
+and its member resolver calls the existing `GET /api/me` adapter, but
+authoritative member resolution and authenticated member-data access remain
 disabled.** Clerk activation requires all three conditions: the explicit
 `EXPO_PUBLIC_ENABLE_CLERK_AUTH=true` flag, an Expo Development build, and a
 structurally valid `pk_test_` publishable key. A release build or live key
@@ -20,13 +21,52 @@ off, the existing Bluebird demo phone flow remains unchanged.
 An active Clerk identity is not treated as a Bluebird member. Until a future
 approved backend integration resolves a linked member, signed-in users see a
 pending/unlinked notice and cannot open member tabs or member-specific cached
-data; direct links to other member routes are guarded as well. Sign-out and
-identity changes clear React Query state. The existing
-Clerk adapter asks Clerk for a fresh token on each explicit authenticated
-request and the production API client sends it as a Bearer token, but the app
-does not construct or call that client. `PRODUCTION_AUTH_AVAILABILITY` remains
-`unavailable`; public generated-client requests receive no Clerk or legacy
-Authorization header.
+data; direct links to other member routes are guarded as well. The resolver
+asks Clerk for a fresh token for `GET /api/me`, and clears its request on
+identity changes. Sign-out and identity changes clear React Query state before
+the next identity can be exposed. `/api/me` currently returns only a
+projection, so every successful response remains unresolved, including
+`isAuthenticated: true` plus `isMember: true`; no registration or onboarding
+state is inferred. `PRODUCTION_AUTH_AVAILABILITY` remains `unavailable`;
+member-data requests remain disabled and public generated-client requests
+receive no Clerk or legacy Authorization header.
+
+### Backend contract required to activate member routing
+
+The mobile resolver deliberately accepts no guessed response fields. Before
+the app may route to Registration, Onboarding, or Home, the backend/API owner
+must document and implement all of the following:
+
+1. **Clerk token verification:** identify the exact Clerk instance and
+   environment, require signature/issuer validation against that instance,
+   and specify expected audience, authorized party/origin, token type/template,
+   and required claims. State how `sub` is mapped to a Bluebird account, and
+   confirm that tokens returned by the app's fresh `getToken()` call are
+   accepted by both `/api/me` and any member routes.
+2. **Stable Bluebird identity:** return a non-empty, stable Bluebird member
+   identifier that is distinct from Clerk `userId`, email, and phone number.
+   Document its type, lifetime, and account-switch/linking behavior.
+3. **Explicit resolution semantics:** specify separate, unambiguous outcomes
+   for a linked member, a confirmed account requiring registration/linking,
+   and a linked member requiring onboarding. Include the stable member ID for
+   linked outcomes and define whether onboarding is based on a server-owned
+   completion flag. `isMember`, profile completeness, or missing fields alone
+   are not sufficient identity/link evidence.
+4. **Error/status behavior:** specify response bodies and HTTP statuses for
+   anonymous, invalid, expired, revoked, wrong-issuer, unlinked, onboarding,
+   transient backend, and unexpected failures. In particular, do not return a
+   normal 200 projection that is indistinguishable from an identity lookup
+   failure; define retry behavior and whether a refreshed Clerk token can
+   recover from an expiry response.
+5. **Compatibility and deployment evidence:** identify the deployed service
+   and version that implements the contract, prove the configured mobile API
+   base URL reaches it, and confirm its token verifier and response schema in
+   a non-production environment before enabling any member-data gate.
+
+Until those requirements are met and independently verified, the prepared
+semantic states and route destinations are inert: no account is created or
+linked, no legacy-JWT-dependent registration/onboarding route is opened, and
+the pending/unlinked screen remains the only Clerk signed-in destination.
 
 ### Verification and remaining blockers
 
