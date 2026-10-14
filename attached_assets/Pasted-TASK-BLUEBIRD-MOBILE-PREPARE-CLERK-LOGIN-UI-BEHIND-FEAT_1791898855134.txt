@@ -1,0 +1,242 @@
+TASK: BLUEBIRD MOBILE — PREPARE CLERK LOGIN UI BEHIND FEATURE FLAG
+
+MODE: BUILD / EXECUTE
+
+PROJECT: Bluebird Mobile
+
+CONTEXT:
+
+The following work is already complete:
+
+- Expo SDK 57 migration
+- @clerk/expo@4.10.1 installation
+- Expo SecureStore integration
+- Dormant ClerkProvider entry point
+- Clerk session token adapter
+- VerifiedProductionTokenProvider adapter
+- Production API contract alignment
+- Clerk readiness audit
+- Mock authentication tests
+
+The production Bluebird backend uses Clerk authentication
+according to the source-derived API contract.
+
+However, the actual production Clerk instance and
+token acceptance have not yet been verified.
+
+GOAL:
+
+Prepare a functional Clerk authentication UI and
+provider integration behind a disabled feature flag.
+
+The existing application must continue working
+exactly as before when the flag is disabled.
+
+PHASE 1 — REVIEW
+
+Inspect:
+
+- Current application root layout
+- Existing AuthContext
+- Existing login and onboarding screens
+- Expo Router navigation
+- Dormant Clerk integration
+- Production API token adapter
+- Existing feature flag conventions
+
+Reuse existing components where possible.
+
+Do not duplicate the Clerk bridge implemented
+in Task #351.
+
+PHASE 2 — FEATURE FLAG
+
+Introduce a feature flag:
+
+EXPO_PUBLIC_ENABLE_CLERK_AUTH
+
+Default behavior:
+
+- Missing flag = disabled
+- false = disabled
+- true = enabled only when all required
+  configuration is valid
+
+Do not enable Clerk automatically just because
+a publishable key exists.
+
+Validate the flag and publishable key before
+mounting ClerkProvider.
+
+If configuration is incomplete, fail closed
+and preserve the existing application behavior.
+
+PHASE 3 — PROVIDER INTEGRATION
+
+Prepare conditional ClerkProvider mounting.
+
+Requirements:
+
+- Use the existing dormant provider entry point.
+- Use Clerk's Expo SecureStore token cache.
+- Never expose CLERK_SECRET_KEY.
+- Do not replace the existing AuthContext.
+- Do not mix local/demo JWT with Clerk tokens.
+- Keep production API authentication disabled.
+- Prevent authenticated API calls until
+  backend token acceptance is verified.
+
+When the feature flag is disabled,
+Clerk must not initialize.
+
+PHASE 4 — AUTHENTICATION UI
+
+Prepare mobile authentication screens using
+the existing Bluebird design system.
+
+Include:
+
+1. Sign-in screen
+2. Sign-up screen
+3. Loading state
+4. Authentication error state
+5. Signed-out state
+6. Sign-out action
+
+Use Clerk's supported Expo authentication APIs.
+
+Do not assume that SMS login, email login,
+password login, or OAuth providers are enabled.
+
+Inspect the available Clerk integration and
+make authentication methods configurable.
+
+Do not invent an authentication method that
+has not been confirmed for the existing
+Bluebird Clerk instance.
+
+Do not replace the current onboarding flow.
+
+PHASE 5 — NAVIGATION
+
+Integrate authentication screens into Expo Router
+behind the feature flag.
+
+Requirements:
+
+- Existing navigation remains unchanged
+  when the flag is disabled.
+- Existing anonymous screens remain accessible.
+- Authentication screens are isolated.
+- No redirect loops.
+- No automatic production API requests.
+- No automatic account creation.
+
+PHASE 6 — TOKEN SAFETY
+
+Ensure:
+
+- Clerk session tokens remain separate
+  from local/demo JWT.
+- Signed-out state never provides a
+  production authorization token.
+- Token refresh uses Clerk's supported APIs.
+- Sign-out clears Clerk session state.
+- Production API calls remain disabled.
+- No stale token is reused.
+
+PHASE 7 — TESTING
+
+Add mock-only tests for:
+
+- Feature flag disabled
+- Feature flag enabled without key
+- Feature flag enabled with valid mock config
+- ClerkProvider mounting conditions
+- Signed-out navigation
+- Sign-in loading and error states
+- Sign-out behavior
+- Demo JWT isolation
+- No production API requests
+
+Run:
+
+- Library TypeScript checks
+- Bluebird application TypeScript checks
+- Clerk bridge tests
+- Production auth API tests
+- Startup stability tests
+- Network reliability tests
+- Queue readiness tests
+- Membership tests
+- Passenger flow tests
+- Web/iOS/Android Metro exports
+- git diff --check
+
+PHASE 8 — DOCUMENTATION
+
+Update:
+
+- AUTHENTICATED-API-READINESS.md
+- STAGE_2B_ACTIVATION_CHECKLIST.md
+
+Document:
+
+1. Feature flag behavior
+2. Provider mounting conditions
+3. Authentication routes
+4. Supported UI states
+5. Required Clerk configuration
+6. Remaining requirements from Nick
+7. Native verification requirements
+8. Production activation blockers
+
+PHASE 9 — FINAL REPORT
+
+Provide:
+
+1. Files created or modified
+2. Feature flag implementation
+3. ClerkProvider integration status
+4. Authentication UI status
+5. Navigation changes
+6. Test results
+7. Remaining requirements from Nick
+8. Steps needed to test authentication
+   on a real device
+
+RESTRICTIONS:
+
+Do not enable the Clerk feature flag.
+
+Do not add real Clerk credentials.
+
+Do not activate production authentication.
+
+Do not modify the production backend.
+
+Do not replace AuthContext.
+
+Do not modify production API contracts.
+
+Do not send SMS.
+
+Do not initiate payments.
+
+Do not create production accounts.
+
+Do not deploy.
+
+Do not commit.
+
+Do not push.
+
+SUCCESS CRITERIA:
+
+Bluebird Mobile contains a prepared Clerk login UI
+and conditional provider integration.
+
+With the feature flag disabled, the existing
+application behaves exactly as before.
+
+Production authentication remains inactive.
