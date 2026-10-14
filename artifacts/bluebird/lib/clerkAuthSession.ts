@@ -6,6 +6,7 @@ export type ClerkEntryState =
   | 'loading'
   | 'signed-out'
   | 'member-pending'
+  | 'member-not-checked'
   | 'member-unlinked'
   | 'member-linked'
   | 'registration-required'
@@ -35,6 +36,8 @@ export function getClerkEntryState(input: {
       return 'signed-out';
     case 'resolving':
       return 'member-pending';
+    case 'not_checked':
+      return 'member-not-checked';
   }
 }
 

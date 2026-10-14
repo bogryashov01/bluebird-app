@@ -10,6 +10,13 @@ import { useDormantClerkProductionTokenProvider } from '@/lib/dormantClerkIntegr
 import { getClerkAuthErrorMessage, performClerkSignOut } from '@/lib/clerkAuthConfig';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth as useBluebirdAuth } from '@/context/AuthContext';
+import { confirmDialog } from '@/lib/confirmDialog';
+import {
+  isClerkApiConnectionTestVisible,
+  runClerkApiConnectionTest,
+  type ClerkApiConnectionDiagnosticResult,
+} from '@/lib/clerkApiConnectionDiagnostic';
+import { createAuthenticatedProductionApiClient } from '@/lib/productionAuthApi';
 
 export function ClerkSignedInScreen() {
   const insets = useSafeAreaInsets();
@@ -20,6 +27,9 @@ export function ClerkSignedInScreen() {
   const clerkTokenProvider = useDormantClerkProductionTokenProvider();
   const [error, setError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isTestingApi, setIsTestingApi] = useState(false);
+  const [apiDiagnostic, setApiDiagnostic] = useState<ClerkApiConnectionDiagnosticResult | null>(null);
+  const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
@@ -35,6 +45,25 @@ export function ClerkSignedInScreen() {
       return;
     }
     router.replace('/(auth)/welcome');
+  };
+
+  const handleApiConnectionTest = async () => {
+    if (isTestingApi) return;
+    setIsTestingApi(true);
+    try {
+      const result = await runClerkApiConnectionTest({
+        isDevelopment,
+        isLoaded,
+        isSignedIn,
+        confirm: confirmDialog,
+        createApiClient: () => createAuthenticatedProductionApiClient({
+          tokenProvider: clerkTokenProvider,
+        }),
+      });
+      if (result) setApiDiagnostic(result);
+    } finally {
+      setIsTestingApi(false);
+    }
   };
 
   if (!isLoaded) {
@@ -63,6 +92,31 @@ export function ClerkSignedInScreen() {
         <Text style={[styles.pending, { color: colors.mutedOnBrand }]} testID="clerk-member-pending">
           {getResolutionMessage(clerkMemberResolution)}
         </Text>
+        {isClerkApiConnectionTestVisible({ isDevelopment, isLoaded, isSignedIn }) && (
+          <View style={styles.diagnosticSection}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isTestingApi, busy: isTestingApi }}
+              disabled={isTestingApi}
+              onPress={handleApiConnectionTest}
+              style={[styles.retryButton, { borderColor: colors.border }, isTestingApi && styles.disabled]}
+              testID="clerk-api-connection-test"
+            >
+              {isTestingApi ? (
+                <ActivityIndicator color={colors.textOnBrand} />
+              ) : (
+                <Text style={[styles.retryButtonText, { color: colors.textOnBrand }]}>
+                  Test Bluebird API Connection
+                </Text>
+              )}
+            </Pressable>
+            {apiDiagnostic && (
+              <View accessibilityLiveRegion="polite" style={styles.diagnosticResult} testID="clerk-api-connection-result">
+                <DiagnosticResultText result={apiDiagnostic} color={colors.mutedOnBrand} />
+              </View>
+            )}
+          </View>
+        )}
         {clerkMemberResolution.status === 'error' && (
           <Pressable
             accessibilityRole="button"
@@ -103,6 +157,8 @@ function getResolutionMessage(resolution: ReturnType<typeof useBluebirdAuth>['cl
   switch (resolution.status) {
     case 'signed_out':
       return 'Account status: signed out.';
+    case 'not_checked':
+      return 'Account status: member link has not been checked. Member access remains disabled.';
     case 'resolving':
       return 'Account status: checking for a confirmed Bluebird member link.';
     case 'linked':
@@ -120,6 +176,29 @@ function getResolutionMessage(resolution: ReturnType<typeof useBluebirdAuth>['cl
   }
 }
 
+function DiagnosticResultText({
+  result,
+  color,
+}: {
+  result: ClerkApiConnectionDiagnosticResult;
+  color: string;
+}) {
+  const lines = [
+    `HTTP status: ${result.httpStatus ?? 'Unavailable'}`,
+    `Authentication accepted: ${formatBoolean(result.authenticationAccepted)}`,
+    `isAuthenticated: ${formatBoolean(result.isAuthenticated)}`,
+    `isMember: ${formatBoolean(result.isMember)}`,
+    `isProfileComplete: ${formatBoolean(result.isProfileComplete)}`,
+    `Schema: ${result.schemaStatus}`,
+    ...(result.failureCategory ? [`Failure: ${result.failureCategory}`] : []),
+  ];
+  return <Text style={[styles.diagnosticText, { color }]}>{lines.join('\n')}</Text>;
+}
+
+function formatBoolean(value: boolean | null): string {
+  return value === null ? 'Unavailable' : value ? 'Yes' : 'No';
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 24 },
   centered: { justifyContent: 'center', alignItems: 'center' },
@@ -130,6 +209,9 @@ const styles = StyleSheet.create({
   pending: { fontSize: 13, fontFamily: 'Inter_500Medium', lineHeight: 20, marginBottom: 24 },
   retryButton: { minHeight: 46, borderWidth: 1, borderRadius: 999, justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
   retryButtonText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
+  diagnosticSection: { marginBottom: 18 },
+  diagnosticResult: { marginTop: 10 },
+  diagnosticText: { fontSize: 12, fontFamily: 'Inter_400Regular', lineHeight: 18 },
   error: { fontSize: 14, fontFamily: 'Inter_400Regular', lineHeight: 21, marginBottom: 14 },
   primaryButton: { minHeight: 50, borderRadius: 999, justifyContent: 'center', alignItems: 'center' },
   primaryButtonText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },

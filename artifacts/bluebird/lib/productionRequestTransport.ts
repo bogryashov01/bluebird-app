@@ -16,6 +16,7 @@ export interface ProductionJsonRequestOptions<T> {
   credentials: RequestCredentials;
   timeoutMs: number;
   signal?: AbortSignal;
+  onResponseStatus?: (status: number) => void;
   prepareHeaders?: (signal: AbortSignal) => Promise<Record<string, string>>;
   parse: (value: unknown) => T;
   errors: ProductionTransportErrorFactory;
@@ -72,6 +73,7 @@ export async function requestProductionJson<T>(
       if (cancelled || controller.signal.aborted) throw options.errors.cancelled();
       throw options.errors.network();
     }
+    options.onResponseStatus?.(response.status);
     if (!response.ok) throw options.errors.http(response);
 
     let json: unknown;

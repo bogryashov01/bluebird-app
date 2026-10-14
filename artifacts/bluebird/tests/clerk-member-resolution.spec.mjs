@@ -5,6 +5,7 @@ import {
   getClerkMemberDestination,
   mapAuthoritativeMemberDecision,
   resolveClerkMember,
+  shouldAutomaticallyResolveClerkMember,
 } from "../scripts/.clerk-member-resolution.test.mjs";
 
 const projection = {
@@ -165,6 +166,33 @@ test("unloaded and signed-out sessions make no API request", async () => {
     { status: "signed_out" },
   );
   assert.equal(requests, 0);
+});
+
+test("automatic member resolution is suppressed for every Development Clerk session", () => {
+  assert.equal(shouldAutomaticallyResolveClerkMember({
+    isDevelopment: true,
+    isClerkMode: true,
+    isLoaded: true,
+    isSignedIn: true,
+  }), false);
+  assert.equal(shouldAutomaticallyResolveClerkMember({
+    isDevelopment: true,
+    isClerkMode: true,
+    isLoaded: true,
+    isSignedIn: false,
+  }), false);
+  assert.equal(shouldAutomaticallyResolveClerkMember({
+    isDevelopment: true,
+    isClerkMode: true,
+    isLoaded: false,
+    isSignedIn: true,
+  }), false);
+  assert.equal(shouldAutomaticallyResolveClerkMember({
+    isDevelopment: false,
+    isClerkMode: true,
+    isLoaded: true,
+    isSignedIn: true,
+  }), true);
 });
 
 test("unauthorized, network, backend, malformed, and cancelled requests remain errors", async () => {

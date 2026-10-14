@@ -22,6 +22,16 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(getClerkEntryState({ isLoaded: false, isSignedIn: undefined }), "loading");
   assert.equal(getClerkEntryState({ isLoaded: true, isSignedIn: false }), "signed-out");
   assert.equal(getClerkEntryState({ isLoaded: true, isSignedIn: true }), "member-pending");
+  assert.equal(getClerkEntryState({
+    isLoaded: true,
+    isSignedIn: true,
+    memberResolution: { status: "not_checked" },
+  }), "member-not-checked");
+  assert.equal(canAccessClerkMemberScreens({
+    isLoaded: true,
+    isSignedIn: true,
+    memberResolution: { status: "not_checked" },
+  }), false);
   assert.equal(
     getClerkEntryState({
       isLoaded: true,

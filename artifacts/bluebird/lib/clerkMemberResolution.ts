@@ -11,6 +11,7 @@ import {
 export type ClerkMemberResolution =
   | { status: 'signed_out' }
   | { status: 'resolving'; clerkUserId?: string | null }
+  | { status: 'not_checked'; clerkUserId?: string | null }
   | { status: 'linked'; memberId: string }
   | { status: 'registration_required' }
   | { status: 'onboarding_required' }
@@ -19,6 +20,15 @@ export type ClerkMemberResolution =
       status: 'error';
       reason: 'unauthorized' | 'network' | 'backend' | 'invalid_response' | 'token' | 'cancelled' | 'unknown';
     };
+
+export function shouldAutomaticallyResolveClerkMember(input: {
+  isDevelopment: boolean;
+  isClerkMode: boolean;
+  isLoaded: boolean;
+  isSignedIn: boolean | undefined;
+}): boolean {
+  return input.isClerkMode && input.isLoaded && input.isSignedIn === true && !input.isDevelopment;
+}
 
 /**
  * A semantic decision, not an API wire shape. Only an adapter backed by an

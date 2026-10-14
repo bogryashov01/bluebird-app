@@ -21,6 +21,12 @@ export interface ProductionAuthApiOptions {
 
 export interface ProductionRequestOptions {
   signal?: AbortSignal;
+  onResponseStatus?: (status: number) => void;
+}
+
+export interface ProductionCurrentUserResponse {
+  status: number;
+  currentUser: ProductionCurrentUser;
 }
 
 export type ProductionHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -1125,6 +1131,7 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
       credentials: 'omit',
       timeoutMs,
       signal: requestOptions.signal,
+      onResponseStatus: requestOptions.onResponseStatus,
       prepareHeaders: async (signal) => {
         let token: string | null;
         try {
@@ -1168,6 +1175,19 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
   return {
     getMe: (requestOptions?: ProductionRequestOptions) =>
       request(PRODUCTION_AUTH_PATHS.me, 'GET', parseCurrentUser, requestOptions),
+    getMeWithStatus: async (
+      onResponseStatus?: (status: number) => void,
+    ): Promise<ProductionCurrentUserResponse> => {
+      let status: number | null = null;
+      const currentUser = await request(PRODUCTION_AUTH_PATHS.me, 'GET', parseCurrentUser, {
+        onResponseStatus: (responseStatus) => {
+          status = responseStatus;
+          onResponseStatus?.(responseStatus);
+        },
+      });
+      if (status === null) throw new ProductionAuthRequestError('Production response status was unavailable.', 'network');
+      return { status, currentUser };
+    },
     getProfile: (requestOptions?: ProductionRequestOptions) =>
       request(PRODUCTION_AUTH_PATHS.profile, 'GET', parseProfile, requestOptions),
     updateProfile: (data: UpdateProductionUserProfileRequest, requestOptions?: ProductionRequestOptions) => {

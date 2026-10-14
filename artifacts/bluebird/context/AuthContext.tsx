@@ -13,6 +13,7 @@ import {
 } from '@/lib/clerkAuthSession';
 import {
   resolveClerkMember,
+  shouldAutomaticallyResolveClerkMember,
   type ClerkMemberResolution,
 } from '@/lib/clerkMemberResolution';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
@@ -103,6 +104,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (clerkSession.isSignedIn !== true) {
       setClerkMemberResolution({ status: 'signed_out' });
+      return;
+    }
+    const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
+    if (!shouldAutomaticallyResolveClerkMember({
+      isDevelopment,
+      isClerkMode: clerkMode,
+      isLoaded: clerkSession.isLoaded,
+      isSignedIn: clerkSession.isSignedIn,
+    })) {
+      if (isDevelopment) {
+        setClerkMemberResolution({ status: 'not_checked', clerkUserId: clerkSession.userId });
+      }
       return;
     }
 
