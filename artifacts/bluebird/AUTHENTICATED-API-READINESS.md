@@ -1,5 +1,143 @@
 # Bluebird authenticated production API readiness
 
+## Clerk phone-auth readiness assessment (2026-10-14)
+
+**Decision: client work is feasible behind the existing dormant gate, but
+phone authentication is not implemented or ready to activate.** This assessment
+uses the supplied Development-instance settings as input, not as a live Clerk
+dashboard/API verification: phone-number + SMS-code methods are reported enabled
+for sign-in and sign-up, while verification at sign-up is reported disabled.
+No Clerk sign-in/sign-up request was made, and no SMS was sent.
+
+The environment metadata indicates that an
+`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` secret is configured. Its value was not
+read, copied, logged, or checked. Presence alone does not prove that the value
+is valid, belongs to the supplied Development instance, matches its issuer, or
+is included in a running Expo bundle. The app still mounts Clerk and exposes
+the Clerk routes only when its existing feature flag is exactly `true` and the
+key passes the local shape check. This review did not inspect or change the
+feature-flag value.
+
+### What exists and what phone authentication still needs
+
+- Existing code has a conditional `ClerkProvider` using Clerk Expo's
+  `tokenCache`, isolated `/sign-in` and `/sign-up` routes, and a small session
+  adapter that can retrieve a Clerk token and delegate Clerk sign-out. The
+  adapter is not connected to `AuthContext`, demo auth, or Bluebird API calls.
+- The current `ClerkAuthPanel` is not a sign-in form: signed-out users see a
+  “not enabled yet” message. It has loading/error display, can show a current
+  Clerk session and sign it out, and links between routes. The separate demo
+  welcome/phone/code path and its `AuthContext` remain the active authentication
+  experience.
+- The installed `@clerk/expo@4.10.1` types (through resolved
+  `@clerk/shared@4.40.0`) expose this phone-code shape:
+  - **Sign-in:** collect and normalize a phone identifier; create a sign-in
+    using the `phone_code` strategy; prepare the first factor; collect the
+    code and attempt that factor. Inspect the returned status, handle a
+    required second factor or other non-complete state, and call `setActive`
+    with `createdSessionId` only after status is `complete`.
+  - **Sign-up:** create a sign-up with the phone number; prepare phone-number
+    verification with the `phone_code` strategy; collect and attempt the
+    code. Respect returned `missingRequirements`, `unverifiedFields`, and
+    `verifications.phoneNumber.status`; only activate a returned session after
+    the sign-up status is `complete` and its policy requirements are met.
+  - Both screens still need accessible phone/code entry, input validation,
+    pending/disabled states, resend/cooldown behavior, safe error mapping,
+    expired/invalid-code recovery, back/edit-phone behavior, session activation
+    and navigation, and explicit Clerk-only sign-out/account-switch handling.
+    Do not log codes, phone PII, or session tokens. These are client lifecycle
+    calls only; they have not been invoked in this assessment.
+- An incomplete lifecycle must not be treated as signed in. In particular,
+  a `complete` sign-up result or a returned session alone is not proof that
+  Bluebird may treat the phone as verified when the supplied setting disables
+  verification at sign-up. The app must check the actual returned verification
+  state and product policy; if policy requires verified ownership, block
+  onboarding/member access until Clerk confirms it.
+
+### Static dependency evidence versus native readiness
+
+The locked package graph is compatible according to the installed peer
+metadata; this is static evidence only:
+
+| Package | Locked version | Installed Clerk/Expo constraint | Static result |
+| --- | --- | --- | --- |
+| Expo | `57.0.27` | `@clerk/expo@4.10.1`: `>=54 <58` | Satisfied |
+| React Native | `0.86.3` | Clerk Expo: `>=0.75` | Satisfied |
+| React / React DOM | `19.2.3` / `19.2.3` | Clerk Expo `^19`; resolved `@clerk/react@6.17.8` and `@clerk/shared@4.40.0` accept `~19.2.3` | Satisfied |
+| `@clerk/expo` | `4.10.1` | Resolved with the versions shown here | Installed |
+| `expo-secure-store` | `57.0.4` | Clerk Expo optional peer `>=12.4.0`; SDK 57 module expects Expo | Satisfied |
+
+The lockfile resolves Auth Session `57.0.14`, Constants `57.0.21`, Crypto
+`57.0.3`, Secure Store `57.0.4`, and Web Browser `57.0.3` with Expo
+`57.0.27`. These satisfy Clerk's declared peers and the SDK 57 family. The
+native Clerk token cache uses SecureStore on native; the source/lockfile do not
+prove native keychain/keystore writes, process-death restoration, app return
+URLs, or a successful development build. No `ios/` or `android/` project or
+`xcodebuild`/`adb`/`gradle` tool is available in this workspace. Native
+development-build and device verification remains a separate blocker; a
+typecheck, lockfile, or Metro export cannot substitute for it.
+
+### Verification policy and API identity blockers
+
+- The supplied Development setting says sign-up verification is disabled. Its
+  security meaning is unresolved: product/security owners must decide whether
+  accounts may be created and sessions activated before phone ownership is
+  proven. Do not call a phone verified based on a submitted number, a code
+  screen being shown, a session being active, or sign-up completion. Require
+  Clerk's actual returned phone verification state and an approved policy.
+  This assessment did not independently inspect Clerk settings or test their
+  effect.
+- The checked-in API server at
+  `artifacts/api-server/src/middlewares/auth.ts` signs `{ userId }` with its
+  own `JWT_SECRET`/`SESSION_SECRET` and verifies bearer JWTs using that same
+  secret, then checks its local revoked-token table. It does not show Clerk
+  public-key/JWKS signature validation, Clerk issuer or audience checks, or a
+  mapping from Clerk `sub` to a Bluebird `userId`. A Clerk-issued session token
+  is therefore **not proven compatible** with this verifier; the local
+  middleware should not be treated as a valid Clerk-token integration.
+- Before any member API connection, the API owner must specify the accepted
+  token (default Clerk session token or named template), exact issuer and
+  signing-key verification method, audience/authorized-party requirements,
+  expected subject claim and account mapping, revocation/session-expiry
+  behavior, and `/api/me`/protected-route responses. The existing token bridge
+  has no required template configured. These decisions require a separately
+  approved backend change or confirmed backend contract; this assessment makes
+  no production/backend change.
+
+### Blockers and staged implementation sequence
+
+1. **Confirm policy and environment:** product/security owner approves the
+   Development phone-code methods and decides whether sign-up must require a
+   verified phone before account/session/member access. Confirm the
+   environment-specific public key/instance/issuer correspondence without
+   exposing the value. Keep the feature flag unchanged.
+2. **Implement isolated mobile UI only after that policy decision:** add phone
+   and code screens to the existing Clerk routes, following the installed
+   v4 resource lifecycle above. Keep demo `AuthContext`, welcome flow,
+   feature-flag configuration, production availability, and API server
+   unchanged. Explicitly model loading, errors, verification and incomplete
+   account states, sign-out, and account switching.
+3. **Test without Clerk or SMS:** inject fake sign-in/sign-up resources and
+   verify state transitions, error/retry/resend UX, and that `setActive` is
+   called only for an approved complete result. Use synthetic phone/code
+   fixtures and assert no network call; do not use actual Clerk endpoints or
+   real phone numbers.
+4. **Verify native behavior separately:** after an approved mobile build,
+   check iOS and Android development builds for SecureStore persistence and
+   restore, session activation/sign-out, app switching/cache isolation, and
+   any required redirect/config-plugin behavior. Static type and bundle checks
+   are not evidence for these device behaviors.
+5. **Keep API integration out of this mobile-only stage:** API owner resolves
+   token issuer/signature/audience and Clerk-to-member identity mapping in an
+   approved plan. Any later server/client integration is a separate,
+   explicitly approved change with its own verification.
+
+This task did not read environment-variable values, credentials, or tokens;
+print or log no such values; call Clerk APIs; create accounts or sessions; send
+SMS; change authentication settings, the feature flag, demo auth, backend,
+production configuration, or deployment settings; or deploy. No production
+request or native development build was attempted.
+
 ## Feature-flagged Clerk UI preparation (2026-10-13)
 
 **Status: prepared and inactive by default; production authentication is not

@@ -11,20 +11,40 @@ verified and activation is separately approved.
 
 Bluebird has an isolated Clerk Expo provider/token adapter plus feature-flagged
 sign-in and sign-up routes. The provider is absent unless the exact opt-in flag
-and a structurally valid public key are both present. No Clerk instance or
-enabled authentication method is currently confirmed, so the routes make no
-sign-in/sign-up call and do not create accounts; signed-in sessions can be
-explicitly signed out through Clerk. Demo/local `AuthContext`, onboarding,
-token getter, API client, and `PRODUCTION_AUTH_AVAILABILITY` remain unchanged
-(`unavailable`). The SDK token cache uses Expo SecureStore on native, but
-persistence/restoration has not been tested on a device. All bridge/UI tests
-use injected mock sessions/configuration/fetchers only.
+and a structurally valid public key are both present. The current screens do
+not collect a phone or code and make no sign-in/sign-up call; signed-in
+sessions can be explicitly signed out through Clerk. Demo/local `AuthContext`,
+onboarding, token getter, API client, and `PRODUCTION_AUTH_AVAILABILITY` remain
+unchanged (`unavailable`). The SDK token cache uses Expo SecureStore on native,
+but persistence/restoration has not been tested on a device. All bridge/UI
+tests use injected mock sessions/configuration/fetchers only.
 
-The Clerk management check returned `not_configured`. Nick/product owner and
-the production API owner must confirm the intended instance/environment,
-enabled sign-in methods, public key provenance, native redirect settings, and
-token contract before a method is implemented or the feature flag is enabled
-in a release. Unknown methods are not assumed or invoked.
+The 2026-10-13 preparation recorded a Clerk management status of
+`not_configured`. For the 2026-10-14 readiness assessment, supplied
+Development-instance settings report phone-number + SMS-code sign-in and
+sign-up enabled and verification-at-sign-up disabled. These supplied settings
+were not independently checked against Clerk. Environment metadata indicates
+an `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` secret is configured, but its value was
+not read or checked for validity, instance/issuer match, or presence in an Expo
+bundle. The feature-flag value was not read or changed. Neither the supplied
+settings nor the configured-key status authorizes enabling the feature.
+
+The disabled sign-up verification setting is an unresolved security/product
+decision: do not treat a phone as verified based on sign-up completion or an
+active session. Before implementing the phone screens, the owner must define
+whether verified phone ownership is required before account/member access and
+how to handle Clerk's actual returned verification state. The Clerk Expo 4.10.1
+types support create → prepare phone-code verification → attempt code → inspect
+resource status → activate only a complete session; detailed lifecycle and
+static peer evidence are in the [readiness report](./AUTHENTICATED-API-READINESS.md).
+
+The supplied settings are Development-instance settings, not proof of
+production methods or backend acceptance. The local API-server middleware
+verifies its own-secret `{ userId }` JWTs and does not establish Clerk token
+issuer/signature/audience validation or Clerk-to-member identity mapping.
+Production API integration remains blocked on an explicit server contract and
+owner decision. Do not change production backend/configuration or initiate SMS
+flows as part of this mobile assessment.
 
 The supplied API contract is a dated source snapshot, not a production test.
 It specifies HTTPS Clerk Bearer sessions, optional-auth `GET /api/me` with

@@ -31,3 +31,4 @@
 - [Bluebird browser test fixtures](bluebird-browser-test-fixtures.md) — mock shared auth-query arrays and the local airport catalog separately from live public airport search.
 - [Bluebird time zone formatting](bluebird-time-zone-formatting.md) — short Intl timezone labels vary by runtime; preserve IANA zones and avoid asserting a specific abbreviation.
 - [Clerk Expo compatibility](clerk-expo-sdk54-peers.md) — verify transitive React peers and native-runtime risks for the selected Expo baseline; Metro exports alone are insufficient.
+- [Clerk phone verification policy](clerk-phone-verification-policy.md) — sign-up completion is not proof of phone ownership when verification-at-sign-up is disabled.
