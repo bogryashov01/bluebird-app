@@ -46,17 +46,32 @@ export function getClerkAuthViewState(input: {
 }
 
 export function getClerkAuthErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) return error.message;
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error &&
-    typeof error.message === 'string' &&
-    error.message.trim()
-  ) {
-    return error.message;
+  const code = getClerkErrorCode(error);
+  if (code === 'form_code_incorrect') return 'That code is incorrect. Check the SMS and try again.';
+  if (code === 'form_code_expired' || code === 'verification_expired') {
+    return 'That code has expired. Request a new code and try again.';
+  }
+  if (code === 'too_many_requests' || code === 'rate_limit_exceeded') {
+    return 'Too many attempts. Wait a moment, then try again.';
   }
   return 'Clerk authentication could not be completed. Please try again.';
+}
+
+function getClerkErrorCode(error: unknown): string | null {
+  if (typeof error !== 'object' || error === null) return null;
+  if ('code' in error && typeof error.code === 'string') return error.code;
+  if ('errors' in error && Array.isArray(error.errors)) {
+    const firstError: unknown = error.errors[0];
+    if (
+      typeof firstError === 'object' &&
+      firstError !== null &&
+      'code' in firstError &&
+      typeof firstError.code === 'string'
+    ) {
+      return firstError.code;
+    }
+  }
+  return null;
 }
 
 export async function performClerkSignOut(

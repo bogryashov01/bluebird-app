@@ -2,12 +2,13 @@
 
 ## Clerk phone-auth readiness assessment (2026-10-14)
 
-**Decision: client work is feasible behind the existing dormant gate, but
-phone authentication is not implemented or ready to activate.** This assessment
-uses the supplied Development-instance settings as input, not as a live Clerk
-dashboard/API verification: phone-number + SMS-code methods are reported enabled
-for sign-in and sign-up, while verification at sign-up is reported disabled.
-No Clerk sign-in/sign-up request was made, and no SMS was sent.
+**Decision: isolated phone-code authentication is implemented behind the
+existing dormant gate, but production authentication is not ready to activate.**
+This assessment uses the supplied Development-instance settings as input, not
+as a live Clerk dashboard/API verification: phone-number + SMS-code methods
+are reported enabled for sign-in and sign-up, while verification at sign-up is
+reported disabled. Automated tests use synthetic data and mocked resources;
+no Clerk request or SMS was sent.
 
 The environment metadata indicates that an
 `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` secret is configured. Its value was not
@@ -24,11 +25,15 @@ feature-flag value.
   `tokenCache`, isolated `/sign-in` and `/sign-up` routes, and a small session
   adapter that can retrieve a Clerk token and delegate Clerk sign-out. The
   adapter is not connected to `AuthContext`, demo auth, or Bluebird API calls.
-- The current `ClerkAuthPanel` is not a sign-in form: signed-out users see a
-  “not enabled yet” message. It has loading/error display, can show a current
-  Clerk session and sign it out, and links between routes. The separate demo
-  welcome/phone/code path and its `AuthContext` remain the active authentication
-  experience.
+- Feature-flagged Clerk routes now provide phone entry, SMS-code request,
+  verification, resend, edit-number recovery, sanitized errors, and a separate
+  Clerk-only signed-in screen. Sign-up explicitly prepares phone-code
+  verification and only calls `setActive` when Clerk returns both a complete
+  attempt and `verifications.phoneNumber.status === "verified"`. Refused or
+  unverified verification leaves the user signed out.
+- Clerk sign-out delegates through the existing production token adapter and
+  clears only the Clerk session. The separate demo welcome/phone/code path and
+  its `AuthContext` remain unchanged and continue to be the default experience.
 - The installed `@clerk/expo@4.10.1` types (through resolved
   `@clerk/shared@4.40.0`) expose this phone-code shape:
   - **Sign-in:** collect and normalize a phone identifier; create a sign-in
@@ -41,18 +46,13 @@ feature-flag value.
     code. Respect returned `missingRequirements`, `unverifiedFields`, and
     `verifications.phoneNumber.status`; only activate a returned session after
     the sign-up status is `complete` and its policy requirements are met.
-  - Both screens still need accessible phone/code entry, input validation,
-    pending/disabled states, resend/cooldown behavior, safe error mapping,
-    expired/invalid-code recovery, back/edit-phone behavior, session activation
-    and navigation, and explicit Clerk-only sign-out/account-switch handling.
-    Do not log codes, phone PII, or session tokens. These are client lifecycle
-    calls only; they have not been invoked in this assessment.
-- An incomplete lifecycle must not be treated as signed in. In particular,
-  a `complete` sign-up result or a returned session alone is not proof that
-  Bluebird may treat the phone as verified when the supplied setting disables
-  verification at sign-up. The app must check the actual returned verification
-  state and product policy; if policy requires verified ownership, block
-  onboarding/member access until Clerk confirms it.
+  - The implementation has accessible phone/code entry, validation,
+    pending/disabled states, resend/edit-number recovery, safe error mapping for
+    invalid/expired codes and network failures, session activation, and
+    Clerk-only sign-out/navigation. It does not log codes, phone PII, or tokens.
+- An incomplete lifecycle is not treated as signed in. A `complete` sign-up
+  result or returned session alone is not accepted when phone verification is
+  not `verified`. No onboarding/member access is connected to Clerk.
 
 ### Static dependency evidence versus native readiness
 
@@ -377,6 +377,26 @@ production-auth availability state were not changed.
    client and any `AuthContext`, navigation, or screen changes. Keep
    `PRODUCTION_AUTH_AVAILABILITY` unavailable until each gate is evidenced;
    activate only in a separate approved change.
+
+## Phone-code implementation verification (2026-10-14)
+
+- `pnpm --filter @workspace/bluebird run typecheck` — passed after refreshing
+  the root TypeScript composite library builds.
+- `pnpm --filter @workspace/bluebird run test:clerk-phone-auth` — 10 passed
+  with mocked Clerk resource methods and synthetic phone/code values. The suite
+  asserts that lifecycle operations do not call `fetch`.
+- `pnpm --filter @workspace/bluebird run test:clerk-auth-ui` — 5 passed;
+  `pnpm --filter @workspace/bluebird run test:clerk-bridge` — 6 passed.
+- The existing browser startup stability check was attempted against the
+  running Expo web workflow. It did not complete: the signed-out splash exposed
+  “Get Started” but Playwright timed out while clicking it, and the disabled
+  Clerk-route test did not observe the Welcome screen before the browser session
+  closed. The Expo workflow restarted and Metro bundled without Clerk import
+  errors, but browser interaction and visible UI are not verified in this
+  environment.
+- Native iOS/Android SecureStore persistence and restoration, and live
+  Development-instance sign-in/sign-up behavior remain unverified. No real
+  phone number, SMS, Clerk request, or production authentication was used.
 
 ## Clerk UI preparation verification (2026-10-13)
 

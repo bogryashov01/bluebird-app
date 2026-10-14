@@ -73,7 +73,10 @@ test("sign-out invokes only the injected Clerk action and reports failures witho
       clerkSignOutCalls += 1;
       throw new Error("mock sign-out failure");
     });
-    assert.deepEqual(failure, { ok: false, message: "mock sign-out failure" });
+    assert.deepEqual(failure, {
+      ok: false,
+      message: "Clerk authentication could not be completed. Please try again.",
+    });
     assert.equal(clerkSignOutCalls, 2);
     assert.equal(fetchCalls, 0);
   } finally {
