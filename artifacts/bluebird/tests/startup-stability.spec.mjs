@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+const clerkAuthEnabled = process.env.EXPO_PUBLIC_ENABLE_CLERK_AUTH === "true";
+
 const localUser = {
   id: "startup-preview-member",
   name: "Preview Member",
@@ -93,7 +95,31 @@ test("fresh signed-out startup reaches Welcome and Sign In, and refresh/back sta
   await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
 });
 
+test("empty browser storage keeps root reloads and direct Flights routes signed out", async ({ page }) => {
+  const apiPaths = [];
+  await page.route("**/api/**", async (route) => {
+    apiPaths.push(new URL(route.request().url()).pathname);
+    return route.fulfill({ json: [] });
+  });
+
+  for (const path of ["/", "/discover", "/trips"]) {
+    await page.goto(path);
+    await expect(page.getByText("Get Started", { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/splash$/);
+    await expect(page.getByText("Browse available empty legs", { exact: true })).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByText("Get Started", { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/splash$/);
+  }
+
+  expect(apiPaths).not.toContain("/api/empty-legs");
+  expect(apiPaths).not.toContain("/api/flights");
+  expect(await page.evaluate(() => localStorage.getItem("bluebird_token"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("bluebird_user"))).toBeNull();
+});
+
 test("disabled Clerk routes redirect to the unchanged demo sign-in flow without API calls", async ({ page }) => {
+  test.skip(clerkAuthEnabled, "This case runs against the Clerk-disabled Preview bundle.");
   const memberApiCalls = [];
   await page.route("**/api/**", async (route) => {
     memberApiCalls.push(route.request().url());
@@ -103,11 +129,28 @@ test("disabled Clerk routes redirect to the unchanged demo sign-in flow without 
   await page.goto("/sign-in");
   await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
   await expect(page.getByText("Continue with Phone", { exact: true })).toBeVisible();
-  await expect(page.getByText("Sign in with Clerk", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("clerk-sign-in-entry")).toHaveCount(0);
+  await expect(page.getByTestId("clerk-sign-up-entry")).toHaveCount(0);
 
   await page.goto("/sign-up");
   await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
   expect(memberApiCalls).toEqual([]);
+});
+
+test("Clerk-enabled Welcome shows both entry links without starting authentication", async ({ page }) => {
+  test.skip(!clerkAuthEnabled, "This case runs against the Clerk-enabled Preview bundle.");
+  const authApiCalls = [];
+  await page.route("**/api/**", async (route) => {
+    authApiCalls.push(new URL(route.request().url()).pathname);
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  await page.goto("/welcome");
+  await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("clerk-sign-in-entry")).toBeVisible();
+  await expect(page.getByTestId("clerk-sign-up-entry")).toBeVisible();
+  await expect(page.getByText("Continue with Phone", { exact: true })).toBeVisible();
+  expect(authApiCalls).toEqual([]);
 });
 
 test("valid local demo session reaches Discover on startup, direct navigation, and refresh", async ({ page }) => {
@@ -167,7 +210,7 @@ test("expired local session is cleared and returns to the signed-out flow", asyn
   await seedLocalSession(page, localUser, "expired-local-session");
   await stubLocalApi(page, { status: 401, body: { error: "Unauthorized" } });
 
-  await page.goto("/");
+  await page.goto("/discover");
   await expect(page.getByText("Get Started", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("bluebird_token"))).toBeNull();
   expect(await page.evaluate(() => localStorage.getItem("bluebird_user"))).toBeNull();

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import { useTheme } from '@/context/ThemeContext';
 import { Feather } from '@expo/vector-icons';
@@ -154,13 +154,20 @@ export default function TabLayout() {
   const { preference } = useTheme();
   const unreadCount = useUnreadNotificationsCount();
   const { token, isLoading } = useAuth();
+  const colors = useColors();
+  // Do not mount tab screens while the stored demo session is being checked.
+  // A direct /discover route otherwise renders Flights briefly before the
+  // signed-out redirect runs.
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
   // Centralized guard: no session → auth flow. Prevents deep links from
   // bypassing sign-in.
-  if (!isLoading) {
-    if (!token) {
-      return <Redirect href="/(auth)/splash" />;
-    }
-  }
+  if (!token) return <Redirect href="/(auth)/splash" />;
   // Native tabs follow the OS appearance only — use them just when the user's
   // theme preference is "System"; a forced Light/Dark needs the themed classic tabs.
   if (isLiquidGlassAvailable() && preference === 'system') {
