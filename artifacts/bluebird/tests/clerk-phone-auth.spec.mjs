@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   beginClerkPhoneAuth,
+  createClerkAuthActionGuard,
   createClerkPhoneAuthActions,
   normalizeClerkPhoneNumber,
   resendClerkPhoneCode,
@@ -82,6 +83,7 @@ function makeResources(overrides = {}) {
   const actions = createClerkPhoneAuthActions({
     signIn,
     signUp,
+    diagnostics: overrides.diagnostics,
     setActive: async (params) => {
       calls.push(["set-active", params]);
       activationCalls += 1;
@@ -110,7 +112,7 @@ test("sign-in selects the phone-code factor and forwards its ID before verifying
     verificationPending: true,
   });
   assert.deepEqual(fixture.calls.slice(0, 2), [
-    ["create-sign-in", { strategy: "phone_code", identifier: "+15555550199" }],
+    ["create-sign-in", { identifier: "+15555550199" }],
     ["prepare-sign-in-code", { strategy: "phone_code", phoneNumberId: "mock-phone-number-id" }],
   ]);
 
@@ -169,7 +171,7 @@ test("successful SMS preparation with a pending first factor enters the code ste
       verificationPending: true,
     });
     assert.deepEqual(fixture.calls, [
-      ["create-sign-in", { strategy: "phone_code", identifier: "+15555550199" }],
+      ["create-sign-in", { identifier: "+15555550199" }],
       ["prepare-sign-in-code", { strategy: "phone_code", phoneNumberId: "mock-phone-number-id" }],
     ]);
     assert.equal(fixture.getActivationCalls(), 0);
@@ -187,7 +189,7 @@ test("missing phone-code factors fail during preparation without opening code en
   assert.equal(started.stage, "code-preparation");
   assert.match(started.message, /could not prepare the verification code/i);
   assert.deepEqual(fixture.calls, [
-    ["create-sign-in", { strategy: "phone_code", identifier: "+15555550199" }],
+    ["create-sign-in", { identifier: "+15555550199" }],
   ]);
 });
 
@@ -203,7 +205,7 @@ test("missing and blank phone number IDs fail safely without preparing SMS", asy
     assert.equal(started.ok, false);
     assert.equal(started.stage, "code-preparation");
     assert.deepEqual(fixture.calls, [
-      ["create-sign-in", { strategy: "phone_code", identifier: "+15555550199" }],
+      ["create-sign-in", { identifier: "+15555550199" }],
     ]);
   }
 });
@@ -384,4 +386,124 @@ test("lifecycle tests only use injected Clerk resources and never call fetch", a
   } finally {
     globalThis.fetch = previousFetch;
   }
+});
+
+test("the UI action guard rejects duplicate button, keyboard, and resend events synchronously", async () => {
+  let resolveRequest;
+  let requestCalls = 0;
+  const busyChanges = [];
+  const guard = createClerkAuthActionGuard((action) => busyChanges.push(action));
+  const firstRequest = guard.run("request", () => {
+    requestCalls += 1;
+    return new Promise((resolve) => { resolveRequest = resolve; });
+  });
+
+  const repeatedButtonPress = await guard.run("request", async () => {
+    requestCalls += 1;
+  });
+  const keyboardSubmit = await guard.run("request", async () => {
+    requestCalls += 1;
+  });
+  const resendWhilePending = await guard.run("resend", async () => {
+    requestCalls += 1;
+  });
+
+  assert.deepEqual(repeatedButtonPress, { accepted: false });
+  assert.deepEqual(keyboardSubmit, { accepted: false });
+  assert.deepEqual(resendWhilePending, { accepted: false });
+  assert.equal(requestCalls, 1);
+  resolveRequest("prepared");
+  assert.deepEqual(await firstRequest, { accepted: true, value: "prepared" });
+  assert.deepEqual(busyChanges, ["request", null]);
+  const nextRequest = await guard.run("request", async () => "next flow");
+  assert.deepEqual(nextRequest, { accepted: true, value: "next flow" });
+});
+
+test("rate limits provide a wait message and safe Development diagnostics", async () => {
+  const events = [];
+  let requestCount = 0;
+  const phoneNumber = "+15555550199";
+  const verificationCode = "123456";
+  const sensitiveToken = "mock-secret-token";
+  const fixture = makeResources({
+    prepareSignInError: {
+      status: 429,
+      retryAfter: 89,
+      errors: [{
+        code: "verification_code_too_many_requests",
+        message: `${phoneNumber} ${verificationCode} ${sensitiveToken}`,
+      }],
+      response: { phoneNumber, verificationCode, token: sensitiveToken },
+    },
+    diagnostics: {
+      nextRequestCount: () => ++requestCount,
+      log: (event) => events.push(event),
+    },
+  });
+
+  const result = await beginClerkPhoneAuth("sign-in", phoneNumber, fixture.actions);
+  assert.equal(result.ok, false);
+  assert.equal(result.stage, "code-preparation");
+  assert.match(result.message, /Wait 2 minutes before trying again/);
+  assert.match(result.message, /SMS delivery can be delayed/);
+  assert.equal(result.message.includes(phoneNumber), false);
+  assert.equal(fixture.calls.filter(([name]) => name === "prepare-sign-in-code").length, 1);
+  assert.deepEqual(events, [
+    { stage: "create", flowRequestCount: 1, clerkStatus: "needs_first_factor", errorCode: null },
+    {
+      stage: "code-preparation",
+      flowRequestCount: 2,
+      clerkStatus: "http_429",
+      errorCode: "verification_code_too_many_requests",
+    },
+  ]);
+  const diagnosticsJson = JSON.stringify(events);
+  for (const sensitiveValue of [phoneNumber, verificationCode, sensitiveToken, "response"]) {
+    assert.equal(diagnosticsJson.includes(sensitiveValue), false);
+  }
+
+  const noDurationFixture = makeResources({
+    prepareSignInError: { errors: [{ code: "too_many_requests" }] },
+  });
+  const noDuration = await beginClerkPhoneAuth(
+    "sign-in",
+    phoneNumber,
+    noDurationFixture.actions,
+  );
+  assert.equal(noDuration.ok, false);
+  assert.match(noDuration.message, /Wait a few minutes before requesting another code/);
+});
+
+test("delayed SMS delivery does not block Clerk-confirmed code entry or treat delivery as acceptance", async () => {
+  let smsArrived = false;
+  let resolveSmsDelivery;
+  const delayedSms = new Promise((resolve) => { resolveSmsDelivery = resolve; });
+  const successFixture = makeResources({
+    preparedSignInResult: {
+      status: "needs_first_factor",
+      createdSessionId: null,
+      firstFactorVerification: { status: "unverified" },
+    },
+  });
+
+  const started = await beginClerkPhoneAuth("sign-in", "+15555550199", successFixture.actions);
+  assert.equal(started.ok, true);
+  assert.equal(started.nextStep, "code");
+  assert.equal(smsArrived, false);
+  resolveSmsDelivery();
+  await delayedSms.then(() => { smsArrived = true; });
+  assert.equal(smsArrived, true);
+
+  const rejectedFixture = makeResources({
+    prepareSignInError: {
+      errors: [{ code: "verification_code_too_many_requests" }],
+    },
+  });
+  smsArrived = true;
+  const rejected = await beginClerkPhoneAuth("sign-in", "+15555550199", rejectedFixture.actions);
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.stage, "code-preparation");
+  assert.equal(smsArrived, true);
+  assert.equal(rejected.nextStep, undefined);
+  assert.equal(rejectedFixture.calls.some(([name]) => name === "attempt-sign-in-code"), false);
 });

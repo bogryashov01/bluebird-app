@@ -25,6 +25,41 @@ export interface ClerkPhoneAuthActions {
   setActive: (sessionId: string) => Promise<void>;
 }
 
+export interface ClerkPhoneAuthDiagnostic {
+  stage: ClerkPhoneAuthFailureStage;
+  flowRequestCount: number;
+  clerkStatus: string | null;
+  errorCode: string | null;
+}
+
+export interface ClerkPhoneAuthDiagnostics {
+  nextRequestCount: () => number;
+  log: (event: ClerkPhoneAuthDiagnostic) => void;
+}
+
+export type ClerkAuthBusyAction = 'request' | 'verify' | 'resend';
+
+export function createClerkAuthActionGuard(onBusyChange: (action: ClerkAuthBusyAction | null) => void) {
+  let pending = false;
+
+  return {
+    run: async <T>(
+      action: ClerkAuthBusyAction,
+      operation: () => Promise<T>,
+    ): Promise<{ accepted: true; value: T } | { accepted: false }> => {
+      if (pending) return { accepted: false };
+      pending = true;
+      onBusyChange(action);
+      try {
+        return { accepted: true, value: await operation() };
+      } finally {
+        pending = false;
+        onBusyChange(null);
+      }
+    },
+  };
+}
+
 export interface ClerkSignInPhoneAttempt extends ClerkPhoneAuthAttempt {
   supportedFirstFactors: ClerkSignInSupportedFirstFactor[] | null;
   firstFactorVerification: { status: string | null };
@@ -39,7 +74,7 @@ export type ClerkSignInSupportedFirstFactor =
   | { strategy: string; phoneNumberId?: string };
 
 export interface ClerkSignInPhoneResource {
-  create: (params: { strategy: 'phone_code'; identifier: string }) => Promise<ClerkSignInPhoneAttempt>;
+  create: (params: { identifier: string }) => Promise<ClerkSignInPhoneAttempt>;
   supportedFirstFactors: ClerkSignInSupportedFirstFactor[] | null;
   prepareFirstFactor: (params: {
     strategy: 'phone_code';
@@ -63,17 +98,28 @@ export function createClerkPhoneAuthActions(input: {
   signIn: ClerkSignInPhoneResource;
   signUp: ClerkSignUpPhoneResource;
   setActive: (params: { session: string }) => Promise<unknown>;
+  diagnostics?: ClerkPhoneAuthDiagnostics;
 }): ClerkPhoneAuthActions {
   return {
     startSignIn: async (phoneNumber) => {
-      const attempt = await runAtStage('create', () =>
-        input.signIn.create({ strategy: 'phone_code', identifier: phoneNumber }),
+      const attempt = await runClerkRequest(
+        'create',
+        () => input.signIn.create({ identifier: phoneNumber }),
+        input.diagnostics,
       );
-      const prepared = await runAtStage('code-preparation', () =>
-        attempt.prepareFirstFactor({
+      let phoneNumberId: string;
+      try {
+        phoneNumberId = getRequiredPhoneNumberId(attempt.supportedFirstFactors);
+      } catch (error) {
+        throw new ClerkPhoneAuthStageError('code-preparation', error);
+      }
+      const prepared = await runClerkRequest(
+        'code-preparation',
+        () => attempt.prepareFirstFactor({
           strategy: 'phone_code',
-          phoneNumberId: getRequiredPhoneNumberId(attempt.supportedFirstFactors),
+          phoneNumberId,
         }),
+        input.diagnostics,
       );
       return {
         status: prepared.status,
@@ -82,9 +128,17 @@ export function createClerkPhoneAuthActions(input: {
       };
     },
     startSignUp: async (phoneNumber) => {
-      const attempt = await runAtStage('create', () => input.signUp.create({ phoneNumber }));
+      const attempt = await runClerkRequest(
+        'create',
+        () => input.signUp.create({ phoneNumber }),
+        input.diagnostics,
+      );
       try {
-        await attempt.preparePhoneNumberVerification({ strategy: 'phone_code' });
+        await runClerkRequest(
+          'code-preparation',
+          () => attempt.preparePhoneNumberVerification({ strategy: 'phone_code' }),
+          input.diagnostics,
+        );
       } catch (error) {
         if (isClerkNetworkFailure(error)) {
           throw new ClerkPhoneAuthStageError('code-preparation', error);
@@ -95,27 +149,36 @@ export function createClerkPhoneAuthActions(input: {
       }
     },
     resendSignIn: async () => {
-      await runAtStage('resend', async () => {
-        await input.signIn.prepareFirstFactor({
+      const phoneNumberId = getRequiredPhoneNumberId(input.signIn.supportedFirstFactors);
+      await runClerkRequest(
+        'resend',
+        () => input.signIn.prepareFirstFactor({
           strategy: 'phone_code',
-          phoneNumberId: getRequiredPhoneNumberId(input.signIn.supportedFirstFactors),
-        });
-      });
+          phoneNumberId,
+        }),
+        input.diagnostics,
+      );
     },
     resendSignUp: async () => {
-      await runAtStage('resend', () =>
-        input.signUp.preparePhoneNumberVerification({ strategy: 'phone_code' }),
+      await runClerkRequest(
+        'resend',
+        () => input.signUp.preparePhoneNumberVerification({ strategy: 'phone_code' }),
+        input.diagnostics,
       );
     },
     attemptSignIn: async (code) => {
-      const attempt = await runAtStage('verification', () =>
-        input.signIn.attemptFirstFactor({ strategy: 'phone_code', code }),
+      const attempt = await runClerkRequest(
+        'verification',
+        () => input.signIn.attemptFirstFactor({ strategy: 'phone_code', code }),
+        input.diagnostics,
       );
       return { status: attempt.status, createdSessionId: attempt.createdSessionId };
     },
     attemptSignUp: async (code) => {
-      const attempt = await runAtStage('verification', () =>
-        input.signUp.attemptPhoneNumberVerification({ code }),
+      const attempt = await runClerkRequest(
+        'verification',
+        () => input.signUp.attemptPhoneNumberVerification({ code }),
+        input.diagnostics,
       );
       return {
         status: attempt.status,
@@ -124,7 +187,11 @@ export function createClerkPhoneAuthActions(input: {
       };
     },
     setActive: async (sessionId) => {
-      await runAtStage('session-activation', () => input.setActive({ session: sessionId }));
+      await runClerkRequest(
+        'session-activation',
+        () => input.setActive({ session: sessionId }),
+        input.diagnostics,
+      );
     },
   };
 }
@@ -167,16 +234,53 @@ class ClerkPhoneAuthStageError extends Error {
   }
 }
 
-async function runAtStage<T>(
+async function runClerkRequest<T>(
   stage: ClerkPhoneAuthFailureStage,
   action: () => Promise<T>,
+  diagnostics?: ClerkPhoneAuthDiagnostics,
 ): Promise<T> {
+  const flowRequestCount = diagnostics?.nextRequestCount() ?? 0;
   try {
-    return await action();
+    const result = await action();
+    diagnostics?.log({
+      stage,
+      flowRequestCount,
+      clerkStatus: getSafeClerkStatus(result),
+      errorCode: null,
+    });
+    return result;
   } catch (error) {
     if (error instanceof ClerkPhoneAuthStageError) throw error;
+    diagnostics?.log({
+      stage,
+      flowRequestCount,
+      clerkStatus: getSafeClerkStatus(error),
+      errorCode: getSafeClerkErrorCode(error),
+    });
     throw new ClerkPhoneAuthStageError(stage, error);
   }
+}
+
+function getSafeClerkStatus(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null) return null;
+  if ('status' in value && typeof value.status === 'number') {
+    return Number.isInteger(value.status) && value.status >= 0 && value.status <= 999
+      ? `http_${value.status}`
+      : null;
+  }
+  if (
+    'status' in value &&
+    typeof value.status === 'string' &&
+    /^[a-zA-Z0-9_-]{1,48}$/.test(value.status)
+  ) {
+    return value.status;
+  }
+  return null;
+}
+
+function getSafeClerkErrorCode(error: unknown): string | null {
+  const code = getClerkErrorCode(error);
+  return code && /^[a-zA-Z0-9_-]{1,80}$/.test(code) ? code : null;
 }
 
 function unwrapStageError(error: unknown): unknown {
@@ -242,8 +346,19 @@ export function getClerkAuthErrorMessage(
   ) {
     return 'Clerk did not allow phone-code verification for sign-up. You remain signed out. Ask the app owner to enable phone verification before trying again.';
   }
-  if (code === 'too_many_requests' || code === 'rate_limit_exceeded') {
-    return 'Too many attempts. Wait a moment, then try again.';
+  if (
+    code === 'verification_code_too_many_requests' ||
+    code === 'verification_attempts_exceeded' ||
+    code === 'too_many_attempts' ||
+    code === 'too_many_requests' ||
+    code === 'rate_limit_exceeded' ||
+    code === 'signup_rate_limit_exceeded'
+  ) {
+    const retryAfter = getSafeRetryAfterSeconds(originalError);
+    const waitText = retryAfter
+      ? `Wait ${formatWaitDuration(retryAfter)} before trying again.`
+      : 'Wait a few minutes before requesting another code.';
+    return `Clerk is limiting verification requests. ${waitText} Do not keep retrying; SMS delivery can be delayed.`;
   }
 
   if (stage === 'create') {
@@ -269,6 +384,25 @@ export function getClerkAuthErrorMessage(
   }
 
   return 'Clerk authentication could not be completed. Please try again.';
+}
+
+function getSafeRetryAfterSeconds(error: unknown): number | null {
+  if (typeof error !== 'object' || error === null || !('retryAfter' in error)) return null;
+  const retryAfter = error.retryAfter;
+  return typeof retryAfter === 'number' &&
+    Number.isFinite(retryAfter) &&
+    retryAfter > 0 &&
+    retryAfter <= 24 * 60 * 60
+    ? Math.ceil(retryAfter)
+    : null;
+}
+
+function formatWaitDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  const hours = Math.ceil(minutes / 60);
+  return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
 }
 
 export async function beginClerkPhoneAuth(

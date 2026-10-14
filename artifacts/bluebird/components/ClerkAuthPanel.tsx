@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -18,11 +18,13 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { useColors } from '@/hooks/useColors';
 import {
   beginClerkPhoneAuth,
+  createClerkAuthActionGuard,
   createClerkPhoneAuthActions,
   resendClerkPhoneCode,
   verifyClerkPhoneCode,
   type ClerkPhoneAuthMode,
   type ClerkPhoneAuthFailureStage,
+  type ClerkPhoneAuthDiagnostic,
   type ClerkSignInPhoneResource,
   type ClerkSignUpPhoneResource,
 } from '@/lib/clerkPhoneAuth';
@@ -41,6 +43,9 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
   const [busyAction, setBusyAction] = useState<'request' | 'verify' | 'resend' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorStage, setErrorStage] = useState<ClerkPhoneAuthFailureStage | null>(null);
+  const requestCount = useRef(0);
+  const actionGuard = useRef<ReturnType<typeof createClerkAuthActionGuard> | null>(null);
+  if (!actionGuard.current) actionGuard.current = createClerkAuthActionGuard(setBusyAction);
   const isSignIn = mode === 'sign-in';
   const resourcesLoaded =
     signInResource.isLoaded &&
@@ -52,6 +57,14 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
     ? createClerkPhoneAuthActions({
         signIn: signInResource.signIn as unknown as ClerkSignInPhoneResource,
         signUp: signUpResource.signUp as unknown as ClerkSignUpPhoneResource,
+        diagnostics: __DEV__
+          ? {
+              nextRequestCount: () => ++requestCount.current,
+              log: (event: ClerkPhoneAuthDiagnostic) => {
+                console.info('[clerk-phone-auth]', event);
+              },
+            }
+          : undefined,
         setActive: async ({ session }) => {
           const activate = signInResource.setActive ?? signUpResource.setActive;
           if (!activate) throw new Error('Clerk is not ready.');
@@ -70,12 +83,15 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
   }, [isLoaded, isSignedIn]);
 
   const handleRequestCode = async () => {
-    if (busyAction || !actions) return;
-    setBusyAction('request');
-    setError(null);
-    setErrorStage(null);
-    const result = await beginClerkPhoneAuth(mode, phone, actions);
-    setBusyAction(null);
+    if (!actions) return;
+    const guarded = await actionGuard.current!.run('request', async () => {
+      requestCount.current = 0;
+      setError(null);
+      setErrorStage(null);
+      return beginClerkPhoneAuth(mode, phone, actions);
+    });
+    if (!guarded.accepted) return;
+    const result = guarded.value;
     if (!result.ok) {
       setError(result.message);
       setErrorStage(result.stage);
@@ -86,12 +102,14 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
   };
 
   const handleVerifyCode = async () => {
-    if (busyAction || !actions) return;
-    setBusyAction('verify');
-    setError(null);
-    setErrorStage(null);
-    const result = await verifyClerkPhoneCode(mode, code, actions);
-    setBusyAction(null);
+    if (!actions) return;
+    const guarded = await actionGuard.current!.run('verify', async () => {
+      setError(null);
+      setErrorStage(null);
+      return verifyClerkPhoneCode(mode, code, actions);
+    });
+    if (!guarded.accepted) return;
+    const result = guarded.value;
     if (!result.ok) {
       setError(result.message);
       setErrorStage(result.stage);
@@ -104,12 +122,14 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
   };
 
   const handleResendCode = async () => {
-    if (busyAction || !actions) return;
-    setBusyAction('resend');
-    setError(null);
-    setErrorStage(null);
-    const result = await resendClerkPhoneCode(mode, actions);
-    setBusyAction(null);
+    if (!actions) return;
+    const guarded = await actionGuard.current!.run('resend', async () => {
+      setError(null);
+      setErrorStage(null);
+      return resendClerkPhoneCode(mode, actions);
+    });
+    if (!guarded.accepted) return;
+    const result = guarded.value;
     if (!result.ok) {
       setError(result.message);
       setErrorStage(result.stage);

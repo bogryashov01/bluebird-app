@@ -32,3 +32,4 @@
 - [Bluebird time zone formatting](bluebird-time-zone-formatting.md) — short Intl timezone labels vary by runtime; preserve IANA zones and avoid asserting a specific abbreviation.
 - [Clerk Expo compatibility](clerk-expo-sdk54-peers.md) — verify transitive React peers and native-runtime risks for the selected Expo baseline; Metro exports alone are insufficient.
 - [Clerk phone verification policy](clerk-phone-verification-policy.md) — sign-up completion is not proof of phone ownership when verification-at-sign-up is disabled.
+- [Clerk SMS preparation](clerk-sms-preparation.md) — create legacy phone sign-ins with the identifier only, then prepare the phone-code factor once.
