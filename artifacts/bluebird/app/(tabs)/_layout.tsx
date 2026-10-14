@@ -153,7 +153,7 @@ function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
 export default function TabLayout() {
   const { preference } = useTheme();
   const unreadCount = useUnreadNotificationsCount();
-  const { token, isLoading } = useAuth();
+  const { token, isLoading, authMode, clerkSignedIn } = useAuth();
   const colors = useColors();
   // Do not mount tab screens while the stored demo session is being checked.
   // A direct /discover route otherwise renders Flights briefly before the
@@ -164,6 +164,11 @@ export default function TabLayout() {
         <ActivityIndicator color={colors.primary} size="large" />
       </View>
     );
+  }
+  if (authMode === 'clerk') {
+    return clerkSignedIn
+      ? <Redirect href="/(clerk-auth)/signed-in" />
+      : <Redirect href="/(clerk-auth)/sign-in" />;
   }
   // Centralized guard: no session → auth flow. Prevents deep links from
   // bypassing sign-in.

@@ -8,11 +8,13 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useDormantClerkProductionTokenProvider } from '@/lib/dormantClerkIntegration';
 import { getClerkAuthErrorMessage, performClerkSignOut } from '@/lib/clerkAuthConfig';
+import { useQueryClient } from '@tanstack/react-query';
 
 export function ClerkSignedInScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { isLoaded, isSignedIn } = useAuth();
+  const queryClient = useQueryClient();
   const clerkTokenProvider = useDormantClerkProductionTokenProvider();
   const [error, setError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -23,6 +25,7 @@ export function ClerkSignedInScreen() {
     if (isSigningOut) return;
     setIsSigningOut(true);
     setError(null);
+    queryClient.clear();
     const result = await performClerkSignOut(() => clerkTokenProvider.clearClerkSession());
     setIsSigningOut(false);
     if (!result.ok) {
@@ -49,19 +52,14 @@ export function ClerkSignedInScreen() {
       ]}
     >
       <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Back to Bluebird demo sign-in"
-        onPress={() => router.replace('/(auth)/welcome')}
-        style={styles.backButton}
-      >
-        <Feather name="arrow-left" size={21} color={colors.mutedOnBrand} />
-      </Pressable>
       <View style={styles.content}>
         <Text style={[styles.eyebrow, { color: colors.paleBlue }]}>BLUEBIRD ACCOUNT</Text>
-        <Text style={[styles.title, { color: colors.textOnBrand }]}>Clerk session active</Text>
+        <Text style={[styles.title, { color: colors.textOnBrand }]}>Bluebird member not linked</Text>
         <Text style={[styles.body, { color: colors.mutedOnBrand }]}>
-          You are signed in to Clerk only. This session is not connected to Bluebird member data or production APIs.
+          Your Clerk session is active, but Bluebird has not confirmed a matching member account. Member screens and cached member data stay unavailable until the backend can verify this connection.
+        </Text>
+        <Text style={[styles.pending, { color: colors.mutedOnBrand }]} testID="clerk-member-pending">
+          Account status: pending link confirmation. No authenticated Bluebird API request has been made.
         </Text>
         {error && (
           <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.destructive }]} testID="clerk-sign-out-error">
@@ -92,11 +90,11 @@ export function ClerkSignedInScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 24 },
   centered: { justifyContent: 'center', alignItems: 'center' },
-  backButton: { height: 44, width: 44, justifyContent: 'center' },
   content: { flex: 1, justifyContent: 'center' },
   eyebrow: { fontSize: 12, fontFamily: 'Inter_600SemiBold', letterSpacing: 1.4, marginBottom: 10 },
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
   body: { fontSize: 15, fontFamily: 'Inter_400Regular', lineHeight: 22, marginTop: 10, marginBottom: 24 },
+  pending: { fontSize: 13, fontFamily: 'Inter_500Medium', lineHeight: 20, marginBottom: 24 },
   error: { fontSize: 14, fontFamily: 'Inter_400Regular', lineHeight: 21, marginBottom: 14 },
   primaryButton: { minHeight: 50, borderRadius: 999, justifyContent: 'center', alignItems: 'center' },
   primaryButtonText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },

@@ -1,5 +1,54 @@
 # Bluebird authenticated production API readiness
 
+## Development-only Clerk session wiring (2026-10-14)
+
+**Current status: the opt-in Clerk session flow is connected to mobile auth,
+but Bluebird member resolution and authenticated production requests remain
+disabled.** Clerk activation requires all three conditions: the explicit
+`EXPO_PUBLIC_ENABLE_CLERK_AUTH=true` flag, an Expo Development build, and a
+structurally valid `pk_test_` publishable key. A release build or live key
+cannot enable this migration path.
+
+When enabled, Welcome's **Continue with Phone** entry opens the existing Clerk
+phone/SMS sign-in flow, with account creation available from that screen.
+Clerk's Expo `tokenCache` remains responsible for session persistence. The
+legacy AuthContext token/profile is not restored or exposed; the shared API
+client's legacy token getter returns `null` without reading Bluebird demo
+storage. Legacy-only onboarding routes redirect to Clerk. When the flag is
+off, the existing Bluebird demo phone flow remains unchanged.
+
+An active Clerk identity is not treated as a Bluebird member. Until a future
+approved backend integration resolves a linked member, signed-in users see a
+pending/unlinked notice and cannot open member tabs or member-specific cached
+data; direct links to other member routes are guarded as well. Sign-out and
+identity changes clear React Query state. The existing
+Clerk adapter asks Clerk for a fresh token on each explicit authenticated
+request and the production API client sends it as a Bearer token, but the app
+does not construct or call that client. `PRODUCTION_AUTH_AVAILABILITY` remains
+`unavailable`; public generated-client requests receive no Clerk or legacy
+Authorization header.
+
+### Verification and remaining blockers
+
+- `pnpm run typecheck:libs` and
+  `pnpm --filter @workspace/bluebird run typecheck` — passed.
+- `test:clerk-auth-ui` — 6 passed; Development-only flag and test-key checks.
+- `test:clerk-phone-auth` — 17 passed with mocked Clerk resources.
+- `test:clerk-bridge` — 6 passed; fresh-token reads and Bearer formatting use
+  only a mocked fetcher.
+- `test:clerk-session-isolation` — 5 passed; includes no legacy-token
+  fallback, public requests without Authorization, pending/unlinked access
+  blocking, cache clearing, and the production-unavailable gate.
+- `test:startup-stability` — 7 legacy-flow checks passed (one Clerk-only case
+  skipped in that run), then the enabled Welcome-to-Clerk route check passed.
+- The restarted Development web preview rendered Welcome. This does not verify
+  iOS/Android persistence or native sign-in behavior.
+
+No live API call, SMS request, Clerk sign-in/sign-up, Dashboard change, or
+authenticated production request was made. Backend acceptance of Clerk tokens
+and Clerk-to-Bluebird member resolution remain unverified; native-device
+behavior also remains unverified.
+
 ## Clerk Development SMS manual-test preparation (2026-10-14)
 
 **Status: local Development UI is ready to inspect; live sign-up remains
@@ -13,12 +62,11 @@ specific Clerk instance could not be cross-checked against its Dashboard.
 `EXPO_PUBLIC_ENABLE_CLERK_AUTH=true` is set in Replit Development only. A
 Development environment check confirmed the flag is `true` there and unset in
 shared and production. The existing publishable-key secret was not changed.
-The Expo Development workflow restarted and rendered the Welcome, sign-in, and
-sign-up screens. Both Welcome links navigated to their Clerk screens; direct
-`/sign-in` and `/sign-up` routes rendered as well. An enabled-preview browser
-check observed zero phone-auth request endpoints while opening those screens;
-the request button was never clicked. The existing demo-phone option remains
-visible when Clerk is enabled.
+The Expo Development workflow rendered Welcome and the phone CTA now routes to
+Clerk sign-in; account creation is linked from that screen. The legacy demo
+phone flow remains available only when the feature flag is off. Opening the
+enabled Welcome screen and following the CTA does not request an SMS or call a
+phone-auth endpoint.
 
 The Clerk Dashboard is not available to this workspace for independent
 inspection. The previous supplied-settings report says phone-code sign-in and
@@ -40,8 +88,8 @@ changed or bypassed.
   — 6 passed, including direct disabled-route redirects and the existing
   demo-phone entry path. Clerk phone-auth lifecycle tests use injected mock
   resources and synthetic data.
-- Browser navigation in the enabled Development preview confirmed both Welcome
-  links and both direct routes; zero phone-auth request endpoints were observed.
+- Browser navigation in the enabled Development preview confirmed the phone
+  CTA opens Clerk sign-in without an SMS request.
 
 No real phone number or code was entered, no SMS was requested, and no live
 sign-in or sign-up was performed. This verifies the web preview only; native
@@ -52,20 +100,21 @@ changed.
 ### Manual SMS runbook
 
 1. Open the local Bluebird Development preview, choose **Get Started**, then
-   choose **Clerk sign in** or **Create account with Clerk**.
+   choose **Continue with Phone**. Choose **Create account** on the Clerk
+   screen if this is a new Clerk Development account.
 2. For sign-in, enter an existing Clerk Development test account's phone
    number. For sign-up, use a new test number only after the owner confirms
    that phone-code/SMS sign-up and required phone verification are enabled in
    the Development Dashboard.
 3. Nothing sends an SMS while the route is merely open or while a phone number
    is being entered. To request one, explicitly tap **Send verification code**.
-4. Enter the received code and tap **Verify and continue**. Confirm the
-   separate Clerk-only signed-in screen appears. For sign-up, confirm Clerk
-   reports the phone as verified; an unverified/incomplete result must remain
-   signed out.
+4. Enter the received code and tap **Verify and continue**. The app should
+   show the pending/unlinked Bluebird member screen, not member-specific
+   content. For sign-up, confirm Clerk reports the phone as verified; an
+   unverified/incomplete result must remain signed out.
 5. If needed, use **Resend code** to explicitly request another SMS, or
    **Edit phone number** to return to the phone field. Use **Sign out of Clerk**
-   to end the isolated Clerk session and return to the Bluebird welcome flow.
+   to end the Clerk session, clear member query state, and return to Welcome.
 
 ## Clerk phone-auth readiness assessment (2026-10-14)
 

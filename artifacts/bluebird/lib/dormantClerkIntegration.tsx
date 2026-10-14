@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { createContext, useContext, useMemo, useRef } from 'react';
 import { ClerkProvider, useAuth } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import {
@@ -11,9 +11,32 @@ import {
   shouldMountClerkProvider,
 } from './clerkAuthConfig';
 
+export interface ClerkAuthSnapshot extends ClerkSessionSnapshot {
+  userId: string | null;
+}
+
+const ClerkAuthSnapshotContext = createContext<ClerkAuthSnapshot | null>(null);
+
+function ClerkAuthSnapshotBridge({ children }: { children: React.ReactNode }) {
+  const auth = useAuth();
+  const snapshot = useMemo<ClerkAuthSnapshot>(() => ({
+    isLoaded: auth.isLoaded,
+    isSignedIn: auth.isSignedIn,
+    userId: auth.userId ?? null,
+    getToken: auth.getToken,
+    signOut: async () => { await auth.signOut(); },
+  }), [auth.isLoaded, auth.isSignedIn, auth.userId, auth.getToken, auth.signOut]);
+
+  return (
+    <ClerkAuthSnapshotContext.Provider value={snapshot}>
+      {children}
+    </ClerkAuthSnapshotContext.Provider>
+  );
+}
+
 /**
- * The isolated Clerk UI can mount this provider only after both the explicit
- * feature flag and a structurally valid Expo-public key are present.
+ * The Development migration flow mounts Clerk only behind its explicit flag
+ * and a test publishable key. Clerk's SDK owns session persistence.
  */
 export function DormantClerkProvider({ children }: { children: React.ReactNode }) {
   const { publishableKey } = CLERK_AUTH_CONFIGURATION;
@@ -23,9 +46,13 @@ export function DormantClerkProvider({ children }: { children: React.ReactNode }
 
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      {children}
+      <ClerkAuthSnapshotBridge>{children}</ClerkAuthSnapshotBridge>
     </ClerkProvider>
   );
+}
+
+export function useClerkAuthSnapshot(): ClerkAuthSnapshot | null {
+  return useContext(ClerkAuthSnapshotContext);
 }
 
 /**

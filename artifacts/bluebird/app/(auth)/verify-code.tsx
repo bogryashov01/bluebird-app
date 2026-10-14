@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, Platform, Pressable, Alert, Image,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { useRequestLoginCode, useVerifyLoginCode } from '@workspace/api-client-r
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 
 const CODE_LENGTH = 6;
 
@@ -30,6 +31,10 @@ export default function VerifyCodeScreen() {
   const [cooldown, setCooldown] = useState(initialCooldown);
   const inputRef = useRef<TextInput>(null);
   const submittedRef = useRef<string | null>(null);
+
+  if (CLERK_AUTH_CONFIGURATION.enabled) {
+    return <Redirect href="/(clerk-auth)/sign-in" />;
+  }
 
   // Resend cooldown ticker
   useEffect(() => {

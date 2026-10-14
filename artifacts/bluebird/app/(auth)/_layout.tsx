@@ -1,6 +1,17 @@
-import { Stack } from 'expo-router';
+import { Redirect, Stack, useSegments } from 'expo-router';
+import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 
 export default function AuthLayout() {
+  const segments = useSegments();
+  const authScreen = segments[1];
+  if (
+    CLERK_AUTH_CONFIGURATION.enabled &&
+    authScreen !== 'splash' &&
+    authScreen !== 'welcome'
+  ) {
+    return <Redirect href="/(clerk-auth)/sign-in" />;
+  }
+
   return (
     <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
       <Stack.Screen name="splash" />

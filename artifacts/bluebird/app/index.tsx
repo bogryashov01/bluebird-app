@@ -4,7 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 
 export default function Index() {
-  const { token, user, isLoading } = useAuth();
+  const { token, user, isLoading, authMode, clerkSignedIn } = useAuth();
   const colors = useColors();
 
   if (isLoading) {
@@ -15,7 +15,13 @@ export default function Index() {
     );
   }
 
-  if (token) {
+  if (authMode === 'clerk') {
+    return clerkSignedIn
+      ? <Redirect href="/(clerk-auth)/signed-in" />
+      : <Redirect href="/(auth)/splash" />;
+  }
+
+  if (token && user) {
     return <Redirect href="/(tabs)/discover" />;
   }
 

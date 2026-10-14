@@ -157,7 +157,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
       >
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Back to Bluebird demo sign-in"
+          accessibilityLabel="Back to Bluebird welcome"
           onPress={() => router.replace('/(auth)/welcome')}
           style={styles.backButton}
           testID="clerk-back-to-demo"
@@ -170,8 +170,8 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
           <Text style={[styles.title, { color: colors.textOnBrand }]}>{title}</Text>
           <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>
             {isSignIn
-              ? 'This Clerk session is separate from Bluebird’s phone-based demo account.'
-              : 'This Clerk account is separate from Bluebird’s existing onboarding. Phone verification is required.'}
+              ? 'Use your phone and SMS code to open your Clerk session.'
+              : 'Create an account with your phone. Bluebird member access is confirmed separately after sign-in.'}
           </Text>
 
           {(!isLoaded || !resourcesLoaded) && (

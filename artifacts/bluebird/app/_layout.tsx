@@ -13,7 +13,7 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
-import { Stack } from 'expo-router';
+import { Redirect, Stack, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { setBaseUrl } from '@workspace/api-client-react';
 import { AuthProvider } from '@/context/AuthContext';
@@ -23,6 +23,8 @@ import { QueueConfirmationWatcher } from '@/lib/queueCelebration';
 import { DormantClerkProvider } from '@/lib/dormantClerkIntegration';
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 import { StatusBar } from 'expo-status-bar';
+import { useAuth } from '@/context/AuthContext';
+import { shouldRedirectClerkRoute } from '@/lib/clerkAuthSession';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -42,6 +44,13 @@ const queryClient = new QueryClient({
 
 function RootLayoutNav() {
   const colors = useColors();
+  const segments = useSegments();
+  const { authMode, clerkSignedIn, memberAccessResolved } = useAuth();
+  const clerkRouteGuarded =
+    authMode === 'clerk' && shouldRedirectClerkRoute(segments, memberAccessResolved);
+  if (clerkRouteGuarded) {
+    return <Redirect href={clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(clerk-auth)/sign-in'} />;
+  }
   // Custom inset-aware header: the default native-stack header rendered
   // behind the iPhone notch/Dynamic Island on these routes.
   const headerOptions = {

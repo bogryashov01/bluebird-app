@@ -137,7 +137,7 @@ test("disabled Clerk routes redirect to the unchanged demo sign-in flow without 
   expect(memberApiCalls).toEqual([]);
 });
 
-test("Clerk-enabled Welcome shows both entry links without starting authentication", async ({ page }) => {
+test("Clerk-enabled Welcome routes the phone journey into Clerk without starting authentication", async ({ page }) => {
   test.skip(!clerkAuthEnabled, "This case runs against the Clerk-enabled Preview bundle.");
   const authApiCalls = [];
   await page.route("**/api/**", async (route) => {
@@ -147,9 +147,16 @@ test("Clerk-enabled Welcome shows both entry links without starting authenticati
 
   await page.goto("/welcome");
   await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
-  await expect(page.getByTestId("clerk-sign-in-entry")).toBeVisible();
-  await expect(page.getByTestId("clerk-sign-up-entry")).toBeVisible();
   await expect(page.getByText("Continue with Phone", { exact: true })).toBeVisible();
+  expect(authApiCalls).toEqual([]);
+
+  await page.getByTestId("welcome-phone-entry").click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  expect(authApiCalls).toEqual([]);
+
+  await page.goto("/discover");
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByText("Browse available empty legs", { exact: true })).toHaveCount(0);
   expect(authApiCalls).toEqual([]);
 });
 

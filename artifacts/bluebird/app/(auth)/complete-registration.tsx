@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
@@ -18,6 +18,7 @@ import { useCompletePhoneRegistration } from '@workspace/api-client-react';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 
 export default function CompleteRegistrationScreen() {
   const insets = useSafeAreaInsets();
@@ -34,6 +35,10 @@ export default function CompleteRegistrationScreen() {
   const [grantExpired, setGrantExpired] = useState(!registrationGrant);
   const lastNameRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
+
+  if (CLERK_AUTH_CONFIGURATION.enabled) {
+    return <Redirect href="/(clerk-auth)/sign-in" />;
+  }
 
   const registration = useCompletePhoneRegistration({
     mutation: {

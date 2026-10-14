@@ -26,9 +26,14 @@ export function isValidClerkPublishableKey(value: unknown): value is string {
 export function resolveClerkAuthConfiguration(
   enabledFlag: unknown,
   publishableKey: unknown,
+  isDevelopment = false,
 ): ClerkAuthConfiguration {
   const key = typeof publishableKey === 'string' ? publishableKey.trim() : '';
-  const enabled = enabledFlag === 'true' && isValidClerkPublishableKey(key);
+  const enabled =
+    isDevelopment &&
+    enabledFlag === 'true' &&
+    isValidClerkPublishableKey(key) &&
+    key.startsWith('pk_test_');
   return {
     enabled,
     publishableKey: enabled ? key : null,
@@ -88,4 +93,5 @@ export async function performClerkSignOut(
 export const CLERK_AUTH_CONFIGURATION = resolveClerkAuthConfiguration(
   process.env.EXPO_PUBLIC_ENABLE_CLERK_AUTH,
   process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  typeof __DEV__ !== 'undefined' && __DEV__,
 );

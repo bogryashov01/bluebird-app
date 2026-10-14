@@ -4,12 +4,13 @@ import {
   ActivityIndicator, Platform, Image,
 } from 'react-native';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRequestLoginCode } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
+import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 
 /**
  * Formats the phone input while typing. US-style numbers get (XXX) XXX-XXXX;
@@ -58,6 +59,10 @@ export default function PhoneScreen() {
   const digits = phone.replace(/\D/g, '');
   // US-style entry needs 10 digits; international "+" entry needs 11–15.
   const valid = phone.startsWith('+') ? digits.length >= 11 && digits.length <= 15 : digits.length >= 10;
+
+  if (CLERK_AUTH_CONFIGURATION.enabled) {
+    return <Redirect href="/(clerk-auth)/sign-in" />;
+  }
 
   const handleContinue = () => {
     if (!valid || requestCode.isPending) return;

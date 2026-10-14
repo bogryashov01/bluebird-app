@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthTokenGetter, logout, type User } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -6,6 +6,12 @@ import { router } from 'expo-router';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useRegisterNetworkingPushToken } from '@workspace/api-client-react';
+import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
+import {
+  clearClerkMemberCacheOnIdentityChange,
+  createLegacyAuthTokenGetter,
+} from '@/lib/clerkAuthSession';
+import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 
 const TOKEN_KEY = 'bluebird_token';
 const USER_KEY = 'bluebird_user';
@@ -16,6 +22,10 @@ interface AuthContextType {
   token: string | null;
   user: AuthUser | null;
   isLoading: boolean;
+  authMode: 'legacy' | 'clerk';
+  clerkSignedIn: boolean;
+  clerkUserId: string | null;
+  memberAccessResolved: boolean;
   signIn: (token: string, user: AuthUser) => Promise<void>;
   signOut: () => Promise<void>;
   updateUser: (user: AuthUser) => void;
@@ -26,24 +36,57 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 // Register the token getter globally so every API request carries the bearer token
-setAuthTokenGetter(async () => {
-  try {
-    return await AsyncStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-});
+setAuthTokenGetter(createLegacyAuthTokenGetter(
+  CLERK_AUTH_CONFIGURATION.enabled,
+  async () => {
+    try {
+      return await AsyncStorage.getItem(TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  },
+));
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  const clerkSession = useClerkAuthSnapshot();
+  const clerkMode = CLERK_AUTH_CONFIGURATION.enabled;
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pendingRegistrationGrant, setPendingRegistrationGrant] = useState<string | null>(null);
   const registerPushToken = useRegisterNetworkingPushToken();
+  const previousClerkIdentity = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!clerkMode) return;
+    // A demo JWT/profile must not survive as a fallback in the Clerk flow.
+    void Promise.all([
+      AsyncStorage.removeItem(TOKEN_KEY),
+      AsyncStorage.removeItem(USER_KEY),
+    ]);
+  }, [clerkMode]);
+
+  useEffect(() => {
+    if (!clerkMode || !clerkSession?.isLoaded) return;
+    const nextIdentity = clerkSession.isSignedIn === true ? clerkSession.userId : null;
+    // Clear before member routes can be exposed for the new identity.
+    if (clearClerkMemberCacheOnIdentityChange(
+      queryClient,
+      previousClerkIdentity.current,
+      nextIdentity,
+      clerkSession.isLoaded,
+    )) {
+      previousClerkIdentity.current = nextIdentity;
+    }
+    setToken(null);
+    setUser(null);
+    setPendingRegistrationGrant(null);
+  }, [clerkMode, clerkSession?.isLoaded, clerkSession?.isSignedIn, clerkSession?.userId, queryClient]);
 
   useEffect(() => {
     async function loadAuth() {
+      if (clerkMode) return;
       try {
         const [storedToken, storedUser] = await Promise.all([
           AsyncStorage.getItem(TOKEN_KEY),
@@ -110,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     loadAuth();
-  }, []);
+  }, [clerkMode]);
 
   useEffect(() => {
     if (!user || !token || user.membershipTier === 'none' || Platform.OS === 'web') return;
@@ -140,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user?.id, user?.membershipTier, token]);
 
   const signIn = async (newToken: string, newUser: AuthUser) => {
+    if (clerkMode) throw new Error('Legacy Bluebird sign-in is disabled while Clerk migration mode is active.');
     const normalized = normalizeUser(newUser);
     await Promise.all([
       AsyncStorage.setItem(TOKEN_KEY, newToken),
@@ -151,6 +195,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    if (clerkMode) {
+      queryClient.clear();
+      await clerkSession?.signOut();
+      setToken(null);
+      setUser(null);
+      setPendingRegistrationGrant(null);
+      router.replace('/(auth)/welcome');
+      return;
+    }
     // Best-effort server-side token revocation. Must happen before the token
     // is cleared locally (the request needs it), but never blocks sign-out:
     // offline or failed calls still complete the local sign-out.
@@ -173,6 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateUser = (updatedUser: AuthUser) => {
+    if (clerkMode) return;
     const normalized = normalizeUser(updatedUser);
     setUser(normalized);
     AsyncStorage.setItem(USER_KEY, JSON.stringify(normalized)).catch(() => {});
@@ -180,9 +234,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      token,
-      user,
-      isLoading,
+      token: clerkMode ? null : token,
+      user: clerkMode ? null : user,
+      isLoading: clerkMode ? !clerkSession?.isLoaded : isLoading,
+      authMode: clerkMode ? 'clerk' : 'legacy',
+      clerkSignedIn: clerkMode && clerkSession?.isLoaded ? clerkSession.isSignedIn === true : false,
+      clerkUserId: clerkMode && clerkSession?.isLoaded && clerkSession.isSignedIn === true
+        ? clerkSession.userId
+        : null,
+      memberAccessResolved: !clerkMode && !!token && !!user,
       signIn,
       signOut,
       updateUser,

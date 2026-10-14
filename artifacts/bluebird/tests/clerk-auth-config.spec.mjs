@@ -13,7 +13,7 @@ const validTestKey = "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k";
 
 test("Clerk stays disabled unless the flag is exactly true and the public key is valid", () => {
   for (const flag of [undefined, "", "false", "TRUE", "1", true]) {
-    const config = resolveClerkAuthConfiguration(flag, validTestKey);
+    const config = resolveClerkAuthConfiguration(flag, validTestKey, true);
     assert.equal(config.enabled, false);
     assert.equal(config.publishableKey, null);
     assert.equal(shouldMountClerkProvider(config), false);
@@ -21,23 +21,31 @@ test("Clerk stays disabled unless the flag is exactly true and the public key is
   }
 
   for (const key of [undefined, "", " ", "secret_key", "pk_test_short", "pk_live_###"]) {
-    const config = resolveClerkAuthConfiguration("true", key);
+    const config = resolveClerkAuthConfiguration("true", key, true);
     assert.equal(config.enabled, false);
     assert.equal(config.publishableKey, null);
     assert.equal(shouldMountClerkProvider(config), false);
     assert.equal(canAccessClerkAuthRoutes(config), false);
   }
 
-  const enabled = resolveClerkAuthConfiguration("true", ` ${validTestKey} `);
+  const enabled = resolveClerkAuthConfiguration("true", ` ${validTestKey} `, true);
   assert.deepEqual(enabled, { enabled: true, publishableKey: validTestKey });
   assert.equal(shouldMountClerkProvider(enabled), true);
   assert.equal(canAccessClerkAuthRoutes(enabled), true);
 });
 
 test("a key by itself never enables provider mounting or Clerk routes", () => {
-  const config = resolveClerkAuthConfiguration(undefined, validTestKey);
+  const config = resolveClerkAuthConfiguration(undefined, validTestKey, true);
   assert.equal(config.enabled, false);
   assert.equal(shouldMountClerkProvider(config), false);
+});
+
+test("Clerk migration is disabled outside Development and rejects live keys", () => {
+  assert.equal(resolveClerkAuthConfiguration("true", validTestKey, false).enabled, false);
+  assert.equal(
+    resolveClerkAuthConfiguration("true", "pk_live_Y2xlcmsuZXhhbXBsZS5jb20k", true).enabled,
+    false,
+  );
 });
 
 test("Clerk auth view states distinguish loading, errors, signed-out, and signed-in", () => {
