@@ -10,9 +10,15 @@ import {
 
 function makeResources(overrides = {}) {
   const calls = [];
+  const supportedFirstFactors = overrides.supportedFirstFactors ?? [
+    { strategy: "email_code", emailAddressId: "mock-email-id" },
+    { strategy: "phone_code", phoneNumberId: "mock-phone-number-id" },
+    { strategy: "phone_code", phoneNumberId: "mock-secondary-phone-id" },
+  ];
   const signInAttempt = {
     status: "needs_first_factor",
     createdSessionId: null,
+    supportedFirstFactors,
     firstFactorVerification: { status: "unverified" },
     prepareFirstFactor: async (params) => {
       calls.push(["prepare-sign-in-code", params]);
@@ -29,6 +35,7 @@ function makeResources(overrides = {}) {
     },
   };
   const signIn = {
+    supportedFirstFactors,
     create: async (params) => {
       calls.push(["create-sign-in", params]);
       if (overrides.createSignInError) throw overrides.createSignInError;
@@ -93,7 +100,7 @@ test("phone normalization accepts US and international synthetic numbers only", 
   }
 });
 
-test("sign-in creates a phone-code attempt, prepares it, verifies, and activates only a complete session", async () => {
+test("sign-in selects the phone-code factor and forwards its ID before verifying", async () => {
   const fixture = makeResources();
   const started = await beginClerkPhoneAuth("sign-in", "(555) 555-0199", fixture.actions);
   assert.deepEqual(started, {
@@ -104,7 +111,7 @@ test("sign-in creates a phone-code attempt, prepares it, verifies, and activates
   });
   assert.deepEqual(fixture.calls.slice(0, 2), [
     ["create-sign-in", { strategy: "phone_code", identifier: "+15555550199" }],
-    ["prepare-sign-in-code", { strategy: "phone_code" }],
+    ["prepare-sign-in-code", { strategy: "phone_code", phoneNumberId: "mock-phone-number-id" }],
   ]);
 
   const verified = await verifyClerkPhoneCode("sign-in", "123456", fixture.actions);
@@ -163,12 +170,41 @@ test("successful SMS preparation with a pending first factor enters the code ste
     });
     assert.deepEqual(fixture.calls, [
       ["create-sign-in", { strategy: "phone_code", identifier: "+15555550199" }],
-      ["prepare-sign-in-code", { strategy: "phone_code" }],
+      ["prepare-sign-in-code", { strategy: "phone_code", phoneNumberId: "mock-phone-number-id" }],
     ]);
     assert.equal(fixture.getActivationCalls(), 0);
     assert.equal(fetchCalls, 0);
   } finally {
     globalThis.fetch = previousFetch;
+  }
+});
+
+test("missing phone-code factors fail during preparation without opening code entry", async () => {
+  const fixture = makeResources({ supportedFirstFactors: [{ strategy: "email_code" }] });
+  const started = await beginClerkPhoneAuth("sign-in", "+15555550199", fixture.actions);
+
+  assert.equal(started.ok, false);
+  assert.equal(started.stage, "code-preparation");
+  assert.match(started.message, /could not prepare the verification code/i);
+  assert.deepEqual(fixture.calls, [
+    ["create-sign-in", { strategy: "phone_code", identifier: "+15555550199" }],
+  ]);
+});
+
+test("missing and blank phone number IDs fail safely without preparing SMS", async () => {
+  for (const supportedFirstFactors of [
+    [{ strategy: "phone_code" }],
+    [{ strategy: "phone_code", phoneNumberId: "" }],
+    [{ strategy: "phone_code", phoneNumberId: "   " }],
+  ]) {
+    const fixture = makeResources({ supportedFirstFactors });
+    const started = await beginClerkPhoneAuth("sign-in", "+15555550199", fixture.actions);
+
+    assert.equal(started.ok, false);
+    assert.equal(started.stage, "code-preparation");
+    assert.deepEqual(fixture.calls, [
+      ["create-sign-in", { strategy: "phone_code", identifier: "+15555550199" }],
+    ]);
   }
 });
 
@@ -283,6 +319,7 @@ test("create, code-preparation, and verification failures report their lifecycle
   assert.equal(unexpectedResponse.ok, false);
   assert.equal(unexpectedResponse.stage, "response");
   assert.match(unexpectedResponse.message, /did not confirm that phone verification is pending/);
+  assert.equal(unexpectedResponseFixture.calls.some(([name]) => name === "attempt-sign-in-code"), false);
 });
 
 test("unverified and incomplete sign-up results stay signed out even if Clerk returns a session id", async () => {
@@ -336,6 +373,13 @@ test("lifecycle tests only use injected Clerk resources and never call fetch", a
     await beginClerkPhoneAuth("sign-in", "+15555550199", fixture.actions);
     await resendClerkPhoneCode("sign-in", fixture.actions);
     await verifyClerkPhoneCode("sign-in", "123456", fixture.actions);
+    assert.deepEqual(
+      fixture.calls.filter(([name]) => name === "prepare-sign-in-code" || name === "resend-sign-in-code"),
+      [
+        ["prepare-sign-in-code", { strategy: "phone_code", phoneNumberId: "mock-phone-number-id" }],
+        ["resend-sign-in-code", { strategy: "phone_code", phoneNumberId: "mock-phone-number-id" }],
+      ],
+    );
     assert.equal(fetchCalls, 0);
   } finally {
     globalThis.fetch = previousFetch;

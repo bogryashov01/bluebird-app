@@ -26,13 +26,25 @@ export interface ClerkPhoneAuthActions {
 }
 
 export interface ClerkSignInPhoneAttempt extends ClerkPhoneAuthAttempt {
+  supportedFirstFactors: ClerkSignInSupportedFirstFactor[] | null;
   firstFactorVerification: { status: string | null };
-  prepareFirstFactor: (params: { strategy: 'phone_code' }) => Promise<ClerkSignInPhoneAttempt>;
+  prepareFirstFactor: (params: {
+    strategy: 'phone_code';
+    phoneNumberId: string;
+  }) => Promise<ClerkSignInPhoneAttempt>;
 }
+
+export type ClerkSignInSupportedFirstFactor =
+  | { strategy: 'phone_code'; phoneNumberId: string }
+  | { strategy: string; phoneNumberId?: string };
 
 export interface ClerkSignInPhoneResource {
   create: (params: { strategy: 'phone_code'; identifier: string }) => Promise<ClerkSignInPhoneAttempt>;
-  prepareFirstFactor: (params: { strategy: 'phone_code' }) => Promise<ClerkSignInPhoneAttempt>;
+  supportedFirstFactors: ClerkSignInSupportedFirstFactor[] | null;
+  prepareFirstFactor: (params: {
+    strategy: 'phone_code';
+    phoneNumberId: string;
+  }) => Promise<ClerkSignInPhoneAttempt>;
   attemptFirstFactor: (params: { strategy: 'phone_code'; code: string }) => Promise<ClerkSignInPhoneAttempt>;
 }
 
@@ -58,12 +70,15 @@ export function createClerkPhoneAuthActions(input: {
         input.signIn.create({ strategy: 'phone_code', identifier: phoneNumber }),
       );
       const prepared = await runAtStage('code-preparation', () =>
-        attempt.prepareFirstFactor({ strategy: 'phone_code' }),
+        attempt.prepareFirstFactor({
+          strategy: 'phone_code',
+          phoneNumberId: getRequiredPhoneNumberId(attempt.supportedFirstFactors),
+        }),
       );
       return {
         status: prepared.status,
         createdSessionId: prepared.createdSessionId,
-        phoneVerificationStatus: prepared.firstFactorVerification.status,
+        phoneVerificationStatus: prepared.firstFactorVerification?.status ?? null,
       };
     },
     startSignUp: async (phoneNumber) => {
@@ -80,9 +95,12 @@ export function createClerkPhoneAuthActions(input: {
       }
     },
     resendSignIn: async () => {
-      await runAtStage('resend', () =>
-        input.signIn.prepareFirstFactor({ strategy: 'phone_code' }),
-      );
+      await runAtStage('resend', async () => {
+        await input.signIn.prepareFirstFactor({
+          strategy: 'phone_code',
+          phoneNumberId: getRequiredPhoneNumberId(input.signIn.supportedFirstFactors),
+        });
+      });
     },
     resendSignUp: async () => {
       await runAtStage('resend', () =>
@@ -109,6 +127,22 @@ export function createClerkPhoneAuthActions(input: {
       await runAtStage('session-activation', () => input.setActive({ session: sessionId }));
     },
   };
+}
+
+function getRequiredPhoneNumberId(
+  factors: ClerkSignInSupportedFirstFactor[] | null,
+): string {
+  const phoneFactor = factors?.find((factor) => factor.strategy === 'phone_code');
+  if (
+    !phoneFactor ||
+    typeof phoneFactor.phoneNumberId !== 'string' ||
+    phoneFactor.phoneNumberId.trim().length === 0
+  ) {
+    throw Object.assign(new Error('Phone-code factor is unavailable.'), {
+      code: 'phone_code_factor_unavailable',
+    });
+  }
+  return phoneFactor.phoneNumberId;
 }
 
 export type ClerkPhoneAuthFailure = {
