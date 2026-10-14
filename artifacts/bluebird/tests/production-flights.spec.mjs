@@ -14,6 +14,8 @@ import {
   PRODUCTION_API_BASE_URL,
   ProductionReadHttpError,
   ProductionReadInvalidJsonError,
+  ProductionReadNetworkError,
+  ProductionReadSchemaError,
   ProductionReadTimeoutError,
   resolveAircraftImageUrl,
   resolveFlightReadConfiguration,
@@ -260,6 +262,13 @@ await assert.rejects(
     return true;
   },
 );
+await assert.rejects(
+  () => fetchProductionFlights({
+    fetcher: async () => { throw new Error("network detail must not leak"); },
+  }),
+  (error) => error instanceof ProductionReadNetworkError &&
+    !String(error).includes("network detail"),
+);
 
 let timedOutSignal;
 await assert.rejects(
@@ -305,6 +314,13 @@ await assert.rejects(
     return true;
   },
   "invalid JSON is reported as a payload failure rather than retried as a network failure",
+);
+await assert.rejects(
+  () => fetchProductionFlights({
+    fetcher: async () => new Response(JSON.stringify({ flights: [rawFlight] }), { status: 200 }),
+  }),
+  ProductionReadSchemaError,
+  "an invalid public response shape is reported as a typed schema failure",
 );
 
 requests.length = 0;

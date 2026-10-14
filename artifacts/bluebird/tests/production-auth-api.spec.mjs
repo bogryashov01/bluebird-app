@@ -313,6 +313,28 @@ test("construction is inert and /api/me HTTP 200 false is a signed-out result", 
   assert.equal(requests, 1);
 });
 
+test("/api/me resolution stays pending for anonymous or non-member projections", async () => {
+  for (const projection of [
+    anonymous,
+    { ...currentUser, isMember: false, memberTier: null },
+    { ...currentUser, isAuthenticated: false },
+  ]) {
+    const client = makeClient(async () => jsonResponse(projection));
+    const result = await client.resolveCurrentMember();
+    assert.equal(result.status, "pending");
+    assert.deepEqual(result.currentUser, projection);
+    assert.equal("registrationRequired" in result, false);
+    assert.equal("accountLinkRequired" in result, false);
+  }
+
+  const memberClient = makeClient(async () => jsonResponse(currentUser));
+  const memberResult = await memberClient.resolveCurrentMember();
+  assert.equal(memberResult.status, "authenticated_member");
+  assert.equal(memberResult.currentUser.isAuthenticated, true);
+  assert.equal(memberResult.currentUser.isMember, true);
+  assert.equal("memberId" in memberResult, false);
+});
+
 test("base URL safety and bearer-only request headers are preserved", async () => {
   let request;
   const client = makeClient(async (url, init) => {
@@ -596,6 +618,18 @@ test("network, timeout, and caller cancellation are distinct sanitized errors", 
 
   const timeoutClient = makeClient(async () => new Promise(() => {}), { timeoutMs: 5 });
   await assert.rejects(timeoutClient.getMe(), ProductionAuthTimeoutError);
+
+  let requestsWhileTokenPending = 0;
+  const stalledTokenClient = createAuthenticatedProductionApiClient({
+    tokenProvider: { getVerifiedAccessToken: () => new Promise(() => {}) },
+    timeoutMs: 5,
+    fetcher: async () => {
+      requestsWhileTokenPending += 1;
+      return jsonResponse(anonymous);
+    },
+  });
+  await assert.rejects(stalledTokenClient.getMe(), ProductionAuthTimeoutError);
+  assert.equal(requestsWhileTokenPending, 0);
 
   const controller = new AbortController();
   let wasAborted = false;

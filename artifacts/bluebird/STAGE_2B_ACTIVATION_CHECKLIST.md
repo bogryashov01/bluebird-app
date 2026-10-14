@@ -52,8 +52,12 @@ and 401 for protected routes with unresolved identity. It does not establish
 exact expired/malformed-token responses or production session TTL. The mobile
 client requires a nonblank token for every request, so it cannot use its
 `getMe()` method to exercise the contract's no-token anonymous response. A
-token-bearing 200 with `isAuthenticated: false` is parsed as signed out; callers
-must gate authenticated behavior on that field.
+token-bearing 200 with `isAuthenticated: false` or `isMember: false` remains
+pending and does not imply registration or account linking is required. Both
+fields true produce only an authenticated-member projection: `/api/me` supplies
+no Bluebird member ID, and this does not establish deployed Clerk token
+acceptance or identity mapping. The signed-in Pending / Unlinked UI and
+unavailable production access gate therefore remain in place.
 
 The checked-in `artifacts/api-server` middleware verifies tokens signed with
 its own `JWT_SECRET`/`SESSION_SECRET` and checks its local revocation table. It

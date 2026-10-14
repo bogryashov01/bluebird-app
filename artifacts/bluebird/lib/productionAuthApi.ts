@@ -2,6 +2,7 @@ import {
   PRODUCTION_API_BASE_URL,
   resolveFlightReadConfiguration,
 } from './productionFlights';
+import { requestProductionJson } from './productionRequestTransport';
 
 /**
  * This provider is deliberately isolated from AuthContext and demo JWT storage.
@@ -52,6 +53,20 @@ export interface ProductionCurrentUser {
   needsSignupPhone: boolean;
   impersonation?: Nullable<ProductionImpersonation>;
 }
+
+/**
+ * Projection-only result for the current `/api/me` contract. Even the positive
+ * branch has no Bluebird member ID and must not open the production access gate.
+ */
+export type ProductionMemberResolution =
+  | {
+      status: 'pending';
+      currentUser: ProductionCurrentUser;
+    }
+  | {
+      status: 'authenticated_member';
+      currentUser: ProductionCurrentUser;
+    };
 
 export interface ProductionNotificationPrefs {
   mode: 'off' | 'all' | 'specific';
@@ -567,8 +582,8 @@ function parseCurrentUser(value: unknown): ProductionCurrentUser {
       ? null
       : parseImpersonation(raw.impersonation, 'currentUser.impersonation');
   }
-  // /api/me is HTTP 200 for anonymous sessions and caught identity failures.
-  // Preserve isAuthenticated:false as a signed-out result; never infer identity.
+  // /api/me can return HTTP 200 for anonymous sessions and caught identity
+  // failures. Preserve the projection as-is; resolution is handled separately.
   return result;
 }
 
@@ -1112,74 +1127,46 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
     requestOptions: ProductionRequestOptions = {},
     body?: unknown,
   ): Promise<T> {
-    if (requestOptions.signal?.aborted) throw new ProductionAuthCancelledError();
-    const controller = new AbortController();
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    let removeExternalAbort = () => {};
-    const races: Array<Promise<never>> = [new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => {
-        controller.abort();
-        reject(new ProductionAuthTimeoutError(timeoutMs));
-      }, timeoutMs);
-    })];
-    if (requestOptions.signal) {
-      races.push(new Promise<never>((_, reject) => {
-        const onAbort = () => {
-          controller.abort();
-          reject(new ProductionAuthCancelledError());
-        };
-        requestOptions.signal?.addEventListener('abort', onAbort, { once: true });
-        removeExternalAbort = () => requestOptions.signal?.removeEventListener('abort', onAbort);
-      }));
-    }
-    const operation = (async () => {
-      let token: string | null;
-      try {
-        token = await options.tokenProvider.getVerifiedAccessToken();
-      } catch {
-        throw new ProductionAuthRequestError('Production access token is unavailable.', 'token');
-      }
-      if (controller.signal.aborted) throw new ProductionAuthCancelledError();
-      if (token === null || token.trim() === '') throw new ProductionAuthRequestError('Production access token is unavailable.', 'token');
-      if (/\s/.test(token)) throw new ProductionAuthRequestError('Production access token is invalid.', 'token');
-
-      let response: Response;
-      try {
-        response = await fetcher(`${baseUrl}${path}`, {
-          method,
-          headers: {
-            Accept: 'application/json',
-            Authorization: `Bearer ${token}`,
-            ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-          },
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-          credentials: 'omit',
-          signal: controller.signal,
-        });
-      } catch {
-        if (controller.signal.aborted) throw new ProductionAuthCancelledError();
-        throw new ProductionAuthNetworkError();
-      }
-      if (!response.ok) throw new ProductionAuthHttpError(response.status);
-      let json: unknown;
-      try {
-        json = await response.json();
-      } catch {
-        throw new ProductionAuthInvalidJsonError();
-      }
-      try {
-        return validator(json);
-      } catch (error) {
-        if (error instanceof ProductionAuthRequestError) throw error;
-        throw new ProductionAuthSchemaError(error instanceof Error ? error.message : 'response');
-      }
-    })();
-    try {
-      return await Promise.race([operation, ...races]);
-    } finally {
-      if (timeoutId !== undefined) clearTimeout(timeoutId);
-      removeExternalAbort();
-    }
+    return requestProductionJson({
+      url: `${baseUrl}${path}`,
+      fetcher,
+      method,
+      headers: {
+        Accept: 'application/json',
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      credentials: 'omit',
+      timeoutMs,
+      signal: requestOptions.signal,
+      prepareHeaders: async (signal) => {
+        let token: string | null;
+        try {
+          token = await options.tokenProvider.getVerifiedAccessToken();
+        } catch {
+          throw new ProductionAuthRequestError('Production access token is unavailable.', 'token');
+        }
+        if (signal.aborted) throw new ProductionAuthCancelledError();
+        if (token === null || token.trim() === '') {
+          throw new ProductionAuthRequestError('Production access token is unavailable.', 'token');
+        }
+        if (/\s/.test(token)) {
+          throw new ProductionAuthRequestError('Production access token is invalid.', 'token');
+        }
+        return { Authorization: `Bearer ${token}` };
+      },
+      parse: validator,
+      errors: {
+        timeout: (duration) => new ProductionAuthTimeoutError(duration),
+        cancelled: () => new ProductionAuthCancelledError(),
+        network: () => new ProductionAuthNetworkError(),
+        http: (response) => new ProductionAuthHttpError(response.status),
+        invalidJson: () => new ProductionAuthInvalidJsonError(),
+        schema: (error) => error instanceof ProductionAuthRequestError
+          ? error
+          : new ProductionAuthSchemaError(error instanceof Error ? error.message : 'response'),
+      },
+    });
   }
 
   const emptyLegPath = (id: number) => {
@@ -1195,6 +1182,19 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
   return {
     getMe: (requestOptions?: ProductionRequestOptions) =>
       request(PRODUCTION_AUTH_PATHS.me, 'GET', parseCurrentUser, requestOptions),
+    resolveCurrentMember: async (
+      requestOptions?: ProductionRequestOptions,
+    ): Promise<ProductionMemberResolution> => {
+      const currentUser = await request(
+        PRODUCTION_AUTH_PATHS.me,
+        'GET',
+        parseCurrentUser,
+        requestOptions,
+      );
+      return currentUser.isAuthenticated && currentUser.isMember
+        ? { status: 'authenticated_member', currentUser }
+        : { status: 'pending', currentUser };
+    },
     getProfile: (requestOptions?: ProductionRequestOptions) =>
       request(PRODUCTION_AUTH_PATHS.profile, 'GET', parseProfile, requestOptions),
     updateProfile: (data: UpdateProductionUserProfileRequest, requestOptions?: ProductionRequestOptions) => {

@@ -1,4 +1,5 @@
 import type { Flight } from '@workspace/api-client-react';
+import { requestProductionJson } from './productionRequestTransport';
 
 export const PRODUCTION_API_BASE_URL = 'https://bluebirdjets.com/api';
 export const PRODUCTION_API_ORIGIN = 'https://bluebirdjets.com';
@@ -179,10 +180,22 @@ export class ProductionReadInvalidJsonError extends Error {
   }
 }
 
+export class ProductionReadCancelledError extends Error {
+  constructor() {
+    super('Production read request was cancelled.');
+    this.name = 'AbortError';
+  }
+}
+
+export class ProductionReadSchemaError extends Error {
+  constructor(message: string) {
+    super(`Production read response did not match the API contract (${message}).`);
+    this.name = 'ProductionReadSchemaError';
+  }
+}
+
 function abortError(): Error {
-  const error = new Error('Production read request was cancelled.');
-  error.name = 'AbortError';
-  return error;
+  return new ProductionReadCancelledError();
 }
 
 function retryAfterMilliseconds(response: Response): number | null {
@@ -636,68 +649,48 @@ export async function fetchProductionJson(
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new RangeError('Production read timeout must be a positive finite number.');
   }
-  if (options.signal?.aborted) throw abortError();
-
-  const controller = new AbortController();
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  let timedOut = false;
-  let rejectAbort: (reason: Error) => void = () => {};
-  const abortPromise = new Promise<never>((_resolve, reject) => {
-    rejectAbort = reject;
+  return requestProductionJson({
+    url: `${baseUrl}${path}`,
+    fetcher,
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    credentials: 'omit',
+    timeoutMs,
+    signal: options.signal,
+    parse: (value) => value,
+    errors: {
+      timeout: (duration) => new ProductionReadTimeoutError(duration),
+      cancelled: abortError,
+      network: () => new ProductionReadNetworkError('Production read request could not reach the service.'),
+      http: (response) => new ProductionReadHttpError(
+        response.status,
+        retryAfterMilliseconds(response),
+      ),
+      invalidJson: () => new ProductionReadInvalidJsonError(),
+      schema: (error) => new ProductionReadSchemaError(
+        error instanceof Error ? error.message : 'response',
+      ),
+    },
   });
-  const abortFromCaller = () => {
-    controller.abort();
-    rejectAbort(abortError());
-  };
-  options.signal?.addEventListener('abort', abortFromCaller, { once: true });
-  timeoutId = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-    rejectAbort(new ProductionReadTimeoutError(timeoutMs));
-  }, timeoutMs);
-
-  const request = async (): Promise<unknown> => {
-    let response: Response;
-    try {
-      response = await fetcher(`${baseUrl}${path}`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        credentials: 'omit',
-        signal: controller.signal,
-      });
-    } catch (error) {
-      if (controller.signal.aborted) {
-        throw timedOut ? new ProductionReadTimeoutError(timeoutMs) : abortError();
-      }
-      throw new ProductionReadNetworkError(
-        error instanceof Error ? error.message : 'Network request failed.',
-      );
-    }
-    if (!response.ok) {
-      throw new ProductionReadHttpError(response.status, retryAfterMilliseconds(response));
-    }
-    try {
-      return await response.json();
-    } catch {
-      if (controller.signal.aborted) {
-        throw timedOut ? new ProductionReadTimeoutError(timeoutMs) : abortError();
-      }
-      throw new ProductionReadInvalidJsonError();
-    }
-  };
-
-  try {
-    return await Promise.race([request(), abortPromise]);
-  } finally {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
-    options.signal?.removeEventListener('abort', abortFromCaller);
-  }
 }
 
 export async function fetchProductionFlights(
   options: ReadRequestOptions = {},
 ): Promise<FlightView[]> {
-  return mapProductionFlights(await fetchProductionJson('/empty-legs', options));
+  return mapReadSchema(
+    await fetchProductionJson('/empty-legs', options),
+    mapProductionFlights,
+  );
+}
+
+function mapReadSchema<T>(value: unknown, parse: (input: unknown) => T): T {
+  try {
+    return parse(value);
+  } catch (error) {
+    throw new ProductionReadSchemaError(
+      error instanceof Error ? error.message : 'response',
+    );
+  }
 }
 
 export function parseProductionFlightId(id: string | number | null | undefined): number | null {
@@ -715,7 +708,10 @@ export async function fetchProductionFlight(
   if (!Number.isSafeInteger(id) || id <= 0) {
     throw new Error('A positive numeric production flight ID is required.');
   }
-  return mapProductionFlight(await fetchProductionJson(`/empty-legs/${id}`, options));
+  return mapReadSchema(
+    await fetchProductionJson(`/empty-legs/${id}`, options),
+    mapProductionFlight,
+  );
 }
 
 export function normalizeAirportCodes(codes: readonly string[]): string[] {
@@ -735,7 +731,10 @@ export async function fetchProductionAirports(
   const unique = normalizeAirportCodes(codes);
   if (unique.length === 0) return [];
   const query = new URLSearchParams({ codes: unique.join(',') });
-  return mapProductionAirports(await fetchProductionJson(`/airports?${query.toString()}`, options));
+  return mapReadSchema(
+    await fetchProductionJson(`/airports?${query.toString()}`, options),
+    mapProductionAirports,
+  );
 }
 
 export async function fetchProductionAirportSearch(
@@ -745,15 +744,17 @@ export async function fetchProductionAirportSearch(
   const normalizedQuery = query.trim();
   if (!normalizedQuery) return [];
   const params = new URLSearchParams({ q: normalizedQuery });
-  return mapProductionAirports(
+  return mapReadSchema(
     await fetchProductionJson(`/airports/search?${params.toString()}`, options),
+    mapProductionAirports,
   );
 }
 
 export async function fetchProductionAirportCities(
   options: ReadRequestOptions = {},
 ): Promise<ProductionAirportCityGroupResponse[]> {
-  return mapProductionAirportCityGroups(
+  return mapReadSchema(
     await fetchProductionJson('/airports/cities', options),
+    mapProductionAirportCityGroups,
   );
 }
