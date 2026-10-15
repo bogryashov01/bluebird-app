@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  getClerkApiConnectionFailureGuidance,
   isClerkApiConnectionTestVisible,
   runClerkApiConnectionTest,
 } from "../scripts/.clerk-api-connection.test.mjs";
@@ -67,6 +68,16 @@ test("test button visibility requires Development plus a loaded signed-in sessio
   }
 });
 
+test("ambiguous browser transport guidance lists possibilities without claiming a cause", () => {
+  const guidance = getClerkApiConnectionFailureGuidance("browser transport (ambiguous)");
+  assert.match(guidance.join(" "), /did not expose why Fetch failed/);
+  assert.match(guidance.join(" "), /may be CORS\/preflight, DNS, TLS, or another network failure/);
+  assert.match(guidance.join(" "), /DevTools Network and Console/);
+  assert.match(guidance.join(" "), /Do not share Authorization headers or response contents/);
+  assert.equal(getClerkApiConnectionFailureGuidance("HTTP"), null);
+  assert.doesNotMatch(JSON.stringify(guidance), /private-token|response body|raw exception/i);
+});
+
 test("gated or cancelled test creates no client, reads no token, and sends no request", async () => {
   let confirmations = 0;
   let clientCreations = 0;
@@ -116,6 +127,7 @@ test("confirmation happens before a single production request and uses one fresh
       order.push("confirm");
       assert.equal(title, "Test Bluebird API Connection");
       assert.match(message, /one authenticated GET request to the production Bluebird API/);
+      assert.match(message, /cross-origin.*Authorization.*OPTIONS CORS preflight/);
       assert.equal(label, "Send request");
       assert.equal(tokenReads, 0);
       assert.equal(requests.length, 0);
@@ -156,8 +168,8 @@ test("confirmation happens before a single production request and uses one fresh
   assert.doesNotMatch(JSON.stringify(result), /token|example|Private|Person|plus|admin/i);
 });
 
-test("HTTP and invalid-schema failures expose only status, safe booleans, and a category", async () => {
-  for (const [status, expectedAccepted] of [[401, false], [503, null]]) {
+test("HTTP status, invalid JSON, and invalid schema remain distinct and sanitized", async () => {
+  for (const [status, expectedAccepted] of [[401, false], [403, null], [503, null]]) {
     const result = await runClerkApiConnectionTest(confirmedOptions({
       createApiClient: () => makeClient({
         tokenProvider: { getVerifiedAccessToken: async () => "private-token" },
@@ -189,15 +201,36 @@ test("HTTP and invalid-schema failures expose only status, safe booleans, and a 
     isMember: null,
     isProfileComplete: null,
     schemaStatus: "invalid",
-    failureCategory: "schema",
+    failureCategory: "invalid schema",
   });
   assert.doesNotMatch(JSON.stringify(invalidSchema), /private|secret|token/i);
+
+  const invalidJson = await runClerkApiConnectionTest(confirmedOptions({
+    createApiClient: () => makeClient({
+      tokenProvider: { getVerifiedAccessToken: async () => "private-token" },
+      fetcher: async () => ({
+        ok: true,
+        status: 200,
+        json: async () => { throw new Error("private response body"); },
+      }),
+    }),
+  }));
+  assert.deepEqual(invalidJson, {
+    httpStatus: 200,
+    authenticationAccepted: null,
+    isAuthenticated: null,
+    isMember: null,
+    isProfileComplete: null,
+    schemaStatus: "not checked",
+    failureCategory: "invalid JSON",
+  });
+  assert.doesNotMatch(JSON.stringify(invalidJson), /private|token|response body/i);
 });
 
-test("network/CORS, timeout, and token failures are sanitized and never retried", async () => {
+test("ambiguous browser transport, timeout, and token failures are sanitized and never retried", async () => {
   const cases = [
     {
-      category: "network/CORS",
+      category: "browser transport (ambiguous)",
       tokenProvider: { getVerifiedAccessToken: async () => "mock-token" },
       fetcher: async () => { throw new Error("private token and email in network error"); },
     },

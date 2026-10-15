@@ -12,6 +12,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth as useBluebirdAuth } from '@/context/AuthContext';
 import { confirmDialog } from '@/lib/confirmDialog';
 import {
+  getClerkApiConnectionFailureGuidance,
   isClerkApiConnectionTestVisible,
   runClerkApiConnectionTest,
   type ClerkApiConnectionDiagnosticResult,
@@ -191,6 +192,7 @@ function DiagnosticResultText({
     `isProfileComplete: ${formatBoolean(result.isProfileComplete)}`,
     `Schema: ${result.schemaStatus}`,
     ...(result.failureCategory ? [`Failure: ${result.failureCategory}`] : []),
+    ...(getClerkApiConnectionFailureGuidance(result.failureCategory) ?? []),
   ];
   return <Text style={[styles.diagnosticText, { color }]}>{lines.join('\n')}</Text>;
 }

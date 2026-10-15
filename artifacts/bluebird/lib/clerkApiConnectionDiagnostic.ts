@@ -7,10 +7,12 @@ export { createAuthenticatedProductionApiClient } from './productionAuthApi';
 
 export type ClerkApiConnectionFailureCategory =
   | 'HTTP'
-  | 'network/CORS'
+  | 'browser transport (ambiguous)'
   | 'timeout'
   | 'token'
-  | 'schema';
+  | 'cancelled'
+  | 'invalid JSON'
+  | 'invalid schema';
 
 export interface ClerkApiConnectionDiagnosticResult {
   httpStatus: number | null;
@@ -26,6 +28,16 @@ export interface ClerkApiConnectionClient {
   getMeWithStatus: (
     onResponseStatus?: (status: number) => void,
   ) => Promise<{ status: number; currentUser: ProductionCurrentUser }>;
+}
+
+export function getClerkApiConnectionFailureGuidance(
+  category: ClerkApiConnectionFailureCategory | null,
+): string[] | null {
+  if (category !== 'browser transport (ambiguous)') return null;
+  return [
+    'The browser did not expose why Fetch failed. It may be CORS/preflight, DNS, TLS, or another network failure.',
+    'Check browser DevTools Network and Console for details. Do not share Authorization headers or response contents.',
+  ];
 }
 
 export function isClerkApiConnectionTestVisible(input: {
@@ -47,7 +59,7 @@ export async function runClerkApiConnectionTest(input: {
 
   const confirmed = await input.confirm(
     'Test Bluebird API Connection',
-    'This will send one authenticated GET request to the production Bluebird API. Continue?',
+    'This will send one authenticated GET request to the production Bluebird API. Because it is cross-origin and includes Authorization, the browser may first send an OPTIONS CORS preflight. Continue?',
     'Send request',
   );
   if (!confirmed) return null;
@@ -94,24 +106,26 @@ export function sanitizeDiagnosticFailure(
     isAuthenticated: null,
     isMember: null,
     isProfileComplete: null,
-    schemaStatus: category === 'schema' ? 'invalid' : 'not checked',
+    schemaStatus: category === 'invalid schema' ? 'invalid' : 'not checked',
     failureCategory: category,
   };
 }
 
 function getFailureCategory(error: unknown): ClerkApiConnectionFailureCategory {
-  if (!(error instanceof ProductionAuthRequestError)) return 'network/CORS';
+  if (!(error instanceof ProductionAuthRequestError)) return 'browser transport (ambiguous)';
   switch (error.code) {
     case 'token':
       return 'token';
     case 'timeout':
       return 'timeout';
     case 'invalid_json':
+      return 'invalid JSON';
     case 'invalid_schema':
-      return 'schema';
+      return 'invalid schema';
     case 'network':
+      return 'browser transport (ambiguous)';
     case 'cancelled':
-      return 'network/CORS';
+      return 'cancelled';
     case 'http':
     case 'session_expired':
       return 'HTTP';
