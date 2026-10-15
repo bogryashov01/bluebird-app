@@ -17,6 +17,7 @@ import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import {
   canEditClerkBluebirdProfile,
+  getClerkBluebirdProfileEffectDependencies,
   isClerkBluebirdProfileResultCurrent,
   loadClerkBluebirdProfile,
   updateClerkBluebirdProfileExplicitly,
@@ -67,19 +68,35 @@ export default function BluebirdProfileScreen() {
   const [loadAttempt, setLoadAttempt] = useState(0);
   const currentIdentity = useRef<string | null>(session?.userId ?? null);
   currentIdentity.current = session?.userId ?? null;
+  const currentSession = useRef(session);
+  currentSession.current = session;
+  const profileLoadDependencies = getClerkBluebirdProfileEffectDependencies({
+    configuration,
+    session,
+    loadAttempt,
+  });
 
   const createApi = useCallback((): ApiClient => {
-    if (!configuration || !session || session.isSignedIn !== true) {
+    if (!configuration || !session || session.isSignedIn !== true || !session.userId) {
       throw new Error('Your signed-in Main Bluebird API session is unavailable.');
     }
+    const requestedClerkUserId = session.userId;
     return createMainBluebirdApiIntegration({
       configuration,
       tokenProvider: {
         environment: configuration.environment,
-        getVerifiedAccessToken: session.getToken,
+        getVerifiedAccessToken: async () => {
+          const activeSession = currentSession.current;
+          if (
+            !activeSession ||
+            activeSession.isSignedIn !== true ||
+            activeSession.userId !== requestedClerkUserId
+          ) return null;
+          return activeSession.getToken();
+        },
       },
     });
-  }, [configuration, session]);
+  }, profileLoadDependencies);
 
   const loadProfile = useCallback(async (signal: AbortSignal) => {
     if (!session?.isLoaded || session.isSignedIn !== true || !session.userId) return;
@@ -115,7 +132,7 @@ export default function BluebirdProfileScreen() {
       if (signal.aborted || currentIdentity.current !== requestedClerkUserId) return;
       setLoadState({ kind: 'error', message: getProfileErrorMessage(error) });
     }
-  }, [createApi, session]);
+  }, [createApi, ...profileLoadDependencies]);
 
   useEffect(() => {
     if (!session?.isLoaded || session.isSignedIn !== true || !session.userId) {
@@ -125,7 +142,7 @@ export default function BluebirdProfileScreen() {
     const controller = new AbortController();
     void loadProfile(controller.signal);
     return () => controller.abort();
-  }, [loadProfile, loadAttempt, session?.isLoaded, session?.isSignedIn, session?.userId]);
+  }, [loadProfile, ...profileLoadDependencies]);
 
   const visibleLoadState: LoadState = loadState.kind === 'loaded' &&
     loadState.clerkUserId !== (session?.userId ?? null)

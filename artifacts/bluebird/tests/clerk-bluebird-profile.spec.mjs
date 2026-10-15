@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   canEditClerkBluebirdProfile,
+  getClerkBluebirdProfileEffectDependencies,
   isClerkBluebirdProfileResultCurrent,
   loadClerkBluebirdProfile,
   updateClerkBluebirdProfileExplicitly,
@@ -207,4 +208,66 @@ test("API errors are not converted into anonymous or registration-required state
   api.getMe = async () => { throw new Error("API unavailable"); };
   await assert.rejects(loadClerkBluebirdProfile(api), /API unavailable/);
   assert.deepEqual(api.calls, []);
+});
+
+test("profile loading stays stable across equivalent rerenders and reloads only for retry or identity changes", async () => {
+  const configuration = {
+    environment: "development",
+    apiBaseUrl: "https://development.example/api",
+    clerkPublishableKey: "pk_test_abcdefghijkl",
+  };
+  const getToken = async () => "session-token";
+  const session = {
+    isLoaded: true,
+    isSignedIn: true,
+    userId: "clerk-user-a",
+    getToken,
+    signOut: async () => {},
+  };
+  const api = fakeApi();
+  let previousDependencies;
+  let loadCount = 0;
+
+  async function simulateProfileEffect(nextConfiguration, nextSession, loadAttempt) {
+    const dependencies = getClerkBluebirdProfileEffectDependencies({
+      configuration: nextConfiguration,
+      session: nextSession,
+      loadAttempt,
+    });
+    const changed = !previousDependencies ||
+      dependencies.length !== previousDependencies.length ||
+      dependencies.some((dependency, index) => !Object.is(dependency, previousDependencies[index]));
+    if (!changed) return;
+
+    previousDependencies = dependencies;
+    loadCount += 1;
+    await loadClerkBluebirdProfile(api);
+  }
+
+  await simulateProfileEffect(configuration, session, 0);
+  for (let render = 0; render < 20; render += 1) {
+    await simulateProfileEffect({ ...configuration }, { ...session }, 0);
+  }
+  assert.equal(loadCount, 1);
+  assert.equal(api.calls.filter(({ path }) => path === "/me/profile").length, 1);
+
+  await simulateProfileEffect(
+    { ...configuration },
+    { ...session, getToken: async () => "refreshed-session-token" },
+    0,
+  );
+  assert.equal(loadCount, 1);
+  assert.equal(api.calls.filter(({ path }) => path === "/me/profile").length, 1);
+
+  await simulateProfileEffect({ ...configuration }, { ...session }, 1);
+  assert.equal(loadCount, 2);
+  assert.equal(api.calls.filter(({ path }) => path === "/me/profile").length, 2);
+
+  await simulateProfileEffect(
+    { ...configuration },
+    { ...session, userId: "clerk-user-b" },
+    1,
+  );
+  assert.equal(loadCount, 3);
+  assert.equal(api.calls.filter(({ path }) => path === "/me/profile").length, 3);
 });

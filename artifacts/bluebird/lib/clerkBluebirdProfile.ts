@@ -4,6 +4,42 @@ import type {
   ProductionRequestOptions,
   UpdateProductionUserProfileRequest,
 } from './productionAuthApi';
+import type { ClerkSessionSnapshot } from './clerkProductionTokenProvider';
+import type { MainBluebirdApiConfiguration } from './mainBluebirdApiConfig';
+
+export type ClerkBluebirdProfileSession = Pick<
+  ClerkSessionSnapshot,
+  'isLoaded' | 'isSignedIn'
+> & { userId: string | null };
+
+/**
+ * React effect dependencies must describe the values that configure a request,
+ * not freshly allocated configuration/session wrapper objects.
+ */
+export function getClerkBluebirdProfileEffectDependencies(input: {
+  configuration: MainBluebirdApiConfiguration | null;
+  session: ClerkBluebirdProfileSession | null;
+  loadAttempt: number;
+}): readonly [
+  MainBluebirdApiConfiguration['environment'] | null,
+  string | null,
+  string | null,
+  boolean,
+  boolean | undefined,
+  string | null,
+  number,
+] {
+  const { configuration, session, loadAttempt } = input;
+  return [
+    configuration?.environment ?? null,
+    configuration?.apiBaseUrl ?? null,
+    configuration?.clerkPublishableKey ?? null,
+    session?.isLoaded ?? false,
+    session?.isSignedIn,
+    session?.userId ?? null,
+    loadAttempt,
+  ];
+}
 
 export interface ClerkBluebirdProfileApi {
   getMe: (options?: ProductionRequestOptions) => Promise<ProductionCurrentUser>;
