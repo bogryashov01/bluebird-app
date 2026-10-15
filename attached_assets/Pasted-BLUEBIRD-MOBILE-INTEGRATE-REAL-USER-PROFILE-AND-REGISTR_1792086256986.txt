@@ -1,0 +1,128 @@
+BLUEBIRD MOBILE — INTEGRATE REAL USER PROFILE AND REGISTRATION
+
+PROJECT: Bluebird Mobile
+
+Task #431 is complete.
+
+CONFIRMED WORKING:
+- Real Clerk Development phone authentication
+- Clerk session activation
+- Clerk JWT retrieval
+- Authenticated Main Bluebird Development API connection
+- GET /api/me returns HTTP 200
+- API confirms isAuthenticated: true
+
+CURRENT STATE:
+
+The Mobile application displays:
+"Bluebird member not linked"
+
+The Main Development API returns:
+isAuthenticated: true
+isMember: false
+isProfileComplete: false
+memberTier: null
+firstName: null
+lastName: null
+email: null
+
+GOAL:
+
+Begin integrating the real Bluebird user registration
+and profile experience into Bluebird Mobile.
+
+IMPORTANT ARCHITECTURE:
+
+The Main Bluebird Website owns:
+- Clerk authentication
+- User profiles
+- Registration
+- Memberships
+- Main database
+
+Bluebird Mobile must reuse these existing systems.
+
+Do not create a second user database.
+Do not use the legacy Mobile demo backend.
+Do not create new Clerk users outside the existing flow.
+Do not modify the Main Bluebird Website or Production API.
+
+PHASE 1 — DISCOVER EXISTING REGISTRATION CONTRACT
+
+1. Inspect the existing Main Bluebird API integration
+   and available API contracts.
+
+2. Identify the endpoints used by the main website
+   to retrieve and update user profiles.
+
+3. Identify how the main website determines:
+   - New user
+   - Existing user
+   - Incomplete registration
+   - Completed registration
+   - Member without active membership
+   - Active member
+
+4. Determine which status fields are authoritative.
+
+5. Do not assume isMember=false means new user.
+
+6. Identify the existing registration steps and
+   required profile fields.
+
+PHASE 2 — IMPLEMENT SAFE PROFILE INTEGRATION
+
+7. Reuse the existing authenticated API client.
+
+8. Retrieve the current user's profile using
+   the existing Main API.
+
+9. Display real profile information when available.
+
+10. Show an explicit unverified state when the
+    backend cannot determine registration status.
+
+11. Never display cached member data belonging
+    to another Clerk session.
+
+12. Do not automatically create or modify profiles.
+
+13. Do not automatically start membership enrollment.
+
+14. Keep member-only screens inaccessible until
+    the backend confirms membership eligibility.
+
+PHASE 3 — VALIDATION
+
+15. Preserve Development/Production isolation.
+
+16. Preserve existing Clerk authentication.
+
+17. Add focused tests for:
+    - New user
+    - Existing non-member
+    - Incomplete profile
+    - Active member
+    - API failure
+    - Session change
+
+18. Run TypeScript checks.
+
+19. Verify the Development Preview where possible.
+
+DELIVERABLES:
+
+- Working real profile retrieval in Bluebird Mobile.
+- Clear account-state UI.
+- Documented existing registration endpoints.
+- Identified next steps for registration screens.
+- No Main Website or Production changes.
+
+IMPORTANT:
+
+Do not implement a guessed registration flow.
+If the Main API does not expose reliable
+registration status, report the exact missing
+contract instead of inventing one.
+
+Focus on real integration, not mock screens.
