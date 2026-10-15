@@ -1,0 +1,574 @@
+TASK: Bluebird Mobile — Final Integration Audit
+      Against the Main Bluebird Architecture
+
+PROJECT:
+BLUEBIRD MOBILE REPLIT
+
+MODE:
+READ-ONLY AUDIT.
+NO IMPLEMENTATION YET.
+
+==================================================
+CRITICAL CONTEXT
+==================================================
+
+We are developing the Bluebird Mobile app
+using Expo, React Native, Expo Router,
+and Clerk authentication.
+
+The MAIN Bluebird website is a separate
+Replit project.
+
+The main website already has:
+
+- Clerk authentication
+- Node.js / Express API
+- PostgreSQL database
+- User profiles
+- Memberships
+- Empty-leg flights
+- Flight queues
+- Trips
+- Passenger management
+
+The main website architecture has already
+been audited.
+
+ATTACHED DOCUMENT:
+
+BLUEBIRD_REAL_PRODUCTION_ARCHITECTURE_AUDIT.md
+
+READ THIS DOCUMENT COMPLETELY BEFORE
+ANALYZING THE MOBILE APPLICATION.
+
+This is the authoritative reference for
+the MAIN WEBSITE'S CHECKED-IN SOURCE
+and inspected deployment metadata.
+
+IMPORTANT:
+
+The document does NOT prove live
+production behavior.
+
+Do not treat unverified deployment
+details as confirmed facts.
+
+==================================================
+OUR TARGET ARCHITECTURE
+==================================================
+
+                  CLERK
+                    |
+          +---------+---------+
+          |                   |
+          v                   v
+    BLUEBIRD WEB       BLUEBIRD MOBILE
+          |                   |
+          +---------+---------+
+                    |
+                    v
+             BLUEBIRD API
+                    |
+                    v
+               PostgreSQL
+
+We want:
+
+ONE existing Bluebird backend.
+
+ONE corresponding Clerk instance
+per environment.
+
+ONE existing Bluebird database
+per environment.
+
+NO separate mobile backend.
+
+NO legacy Bluebird JWT authentication
+for the Clerk mobile flow.
+
+==================================================
+PART 1 — CURRENT MOBILE AUTHENTICATION
+==================================================
+
+Inspect the actual mobile source code.
+
+Determine:
+
+1. Which Clerk SDK/version is installed?
+
+2. Which Clerk publishable key is selected
+   in Development?
+
+3. Which environment variables control
+   Clerk configuration?
+
+4. Does the application use Clerk
+   as its sole authentication provider?
+
+5. Are any legacy JWT fallbacks still active?
+
+6. How does phone sign-up work?
+
+7. How does phone sign-in work?
+
+8. How is the SMS code verified?
+
+9. How is the Clerk session activated?
+
+10. How is the session persisted?
+
+11. How does the application obtain
+    a fresh Clerk session token?
+
+12. Is the token passed to the API client?
+
+13. Does the app use a default Clerk
+    session token or a JWT template?
+
+14. Can the current mobile Clerk instance
+    be identified from safe metadata?
+
+15. Is there evidence that it matches
+    the MAIN Bluebird Development instance?
+
+IMPORTANT:
+
+Do not expose publishable key values,
+secret keys, JWTs, session IDs,
+phone numbers, or user information.
+
+Do not assume that two Development
+instances are the same.
+
+If matching cannot be established
+from available evidence, mark UNKNOWN.
+
+==================================================
+PART 2 — CURRENT MOBILE API CONNECTION
+==================================================
+
+Inspect the existing mobile API client.
+
+Determine:
+
+1. What is the configured API base URL?
+
+2. Which API URL is used in Web Preview?
+
+3. Which API URL is used in native builds?
+
+4. Does the client attach:
+
+   Authorization: Bearer <Clerk token>
+
+5. Does it obtain a fresh token through
+   the Clerk SDK?
+
+6. How are expired sessions handled?
+
+7. Are any requests still using
+   the local demo API server?
+
+8. Are any requests still using
+   legacy Bluebird JWT tokens?
+
+9. Are browser cookies required
+   anywhere in the mobile API flow?
+
+10. Is there an existing production
+    API client foundation that can
+    be reused without rewriting it?
+
+11. Which requests are automatic?
+
+12. Which requests require explicit
+    developer confirmation?
+
+13. Is the existing browser diagnostic
+    still isolated from member access?
+
+IMPORTANT:
+
+The Mobile Replit contains a separate
+legacy/demo API server.
+
+DO NOT confuse that server with
+the MAIN Bluebird API.
+
+The main Bluebird audit establishes
+that the website uses Clerk Express
+middleware and Bearer-token requests
+at the source-code level.
+
+==================================================
+PART 3 — CLERK INSTANCE COMPATIBILITY
+==================================================
+
+The MAIN Bluebird audit identified
+the following environment variable names:
+
+Production:
+
+CLERK_PUBLISHABLE_KEY
+CLERK_SECRET_KEY
+
+Development:
+
+CLERK_DEV_PUBLISHABLE_KEY
+CLERK_DEV_SECRET_KEY
+
+The main backend selects one Clerk
+key pair according to NODE_ENV.
+
+The Mobile app currently uses
+a Clerk Development instance.
+
+Determine:
+
+1. Can the Mobile app identify its
+   current Clerk instance safely?
+
+2. Is there any evidence that this
+   instance matches the main
+   Bluebird Development instance?
+
+3. Is there any evidence that it matches
+   the main Production instance?
+
+4. Can the mobile app reuse the
+   main Bluebird Development Clerk
+   publishable key?
+
+5. Is the current API target appropriate
+   for the selected Clerk environment?
+
+6. What exact configuration changes
+   would be required if instances differ?
+
+7. Can those changes be made without
+   modifying the main Bluebird backend?
+
+8. Can they be made without
+   Apple Developer access?
+
+Do not change any Clerk configuration.
+
+Do not copy secret keys.
+
+Do not attempt to authenticate
+Development tokens against Production.
+
+If cross-project verification is
+not possible from this Replit,
+state exactly which NON-SECRET
+metadata is needed.
+
+==================================================
+PART 4 — REGISTRATION AND ONBOARDING
+==================================================
+
+Inspect the existing mobile screens:
+
+- Welcome
+- Phone login
+- SMS verification
+- Registration
+- Onboarding
+- Signed-in holding screen
+- Discover / Home
+
+Compare the existing implementation
+with the MAIN Bluebird API.
+
+Relevant API routes:
+
+GET /api/me
+
+GET /api/me/profile
+
+PUT /api/me/profile
+
+POST /api/me/signup-complete
+
+POST /api/me/phone-verification/start
+
+POST /api/me/phone-verification/check
+
+IMPORTANT FINDINGS FROM MAIN AUDIT:
+
+1. Bluebird profiles are associated
+   with Clerk User IDs.
+
+2. Memberships are associated
+   with Clerk User IDs.
+
+3. GET /api/me may return HTTP 200
+   with signed-out flags after
+   an internal backend failure.
+
+4. isMember=false does NOT mean
+   that the user is new.
+
+5. isProfileComplete=false does NOT
+   prove that no profile row exists.
+
+6. GET /api/me/profile may return
+   an empty profile shell.
+
+7. GET /api/me/profile can have
+   database write side effects.
+
+8. PUT /api/me/profile performs
+   a profile upsert by Clerk ID.
+
+9. Bluebird has a separate Quo PIN
+   verification flow after Clerk signup.
+
+10. The main audit could not verify
+    whether the Quo PIN feature flag
+    is enabled in the live runtime.
+
+TARGET USER JOURNEY:
+
+Welcome
+   |
+   v
+Clerk Phone Authentication
+   |
+   v
+Bluebird Identity Resolution
+   |
+   +-- Existing verified profile
+   |         |
+   |         v
+   |    Discover / Home
+   |
+   +-- Incomplete profile
+   |         |
+   |         v
+   |    Registration / Onboarding
+   |
+   +-- No profile
+   |         |
+   |         v
+   |    Registration / Onboarding
+   |
+   +-- API or identity ambiguity
+             |
+             v
+        Safe holding screen
+
+IMPORTANT:
+
+Do not automatically classify a
+user as new based on isMember=false.
+
+Do not link users by matching
+phone numbers or emails alone.
+
+Do not create duplicate identities.
+
+Do not bypass Bluebird's required
+phone verification or profile gates.
+
+Do not automatically create or update
+profiles during this audit.
+
+Determine:
+
+- Which screens can be reused?
+- Which fields already exist?
+- Which fields are missing?
+- Which existing API endpoints are needed?
+- Which transitions need correction?
+- Which requirements are blocked?
+
+==================================================
+PART 5 — MEMBER DATA INTEGRATION
+==================================================
+
+Inspect:
+
+- Discover
+- Profile
+- Membership
+- Trips
+- Passenger screens
+
+Map each screen to the main API.
+
+Relevant routes include:
+
+GET /api/plans
+GET /api/membership
+GET /api/empty-legs
+GET /api/empty-legs/:id
+GET /api/empty-legs/:id/queue
+GET /api/trips
+GET /api/trips/:legId
+GET /api/empty-legs/:id/passengers
+
+Determine:
+
+1. Which screens use real API data?
+
+2. Which screens use demo data?
+
+3. Which screens still depend on
+   legacy JWT authentication?
+
+4. Which screens already use
+   the Clerk production API client?
+
+5. Which member requests are guarded?
+
+6. Which screens can be connected
+   without backend changes?
+
+7. Which screens require additional
+   business-rule handling?
+
+IMPORTANT:
+
+Do not enable member data access
+during this audit.
+
+Do not call side-effecting endpoints.
+
+Do not use trip detail or passenger
+GET endpoints as health checks.
+
+Do not activate memberships,
+join queues, or send messages.
+
+==================================================
+PART 6 — EXISTING WORK PRESERVATION
+==================================================
+
+Previous mobile work already included:
+
+- Clerk phone sign-up/sign-in
+- Clerk session persistence
+- Clerk-only authentication path
+- Fresh-token API adapter
+- Typed production API client
+- Browser diagnostic
+- Safe signed-in holding screen
+- Member-access guards
+- Expo Development Build setup
+
+Inspect these implementations.
+
+Do not replace working code
+without identifying a specific defect.
+
+Do not introduce another
+authentication system.
+
+Do not recreate the API client
+if the existing client is usable.
+
+Do not modify navigation or UI
+during this audit.
+
+==================================================
+PART 7 — EXACT IMPLEMENTATION PLAN
+==================================================
+
+Produce the smallest practical
+implementation plan.
+
+Organize findings into:
+
+A. ALREADY WORKING
+
+B. CONFIGURATION CHANGES NEEDED
+
+C. MOBILE CODE CHANGES NEEDED
+
+D. MAIN BLUEBIRD API CHANGES NEEDED
+   (only if truly necessary)
+
+E. BLOCKED BY UNKNOWN RUNTIME FACTS
+
+For every required change include:
+
+- Exact file path
+- Current behavior
+- Required behavior
+- Reason for the change
+- Dependency or blocker
+- Risk level
+
+Prioritize:
+
+1. Matching Clerk environments.
+2. Connecting the existing API client.
+3. Safe profile resolution.
+4. Registration and onboarding.
+5. Discover and member screens.
+
+DO NOT propose another broad audit.
+
+DO NOT create unnecessary tasks.
+
+DO NOT implement yet.
+
+==================================================
+DELIVERABLE
+==================================================
+
+Create:
+
+BLUEBIRD_MOBILE_FINAL_INTEGRATION_AUDIT.md
+
+The document must contain:
+
+1. Executive summary
+2. Current mobile architecture
+3. Main Bluebird architecture comparison
+4. Clerk instance compatibility
+5. API connection status
+6. Registration/onboarding mapping
+7. Screen-by-screen integration table
+8. Legacy dependencies
+9. Confirmed blockers
+10. Exact implementation plan
+11. Recommended FIRST implementation task
+
+At the end provide a clear verdict:
+
+READY TO IMPLEMENT
+
+or
+
+BLOCKED — SPECIFY EXACT REASON
+
+Distinguish:
+
+- Verified from source
+- Verified from runtime
+- Unknown
+
+No code modifications.
+
+No production requests.
+
+No database changes.
+
+No deployment.
+
+No SMS.
+
+No changes to Clerk configuration.
+
+Do not run startup paths with
+database or external side effects.
+
+Only create the audit document.
+
+The purpose is to prepare Bluebird
+Mobile for implementation against
+the existing MAIN Bluebird API,
+not to start another investigation.

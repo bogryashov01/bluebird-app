@@ -1,0 +1,282 @@
+TASK: Begin Full Bluebird Mobile Migration to the Main Bluebird API
+
+PROJECT:
+BLUEBIRD MOBILE REPLIT
+
+MODE:
+BUILD / IMPLEMENTATION
+
+IMPORTANT ARCHITECTURE DECISION:
+
+Bluebird Mobile is the native mobile client
+of the existing Bluebird website.
+
+We are NOT building a separate mobile backend.
+
+The existing Bluebird website owns:
+
+- Clerk authentication
+- User profiles
+- Membership
+- Flights
+- Queues
+- Trips
+- Passengers
+- Business logic
+- PostgreSQL database
+
+Bluebird Mobile must consume that same API.
+
+TARGET ARCHITECTURE:
+
+Bluebird Website ----\
+                      > Main Bluebird API
+Bluebird Mobile -----/          |
+                               Database
+
+Authentication for both clients is Clerk.
+
+The local legacy JWT API is deprecated.
+
+Our goal is to eventually remove the
+legacy API and generated legacy client
+after all mobile dependencies are migrated.
+
+REFERENCE DOCUMENTS:
+
+- BLUEBIRD_MOBILE_FINAL_INTEGRATION_AUDIT.md
+- BLUEBIRD_MOBILE_BACKEND_CONTRACT.md
+
+==================================================
+PHASE 1 — IMPLEMENT NOW
+==================================================
+
+Create a single, reusable Main Bluebird
+API integration layer for the mobile app.
+
+Use the existing @clerk/expo integration.
+
+Use the existing productionAuthApi.ts
+and Clerk token-provider code where possible.
+
+Do not create another authentication system.
+
+1. API ENVIRONMENTS
+
+Support explicit API environments:
+
+- development
+- production
+
+Development must use the main Bluebird
+Development API.
+
+Production must use the main Bluebird
+Production API.
+
+Do not automatically fall back between them.
+
+Do not silently use the local legacy API.
+
+Never send Development Clerk tokens
+to the Production API.
+
+Never send Production Clerk tokens
+to the Development API.
+
+If the matching API base URL or Clerk
+configuration is missing, fail closed.
+
+Do not hardcode an ephemeral Replit
+Development domain into application source.
+
+2. CLERK AUTHENTICATION
+
+Continue using @clerk/expo.
+
+Obtain a fresh Clerk session token
+using getToken() for authenticated requests.
+
+Send:
+
+Authorization: Bearer <token>
+
+Do not use legacy JWT.
+
+Do not persist Clerk tokens in
+AsyncStorage or legacy auth storage.
+
+Do not modify Clerk dashboard settings.
+
+Do not bypass existing authentication gates.
+
+3. SHARED API CLIENT
+
+Create or refactor a reusable client
+for the existing Main Bluebird API.
+
+Support:
+
+- Public API requests
+- Authenticated API requests
+- Typed responses
+- Request timeouts
+- Explicit HTTP errors
+- Authentication errors
+- Network errors
+- Safe token refresh through Clerk
+- Account-switch cache isolation
+
+Preserve the existing validated
+production API models and methods.
+
+Do not duplicate existing working code.
+
+4. EXISTING ENDPOINTS
+
+Use the existing Main Bluebird
+API contract.
+
+Prepare support for:
+
+GET /api/me
+GET /api/me/profile
+GET /api/membership
+GET /api/empty-legs
+GET /api/trips
+
+And existing supported queue,
+passenger, and profile endpoints.
+
+Do not invent endpoints.
+
+Do not call endpoints automatically
+just because the client is initialized.
+
+Do not call member endpoints with known
+GET-side effects as health checks.
+
+5. AUTHENTICATION STATES
+
+Keep distinct states for:
+
+- Clerk signed out
+- Clerk loading
+- Clerk signed in, API not checked
+- API authenticated
+- API unauthorized
+- API unavailable
+- Member identity unresolved
+
+IMPORTANT:
+
+Do not treat isMember=false
+as a new user.
+
+Do not treat isProfileComplete=false
+as proof that a profile does not exist.
+
+Do not treat HTTP 200 from /api/me
+as proof of member linkage.
+
+Do not automatically create profiles.
+
+Do not automatically link accounts
+by phone or email.
+
+Do not unlock member-only screens
+without confirmed account identity.
+
+6. LEGACY BACKEND MIGRATION
+
+Identify and isolate remaining legacy
+JWT client dependencies.
+
+Mark the legacy backend integration
+as deprecated for the target architecture.
+
+Do not delete the legacy API server yet.
+
+Do not break existing screens.
+
+Do not change the legacy token getter
+to return Clerk tokens.
+
+Do not route Clerk requests through
+the legacy JWT API.
+
+Create a concrete migration checklist
+for replacing remaining legacy hooks
+with Main Bluebird API calls.
+
+7. SAFE CONNECTION PREPARATION
+
+Provide a Development-only connection
+workflow using the matching Clerk
+Development instance and Main Bluebird
+Development API.
+
+The connection action must require
+explicit user confirmation.
+
+Do not execute external requests
+during this task.
+
+Do not use production accounts.
+
+Do not send SMS.
+
+Do not create or update profiles.
+
+Do not deploy.
+
+==================================================
+OUT OF SCOPE
+==================================================
+
+Do not implement the proposed
+/api/me/registration-status endpoint.
+
+Do not modify the main website.
+
+Do not modify production backend.
+
+Do not enable production member routes.
+
+Do not migrate registration writes yet.
+
+Do not migrate billing or purchases.
+
+Do not remove existing screens.
+
+Do not delete the legacy API server.
+
+==================================================
+DELIVERABLE
+==================================================
+
+Implement the shared API integration
+layer in Bluebird Mobile.
+
+Report:
+
+1. Files changed.
+2. New API environment configuration.
+3. Clerk token integration.
+4. Available API methods.
+5. Remaining legacy dependencies.
+6. Development connection procedure.
+7. Exact next implementation step.
+
+IMPORTANT:
+
+This is an IMPLEMENTATION task.
+
+Do not produce another general audit
+instead of code changes.
+
+Do not modify the main Bluebird website.
+
+Do not make production API requests.
+
+Do not deploy.
