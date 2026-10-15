@@ -17,6 +17,25 @@ export interface ProductionAuthApiOptions {
   baseUrl?: string;
   fetcher?: typeof fetch;
   timeoutMs?: number;
+  diagnostic?: ProductionAuthDiagnosticHooks;
+}
+
+export const PRODUCTION_AUTH_DIAGNOSTIC_TARGET_URL = 'https://bluebirdjets.com/api/me';
+
+/** Hooks used only by the explicit Development API diagnostic. */
+export interface ProductionAuthDiagnosticHooks {
+  expectedUrl: typeof PRODUCTION_AUTH_DIAGNOSTIC_TARGET_URL;
+  onTokenResult: (tokenObtained: boolean) => void;
+  onFetchInitiated: () => void;
+  onFetchCompleted: () => void;
+  onFetchFailed: () => void;
+}
+
+export class ProductionAuthConfigurationError extends Error {
+  constructor() {
+    super('Production API configuration is invalid.');
+    this.name = 'ProductionAuthConfigurationError';
+  }
 }
 
 export interface ProductionRequestOptions {
@@ -1103,13 +1122,19 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
   }
   const timeoutMs = options.timeoutMs ?? PRODUCTION_AUTH_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new RangeError('Production auth timeout must be a positive finite number.');
-  const baseUrl = resolveFlightReadConfiguration({
-    isDev: false,
-    mode: 'production',
-    baseUrl: options.baseUrl ??
-      process.env.EXPO_PUBLIC_BLUEBIRD_FLIGHT_API_BASE_URL ??
-      PRODUCTION_API_BASE_URL,
-  }).baseUrl;
+  let baseUrl: string;
+  try {
+    baseUrl = resolveFlightReadConfiguration({
+      isDev: false,
+      mode: 'production',
+      baseUrl: options.baseUrl ??
+        process.env.EXPO_PUBLIC_BLUEBIRD_FLIGHT_API_BASE_URL ??
+        PRODUCTION_API_BASE_URL,
+    }).baseUrl;
+  } catch {
+    if (!options.diagnostic) throw new Error('Production API configuration is invalid.');
+    throw new ProductionAuthConfigurationError();
+  }
   const fetcher = options.fetcher ?? fetch;
 
   async function request<T>(
@@ -1119,8 +1144,15 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
     requestOptions: ProductionRequestOptions = {},
     body?: unknown,
   ): Promise<T> {
+    const url = `${baseUrl}${path}`;
+    if (
+      options.diagnostic &&
+      (url !== PRODUCTION_AUTH_DIAGNOSTIC_TARGET_URL || url !== options.diagnostic.expectedUrl)
+    ) {
+      throw new ProductionAuthConfigurationError();
+    }
     return requestProductionJson({
-      url: `${baseUrl}${path}`,
+      url,
       fetcher,
       method,
       headers: {
@@ -1132,16 +1164,25 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
       timeoutMs,
       signal: requestOptions.signal,
       onResponseStatus: requestOptions.onResponseStatus,
+      onFetchInitiated: options.diagnostic?.onFetchInitiated,
+      onFetchCompleted: options.diagnostic?.onFetchCompleted,
+      onFetchFailed: options.diagnostic?.onFetchFailed,
       prepareHeaders: async (signal) => {
         let token: string | null;
         try {
           token = await options.tokenProvider.getVerifiedAccessToken();
         } catch {
+          notifyDiagnosticTokenResult(options.diagnostic, false);
           throw new ProductionAuthRequestError('Production access token is unavailable.', 'token');
         }
+        const tokenObtained = typeof token === 'string' && token.trim().length > 0;
+        notifyDiagnosticTokenResult(options.diagnostic, tokenObtained);
         if (signal.aborted) throw new ProductionAuthCancelledError();
-        if (token === null || token.trim() === '') {
+        if (!tokenObtained) {
           throw new ProductionAuthRequestError('Production access token is unavailable.', 'token');
+        }
+        if (typeof token !== 'string') {
+          throw new ProductionAuthRequestError('Production access token is invalid.', 'token');
         }
         if (/\s/.test(token)) {
           throw new ProductionAuthRequestError('Production access token is invalid.', 'token');
@@ -1347,6 +1388,17 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
     getPhoneVerificationStatus: (phoneE164: string, requestOptions?: ProductionRequestOptions) =>
       request(phoneStatusPath(phoneE164), 'GET', parsePhoneVerificationStatus, requestOptions),
   };
+}
+
+function notifyDiagnosticTokenResult(
+  diagnostic: ProductionAuthDiagnosticHooks | undefined,
+  tokenObtained: boolean,
+): void {
+  try {
+    diagnostic?.onTokenResult(tokenObtained);
+  } catch {
+    // Diagnostic observers must never change request behavior.
+  }
 }
 
 /** Member identifiers isolate opt-in caches; tokens never belong in cache keys. */

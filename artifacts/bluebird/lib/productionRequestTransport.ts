@@ -17,6 +17,9 @@ export interface ProductionJsonRequestOptions<T> {
   timeoutMs: number;
   signal?: AbortSignal;
   onResponseStatus?: (status: number) => void;
+  onFetchInitiated?: () => void;
+  onFetchCompleted?: () => void;
+  onFetchFailed?: () => void;
   prepareHeaders?: (signal: AbortSignal) => Promise<Record<string, string>>;
   parse: (value: unknown) => T;
   errors: ProductionTransportErrorFactory;
@@ -35,6 +38,13 @@ export async function requestProductionJson<T>(
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
   let cancelled = false;
+  let fetchStarted = false;
+  let fetchSettled = false;
+  const markFetchFailed = () => {
+    if (!fetchStarted || fetchSettled) return;
+    fetchSettled = true;
+    notify(options.onFetchFailed);
+  };
   let rejectAbort: (reason: Error) => void = () => {};
   const abortPromise = new Promise<never>((_resolve, reject) => {
     rejectAbort = reject;
@@ -42,12 +52,14 @@ export async function requestProductionJson<T>(
   const abortFromCaller = () => {
     cancelled = true;
     controller.abort();
+    markFetchFailed();
     rejectAbort(options.errors.cancelled());
   };
   options.signal?.addEventListener('abort', abortFromCaller, { once: true });
   timeoutId = setTimeout(() => {
     timedOut = true;
     controller.abort();
+    markFetchFailed();
     rejectAbort(options.errors.timeout(options.timeoutMs));
   }, options.timeoutMs);
 
@@ -61,6 +73,8 @@ export async function requestProductionJson<T>(
 
     let response: Response;
     try {
+      fetchStarted = true;
+      notify(options.onFetchInitiated);
       response = await options.fetcher(options.url, {
         method: options.method,
         headers: { ...options.headers, ...extraHeaders },
@@ -68,7 +82,12 @@ export async function requestProductionJson<T>(
         credentials: options.credentials,
         signal: controller.signal,
       });
+      if (!fetchSettled) {
+        fetchSettled = true;
+        notify(options.onFetchCompleted);
+      }
     } catch {
+      markFetchFailed();
       if (timedOut) throw options.errors.timeout(options.timeoutMs);
       if (cancelled || controller.signal.aborted) throw options.errors.cancelled();
       throw options.errors.network();
@@ -97,5 +116,13 @@ export async function requestProductionJson<T>(
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId);
     options.signal?.removeEventListener('abort', abortFromCaller);
+  }
+}
+
+function notify(callback: (() => void) | undefined): void {
+  try {
+    callback?.();
+  } catch {
+    // Diagnostic observers must never change request behavior.
   }
 }

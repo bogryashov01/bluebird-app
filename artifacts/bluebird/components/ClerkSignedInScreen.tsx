@@ -15,6 +15,7 @@ import {
   getClerkApiConnectionFailureGuidance,
   isClerkApiConnectionTestVisible,
   runClerkApiConnectionTest,
+  type ClerkApiDiagnosticStage,
   type ClerkApiConnectionDiagnosticResult,
 } from '@/lib/clerkApiConnectionDiagnostic';
 import { createAuthenticatedProductionApiClient } from '@/lib/productionAuthApi';
@@ -30,6 +31,7 @@ export function ClerkSignedInScreen() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isTestingApi, setIsTestingApi] = useState(false);
   const [apiDiagnostic, setApiDiagnostic] = useState<ClerkApiConnectionDiagnosticResult | null>(null);
+  const [apiDiagnosticStages, setApiDiagnosticStages] = useState<ClerkApiDiagnosticStage[] | null>(null);
   const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -51,17 +53,23 @@ export function ClerkSignedInScreen() {
   const handleApiConnectionTest = async () => {
     if (isTestingApi) return;
     setIsTestingApi(true);
+    setApiDiagnostic(null);
+    setApiDiagnosticStages(null);
     try {
       const result = await runClerkApiConnectionTest({
         isDevelopment,
         isLoaded,
         isSignedIn,
         confirm: confirmDialog,
-        createApiClient: () => createAuthenticatedProductionApiClient({
+        createApiClient: (diagnostic) => createAuthenticatedProductionApiClient({
           tokenProvider: clerkTokenProvider,
+          diagnostic,
         }),
+        onStages: setApiDiagnosticStages,
       });
       if (result) setApiDiagnostic(result);
+    } catch {
+      // The diagnostic helper sanitizes expected failures; never surface raw errors here.
     } finally {
       setIsTestingApi(false);
     }
@@ -111,9 +119,13 @@ export function ClerkSignedInScreen() {
                 </Text>
               )}
             </Pressable>
-            {apiDiagnostic && (
+            {(apiDiagnostic || apiDiagnosticStages) && (
               <View accessibilityLiveRegion="polite" style={styles.diagnosticResult} testID="clerk-api-connection-result">
-                <DiagnosticResultText result={apiDiagnostic} color={colors.mutedOnBrand} />
+                <DiagnosticResultText
+                  result={apiDiagnostic}
+                  stages={apiDiagnosticStages ?? apiDiagnostic?.stages ?? []}
+                  color={colors.mutedOnBrand}
+                />
               </View>
             )}
           </View>
@@ -179,22 +191,44 @@ function getResolutionMessage(resolution: ReturnType<typeof useBluebirdAuth>['cl
 
 function DiagnosticResultText({
   result,
+  stages,
   color,
 }: {
-  result: ClerkApiConnectionDiagnosticResult;
+  result: ClerkApiConnectionDiagnosticResult | null;
+  stages: ClerkApiDiagnosticStage[];
   color: string;
 }) {
   const lines = [
-    `HTTP status: ${result.httpStatus ?? 'Unavailable'}`,
-    `Authentication accepted: ${formatBoolean(result.authenticationAccepted)}`,
-    `isAuthenticated: ${formatBoolean(result.isAuthenticated)}`,
-    `isMember: ${formatBoolean(result.isMember)}`,
-    `isProfileComplete: ${formatBoolean(result.isProfileComplete)}`,
-    `Schema: ${result.schemaStatus}`,
-    ...(result.failureCategory ? [`Failure: ${result.failureCategory}`] : []),
-    ...(getClerkApiConnectionFailureGuidance(result.failureCategory) ?? []),
+    'Execution stages:',
+    ...stages.map(formatDiagnosticStage),
+    ...(result ? [
+      '',
+      `HTTP status: ${result.httpStatus ?? 'Unavailable'}`,
+      `Authentication accepted: ${formatBoolean(result.authenticationAccepted)}`,
+      `isAuthenticated: ${formatBoolean(result.isAuthenticated)}`,
+      `isMember: ${formatBoolean(result.isMember)}`,
+      `isProfileComplete: ${formatBoolean(result.isProfileComplete)}`,
+      `Schema: ${result.schemaStatus}`,
+      ...(result.failureCategory ? [`Failure: ${result.failureCategory}`] : []),
+      ...(getClerkApiConnectionFailureGuidance(result.failureCategory) ?? []),
+    ] : []),
   ];
   return <Text style={[styles.diagnosticText, { color }]}>{lines.join('\n')}</Text>;
+}
+
+function formatDiagnosticStage(stage: ClerkApiDiagnosticStage): string {
+  switch (stage.name) {
+    case 'button':
+      return `Button clicked: ${stage.status === 'clicked' ? 'Yes' : 'No'}`;
+    case 'confirmation':
+      return `Confirmation: ${stage.status}`;
+    case 'client':
+      return `API client: ${stage.status}`;
+    case 'token':
+      return `Clerk token obtained: ${formatBoolean(stage.tokenObtained ?? null)}${stage.status === 'failed' ? ' (acquisition failed)' : ''}`;
+    case 'fetch':
+      return `Fetch: ${stage.status}`;
+  }
 }
 
 function formatBoolean(value: boolean | null): string {

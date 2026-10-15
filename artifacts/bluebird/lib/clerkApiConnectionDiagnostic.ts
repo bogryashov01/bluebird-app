@@ -1,9 +1,14 @@
 import {
   ProductionAuthHttpError,
+  ProductionAuthConfigurationError,
   ProductionAuthRequestError,
+  type ProductionAuthDiagnosticHooks,
   type ProductionCurrentUser,
+  PRODUCTION_AUTH_DIAGNOSTIC_TARGET_URL,
 } from './productionAuthApi';
 export { createAuthenticatedProductionApiClient } from './productionAuthApi';
+
+export const CLERK_API_CONNECTION_TARGET = PRODUCTION_AUTH_DIAGNOSTIC_TARGET_URL;
 
 export type ClerkApiConnectionFailureCategory =
   | 'HTTP'
@@ -12,7 +17,36 @@ export type ClerkApiConnectionFailureCategory =
   | 'token'
   | 'cancelled'
   | 'invalid JSON'
-  | 'invalid schema';
+  | 'invalid schema'
+  | 'URL/configuration'
+  | 'client setup'
+  | 'confirmation';
+
+export type ClerkApiDiagnosticStageName =
+  | 'button'
+  | 'confirmation'
+  | 'client'
+  | 'token'
+  | 'fetch';
+
+export type ClerkApiDiagnosticStageStatus =
+  | 'not reached'
+  | 'clicked'
+  | 'waiting'
+  | 'accepted'
+  | 'declined'
+  | 'initialized'
+  | 'obtained'
+  | 'initiated'
+  | 'completed'
+  | 'failed';
+
+export interface ClerkApiDiagnosticStage {
+  name: ClerkApiDiagnosticStageName;
+  status: ClerkApiDiagnosticStageStatus;
+  /** The only token information retained by the diagnostic. */
+  tokenObtained?: boolean | null;
+}
 
 export interface ClerkApiConnectionDiagnosticResult {
   httpStatus: number | null;
@@ -22,6 +56,7 @@ export interface ClerkApiConnectionDiagnosticResult {
   isProfileComplete: boolean | null;
   schemaStatus: 'valid' | 'invalid' | 'not checked';
   failureCategory: ClerkApiConnectionFailureCategory | null;
+  stages: ClerkApiDiagnosticStage[];
 }
 
 export interface ClerkApiConnectionClient {
@@ -33,11 +68,19 @@ export interface ClerkApiConnectionClient {
 export function getClerkApiConnectionFailureGuidance(
   category: ClerkApiConnectionFailureCategory | null,
 ): string[] | null {
-  if (category !== 'browser transport (ambiguous)') return null;
-  return [
-    'The browser did not expose why Fetch failed. It may be CORS/preflight, DNS, TLS, or another network failure.',
-    'Check browser DevTools Network and Console for details. Do not share Authorization headers or response contents.',
-  ];
+  if (category === 'browser transport (ambiguous)') {
+    return [
+      'The browser did not expose why Fetch failed. It may be CORS/preflight, DNS, TLS, or another network failure.',
+      'Check browser DevTools Network and Console for details. Do not share Authorization headers or response contents.',
+    ];
+  }
+  if (category === 'URL/configuration') {
+    return [
+      'The resolved API URL did not match the allowed diagnostic endpoint, so no request was sent.',
+      'Check the local API URL configuration. The candidate URL is not displayed.',
+    ];
+  }
+  return null;
 }
 
 export function isClerkApiConnectionTestVisible(input: {
@@ -48,25 +91,111 @@ export function isClerkApiConnectionTestVisible(input: {
   return input.isDevelopment && input.isLoaded && input.isSignedIn === true;
 }
 
+const INITIAL_STAGES: ClerkApiDiagnosticStage[] = [
+  { name: 'button', status: 'not reached' },
+  { name: 'confirmation', status: 'not reached' },
+  { name: 'client', status: 'not reached' },
+  { name: 'token', status: 'not reached', tokenObtained: null },
+  { name: 'fetch', status: 'not reached' },
+];
+
+function emptyResult(
+  stages: ClerkApiDiagnosticStage[],
+  failureCategory: ClerkApiConnectionFailureCategory | null = null,
+): ClerkApiConnectionDiagnosticResult {
+  return {
+    httpStatus: null,
+    authenticationAccepted: null,
+    isAuthenticated: null,
+    isMember: null,
+    isProfileComplete: null,
+    schemaStatus: 'not checked',
+    failureCategory,
+    stages,
+  };
+}
+
 export async function runClerkApiConnectionTest(input: {
   isDevelopment: boolean;
   isLoaded: boolean;
   isSignedIn: boolean | undefined;
   confirm: (title: string, message: string, confirmLabel: string) => Promise<boolean>;
-  createApiClient: () => ClerkApiConnectionClient;
+  createApiClient: (hooks: ProductionAuthDiagnosticHooks) => ClerkApiConnectionClient;
+  onStages?: (stages: ClerkApiDiagnosticStage[]) => void;
 }): Promise<ClerkApiConnectionDiagnosticResult | null> {
   if (!isClerkApiConnectionTestVisible(input)) return null;
 
-  const confirmed = await input.confirm(
-    'Test Bluebird API Connection',
-    'This will send one authenticated GET request to the production Bluebird API. Because it is cross-origin and includes Authorization, the browser may first send an OPTIONS CORS preflight. Continue?',
-    'Send request',
-  );
-  if (!confirmed) return null;
+  let stages = INITIAL_STAGES.map((stage) => ({ ...stage }));
+  const publishStages = () => {
+    try {
+      input.onStages?.(stages.map((stage) => ({ ...stage })));
+    } catch {
+      // Reporting is observational and must not interrupt the diagnostic.
+    }
+  };
+  const updateStage = (
+    name: ClerkApiDiagnosticStageName,
+    status: ClerkApiDiagnosticStageStatus,
+    tokenObtained?: boolean,
+  ) => {
+    stages = stages.map((stage) =>
+      stage.name === name
+        ? {
+            ...stage,
+            status,
+            ...(name === 'token' ? { tokenObtained: tokenObtained ?? false } : {}),
+          }
+        : stage,
+    );
+    publishStages();
+  };
 
-  let responseStatus: number | null = null;
+  updateStage('button', 'clicked');
+  updateStage('confirmation', 'waiting');
+  let confirmed: boolean;
   try {
-    const { status, currentUser } = await input.createApiClient().getMeWithStatus((value) => {
+    confirmed = await input.confirm(
+      'Test Bluebird API Connection',
+      'This will send one authenticated GET request to the production Bluebird API. Because it is cross-origin and includes Authorization, the browser may first send an OPTIONS CORS preflight. Continue?',
+      'Send request',
+    );
+  } catch {
+    updateStage('confirmation', 'failed');
+    return emptyResult(stages, 'confirmation');
+  }
+
+  if (!confirmed) {
+    updateStage('confirmation', 'declined');
+    return emptyResult(stages);
+  }
+  updateStage('confirmation', 'accepted');
+
+  let fetchInitiated = false;
+  let responseStatus: number | null = null;
+  let client: ClerkApiConnectionClient;
+  const hooks: ProductionAuthDiagnosticHooks = {
+    expectedUrl: CLERK_API_CONNECTION_TARGET,
+    onTokenResult: (tokenObtained) =>
+      updateStage('token', tokenObtained ? 'obtained' : 'failed', tokenObtained),
+    onFetchInitiated: () => {
+      fetchInitiated = true;
+      updateStage('fetch', 'initiated');
+    },
+    onFetchCompleted: () => updateStage('fetch', 'completed'),
+    onFetchFailed: () => updateStage('fetch', 'failed'),
+  };
+
+  updateStage('client', 'waiting');
+  try {
+    client = input.createApiClient(hooks);
+    updateStage('client', 'initialized');
+  } catch (error) {
+    updateStage('client', 'failed');
+    return emptyResult(stages, getSetupFailureCategory(error));
+  }
+
+  try {
+    const { status, currentUser } = await client.getMeWithStatus((value) => {
       responseStatus = value;
     });
     return {
@@ -77,42 +206,48 @@ export async function runClerkApiConnectionTest(input: {
       isProfileComplete: currentUser.isProfileComplete,
       schemaStatus: 'valid',
       failureCategory: null,
+      stages,
     };
   } catch (error) {
-    return sanitizeDiagnosticFailure(error, responseStatus);
+    return sanitizeDiagnosticFailure(error, responseStatus, stages, fetchInitiated);
   }
 }
 
 export function sanitizeDiagnosticFailure(
   error: unknown,
   responseStatus: number | null = null,
+  stages: ClerkApiDiagnosticStage[] = INITIAL_STAGES.map((stage) => ({ ...stage })),
+  fetchInitiated = false,
 ): ClerkApiConnectionDiagnosticResult {
   if (error instanceof ProductionAuthHttpError) {
     return {
+      ...emptyResult(stages, 'HTTP'),
       httpStatus: error.status,
       authenticationAccepted: error.status === 401 ? false : null,
-      isAuthenticated: null,
-      isMember: null,
-      isProfileComplete: null,
-      schemaStatus: 'not checked',
-      failureCategory: 'HTTP',
     };
   }
 
-  const category = getFailureCategory(error);
+  const category = getFailureCategory(error, fetchInitiated);
   return {
+    ...emptyResult(stages, category),
     httpStatus: responseStatus,
-    authenticationAccepted: null,
-    isAuthenticated: null,
-    isMember: null,
-    isProfileComplete: null,
     schemaStatus: category === 'invalid schema' ? 'invalid' : 'not checked',
-    failureCategory: category,
   };
 }
 
-function getFailureCategory(error: unknown): ClerkApiConnectionFailureCategory {
-  if (!(error instanceof ProductionAuthRequestError)) return 'browser transport (ambiguous)';
+function getSetupFailureCategory(error: unknown): 'URL/configuration' | 'client setup' {
+  return error instanceof ProductionAuthConfigurationError
+    ? 'URL/configuration'
+    : 'client setup';
+}
+
+function getFailureCategory(
+  error: unknown,
+  fetchInitiated: boolean,
+): ClerkApiConnectionFailureCategory {
+  if (!(error instanceof ProductionAuthRequestError)) {
+    return fetchInitiated ? 'browser transport (ambiguous)' : 'client setup';
+  }
   switch (error.code) {
     case 'token':
       return 'token';
