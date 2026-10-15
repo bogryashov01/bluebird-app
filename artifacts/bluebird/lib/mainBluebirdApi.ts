@@ -23,6 +23,7 @@ import type {
 import type { ClerkSessionSnapshot } from './clerkProductionTokenProvider';
 import {
   getMainBluebirdApiConfiguration,
+  getMainBluebirdDevelopmentDiagnosticStatus,
   MainBluebirdApiConfigurationError,
   resolveMainBluebirdApiConfiguration,
   type MainBluebirdApiConfiguration,
@@ -31,8 +32,10 @@ import {
 export { MainBluebirdApiConfigurationError } from './mainBluebirdApiConfig';
 export {
   getMainBluebirdApiConfiguration,
+  getMainBluebirdDevelopmentDiagnosticStatus,
   resolveMainBluebirdApiConfiguration,
 } from './mainBluebirdApiConfig';
+export type { MainBluebirdDevelopmentDiagnosticStatus } from './mainBluebirdApiConfig';
 
 export interface EnvironmentBoundClerkTokenProvider {
   environment: MainBluebirdApiEnvironment;

@@ -8,6 +8,7 @@ import {
 } from "../scripts/.main-bluebird-api.test.mjs";
 import {
   getMainBluebirdApiConfiguration,
+  getMainBluebirdDevelopmentDiagnosticStatus,
   resolveMainBluebirdApiConfiguration,
   MainBluebirdApiConfigurationError,
 } from "../scripts/.main-bluebird-api.test.mjs";
@@ -106,6 +107,55 @@ test("configuration never infers a selected pair or falls back to legacy values"
       else process.env[name] = previous[name];
     }
   }
+});
+
+test("Development diagnostics report only safe status and require a matching API issuer", () => {
+  const valid = {
+    EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: "development",
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL: "https://main-api-development.example.test/api",
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k",
+    EXPO_PUBLIC_ENABLE_CLERK_AUTH: "true",
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER: "https://clerk.example.com",
+  };
+  const ready = getMainBluebirdDevelopmentDiagnosticStatus(valid);
+  assert.equal(ready.developmentConfigurationValid, true);
+  assert.equal(ready.clerkAuthEnabled, true);
+  assert.equal(ready.clerkInstanceMatchVerified, true);
+  assert.equal(ready.canTest, true);
+
+  const missing = getMainBluebirdDevelopmentDiagnosticStatus({
+    ...valid,
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL: "",
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY: "",
+    EXPO_PUBLIC_ENABLE_CLERK_AUTH: "false",
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER: "",
+  });
+  assert.equal(missing.canTest, false);
+  assert.equal(missing.developmentConfigurationValid, false);
+  assert.equal(missing.clerkAuthEnabled, false);
+  assert.equal(missing.clerkInstanceMatchVerified, false);
+  assert.match(missing.missingPrerequisites.join(" "), /EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL/);
+  assert.match(missing.missingPrerequisites.join(" "), /EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY/);
+  assert.match(missing.missingPrerequisites.join(" "), /EXPO_PUBLIC_ENABLE_CLERK_AUTH/);
+  assert.match(missing.missingPrerequisites.join(" "), /EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER/);
+
+  const mismatch = getMainBluebirdDevelopmentDiagnosticStatus({
+    ...valid,
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER: "https://other-clerk.example.com",
+  });
+  assert.equal(mismatch.clerkInstanceMatchVerified, false);
+  assert.equal(mismatch.canTest, false);
+  assert.match(mismatch.missingPrerequisites.join(" "), /does not match/);
+
+  const safeReport = JSON.stringify([ready, missing, mismatch]);
+  assert.doesNotMatch(safeReport, /main-api-development\.example\.test|pk_test_|clerk\.example\.com|other-clerk/i);
+  for (const name of [
+    "EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT",
+    "EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL",
+    "EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY",
+    "EXPO_PUBLIC_ENABLE_CLERK_AUTH",
+    "EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER",
+  ]) assert.match(safeReport, new RegExp(name));
 });
 
 test("construction is inert, uses the selected API, and sends only a fresh Clerk bearer token", async () => {

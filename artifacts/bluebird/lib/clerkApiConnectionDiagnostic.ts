@@ -5,7 +5,11 @@ import {
   type ProductionAuthDiagnosticHooks,
   type ProductionCurrentUser,
 } from './productionAuthApi';
-import type { MainBluebirdApiEnvironment } from './mainBluebirdApiConfig';
+import {
+  validateMainBluebirdApiBaseUrl,
+  type MainBluebirdApiConfiguration,
+  type MainBluebirdApiEnvironment,
+} from './mainBluebirdApiConfig';
 export { createAuthenticatedProductionApiClient } from './productionAuthApi';
 
 export type ClerkApiConnectionFailureCategory =
@@ -47,12 +51,12 @@ export interface ClerkApiDiagnosticStage {
 }
 
 export interface ClerkApiConnectionDiagnosticResult {
+  environment: MainBluebirdApiEnvironment;
+  clerkSessionExists: boolean;
+  tokenObtained: boolean | null;
   httpStatus: number | null;
+  apiResponseReceived: boolean;
   authenticationAccepted: boolean | null;
-  isAuthenticated: boolean | null;
-  isMember: boolean | null;
-  isProfileComplete: boolean | null;
-  schemaStatus: 'valid' | 'invalid' | 'not checked';
   failureCategory: ClerkApiConnectionFailureCategory | null;
   stages: ClerkApiDiagnosticStage[];
 }
@@ -84,11 +88,17 @@ export function getClerkApiConnectionFailureGuidance(
 export function isClerkApiConnectionTestVisible(input: {
   isDevelopment: boolean;
   environment: MainBluebirdApiEnvironment | null;
+  configurationValid: boolean;
+  clerkInstanceMatchVerified: boolean;
+  clerkAuthEnabled: boolean;
   isLoaded: boolean;
   isSignedIn: boolean | undefined;
 }): boolean {
   return input.isDevelopment &&
     input.environment === 'development' &&
+    input.configurationValid &&
+    input.clerkInstanceMatchVerified &&
+    input.clerkAuthEnabled &&
     input.isLoaded &&
     input.isSignedIn === true;
 }
@@ -104,14 +114,18 @@ const INITIAL_STAGES: ClerkApiDiagnosticStage[] = [
 function emptyResult(
   stages: ClerkApiDiagnosticStage[],
   failureCategory: ClerkApiConnectionFailureCategory | null = null,
+  environment: MainBluebirdApiEnvironment = 'development',
+  clerkSessionExists = false,
+  httpStatus: number | null = null,
 ): ClerkApiConnectionDiagnosticResult {
+  const tokenStage = stages.find((stage) => stage.name === 'token');
   return {
-    httpStatus: null,
+    environment,
+    clerkSessionExists,
+    tokenObtained: tokenStage?.tokenObtained ?? null,
+    httpStatus,
+    apiResponseReceived: httpStatus !== null,
     authenticationAccepted: null,
-    isAuthenticated: null,
-    isMember: null,
-    isProfileComplete: null,
-    schemaStatus: 'not checked',
     failureCategory,
     stages,
   };
@@ -120,7 +134,10 @@ function emptyResult(
 export async function runClerkApiConnectionTest(input: {
   isDevelopment: boolean;
   environment: MainBluebirdApiEnvironment | null;
-  targetUrl: string | null;
+  configuration: MainBluebirdApiConfiguration | null;
+  configurationValid: boolean;
+  clerkInstanceMatchVerified: boolean;
+  clerkAuthEnabled: boolean;
   isLoaded: boolean;
   isSignedIn: boolean | undefined;
   confirm: (title: string, message: string, confirmLabel: string) => Promise<boolean>;
@@ -131,24 +148,21 @@ export async function runClerkApiConnectionTest(input: {
 
   let expectedUrl: string;
   try {
-    const parsed = new URL(input.targetUrl ?? '');
-    if (
-      parsed.protocol !== 'https:' ||
-      parsed.pathname.replace(/\/+$/, '') !== '/api/me' ||
-      parsed.search ||
-      parsed.hash ||
-      parsed.username ||
-      parsed.password ||
-      parsed.origin === 'https://bluebirdjets.com'
-    ) {
-      throw new Error('invalid target');
+    if (!input.configuration || input.configuration.environment !== 'development') {
+      throw new Error('invalid configuration');
     }
-    expectedUrl = parsed.toString();
+    const apiBaseUrl = validateMainBluebirdApiBaseUrl(input.configuration.apiBaseUrl, 'development');
+    expectedUrl = `${apiBaseUrl}/me`;
   } catch {
     const failedStages = INITIAL_STAGES.map((stage) => ({ ...stage }));
     failedStages[0] = { name: 'button', status: 'clicked' };
     failedStages[2] = { name: 'client', status: 'failed' };
-    return emptyResult(failedStages, 'URL/configuration');
+    return emptyResult(
+      failedStages,
+      'URL/configuration',
+      input.environment ?? 'development',
+      input.isSignedIn === true,
+    );
   }
 
   let stages = INITIAL_STAGES.map((stage) => ({ ...stage }));
@@ -187,12 +201,12 @@ export async function runClerkApiConnectionTest(input: {
     );
   } catch {
     updateStage('confirmation', 'failed');
-    return emptyResult(stages, 'confirmation');
+    return emptyResult(stages, 'confirmation', input.environment ?? 'development', input.isSignedIn === true);
   }
 
   if (!confirmed) {
     updateStage('confirmation', 'declined');
-    return emptyResult(stages);
+    return emptyResult(stages, null, input.environment ?? 'development', input.isSignedIn === true);
   }
   updateStage('confirmation', 'accepted');
 
@@ -217,7 +231,12 @@ export async function runClerkApiConnectionTest(input: {
     updateStage('client', 'initialized');
   } catch (error) {
     updateStage('client', 'failed');
-    return emptyResult(stages, getSetupFailureCategory(error));
+    return emptyResult(
+      stages,
+      getSetupFailureCategory(error),
+      input.environment ?? 'development',
+      input.isSignedIn === true,
+    );
   }
 
   try {
@@ -225,17 +244,24 @@ export async function runClerkApiConnectionTest(input: {
       responseStatus = value;
     });
     return {
+      environment: input.environment ?? 'development',
+      clerkSessionExists: input.isSignedIn === true,
+      tokenObtained: stages.find((stage) => stage.name === 'token')?.tokenObtained ?? null,
       httpStatus: status,
+      apiResponseReceived: true,
       authenticationAccepted: currentUser.isAuthenticated,
-      isAuthenticated: currentUser.isAuthenticated,
-      isMember: currentUser.isMember,
-      isProfileComplete: currentUser.isProfileComplete,
-      schemaStatus: 'valid',
       failureCategory: null,
       stages,
     };
   } catch (error) {
-    return sanitizeDiagnosticFailure(error, responseStatus, stages, fetchInitiated);
+    return sanitizeDiagnosticFailure(
+      error,
+      responseStatus,
+      stages,
+      fetchInitiated,
+      input.environment ?? 'development',
+      input.isSignedIn === true,
+    );
   }
 }
 
@@ -244,21 +270,18 @@ export function sanitizeDiagnosticFailure(
   responseStatus: number | null = null,
   stages: ClerkApiDiagnosticStage[] = INITIAL_STAGES.map((stage) => ({ ...stage })),
   fetchInitiated = false,
+  environment: MainBluebirdApiEnvironment = 'development',
+  clerkSessionExists = false,
 ): ClerkApiConnectionDiagnosticResult {
   if (error instanceof ProductionAuthHttpError) {
     return {
-      ...emptyResult(stages, 'HTTP'),
-      httpStatus: error.status,
+      ...emptyResult(stages, 'HTTP', environment, clerkSessionExists, error.status),
       authenticationAccepted: error.status === 401 ? false : null,
     };
   }
 
   const category = getFailureCategory(error, fetchInitiated);
-  return {
-    ...emptyResult(stages, category),
-    httpStatus: responseStatus,
-    schemaStatus: category === 'invalid schema' ? 'invalid' : 'not checked',
-  };
+  return emptyResult(stages, category, environment, clerkSessionExists, responseStatus);
 }
 
 function getSetupFailureCategory(error: unknown): 'URL/configuration' | 'client setup' {

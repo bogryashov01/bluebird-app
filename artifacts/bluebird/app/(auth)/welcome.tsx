@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
+import { getMainBluebirdDevelopmentDiagnosticStatus } from '@/lib/mainBluebirdApiConfig';
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
@@ -14,6 +15,8 @@ export default function WelcomeScreen() {
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
   const isDark = colors.scheme === 'dark';
+  const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
+  const developmentDiagnostic = getMainBluebirdDevelopmentDiagnosticStatus();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad, paddingBottom: bottomPad + 16 }]}>
@@ -43,6 +46,31 @@ export default function WelcomeScreen() {
           </View>
         </TouchableOpacity>
 
+        {isDevelopment && (
+          <View
+            style={[styles.developmentDiagnostic, { borderColor: colors.border }]}
+            testID="main-bluebird-development-config"
+          >
+            <Text style={[styles.developmentDiagnosticTitle, { color: colors.paleBlue }]}>
+              Development API diagnostics
+            </Text>
+            {developmentDiagnostic.checks.map(({ name, status }) => (
+              <Text key={name} style={[styles.developmentDiagnosticText, { color: colors.mutedOnBrand }]}>
+                {name}: {status}
+              </Text>
+            ))}
+            <Text style={[styles.developmentDiagnosticText, { color: colors.mutedOnBrand }]}>
+              API connection action: {developmentDiagnostic.canTest
+                ? 'Configuration ready; a loaded, signed-in Development Clerk session is also required.'
+                : 'Disabled until the listed prerequisites are satisfied.'}
+            </Text>
+            {developmentDiagnostic.missingPrerequisites.map((prerequisite) => (
+              <Text key={prerequisite} style={[styles.developmentDiagnosticText, { color: colors.mutedOnBrand }]}>
+                • {prerequisite}
+              </Text>
+            ))}
+          </View>
+        )}
       </View>
 
       <Text style={[styles.footerText, { color: colors.mutedOnBrand }]}>
@@ -77,6 +105,22 @@ const styles = StyleSheet.create({
   },
   pillInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pillText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+  developmentDiagnostic: {
+    marginTop: 18,
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  developmentDiagnosticTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: 4,
+  },
+  developmentDiagnosticText: {
+    fontSize: 10,
+    fontFamily: 'Inter_400Regular',
+    lineHeight: 14,
+  },
   footerText: {
     fontSize: 12, fontFamily: 'Inter_400Regular',
     textAlign: 'center', lineHeight: 18, paddingHorizontal: 12,

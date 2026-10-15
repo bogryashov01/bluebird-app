@@ -7,6 +7,11 @@ import {
 } from "../scripts/.clerk-api-connection.test.mjs";
 import { createAuthenticatedProductionApiClient } from "../scripts/.clerk-api-connection.test.mjs";
 const DEVELOPMENT_API_ME = "https://main-api-development.example.test/api/me";
+const DEVELOPMENT_CONFIGURATION = {
+  environment: "development",
+  apiBaseUrl: "https://main-api-development.example.test/api",
+  clerkPublishableKey: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k",
+};
 process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "development";
 process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL = "https://main-api-development.example.test/api";
 process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY = "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k";
@@ -49,7 +54,10 @@ function confirmedOptions(overrides = {}) {
   return {
     isDevelopment: true,
     environment: "development",
-    targetUrl: DEVELOPMENT_API_ME,
+    configuration: DEVELOPMENT_CONFIGURATION,
+    configurationValid: true,
+    clerkInstanceMatchVerified: true,
+    clerkAuthEnabled: true,
     isLoaded: true,
     isSignedIn: true,
     confirm: async () => true,
@@ -62,19 +70,25 @@ function confirmedOptions(overrides = {}) {
   };
 }
 
-test("test button visibility requires Development plus a loaded signed-in session", () => {
+test("test button visibility requires valid Development config, issuer match, Clerk auth, and sign-in", () => {
   assert.equal(isClerkApiConnectionTestVisible({
     isDevelopment: true,
     environment: "development",
+    configurationValid: true,
+    clerkInstanceMatchVerified: true,
+    clerkAuthEnabled: true,
     isLoaded: true,
     isSignedIn: true,
   }), true);
   for (const input of [
-    { isDevelopment: false, environment: "development", isLoaded: true, isSignedIn: true },
-    { isDevelopment: true, environment: "production", isLoaded: true, isSignedIn: true },
-    { isDevelopment: true, environment: "development", isLoaded: false, isSignedIn: true },
-    { isDevelopment: true, environment: "development", isLoaded: true, isSignedIn: false },
-    { isDevelopment: true, environment: "development", isLoaded: true, isSignedIn: undefined },
+    { isDevelopment: false, environment: "development", configurationValid: true, clerkInstanceMatchVerified: true, clerkAuthEnabled: true, isLoaded: true, isSignedIn: true },
+    { isDevelopment: true, environment: "production", configurationValid: true, clerkInstanceMatchVerified: true, clerkAuthEnabled: true, isLoaded: true, isSignedIn: true },
+    { isDevelopment: true, environment: "development", configurationValid: false, clerkInstanceMatchVerified: true, clerkAuthEnabled: true, isLoaded: true, isSignedIn: true },
+    { isDevelopment: true, environment: "development", configurationValid: true, clerkInstanceMatchVerified: false, clerkAuthEnabled: true, isLoaded: true, isSignedIn: true },
+    { isDevelopment: true, environment: "development", configurationValid: true, clerkInstanceMatchVerified: true, clerkAuthEnabled: false, isLoaded: true, isSignedIn: true },
+    { isDevelopment: true, environment: "development", configurationValid: true, clerkInstanceMatchVerified: true, clerkAuthEnabled: true, isLoaded: false, isSignedIn: true },
+    { isDevelopment: true, environment: "development", configurationValid: true, clerkInstanceMatchVerified: true, clerkAuthEnabled: true, isLoaded: true, isSignedIn: false },
+    { isDevelopment: true, environment: "development", configurationValid: true, clerkInstanceMatchVerified: true, clerkAuthEnabled: true, isLoaded: true, isSignedIn: undefined },
   ]) {
     assert.equal(isClerkApiConnectionTestVisible(input), false);
   }
@@ -114,6 +128,10 @@ test("gated or cancelled test creates no client, reads no token, and sends no re
   };
 
   const declined = await runClerkApiConnectionTest(options);
+  assert.equal(declined.environment, "development");
+  assert.equal(declined.clerkSessionExists, true);
+  assert.equal(declined.tokenObtained, null);
+  assert.equal(declined.apiResponseReceived, false);
   assert.equal(declined.stages.find((stage) => stage.name === "confirmation").status, "declined");
   assert.equal(declined.stages.find((stage) => stage.name === "client").status, "not reached");
   assert.equal(confirmations, 1);
@@ -124,6 +142,9 @@ test("gated or cancelled test creates no client, reads no token, and sends no re
   for (const gate of [
     { isDevelopment: false, environment: "development", isLoaded: true, isSignedIn: true },
     { isDevelopment: true, environment: "production", isLoaded: true, isSignedIn: true },
+    { configurationValid: false },
+    { clerkInstanceMatchVerified: false },
+    { clerkAuthEnabled: false },
     { isDevelopment: true, environment: "development", isLoaded: false, isSignedIn: true },
     { isDevelopment: true, environment: "development", isLoaded: true, isSignedIn: false },
   ]) {
@@ -178,6 +199,9 @@ test("confirmation happens before a single configured Development request and us
   assert.equal(requests[0].url, DEVELOPMENT_API_ME);
   assert.equal(requests[0].init.method, "GET");
   assert.equal(requests[0].init.headers.Authorization, "Bearer fresh-clerk-token-1");
+  assert.deepEqual(Object.keys(requests[0].init.headers).sort(), ["Accept", "Authorization"]);
+  assert.equal(requests[0].init.credentials, "omit");
+  assert.equal(requests[0].init.headers.Cookie, undefined);
   assert.deepEqual(stageEvents, [
     "button:clicked",
     "confirmation:waiting",
@@ -189,12 +213,12 @@ test("confirmation happens before a single configured Development request and us
     "fetch:completed",
   ]);
   assert.deepEqual(result, {
+    environment: "development",
+    clerkSessionExists: true,
+    tokenObtained: true,
     httpStatus: 200,
+    apiResponseReceived: true,
     authenticationAccepted: true,
-    isAuthenticated: true,
-    isMember: true,
-    isProfileComplete: true,
-    schemaStatus: "valid",
     failureCategory: null,
     stages: [
       { name: "button", status: "clicked" },
@@ -217,6 +241,7 @@ test("HTTP status, invalid JSON, and invalid schema remain distinct and sanitize
       }),
     }));
     assert.equal(result.httpStatus, status);
+    assert.equal(result.apiResponseReceived, true);
     assert.equal(result.authenticationAccepted, expectedAccepted);
     assert.equal(result.failureCategory, "HTTP");
     assert.equal(result.stages.find((stage) => stage.name === "fetch").status, "completed");
@@ -231,7 +256,7 @@ test("HTTP status, invalid JSON, and invalid schema remain distinct and sanitize
     }),
   }));
   assert.equal(invalidSchema.httpStatus, 200);
-  assert.equal(invalidSchema.schemaStatus, "invalid");
+  assert.equal(invalidSchema.apiResponseReceived, true);
   assert.equal(invalidSchema.failureCategory, "invalid schema");
   assert.doesNotMatch(JSON.stringify(invalidSchema), /private|secret|Authorization/i);
 
@@ -247,8 +272,37 @@ test("HTTP status, invalid JSON, and invalid schema remain distinct and sanitize
     }),
   }));
   assert.equal(invalidJson.httpStatus, 200);
+  assert.equal(invalidJson.apiResponseReceived, true);
   assert.equal(invalidJson.failureCategory, "invalid JSON");
   assert.doesNotMatch(JSON.stringify(invalidJson), /private|response body|Authorization/i);
+});
+
+test("guest-shaped HTTP 200 is a received API response, not a Bluebird member identity", async () => {
+  const result = await runClerkApiConnectionTest(confirmedOptions({
+    createApiClient: (diagnostic) => makeClient({
+      tokenProvider: { getVerifiedAccessToken: async () => "private-token" },
+      fetcher: async () => makeResponse({
+        isAuthenticated: false,
+        isAdmin: false,
+        isConcierge: false,
+        isMember: false,
+        memberTier: null,
+        isProfileComplete: false,
+        needsPlanDecision: false,
+        needsSignupPhone: false,
+        impersonation: null,
+      }),
+      diagnostic,
+    }),
+  }));
+  assert.equal(result.environment, "development");
+  assert.equal(result.clerkSessionExists, true);
+  assert.equal(result.tokenObtained, true);
+  assert.equal(result.httpStatus, 200);
+  assert.equal(result.apiResponseReceived, true);
+  assert.equal(result.authenticationAccepted, false);
+  assert.equal(result.memberIdentity, undefined);
+  assert.doesNotMatch(JSON.stringify(result), /isMember|isProfileComplete|memberTier|private-token/i);
 });
 
 test("ambiguous browser transport, timeout, and token failures are sanitized and never retried", async () => {
@@ -287,7 +341,7 @@ test("ambiguous browser transport, timeout, and token failures are sanitized and
     assert.equal(requests, category === "token" ? 0 : 1);
     assert.equal(result.failureCategory, category);
     assert.equal(result.httpStatus, null);
-    assert.equal(result.schemaStatus, "not checked");
+    assert.equal(result.apiResponseReceived, false);
     assert.doesNotMatch(JSON.stringify(result), /private|email|mock-token|must not fetch/i);
   }
 });
@@ -303,6 +357,8 @@ test("failed token acquisition is a boolean-only stage and prevents Fetch", asyn
   }));
   assert.equal(requests, 0);
   assert.equal(result.failureCategory, "token");
+  assert.equal(result.tokenObtained, false);
+  assert.equal(result.apiResponseReceived, false);
   assert.deepEqual(result.stages.find((stage) => stage.name === "token"), {
     name: "token",
     status: "failed",
@@ -324,10 +380,41 @@ test("incorrect API URL fails closed with a sanitized configuration outcome", as
   }));
   assert.equal(requests, 0);
   assert.equal(result.failureCategory, "URL/configuration");
+  assert.equal(result.tokenObtained, null);
+  assert.equal(result.apiResponseReceived, false);
   assert.equal(result.stages.find((stage) => stage.name === "client").status, "failed");
   assert.equal(result.stages.find((stage) => stage.name === "token").status, "not reached");
   assert.equal(result.stages.find((stage) => stage.name === "fetch").status, "not reached");
   assert.doesNotMatch(JSON.stringify(result), /wrong\.example|private-token|Authorization/i);
+});
+
+test("the diagnostic rejects a Production API configuration before confirmation or token access", async () => {
+  let confirmations = 0;
+  let clients = 0;
+  let tokenReads = 0;
+  let requests = 0;
+  const result = await runClerkApiConnectionTest(confirmedOptions({
+    configuration: {
+      ...DEVELOPMENT_CONFIGURATION,
+      apiBaseUrl: "https://bluebirdjets.com/api",
+    },
+    confirm: async () => { confirmations += 1; return true; },
+    createApiClient: () => {
+      clients += 1;
+      return makeClient({
+        tokenProvider: { getVerifiedAccessToken: async () => { tokenReads += 1; return "private-token"; } },
+        fetcher: async () => { requests += 1; return makeResponse(currentUser); },
+      });
+    },
+  }));
+  assert.equal(result.failureCategory, "URL/configuration");
+  assert.equal(result.httpStatus, null);
+  assert.equal(result.apiResponseReceived, false);
+  assert.equal(confirmations, 0);
+  assert.equal(clients, 0);
+  assert.equal(tokenReads, 0);
+  assert.equal(requests, 0);
+  assert.doesNotMatch(JSON.stringify(result), /bluebirdjets\.com|private-token/i);
 });
 
 test("Fetch rejection is marked failed and remains an ambiguous browser transport failure", async () => {

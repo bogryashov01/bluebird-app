@@ -19,7 +19,10 @@ import {
   type ClerkApiConnectionDiagnosticResult,
 } from '@/lib/clerkApiConnectionDiagnostic';
 import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
-import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
+import {
+  getMainBluebirdApiConfigurationOrNull,
+  getMainBluebirdDevelopmentDiagnosticStatus,
+} from '@/lib/mainBluebirdApiConfig';
 
 export function ClerkSignedInScreen() {
   const insets = useSafeAreaInsets();
@@ -35,6 +38,16 @@ export function ClerkSignedInScreen() {
   const [apiDiagnostic, setApiDiagnostic] = useState<ClerkApiConnectionDiagnosticResult | null>(null);
   const [apiDiagnosticStages, setApiDiagnosticStages] = useState<ClerkApiDiagnosticStage[] | null>(null);
   const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
+  const developmentDiagnosticStatus = getMainBluebirdDevelopmentDiagnosticStatus();
+  const canRunApiConnectionTest = isClerkApiConnectionTestVisible({
+    isDevelopment,
+    environment: mainApiConfiguration?.environment ?? null,
+    configurationValid: developmentDiagnosticStatus.developmentConfigurationValid,
+    clerkInstanceMatchVerified: developmentDiagnosticStatus.clerkInstanceMatchVerified,
+    clerkAuthEnabled: developmentDiagnosticStatus.clerkAuthEnabled,
+    isLoaded,
+    isSignedIn,
+  });
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
@@ -55,6 +68,7 @@ export function ClerkSignedInScreen() {
   const handleApiConnectionTest = async () => {
     if (
       isTestingApi ||
+      !canRunApiConnectionTest ||
       !mainApiConfiguration ||
       mainApiConfiguration.environment !== 'development'
     ) return;
@@ -65,7 +79,10 @@ export function ClerkSignedInScreen() {
       const result = await runClerkApiConnectionTest({
         isDevelopment,
         environment: mainApiConfiguration.environment,
-        targetUrl: `${mainApiConfiguration.apiBaseUrl}/me`,
+        configuration: mainApiConfiguration,
+        configurationValid: developmentDiagnosticStatus.developmentConfigurationValid,
+        clerkInstanceMatchVerified: developmentDiagnosticStatus.clerkInstanceMatchVerified,
+        clerkAuthEnabled: developmentDiagnosticStatus.clerkAuthEnabled,
         isLoaded,
         isSignedIn,
         confirm: confirmDialog,
@@ -110,19 +127,18 @@ export function ClerkSignedInScreen() {
         <Text style={[styles.pending, { color: colors.mutedOnBrand }]} testID="clerk-member-pending">
           {getResolutionMessage(clerkMemberResolution)}
         </Text>
-        {isClerkApiConnectionTestVisible({
-          isDevelopment,
-          environment: mainApiConfiguration?.environment ?? null,
-          isLoaded,
-          isSignedIn,
-        }) && (
+        {isDevelopment && isLoaded && isSignedIn && (
           <View style={styles.diagnosticSection}>
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ disabled: isTestingApi, busy: isTestingApi }}
-              disabled={isTestingApi}
+              accessibilityState={{ disabled: isTestingApi || !canRunApiConnectionTest, busy: isTestingApi }}
+              disabled={isTestingApi || !canRunApiConnectionTest}
               onPress={handleApiConnectionTest}
-              style={[styles.retryButton, { borderColor: colors.border }, isTestingApi && styles.disabled]}
+              style={[
+                styles.retryButton,
+                { borderColor: colors.border },
+                (isTestingApi || !canRunApiConnectionTest) && styles.disabled,
+              ]}
               testID="clerk-api-connection-test"
             >
               {isTestingApi ? (
@@ -133,15 +149,16 @@ export function ClerkSignedInScreen() {
                 </Text>
               )}
             </Pressable>
-            {(apiDiagnostic || apiDiagnosticStages) && (
-              <View accessibilityLiveRegion="polite" style={styles.diagnosticResult} testID="clerk-api-connection-result">
-                <DiagnosticResultText
-                  result={apiDiagnostic}
-                  stages={apiDiagnosticStages ?? apiDiagnostic?.stages ?? []}
-                  color={colors.mutedOnBrand}
-                />
-              </View>
-            )}
+            <View accessibilityLiveRegion="polite" style={styles.diagnosticResult} testID="clerk-api-connection-result">
+              <DiagnosticResultText
+                result={apiDiagnostic}
+                stages={apiDiagnosticStages ?? apiDiagnostic?.stages ?? []}
+                configurationStatus={developmentDiagnosticStatus}
+                currentSessionExists={isSignedIn === true}
+                currentEnvironment={mainApiConfiguration?.environment ?? null}
+                color={colors.mutedOnBrand}
+              />
+            </View>
           </View>
         )}
         {clerkMemberResolution.status === 'error' && (
@@ -206,26 +223,40 @@ function getResolutionMessage(resolution: ReturnType<typeof useBluebirdAuth>['cl
 function DiagnosticResultText({
   result,
   stages,
+  configurationStatus,
+  currentSessionExists,
+  currentEnvironment,
   color,
 }: {
   result: ClerkApiConnectionDiagnosticResult | null;
   stages: ClerkApiDiagnosticStage[];
+  configurationStatus: ReturnType<typeof getMainBluebirdDevelopmentDiagnosticStatus>;
+  currentSessionExists: boolean;
+  currentEnvironment: 'development' | 'production' | null;
   color: string;
 }) {
   const lines = [
-    'Execution stages:',
-    ...stages.map(formatDiagnosticStage),
+    'Development connection prerequisites:',
+    ...configurationStatus.checks.map(({ name, status }) => `${name}: ${status}`),
+    `Development API configuration valid: ${formatBoolean(configurationStatus.developmentConfigurationValid)}`,
+    `Development Clerk instance match verified: ${formatBoolean(configurationStatus.clerkInstanceMatchVerified)}`,
+    ...(configurationStatus.missingPrerequisites.length
+      ? ['Missing prerequisites:', ...configurationStatus.missingPrerequisites.map((item) => `• ${item}`)]
+      : []),
+    '',
+    `API environment: ${result?.environment ?? currentEnvironment ?? 'Unavailable'}`,
+    `Clerk session exists: ${formatBoolean(result?.clerkSessionExists ?? currentSessionExists)}`,
     ...(result ? [
-      '',
+      `Clerk token obtained: ${formatBoolean(result.tokenObtained)}`,
       `HTTP status: ${result.httpStatus ?? 'Unavailable'}`,
-      `Authentication accepted: ${formatBoolean(result.authenticationAccepted)}`,
-      `isAuthenticated: ${formatBoolean(result.isAuthenticated)}`,
-      `isMember: ${formatBoolean(result.isMember)}`,
-      `isProfileComplete: ${formatBoolean(result.isProfileComplete)}`,
-      `Schema: ${result.schemaStatus}`,
+      `API response received: ${formatBoolean(result.apiResponseReceived)}`,
+      `API authentication accepted: ${formatBoolean(result.authenticationAccepted)}`,
+      'Bluebird member identity: unresolved',
       ...(result.failureCategory ? [`Failure: ${result.failureCategory}`] : []),
       ...(getClerkApiConnectionFailureGuidance(result.failureCategory) ?? []),
     ] : []),
+    ...(stages.length ? ['', 'Execution stages:'] : []),
+    ...stages.map(formatDiagnosticStage),
   ];
   return <Text style={[styles.diagnosticText, { color }]}>{lines.join('\n')}</Text>;
 }
