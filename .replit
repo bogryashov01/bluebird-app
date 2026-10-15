@@ -25,7 +25,7 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.development]
-EXPO_PUBLIC_ENABLE_CLERK_AUTH = "false"
+EXPO_PUBLIC_ENABLE_CLERK_AUTH = "true"
 EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "development"
 EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL = "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api"
 
