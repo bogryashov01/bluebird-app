@@ -95,12 +95,15 @@ test("test button visibility requires valid Development config, issuer match, Cl
   }
 });
 
-test("ambiguous browser transport guidance lists possibilities without claiming a cause", () => {
+test("ambiguous browser transport guidance distinguishes Fetch from unverified API arrival", () => {
   const guidance = getClerkApiConnectionFailureGuidance("browser transport (ambiguous)");
-  assert.match(guidance.join(" "), /did not expose why Fetch failed/);
-  assert.match(guidance.join(" "), /may be CORS\/preflight, DNS, TLS, or another network failure/);
+  assert.match(guidance.join(" "), /Fetch was invoked/);
+  assert.match(guidance.join(" "), /does not establish whether the request reached the API/);
+  assert.match(guidance.join(" "), /DevTools Network and Console and the target API access logs/);
+  assert.match(guidance.join(" "), /confirm the target runs that configuration before changing server settings/);
   assert.match(guidance.join(" "), /DevTools Network and Console/);
-  assert.match(guidance.join(" "), /Do not share Authorization headers or response contents/);
+  assert.match(guidance.join(" "), /Do not share Authorization headers, tokens, cookies, or response contents/);
+  assert.doesNotMatch(guidance.join(" "), /may be CORS|DNS|TLS/i);
   assert.equal(getClerkApiConnectionFailureGuidance("HTTP"), null);
   assert.match(getClerkApiConnectionFailureGuidance("URL/configuration").join(" "), /no request was sent/);
   assert.doesNotMatch(JSON.stringify(guidance), /private-token|response body|raw exception/i);
@@ -132,6 +135,11 @@ test("gated or cancelled test creates no client, reads no token, and sends no re
   assert.equal(declined.environment, "development");
   assert.equal(declined.clerkSessionExists, true);
   assert.equal(declined.tokenObtained, null);
+  assert.deepEqual(declined.target, {
+    origin: new URL(DEVELOPMENT_API_ME).origin,
+    path: "/api/me",
+  });
+  assert.equal(declined.fetchInvoked, false);
   assert.equal(declined.apiResponseReceived, false);
   assert.equal(declined.stages.find((stage) => stage.name === "confirmation").status, "declined");
   assert.equal(declined.stages.find((stage) => stage.name === "client").status, "not reached");
@@ -215,8 +223,13 @@ test("confirmation happens before a single configured Development request and us
   ]);
   assert.deepEqual(result, {
     environment: "development",
+    target: {
+      origin: new URL(DEVELOPMENT_API_ME).origin,
+      path: "/api/me",
+    },
     clerkSessionExists: true,
     tokenObtained: true,
+    fetchInvoked: true,
     httpStatus: 200,
     apiResponseReceived: true,
     authenticationAccepted: true,
@@ -229,6 +242,11 @@ test("confirmation happens before a single configured Development request and us
       { name: "fetch", status: "completed" },
     ],
   });
+  assert.deepEqual(result.target, {
+    origin: new URL(DEVELOPMENT_API_ME).origin,
+    path: "/api/me",
+  });
+  assert.equal(result.fetchInvoked, true);
   assert.doesNotMatch(JSON.stringify(result), /fresh-clerk-token|example|Private|Person|plus|admin|Authorization/i);
 });
 
@@ -242,6 +260,7 @@ test("HTTP status, invalid JSON, and invalid schema remain distinct and sanitize
       }),
     }));
     assert.equal(result.httpStatus, status);
+    assert.equal(result.fetchInvoked, true);
     assert.equal(result.apiResponseReceived, true);
     assert.equal(result.authenticationAccepted, expectedAccepted);
     assert.equal(result.failureCategory, "HTTP");
@@ -257,6 +276,7 @@ test("HTTP status, invalid JSON, and invalid schema remain distinct and sanitize
     }),
   }));
   assert.equal(invalidSchema.httpStatus, 200);
+  assert.equal(invalidSchema.fetchInvoked, true);
   assert.equal(invalidSchema.apiResponseReceived, true);
   assert.equal(invalidSchema.failureCategory, "invalid schema");
   assert.doesNotMatch(JSON.stringify(invalidSchema), /private|secret|Authorization/i);
@@ -273,6 +293,7 @@ test("HTTP status, invalid JSON, and invalid schema remain distinct and sanitize
     }),
   }));
   assert.equal(invalidJson.httpStatus, 200);
+  assert.equal(invalidJson.fetchInvoked, true);
   assert.equal(invalidJson.apiResponseReceived, true);
   assert.equal(invalidJson.failureCategory, "invalid JSON");
   assert.doesNotMatch(JSON.stringify(invalidJson), /private|response body|Authorization/i);
@@ -300,6 +321,7 @@ test("guest-shaped HTTP 200 is a received API response, not a Bluebird member id
   assert.equal(result.clerkSessionExists, true);
   assert.equal(result.tokenObtained, true);
   assert.equal(result.httpStatus, 200);
+  assert.equal(result.fetchInvoked, true);
   assert.equal(result.apiResponseReceived, true);
   assert.equal(result.authenticationAccepted, false);
   assert.equal(result.memberIdentity, undefined);
@@ -342,6 +364,7 @@ test("ambiguous browser transport, timeout, and token failures are sanitized and
     assert.equal(requests, category === "token" ? 0 : 1);
     assert.equal(result.failureCategory, category);
     assert.equal(result.httpStatus, null);
+    assert.equal(result.fetchInvoked, category !== "token");
     assert.equal(result.apiResponseReceived, false);
     assert.doesNotMatch(JSON.stringify(result), /private|email|mock-token|must not fetch/i);
   }
@@ -359,6 +382,7 @@ test("failed token acquisition is a boolean-only stage and prevents Fetch", asyn
   assert.equal(requests, 0);
   assert.equal(result.failureCategory, "token");
   assert.equal(result.tokenObtained, false);
+  assert.equal(result.fetchInvoked, false);
   assert.equal(result.apiResponseReceived, false);
   assert.deepEqual(result.stages.find((stage) => stage.name === "token"), {
     name: "token",
@@ -381,6 +405,11 @@ test("incorrect API URL fails closed with a sanitized configuration outcome", as
   }));
   assert.equal(requests, 0);
   assert.equal(result.failureCategory, "URL/configuration");
+  assert.deepEqual(result.target, {
+    origin: new URL(DEVELOPMENT_API_ME).origin,
+    path: "/api/me",
+  });
+  assert.equal(result.fetchInvoked, false);
   assert.equal(result.tokenObtained, null);
   assert.equal(result.apiResponseReceived, false);
   assert.equal(result.stages.find((stage) => stage.name === "client").status, "failed");
@@ -429,6 +458,9 @@ test("Fetch rejection is marked failed and remains an ambiguous browser transpor
   }));
   assert.equal(requests, 1);
   assert.equal(result.failureCategory, "browser transport (ambiguous)");
+  assert.equal(result.fetchInvoked, true);
+  assert.equal(result.apiResponseReceived, false);
+  assert.equal(result.httpStatus, null);
   assert.equal(result.stages.find((stage) => stage.name === "fetch").status, "failed");
   assert.doesNotMatch(JSON.stringify(result), /private-token|555-0100|Authorization/i);
 });

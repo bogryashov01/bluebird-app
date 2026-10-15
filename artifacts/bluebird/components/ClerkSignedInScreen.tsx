@@ -248,7 +248,9 @@ function DiagnosticResultText({
     `API environment: ${result?.environment ?? currentEnvironment ?? 'Unavailable'}`,
     `Clerk session exists: ${formatBoolean(result?.clerkSessionExists ?? currentSessionExists)}`,
     ...(result ? [
+      `API target: ${result.target ? `${result.target.origin}${result.target.path}` : 'Unavailable'}`,
       `Clerk token obtained: ${formatBoolean(result.tokenObtained)}`,
+      `Fetch invoked: ${formatBoolean(result.fetchInvoked)}`,
       `HTTP status: ${result.httpStatus ?? 'Unavailable'}`,
       `API response received: ${formatBoolean(result.apiResponseReceived)}`,
       `API authentication accepted: ${formatBoolean(result.authenticationAccepted)}`,

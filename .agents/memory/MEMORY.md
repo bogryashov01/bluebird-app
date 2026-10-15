@@ -34,3 +34,4 @@
 - [Clerk Expo compatibility](clerk-expo-sdk54-peers.md) — verify transitive React peers and native-runtime risks for the selected Expo baseline; Metro exports alone are insufficient.
 - [Clerk phone verification policy](clerk-phone-verification-policy.md) — sign-up completion is not proof of phone ownership when verification-at-sign-up is disabled.
 - [Clerk SMS preparation](clerk-sms-preparation.md) — create legacy phone sign-ins with the identifier only, then prepare the phone-code factor once.
+- [Bluebird Development auth status](bluebird-development-auth-status.md) — the user reported that real Clerk Development sign-in and token acquisition work; separate transport failures from auth setup.
