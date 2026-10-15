@@ -46,6 +46,10 @@ function RootLayoutNav() {
   const colors = useColors();
   const segments = useSegments();
   const { authMode, clerkSignedIn, memberAccessResolved } = useAuth();
+  const isClerkProfileRoute = segments[0] === 'account' && segments[1] === 'bluebird-profile';
+  if (isClerkProfileRoute && authMode !== 'clerk') {
+    return <Redirect href="/(auth)/welcome" />;
+  }
   const clerkRouteGuarded =
     authMode === 'clerk' && shouldRedirectClerkRoute(segments, memberAccessResolved);
   if (clerkRouteGuarded) {
@@ -193,6 +197,10 @@ function RootLayoutNav() {
       <Stack.Screen
         name="account/personal-info"
         options={{ headerShown: true, title: 'Personal Information', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="account/bluebird-profile"
+        options={{ headerShown: true, title: 'Bluebird Profile', ...headerOptions }}
       />
       <Stack.Screen
         name="account/payment-methods"

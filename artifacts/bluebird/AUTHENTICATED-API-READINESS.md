@@ -1,11 +1,43 @@
 # Bluebird authenticated production API readiness
 
+## Explicit API-backed profile access (2026-10-15)
+
+**Current status: a signed-in Clerk user can intentionally open the user's own
+Main API profile without entering member-only screens.** This is profile access,
+not proof of a stable Bluebird member link or active membership.
+
+- The signed-in Clerk screen offers **Open my Bluebird profile**. Only opening
+  that route makes the profile request. It first requires `/api/me` to return
+  `isAuthenticated: true`, then reads `/api/me/profile`. The profile GET may
+  synchronize a Clerk-verified phone, so the screen explains this before the
+  user opens it.
+- Profile completion is offered only when `/api/me.isProfileComplete` and
+  `/api/me/profile.isComplete` agree. A mismatch stays visibly unverified.
+  `/api/me.needsSignupPhone` and `profile.phoneVerificationRequired` are
+  displayed and handled as separate server-owned phone requirements.
+- Viewing or completing a profile does not grant flight, queue, trip, or
+  membership access. `isMember: false` is displayed as **No active membership**
+  and never treated as an unregistered account.
+- Profile writes use the full `PUT /api/me/profile` contract only after the
+  user submits the form. Phone verification sends a text only after an explicit
+  request, and the SMS controls are unavailable outside Development. There is
+  no automatic registration, profile write, SMS, or membership enrollment.
+- Profile data is held only for the current Clerk identity; loading and
+  save-response handling reject stale identity results. Existing Clerk identity
+  changes and sign-out still clear the member query cache.
+- `test:clerk-bluebird-profile`, `test:production-auth-api`,
+  `test:main-bluebird-api`, `test:clerk-session-isolation`, and the Bluebird
+  TypeScript check pass. The Development web preview rendered `/welcome` and
+  its Development configuration panel. The unauthenticated preview cannot
+  verify the signed-in profile screen; no live profile read/write, SMS, or
+  native iOS/Android behavior was exercised.
+
 ## Development-only Clerk session wiring (2026-10-14)
 
 **Current status: the opt-in Clerk session flow is connected to mobile auth,
 and its member resolver calls the existing `GET /api/me` adapter, but
-authoritative member resolution and authenticated member-data access remain
-disabled.** Clerk activation requires all three conditions: the explicit
+authoritative member resolution and member-only data access remain disabled.
+The separate self-profile exception is documented above.** Clerk activation requires all three conditions: the explicit
 `EXPO_PUBLIC_ENABLE_CLERK_AUTH=true` flag, an Expo Development build, and a
 structurally valid `pk_test_` publishable key. A release build or live key
 cannot enable this migration path.
@@ -83,11 +115,13 @@ its corresponding runtime prerequisites are closed.
   mutation and expects a legacy Bluebird JWT. The current Onboarding screen
   reads the legacy `AuthContext` token and writes through the legacy `/me`
   client. Neither screen is a Clerk-safe destination yet.
-- Profile, Membership, Trips, notification badges, Discover personalization,
-  and the queue watcher require the local demo flow plus a legacy-auth user.
-  Clerk mode cannot enable those queries, even if a stale legacy user value is
-  accidentally present. The Clerk root route guard also keeps their routes
-  closed and identity changes/sign-out clear the query cache.
+- Membership, Trips, notification badges, Discover personalization, and the
+  queue watcher require the local demo flow plus a legacy-auth user. Clerk mode
+  cannot enable those queries, even if a stale legacy user value is
+  accidentally present. Profile's separate API-backed route is the exception
+  and does not enable the legacy profile or other member queries. The Clerk root
+  route guard keeps other member routes closed; identity changes/sign-out clear
+  the query cache.
 - Do not call profile or member endpoints as a readiness probe. In particular,
   the supplied contract documents that `GET /me/profile` can synchronize
   verified phone state. Before any future profile read is allowed, the API

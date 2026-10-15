@@ -122,13 +122,28 @@ export function ClerkSignedInScreen() {
       <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.content}>
         <Text style={[styles.eyebrow, { color: colors.paleBlue }]}>BLUEBIRD ACCOUNT</Text>
-        <Text style={[styles.title, { color: colors.textOnBrand }]}>Bluebird member not linked</Text>
+        <Text style={[styles.title, { color: colors.textOnBrand }]}>Your Bluebird account</Text>
         <Text style={[styles.body, { color: colors.mutedOnBrand }]}>
-          Your Clerk session is active, but Bluebird has not confirmed a matching member account. Member screens and cached member data stay unavailable until the backend can verify this connection.
+          Your Clerk session is active. View your API-backed Bluebird profile separately from membership; member-only flight, queue, and trip features remain unavailable until the backend confirms eligibility.
         </Text>
         <Text style={[styles.pending, { color: colors.mutedOnBrand }]} testID="clerk-member-pending">
           {getResolutionMessage(clerkMemberResolution)}
         </Text>
+        <View style={styles.profileAction}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/account/bluebird-profile' as any)}
+            style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+            testID="open-bluebird-profile"
+          >
+            <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>
+              Open my Bluebird profile
+            </Text>
+          </Pressable>
+          <Text style={[styles.profileNote, { color: colors.mutedOnBrand }]}>
+            Opening the profile may synchronize phone details already verified by Clerk.
+          </Text>
+        </View>
         {isDevelopment && isLoaded && isSignedIn && (
           <View style={styles.diagnosticSection}>
             <Pressable
@@ -204,9 +219,9 @@ function getResolutionMessage(resolution: ReturnType<typeof useBluebirdAuth>['cl
     case 'signed_out':
       return 'Account status: signed out.';
     case 'not_checked':
-      return 'Account status: member link has not been checked. Member access remains disabled.';
+      return 'API profile status: not checked. Member access remains disabled.';
     case 'resolving':
-      return 'Account status: checking for a confirmed Bluebird member link.';
+      return 'Account status: identity link is not confirmed.';
     case 'linked':
       return 'Account status: a Bluebird member identity was confirmed.';
     case 'registration_required':
@@ -214,11 +229,11 @@ function getResolutionMessage(resolution: ReturnType<typeof useBluebirdAuth>['cl
     case 'onboarding_required':
       return 'Account status: the backend confirmed that onboarding is required.';
     case 'unresolved':
-      return 'Account status: pending link confirmation. The current API response does not include an authoritative Bluebird member identity.';
+      return 'Account status: identity link remains unverified. Profile access does not establish membership.';
     case 'error':
       return resolution.reason === 'unauthorized'
-        ? 'Account status: the backend did not accept this session. No member identity was resolved.'
-        : 'Account status: Bluebird could not verify the member link. No registration or member access was inferred.';
+        ? 'Account status: the backend did not accept this session. No registration or member access was inferred.'
+        : 'Account status: Bluebird could not verify the account link. No registration or member access was inferred.';
   }
 }
 
@@ -306,6 +321,8 @@ const styles = StyleSheet.create({
   retryButton: { minHeight: 46, borderWidth: 1, borderRadius: 999, justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
   retryButtonText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
   diagnosticSection: { marginBottom: 18 },
+  profileAction: { marginBottom: 20, gap: 8 },
+  profileNote: { fontSize: 12, lineHeight: 18, fontFamily: 'Inter_400Regular', textAlign: 'center' },
   diagnosticResult: { marginTop: 10 },
   diagnosticText: { fontSize: 12, fontFamily: 'Inter_400Regular', lineHeight: 18 },
   error: { fontSize: 14, fontFamily: 'Inter_400Regular', lineHeight: 21, marginBottom: 14 },

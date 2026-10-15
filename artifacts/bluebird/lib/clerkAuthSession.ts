@@ -58,6 +58,9 @@ export function shouldRedirectClerkRoute(
   const route = segments[1];
   if (!group || group === 'index' || group === '(clerk-auth)') return false;
   if (group === '(auth)' && (route === 'splash' || route === 'welcome')) return false;
+  // This one account route is explicitly user-opened and reads only the
+  // authenticated user's API profile; it does not grant member capabilities.
+  if (group === 'account' && route === 'bluebird-profile') return false;
   return true;
 }
 
