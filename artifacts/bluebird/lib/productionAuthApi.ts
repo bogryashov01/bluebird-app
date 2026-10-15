@@ -1,6 +1,7 @@
 import { requestProductionJson } from './productionRequestTransport';
 import {
   getMainBluebirdApiConfiguration,
+  getMainBluebirdDevelopmentDiagnosticStatus,
   validateMainBluebirdApiBaseUrl,
   type MainBluebirdApiEnvironment,
 } from './mainBluebirdApiConfig';
@@ -1139,6 +1140,12 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
       selected.apiBaseUrl !== baseUrl
     ) {
       throw new Error('Main API client configuration does not match the selected environment.');
+    }
+    if (
+      options.environment === 'development' &&
+      !getMainBluebirdDevelopmentDiagnosticStatus().clerkInstanceMatchVerified
+    ) {
+      throw new Error('The Development API Clerk issuer has not been verified.');
     }
   } catch {
     if (!options.diagnostic) throw new Error('Main Bluebird API configuration is invalid.');

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   getAvailableClerkMemberDestination,
+  getClerkAuthRootDestination,
   getClerkMemberDestination,
   mapAuthoritativeMemberDecision,
   resolveClerkMember as resolveClerkMemberInternal,
@@ -16,6 +17,7 @@ const developmentConfiguration = {
 process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "development";
 process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL = developmentConfiguration.apiBaseUrl;
 process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY = developmentConfiguration.clerkPublishableKey;
+process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER = "https://clerk.example.com";
 const resolveClerkMember = (options) => resolveClerkMemberInternal({
   configuration: developmentConfiguration,
   ...options,
@@ -161,6 +163,30 @@ test("explicit semantic decisions map to existing destinations without inventing
     mapAuthoritativeMemberDecision({ status: "linked", memberId: "  " }),
     { status: "unresolved", reason: "missing_authoritative_decision" },
   );
+});
+
+test("restored Clerk sessions stay on the signed-in route while member verification is pending", () => {
+  const closedReadiness = { linkedMember: false, registration: false, onboarding: false };
+  assert.equal(getClerkAuthRootDestination({
+    clerkSignedIn: true,
+    resolution: { status: "not_checked" },
+    readiness: closedReadiness,
+  }), "/(clerk-auth)/signed-in");
+  assert.equal(getClerkAuthRootDestination({
+    clerkSignedIn: true,
+    resolution: { status: "linked", memberId: "member-1" },
+    readiness: closedReadiness,
+  }), "/(clerk-auth)/signed-in");
+  assert.equal(getClerkAuthRootDestination({
+    clerkSignedIn: true,
+    resolution: { status: "linked", memberId: "member-1" },
+    readiness: { ...closedReadiness, linkedMember: true },
+  }), "/(tabs)/discover");
+  assert.equal(getClerkAuthRootDestination({
+    clerkSignedIn: false,
+    resolution: { status: "signed_out" },
+    readiness: closedReadiness,
+  }), "/(auth)/splash");
 });
 
 test("unloaded and signed-out sessions make no API request", async () => {

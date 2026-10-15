@@ -149,6 +149,24 @@ export function getAvailableClerkMemberDestination(
   return readiness.onboarding ? destination : null;
 }
 
+export type ClerkAuthRootDestination =
+  | '/(auth)/splash'
+  | '/(clerk-auth)/signed-in'
+  | ClerkMemberDestination;
+
+export function getClerkAuthRootDestination(input: {
+  clerkSignedIn: boolean;
+  resolution: ClerkMemberResolution;
+  readiness: ClerkMemberNavigationReadiness;
+}): ClerkAuthRootDestination {
+  const memberDestination = getAvailableClerkMemberDestination(
+    input.resolution,
+    input.readiness,
+  );
+  if (memberDestination) return memberDestination;
+  return input.clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(auth)/splash';
+}
+
 function getResolutionErrorReason(error: unknown): Extract<ClerkMemberResolution, { status: 'error' }>['reason'] {
   if (!(error instanceof ProductionAuthRequestError)) return 'unknown';
   switch (error.code) {

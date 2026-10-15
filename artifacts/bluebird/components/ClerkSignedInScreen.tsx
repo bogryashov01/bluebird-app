@@ -6,7 +6,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import { useDormantClerkProductionTokenProvider } from '@/lib/dormantClerkIntegration';
 import { getClerkAuthErrorMessage, performClerkSignOut } from '@/lib/clerkAuthConfig';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth as useBluebirdAuth } from '@/context/AuthContext';
@@ -27,10 +26,9 @@ import {
 export function ClerkSignedInScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { isLoaded, isSignedIn } = useClerkAuth();
+  const { isLoaded, isSignedIn, signOut, getToken } = useClerkAuth();
   const { clerkMemberResolution, retryClerkMemberResolution } = useBluebirdAuth();
   const queryClient = useQueryClient();
-  const clerkTokenProvider = useDormantClerkProductionTokenProvider();
   const mainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
   const [error, setError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -56,7 +54,7 @@ export function ClerkSignedInScreen() {
     setIsSigningOut(true);
     setError(null);
     queryClient.clear();
-    const result = await performClerkSignOut(() => clerkTokenProvider.clearClerkSession());
+    const result = await performClerkSignOut(async () => { await signOut(); });
     setIsSigningOut(false);
     if (!result.ok) {
       setError(getClerkAuthErrorMessage(result.message));
@@ -88,7 +86,10 @@ export function ClerkSignedInScreen() {
         confirm: confirmDialog,
         createApiClient: (diagnostic) => createMainBluebirdApiIntegration({
           configuration: mainApiConfiguration,
-          tokenProvider: clerkTokenProvider,
+          tokenProvider: {
+            environment: mainApiConfiguration.environment,
+            getVerifiedAccessToken: getToken,
+          },
           diagnostic,
         }).authenticated,
         onStages: setApiDiagnosticStages,

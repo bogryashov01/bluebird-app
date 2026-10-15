@@ -16,6 +16,7 @@ import {
 process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "development";
 process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL = "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api";
 process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY = "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k";
+process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER = "https://clerk.example.com";
 process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL = "https://bluebirdjets.com/api";
 process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsuZXhhbXBsZS5jb20k";
 
@@ -96,6 +97,7 @@ test("configuration never infers a selected pair or falls back to legacy values"
     "EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL",
     "EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL",
     "EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY",
+    "EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER",
     "EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY",
     "EXPO_PUBLIC_DOMAIN",
     "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY",
@@ -234,6 +236,35 @@ test("construction is inert, uses the selected API, and sends only a fresh Clerk
   await api.authenticated.getMe();
   assert.equal(requests[1].init.headers.Authorization, "Bearer clerk-token-2");
   assert.equal(tokenReads, 2);
+});
+
+test("unverified or mismatched Development issuer blocks API clients before token reads or requests", async () => {
+  const originalIssuer = process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER;
+  let tokenReads = 0;
+  let requests = 0;
+  try {
+    for (const issuer of [undefined, "https://other-clerk.example.test"]) {
+      if (issuer === undefined) delete process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER;
+      else process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER = issuer;
+
+      assert.throws(() => createMainBluebirdApiIntegration({
+        configuration: development,
+        tokenProvider: tokenProvider("development", async () => {
+          tokenReads += 1;
+          return "must-not-be-read";
+        }),
+        fetcher: async () => {
+          requests += 1;
+          return jsonResponse({});
+        },
+      }), /configuration is invalid/i);
+    }
+  } finally {
+    if (originalIssuer === undefined) delete process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER;
+    else process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER = originalIssuer;
+  }
+  assert.equal(tokenReads, 0);
+  assert.equal(requests, 0);
 });
 
 test("environment mismatch is rejected before any token acquisition or request", () => {

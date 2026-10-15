@@ -6,6 +6,7 @@ import {
   getClerkAuthViewState,
   performClerkSignOut,
   resolveClerkAuthConfiguration,
+  resolveClerkAuthConfigurationFromEnvironment,
   shouldMountClerkProvider,
 } from "../scripts/.clerk-auth-config.test.mjs";
 
@@ -28,22 +29,25 @@ test("Clerk stays disabled unless the flag is exactly true and the public key is
     assert.equal(canAccessClerkAuthRoutes(config), false);
   }
 
-  const enabled = resolveClerkAuthConfiguration("true", ` ${validTestKey} `, true, true);
+  const enabled = resolveClerkAuthConfiguration("true", ` ${validTestKey} `, true);
   assert.deepEqual(enabled, { enabled: true, publishableKey: validTestKey });
   assert.equal(shouldMountClerkProvider(enabled), true);
   assert.equal(canAccessClerkAuthRoutes(enabled), true);
 });
 
-test("Development Clerk auth stays disabled until the selected key matches the verified API issuer", () => {
-  for (const verified of [false, undefined]) {
-    const config = resolveClerkAuthConfiguration("true", validTestKey, true, verified);
-    assert.equal(config.enabled, false);
-    assert.equal(config.publishableKey, null);
-    assert.equal(shouldMountClerkProvider(config), false);
-    assert.equal(canAccessClerkAuthRoutes(config), false);
-  }
+test("Development Clerk auth is independent of Main API issuer readiness", () => {
+  const config = resolveClerkAuthConfigurationFromEnvironment({
+    EXPO_PUBLIC_ENABLE_CLERK_AUTH: "true",
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY: validTestKey,
+    EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: "development",
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL: "",
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER: "https://unverified.example.test",
+  }, true);
+  assert.deepEqual(config, { enabled: true, publishableKey: validTestKey });
+  assert.equal(shouldMountClerkProvider(config), true);
+  assert.equal(canAccessClerkAuthRoutes(config), true);
 
-  const configWithoutFlag = resolveClerkAuthConfiguration(undefined, validTestKey, true, true);
+  const configWithoutFlag = resolveClerkAuthConfiguration(undefined, validTestKey, true);
   assert.equal(configWithoutFlag.enabled, false);
   assert.equal(shouldMountClerkProvider(configWithoutFlag), false);
 });

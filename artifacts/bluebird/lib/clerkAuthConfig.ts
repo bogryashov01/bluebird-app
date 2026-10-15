@@ -1,8 +1,3 @@
-import {
-  getMainBluebirdApiConfigurationOrNull,
-  getMainBluebirdDevelopmentDiagnosticStatus,
-} from './mainBluebirdApiConfig';
-
 export interface ClerkAuthConfiguration {
   enabled: boolean;
   publishableKey: string | null;
@@ -32,12 +27,10 @@ export function resolveClerkAuthConfiguration(
   enabledFlag: unknown,
   publishableKey: unknown,
   isDevelopment = false,
-  clerkInstanceMatchVerified = false,
 ): ClerkAuthConfiguration {
   const key = typeof publishableKey === 'string' ? publishableKey.trim() : '';
   const enabled =
     isDevelopment &&
-    clerkInstanceMatchVerified &&
     enabledFlag === 'true' &&
     isValidClerkPublishableKey(key) &&
     key.startsWith('pk_test_');
@@ -45,6 +38,17 @@ export function resolveClerkAuthConfiguration(
     enabled,
     publishableKey: enabled ? key : null,
   };
+}
+
+export function resolveClerkAuthConfigurationFromEnvironment(
+  environment: Record<string, unknown>,
+  isDevelopment = false,
+): ClerkAuthConfiguration {
+  return resolveClerkAuthConfiguration(
+    environment.EXPO_PUBLIC_ENABLE_CLERK_AUTH,
+    environment.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY,
+    isDevelopment,
+  );
 }
 
 export function getClerkAuthViewState(input: {
@@ -97,21 +101,14 @@ export async function performClerkSignOut(
   }
 }
 
-const selectedMainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
-const developmentDiagnosticStatus = getMainBluebirdDevelopmentDiagnosticStatus();
-
 /**
- * Clerk is mounted only when the selected Main API and its corresponding
- * Clerk publishable key are both valid. Legacy single-key variables are not
- * used as a fallback.
+ * Clerk startup is independent from Main API availability and issuer
+ * verification. API requests apply those checks separately before using a
+ * Clerk token.
  */
 export const CLERK_AUTH_CONFIGURATION: ClerkAuthConfiguration = {
-  ...resolveClerkAuthConfiguration(
-    process.env.EXPO_PUBLIC_ENABLE_CLERK_AUTH,
-    selectedMainApiConfiguration?.clerkPublishableKey,
-    typeof __DEV__ !== 'undefined' &&
-      __DEV__ &&
-      selectedMainApiConfiguration?.environment === 'development',
-    developmentDiagnosticStatus.clerkInstanceMatchVerified,
+  ...resolveClerkAuthConfigurationFromEnvironment(
+    process.env,
+    typeof __DEV__ !== 'undefined' && __DEV__,
   ),
 };

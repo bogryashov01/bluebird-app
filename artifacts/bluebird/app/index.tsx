@@ -2,7 +2,7 @@ import { Redirect } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
-import { getAvailableClerkMemberDestination } from '@/lib/clerkMemberResolution';
+import { getClerkAuthRootDestination } from '@/lib/clerkMemberResolution';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 
 export default function Index() {
@@ -26,14 +26,15 @@ export default function Index() {
   }
 
   if (authMode === 'clerk') {
-    const destination = getAvailableClerkMemberDestination(clerkMemberResolution, {
-      ...CLERK_MEMBER_NAVIGATION_READINESS,
-      linkedMember: CLERK_MEMBER_NAVIGATION_READINESS.linkedMember && memberAccessResolved,
+    const destination = getClerkAuthRootDestination({
+      clerkSignedIn,
+      resolution: clerkMemberResolution,
+      readiness: {
+        ...CLERK_MEMBER_NAVIGATION_READINESS,
+        linkedMember: CLERK_MEMBER_NAVIGATION_READINESS.linkedMember && memberAccessResolved,
+      },
     });
-    if (destination) return <Redirect href={destination} />;
-    return clerkSignedIn
-      ? <Redirect href="/(clerk-auth)/signed-in" />
-      : <Redirect href="/(auth)/splash" />;
+    return <Redirect href={destination} />;
   }
 
   if (token && user) {

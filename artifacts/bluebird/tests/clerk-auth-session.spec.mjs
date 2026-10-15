@@ -83,6 +83,7 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["(auth)", "onboarding"], false), true);
   assert.equal(shouldRedirectClerkRoute(["(auth)", "welcome"], false), false);
   assert.equal(shouldRedirectClerkRoute(["(clerk-auth)", "sign-in"], false), false);
+  assert.equal(shouldRedirectClerkRoute(["(clerk-auth)", "signed-in"], false), false);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], true), false);
 });
 
