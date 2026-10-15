@@ -184,7 +184,7 @@ test("profile completion is based on matching API-owned state, not membership or
   assert.equal(canEditClerkBluebirdProfile(result), true);
 });
 
-test("membership decision is independent from registration and no-membership remains an account state", async () => {
+test("membership decision is not a profile or registration step", async () => {
   const api = fakeApi({
     me: currentUser({ isProfileComplete: true, needsPlanDecision: true }),
     loadedProfile: { ...profile, isComplete: true },
@@ -192,7 +192,7 @@ test("membership decision is independent from registration and no-membership rem
   const result = await loadClerkBluebirdProfile(api);
   assert.equal(result.currentUser.isMember, false);
   assert.equal(result.completion, "complete");
-  assert.equal(getClerkOnboardingStep(result), "membership_choice");
+  assert.equal(getClerkOnboardingStep(result), "complete");
   assert.equal(canEditClerkBluebirdProfile(result), true);
   assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), [
     "GET /me",
@@ -226,7 +226,7 @@ test("a returning complete nonmember stays on the account path when no plan deci
   assert.equal(canEditClerkBluebirdProfile(result), true);
 });
 
-test("membership errors and contradictory membership fields stay unverified", async () => {
+test("membership errors and contradictory fields do not change profile completion", async () => {
   const unavailable = await loadClerkBluebirdProfile(fakeApi({
     me: currentUser({ isProfileComplete: true }),
     loadedProfile: { ...profile, isComplete: true },
@@ -234,7 +234,7 @@ test("membership errors and contradictory membership fields stay unverified", as
   }));
   assert.equal(unavailable.kind, "authenticated");
   assert.equal(unavailable.membershipState, "unavailable");
-  assert.equal(getClerkOnboardingStep(unavailable), "unverified");
+  assert.equal(getClerkOnboardingStep(unavailable), "complete");
   assert.equal(canEditClerkBluebirdProfile(unavailable), true);
 
   const mismatch = await loadClerkBluebirdProfile(fakeApi({
@@ -248,7 +248,7 @@ test("membership errors and contradictory membership fields stay unverified", as
     },
   }));
   assert.equal(mismatch.membershipState, "conflict");
-  assert.equal(getClerkOnboardingStep(mismatch), "unverified");
+  assert.equal(getClerkOnboardingStep(mismatch), "complete");
 });
 
 test("only an explicit editable-profile update calls PUT and returns API values", async () => {

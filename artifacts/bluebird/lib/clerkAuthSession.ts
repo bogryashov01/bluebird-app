@@ -9,6 +9,7 @@ export type ClerkEntryState =
   | 'member-not-checked'
   | 'member-unlinked'
   | 'member-linked'
+  | 'registered-home'
   | 'registration-required'
   | 'onboarding-required'
   | 'error';
@@ -22,6 +23,8 @@ export function getClerkEntryState(input: {
   if (input.isSignedIn !== true) return 'signed-out';
   const resolution = input.memberResolution ?? { status: 'resolving' };
   switch (resolution.status) {
+    case 'registered':
+      return 'registered-home';
     case 'linked':
       return resolution.memberId.trim() ? 'member-linked' : 'member-unlinked';
     case 'registration_required':
@@ -52,11 +55,18 @@ export function canAccessClerkMemberScreens(input: {
 export function shouldRedirectClerkRoute(
   segments: readonly string[],
   memberAccessResolved: boolean,
+  registeredHomeReady = false,
 ): boolean {
   if (memberAccessResolved) return false;
   const group = segments[0];
   const route = segments[1];
   if (!group || group === 'index' || group === '(clerk-auth)') return false;
+  if (
+    registeredHomeReady &&
+    group === '(tabs)' &&
+    route === 'discover' &&
+    (segments.length === 2 || (segments.length === 3 && segments[2] === 'index'))
+  ) return false;
   if (group === '(auth)' && (route === 'splash' || route === 'welcome')) return false;
   // This one account route is explicitly user-opened and reads only the
   // authenticated user's API profile; it does not grant member capabilities.
@@ -73,6 +83,13 @@ export function isLegacyMemberQueryEnabled(input: {
   hasLegacyUser: boolean;
 }): boolean {
   return input.authMode === 'legacy' && input.localDemoFlow && input.hasLegacyUser;
+}
+
+export function shouldUseLocalFlightReadMode(
+  authMode: 'legacy' | 'clerk',
+  localReadMode: boolean,
+): boolean {
+  return authMode === 'legacy' && localReadMode;
 }
 
 export function shouldClearClerkMemberCache(

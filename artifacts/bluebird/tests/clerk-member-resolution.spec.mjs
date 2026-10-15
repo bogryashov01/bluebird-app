@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  CLERK_NEW_USER_JOURNEY_STEPS,
   getAvailableClerkMemberDestination,
   getClerkAuthRootDestination,
   getClerkMemberDestination,
+  getClerkPostLoginJourney,
+  getClerkPostLoginStatusMessage,
   mapAuthoritativeMemberDecision,
   resolveClerkMember as resolveClerkMemberInternal,
   shouldAutomaticallyResolveClerkMember,
@@ -112,39 +115,94 @@ test("negative or anonymous /api/me projections never imply registration is requ
   });
 });
 
-test("explicit semantic decisions map to existing destinations without inventing wire fields", () => {
-  const linked = mapAuthoritativeMemberDecision({ status: "linked", memberId: "member-123" });
+test("confirmed registered nonmembers reach Home independently of member-feature identity", () => {
+  const registered = mapAuthoritativeMemberDecision({ status: "registered" });
+  const registeredWithId = mapAuthoritativeMemberDecision({
+    status: "registered",
+    memberId: "member-123",
+  });
+  const closedReadiness = {
+    registeredHome: false,
+    linkedMember: false,
+  };
+
+  assert.deepEqual(registered, { status: "registered" });
+  assert.deepEqual(registeredWithId, { status: "registered", memberId: "member-123" });
+  assert.equal(getClerkMemberDestination(registered), "/(tabs)/discover");
+  assert.equal(getAvailableClerkMemberDestination(registered, closedReadiness), null);
+  assert.deepEqual(getClerkPostLoginJourney(registered, closedReadiness), {
+    kind: "unverified",
+    reason: "registered_home_not_ready",
+  });
+
+  const homeReady = { ...closedReadiness, registeredHome: true };
+  assert.equal(getAvailableClerkMemberDestination(registered, homeReady), "/(tabs)/discover");
+  assert.deepEqual(getClerkPostLoginJourney(registered, homeReady), {
+    kind: "home",
+    destination: "/(tabs)/discover",
+  });
+  assert.match(getClerkPostLoginStatusMessage(registered, closedReadiness), /Home is not enabled/);
+  assert.equal(getClerkAuthRootDestination({
+    clerkSignedIn: true,
+    resolution: registered,
+    readiness: homeReady,
+  }), "/(tabs)/discover");
+});
+
+test("new users keep the required setup order and remain blocked until contracts exist", () => {
   const registration = mapAuthoritativeMemberDecision({ status: "registration_required" });
   const onboarding = mapAuthoritativeMemberDecision({ status: "onboarding_required" });
+  assert.deepEqual(CLERK_NEW_USER_JOURNEY_STEPS, [
+    "complete_profile",
+    "airport_selection",
+    "onboarding",
+    "home",
+  ]);
+  assert.deepEqual(getClerkPostLoginJourney(registration, {
+    registeredHome: true,
+    linkedMember: true,
+  }), {
+    kind: "new_user_blocked",
+    steps: CLERK_NEW_USER_JOURNEY_STEPS,
+  });
+  assert.match(
+    getClerkPostLoginStatusMessage(registration, {
+      registeredHome: true,
+      linkedMember: true,
+    }),
+    /confirmed a new account/,
+  );
+  assert.deepEqual(getClerkPostLoginJourney(onboarding, {
+    registeredHome: true,
+    linkedMember: true,
+  }), {
+    kind: "unverified",
+    reason: "onboarding_contract_not_ready",
+  });
+});
 
-  assert.deepEqual(linked, { status: "linked", memberId: "member-123" });
+test("linked-member access remains separately gated and missing identity is unverified", () => {
+  const linked = mapAuthoritativeMemberDecision({
+    status: "registered",
+    memberId: "member-123",
+  });
+  const registration = mapAuthoritativeMemberDecision({ status: "registration_required" });
+
   assert.deepEqual(registration, { status: "registration_required" });
-  assert.deepEqual(onboarding, { status: "onboarding_required" });
   assert.equal(getClerkMemberDestination(linked), "/(tabs)/discover");
-  assert.equal(getClerkMemberDestination(registration), "/(auth)/complete-registration");
-  assert.equal(getClerkMemberDestination(onboarding), "/(auth)/onboarding");
   const closedReadiness = {
+    registeredHome: false,
     linkedMember: false,
-    registration: false,
-    onboarding: false,
   };
-  for (const decision of [linked, registration, onboarding]) {
+  for (const decision of [linked, registration]) {
     assert.equal(getAvailableClerkMemberDestination(decision, closedReadiness), null);
   }
   const approvedReadiness = {
+    registeredHome: true,
     linkedMember: true,
-    registration: true,
-    onboarding: true,
   };
   assert.equal(getAvailableClerkMemberDestination(linked, approvedReadiness), "/(tabs)/discover");
-  assert.equal(
-    getAvailableClerkMemberDestination(registration, approvedReadiness),
-    "/(auth)/complete-registration",
-  );
-  assert.equal(
-    getAvailableClerkMemberDestination(onboarding, approvedReadiness),
-    "/(auth)/onboarding",
-  );
+  assert.equal(getAvailableClerkMemberDestination(registration, approvedReadiness), null);
   assert.equal(
     getClerkMemberDestination({ status: "unresolved", reason: "projection_only" }),
     null,
@@ -160,13 +218,13 @@ test("explicit semantic decisions map to existing destinations without inventing
     assert.equal(getAvailableClerkMemberDestination(pending, approvedReadiness), null);
   }
   assert.deepEqual(
-    mapAuthoritativeMemberDecision({ status: "linked", memberId: "  " }),
+    mapAuthoritativeMemberDecision({ status: "registered", memberId: "  " }),
     { status: "unresolved", reason: "missing_authoritative_decision" },
   );
 });
 
 test("restored Clerk sessions stay on the signed-in route while member verification is pending", () => {
-  const closedReadiness = { linkedMember: false, registration: false, onboarding: false };
+  const closedReadiness = { registeredHome: false, linkedMember: false };
   assert.equal(getClerkAuthRootDestination({
     clerkSignedIn: true,
     resolution: { status: "not_checked" },
@@ -243,10 +301,12 @@ test("unauthorized, network, backend, malformed, and cancelled requests remain e
   ];
 
   for (const { fetcher, reason } of cases) {
-    assert.deepEqual(
-      await resolveClerkMember({ session: makeSession(), fetcher }),
-      { status: "error", reason },
-    );
+    const result = await resolveClerkMember({ session: makeSession(), fetcher });
+    assert.deepEqual(result, { status: "error", reason });
+    assert.match(getClerkPostLoginStatusMessage(result, {
+      registeredHome: true,
+      linkedMember: true,
+    }), /could not verify/);
   }
 
   const cancelled = new AbortController();

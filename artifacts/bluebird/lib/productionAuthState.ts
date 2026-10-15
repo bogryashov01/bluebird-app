@@ -19,14 +19,15 @@ export const PRODUCTION_AUTH_AVAILABILITY = {
 };
 
 /**
- * Each existing destination has a separate prerequisite. All remain closed:
- * Clerk token acceptance, linked-account ownership, and legacy account-screen
- * compatibility have not been confirmed.
+ * An authoritative registered result is sufficient for Home and independent
+ * of member identity. Member-only routes remain closed until their own safe
+ * capability is confirmed; new-user routes remain blocked on Clerk-safe APIs.
  */
 export const CLERK_MEMBER_NAVIGATION_READINESS = {
+  // A future authoritative registered status is enough for Home; it does not
+  // authorize member-only operations, which remain backend-gated.
+  registeredHome: true,
   linkedMember: false,
-  registration: false,
-  onboarding: false,
 } as const;
 
 export const PRODUCTION_AUTH_UNAVAILABLE_MESSAGE =

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,11 +7,27 @@ import { useAuth as useClerkAuth } from '@clerk/expo';
 import { useColors } from '@/hooks/useColors';
 import { getClerkAuthErrorMessage, performClerkSignOut } from '@/lib/clerkAuthConfig';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth as useBluebirdAuth } from '@/context/AuthContext';
+import {
+  getClerkPostLoginJourney,
+  getClerkPostLoginStatusMessage,
+} from '@/lib/clerkMemberResolution';
+import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 
 export function ClerkSignedInScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { isLoaded, isSignedIn, signOut } = useClerkAuth();
+  const { clerkMemberResolution } = useBluebirdAuth();
+  const postLoginJourney = getClerkPostLoginJourney(
+    clerkMemberResolution,
+    CLERK_MEMBER_NAVIGATION_READINESS,
+  );
+  const hasAuthoritativeRegistration = [
+    'registered',
+    'registration_required',
+    'onboarding_required',
+  ].includes(clerkMemberResolution.status);
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -41,6 +57,9 @@ export function ClerkSignedInScreen() {
     );
   }
   if (!isSignedIn) return <Redirect href="/(clerk-auth)/sign-in" />;
+  if (postLoginJourney.kind === 'home') {
+    return <Redirect href={postLoginJourney.destination} />;
+  }
 
   return (
     <View
@@ -50,33 +69,35 @@ export function ClerkSignedInScreen() {
       ]}
     >
       <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
-      <View style={styles.content}>
-        <Text style={[styles.eyebrow, { color: colors.paleBlue }]}>WELCOME BACK</Text>
-        <Text style={[styles.title, { color: colors.textOnBrand }]}>Your Bluebird journey</Text>
-        <Text style={[styles.body, { color: colors.mutedOnBrand }]}>
-          Your phone sign-in is ready. Open your Bluebird profile to check what the Development API confirms and continue any required profile setup.
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 12 }]} showsVerticalScrollIndicator={false}>
+        <Text style={[styles.eyebrow, { color: colors.paleBlue }]}>BLUEBIRD ACCOUNT</Text>
+        <Text style={[styles.title, { color: colors.textOnBrand }]}>
+          {clerkMemberResolution.status === 'registration_required'
+            ? 'New account setup is blocked'
+            : clerkMemberResolution.status === 'error'
+              ? 'We couldn’t verify your next step'
+              : 'Your next step isn’t verified yet'}
         </Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/account/bluebird-profile' as any)}
-          style={[styles.primaryButton, { backgroundColor: colors.primary }]}
-          testID="open-bluebird-profile"
-        >
-          <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>
-            Continue to my Bluebird profile
+        <Text style={[styles.body, { color: colors.mutedOnBrand }]} testID="clerk-post-login-status">
+          {getClerkPostLoginStatusMessage(clerkMemberResolution, CLERK_MEMBER_NAVIGATION_READINESS)}
+        </Text>
+
+        <View style={[styles.contractCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.cardTitle, { color: colors.textOnSurface }]}>What the API needs to confirm</Text>
+          <Text style={[styles.memberGateNote, { color: colors.mutedForegroundLight }]} testID="clerk-registration-contract-blocker">
+            {hasAuthoritativeRegistration
+              ? 'A stable Bluebird member ID and server-authorized feature eligibility are still needed for member-only actions. The current /me fields isMember, isProfileComplete, and needsPlanDecision do not supply that feature result.'
+              : 'An authoritative registration result for this Clerk account (registered or registration required) is missing. The current /me fields isMember, isProfileComplete, and needsPlanDecision do not provide that decision.'}
           </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/membership/plans' as any)}
-          style={[styles.secondaryButton, { borderColor: colors.border }]}
-          testID="open-membership-plans"
-        >
-          <Text style={[styles.secondaryButtonText, { color: colors.textOnBrand }]}>Review membership plans</Text>
-        </Pressable>
-        <Text style={[styles.memberGateNote, { color: colors.mutedOnBrand }]} testID="clerk-member-eligibility-gate">
-          Flights, queues, and trips stay protected until the API provides a stable Bluebird member identity and confirms feature eligibility. No membership or registration status is inferred from isMember.
+          <Text style={[styles.memberGateNote, { color: colors.mutedForegroundLight }]} testID="clerk-airport-contract-blocker">
+            New-account setup also needs a profile contract that saves and returns all selected home airports. /me/profile currently supports one homeAirportCode, while Bluebird’s airport step allows multiple selections.
+          </Text>
+        </View>
+
+        <Text style={[styles.memberGateNote, { color: colors.mutedOnBrand }]} testID="clerk-new-user-journey-order">
+          Once confirmed, new accounts continue in this order: Complete Profile → Airport Selection → Onboarding → Home. There is no membership-selection step. Confirmed registered users should reach Home even without a membership; booking, queues, and trips remain protected by backend authorization.
         </Text>
+
         {isDevelopment && isLoaded && isSignedIn && (
           <Pressable
             accessibilityRole="button"
@@ -108,7 +129,7 @@ export function ClerkSignedInScreen() {
             </Text>
           )}
         </Pressable>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -116,13 +137,15 @@ export function ClerkSignedInScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 24 },
   centered: { justifyContent: 'center', alignItems: 'center' },
-  content: { flex: 1, justifyContent: 'center' },
+  content: { flexGrow: 1, justifyContent: 'center' },
   eyebrow: { fontSize: 12, fontFamily: 'Inter_600SemiBold', letterSpacing: 1.4, marginBottom: 10 },
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
-  body: { fontSize: 15, fontFamily: 'Inter_400Regular', lineHeight: 22, marginTop: 10, marginBottom: 24 },
+  body: { fontSize: 15, fontFamily: 'Inter_400Regular', lineHeight: 22, marginTop: 10, marginBottom: 16 },
+  contractCard: { borderWidth: 1, borderRadius: 18, padding: 16, gap: 8 },
+  cardTitle: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
   secondaryButton: { minHeight: 48, borderWidth: 1, borderRadius: 999, justifyContent: 'center', alignItems: 'center', marginTop: 12 },
   secondaryButtonText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
-  memberGateNote: { fontSize: 12, lineHeight: 18, marginTop: 20, textAlign: 'center', fontFamily: 'Inter_400Regular' },
+  memberGateNote: { fontSize: 12, lineHeight: 18, marginTop: 4, textAlign: 'left', fontFamily: 'Inter_400Regular' },
   developmentLink: { minHeight: 42, borderWidth: 1, borderRadius: 999, justifyContent: 'center', alignItems: 'center', marginTop: 18 },
   error: { fontSize: 14, fontFamily: 'Inter_400Regular', lineHeight: 21, marginBottom: 14 },
   primaryButton: { minHeight: 50, borderRadius: 999, justifyContent: 'center', alignItems: 'center' },

@@ -13,6 +13,7 @@ export type ClerkMemberResolution =
   | { status: 'signed_out' }
   | { status: 'resolving'; clerkUserId?: string | null }
   | { status: 'not_checked'; clerkUserId?: string | null }
+  | { status: 'registered'; memberId?: string | null }
   | { status: 'linked'; memberId: string }
   | { status: 'registration_required' }
   | { status: 'onboarding_required' }
@@ -40,7 +41,7 @@ export function shouldAutomaticallyResolveClerkMember(input: {
  * not return this type and must not derive it from projection booleans.
  */
 export type AuthoritativeMemberDecision =
-  | { status: 'linked'; memberId: string }
+  | { status: 'registered'; memberId?: string | null }
   | { status: 'registration_required' }
   | { status: 'onboarding_required' };
 
@@ -97,36 +98,111 @@ export function mapAuthoritativeMemberDecision(
   decision: AuthoritativeMemberDecision | null,
 ): ClerkMemberResolution {
   if (!decision) return { status: 'unresolved', reason: 'missing_authoritative_decision' };
-  if (decision.status === 'linked') {
-    const memberId = decision.memberId.trim();
-    return memberId
-      ? { status: 'linked', memberId }
-      : { status: 'unresolved', reason: 'missing_authoritative_decision' };
+  if (decision.status === 'registered') {
+    if (decision.memberId !== undefined && decision.memberId !== null &&
+        (typeof decision.memberId !== 'string' || !decision.memberId.trim())) {
+      return { status: 'unresolved', reason: 'missing_authoritative_decision' };
+    }
+    return {
+      status: 'registered',
+      ...(decision.memberId === undefined ? {} : { memberId: decision.memberId }),
+    };
   }
   return decision;
 }
 
 export type ClerkMemberDestination =
-  | '/(auth)/complete-registration'
-  | '/(auth)/onboarding'
   | '/(tabs)/discover';
 
 /** Explicit capabilities required before a semantic outcome can open its route. */
 export interface ClerkMemberNavigationReadiness {
+  registeredHome: boolean;
   linkedMember: boolean;
-  registration: boolean;
-  onboarding: boolean;
 }
 
-/** Prepared semantic destination mapping; the app keeps these capabilities closed. */
+export const CLERK_NEW_USER_JOURNEY_STEPS = [
+  'complete_profile',
+  'airport_selection',
+  'onboarding',
+  'home',
+] as const;
+
+export type ClerkPostLoginJourney =
+  | { kind: 'home'; destination: '/(tabs)/discover' }
+  | { kind: 'new_user_blocked'; steps: typeof CLERK_NEW_USER_JOURNEY_STEPS }
+  | { kind: 'unverified'; reason: string }
+  | { kind: 'error'; reason: string };
+
+export function getClerkPostLoginJourney(
+  resolution: ClerkMemberResolution,
+  readiness: ClerkMemberNavigationReadiness,
+): ClerkPostLoginJourney {
+  if (resolution.status === 'registered') {
+    return isClerkHomeAvailable(resolution, readiness)
+      ? { kind: 'home', destination: '/(tabs)/discover' }
+      : { kind: 'unverified', reason: 'registered_home_not_ready' };
+  }
+  if (resolution.status === 'linked') {
+    return isClerkHomeAvailable(resolution, readiness)
+      ? { kind: 'home', destination: '/(tabs)/discover' }
+      : { kind: 'unverified', reason: 'linked_member_not_ready' };
+  }
+  if (resolution.status === 'registration_required') {
+    return { kind: 'new_user_blocked', steps: CLERK_NEW_USER_JOURNEY_STEPS };
+  }
+  if (resolution.status === 'onboarding_required') {
+    return { kind: 'unverified', reason: 'onboarding_contract_not_ready' };
+  }
+  if (resolution.status === 'error') return { kind: 'error', reason: resolution.reason };
+  return {
+    kind: 'unverified',
+    reason: resolution.status === 'unresolved'
+      ? resolution.reason
+      : 'registration_not_confirmed',
+  };
+}
+
+export function getClerkPostLoginStatusMessage(
+  resolution: ClerkMemberResolution,
+  readiness: ClerkMemberNavigationReadiness,
+): string {
+  const journey = getClerkPostLoginJourney(resolution, readiness);
+  if (journey.kind === 'home') {
+    return 'The Main API confirmed a registered account. Home is ready.';
+  }
+  if (journey.kind === 'new_user_blocked') {
+    return 'The Main API confirmed a new account. Setup is paused until Bluebird can save the complete profile and every selected home airport.';
+  }
+  if (journey.kind === 'error') {
+    return 'Bluebird could not verify the next step with the Main API. No registration state was inferred and no account changes were made.';
+  }
+  if (journey.reason === 'projection_only' || journey.reason === 'missing_authoritative_decision') {
+    return 'The Main API has not supplied an authoritative registered-versus-new result. Bluebird will not infer the route from profile or membership fields.';
+  }
+  if (journey.reason === 'onboarding_contract_not_ready') {
+    return 'The Main API indicates onboarding is required, but Bluebird cannot safely continue until the profile and multi-airport contracts support the full setup flow.';
+  }
+  if (journey.reason === 'registered_home_not_ready' || journey.reason === 'linked_member_not_ready') {
+    return 'The Main API confirmed registration, but Home is not enabled until the mobile app can keep Home separate from backend-authorized member features.';
+  }
+  return 'The app has not received an authoritative registration result. No profile, airport, or membership changes were made.';
+}
+
+export function isClerkHomeAvailable(
+  resolution: ClerkMemberResolution,
+  readiness: ClerkMemberNavigationReadiness,
+): boolean {
+  if (resolution.status === 'registered') return readiness.registeredHome;
+  if (resolution.status === 'linked') return readiness.linkedMember;
+  return false;
+}
+
+/** A registered account may open Home without granting member-only capabilities. */
 export function getClerkMemberDestination(
   resolution: ClerkMemberResolution,
 ): ClerkMemberDestination | null {
   switch (resolution.status) {
-    case 'registration_required':
-      return '/(auth)/complete-registration';
-    case 'onboarding_required':
-      return '/(auth)/onboarding';
+    case 'registered':
     case 'linked':
       return '/(tabs)/discover';
     default:
@@ -144,9 +220,7 @@ export function getAvailableClerkMemberDestination(
 ): ClerkMemberDestination | null {
   const destination = getClerkMemberDestination(resolution);
   if (!destination) return null;
-  if (destination === '/(tabs)/discover') return readiness.linkedMember ? destination : null;
-  if (destination === '/(auth)/complete-registration') return readiness.registration ? destination : null;
-  return readiness.onboarding ? destination : null;
+  return isClerkHomeAvailable(resolution, readiness) ? destination : null;
 }
 
 export type ClerkAuthRootDestination =
@@ -159,11 +233,8 @@ export function getClerkAuthRootDestination(input: {
   resolution: ClerkMemberResolution;
   readiness: ClerkMemberNavigationReadiness;
 }): ClerkAuthRootDestination {
-  const memberDestination = getAvailableClerkMemberDestination(
-    input.resolution,
-    input.readiness,
-  );
-  if (memberDestination) return memberDestination;
+  const journey = getClerkPostLoginJourney(input.resolution, input.readiness);
+  if (journey.kind === 'home') return journey.destination;
   return input.clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(auth)/splash';
 }
 

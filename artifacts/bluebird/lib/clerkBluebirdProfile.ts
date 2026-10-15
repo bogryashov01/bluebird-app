@@ -102,17 +102,13 @@ function membershipMatchesProjection(
     currentUser.memberTier === membership.tier;
 }
 
-export type ClerkOnboardingStep = 'profile' | 'membership_choice' | 'complete' | 'unverified';
+export type ClerkOnboardingStep = 'profile' | 'complete' | 'unverified';
 
-/** Resolve only explicit API-reported steps; membership is never registration evidence. */
+/** Profile completion is only a profile display state, not a registration decision. */
 export function getClerkOnboardingStep(result: BluebirdProfileLoadResult): ClerkOnboardingStep {
   if (result.kind !== 'authenticated') return 'unverified';
   if (result.completion === 'completion_required') return 'profile';
-  if (result.completion !== 'complete' || result.membershipState !== 'available') return 'unverified';
-  if (result.currentUser.needsPlanDecision) {
-    return result.membership?.isMember === false ? 'membership_choice' : 'unverified';
-  }
-  return 'complete';
+  return result.completion === 'complete' ? 'complete' : 'unverified';
 }
 
 export function canEditClerkBluebirdProfile(

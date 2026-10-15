@@ -25,6 +25,8 @@ import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '@/context/AuthContext';
 import { shouldRedirectClerkRoute } from '@/lib/clerkAuthSession';
+import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
+import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -45,13 +47,18 @@ const queryClient = new QueryClient({
 function RootLayoutNav() {
   const colors = useColors();
   const segments = useSegments();
-  const { authMode, clerkSignedIn, memberAccessResolved } = useAuth();
+  const { authMode, clerkSignedIn, clerkMemberResolution, memberAccessResolved } = useAuth();
   const isClerkProfileRoute = segments[0] === 'account' && segments[1] === 'bluebird-profile';
   if (isClerkProfileRoute && authMode !== 'clerk') {
     return <Redirect href="/(auth)/welcome" />;
   }
+  const registeredHomeReady = isClerkHomeAvailable(
+    clerkMemberResolution,
+    CLERK_MEMBER_NAVIGATION_READINESS,
+  );
   const clerkRouteGuarded =
-    authMode === 'clerk' && shouldRedirectClerkRoute(segments, memberAccessResolved);
+    authMode === 'clerk' &&
+    shouldRedirectClerkRoute(segments, memberAccessResolved, registeredHomeReady);
   if (clerkRouteGuarded) {
     return <Redirect href={clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(clerk-auth)/sign-in'} />;
   }

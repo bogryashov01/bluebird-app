@@ -6,6 +6,7 @@ import {
   createLegacyAuthTokenGetter,
   getClerkEntryState,
   isLegacyMemberQueryEnabled,
+  shouldUseLocalFlightReadMode,
   shouldRedirectClerkRoute,
   shouldClearClerkMemberCache,
 } from "../scripts/.clerk-auth-session.test.mjs";
@@ -72,11 +73,24 @@ test("central Clerk resolution states gate member screens and distinguish outcom
     }),
     true,
   );
+  assert.equal(getClerkEntryState({
+    isLoaded: true,
+    isSignedIn: true,
+    memberResolution: { status: "registered" },
+  }), "registered-home");
+  assert.equal(canAccessClerkMemberScreens({
+    isLoaded: true,
+    isSignedIn: true,
+    memberResolution: { status: "registered" },
+  }), false);
   assert.equal(
     canAccessClerkMemberScreens({ isLoaded: true, isSignedIn: true }),
     false,
   );
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], false), true);
+  assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["(tabs)", "trips"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["queue", "join"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "profile"], false), true);
   assert.equal(shouldRedirectClerkRoute(["notifications"], false), true);
   assert.equal(shouldRedirectClerkRoute(["(auth)", "complete-registration"], false), true);
@@ -92,6 +106,9 @@ test("central Clerk resolution states gate member screens and distinguish outcom
 });
 
 test("member-data query gates require local demo mode and a legacy-auth member", () => {
+  assert.equal(shouldUseLocalFlightReadMode("clerk", true), false);
+  assert.equal(shouldUseLocalFlightReadMode("legacy", true), true);
+  assert.equal(shouldUseLocalFlightReadMode("legacy", false), false);
   assert.equal(isLegacyMemberQueryEnabled({
     authMode: "clerk",
     localDemoFlow: true,
@@ -180,8 +197,7 @@ test("authenticated production calls remain unavailable until backend acceptance
     "member_identity_mapping_unverified",
   ]);
   assert.deepEqual(CLERK_MEMBER_NAVIGATION_READINESS, {
+    registeredHome: true,
     linkedMember: false,
-    registration: false,
-    onboarding: false,
   });
 });

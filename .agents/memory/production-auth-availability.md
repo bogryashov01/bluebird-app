@@ -9,8 +9,8 @@ Production authentication availability is a separate boundary from a signed-in `
 
 **How to apply:** Gate shared member-data hooks with the same production-auth availability condition as their screens, and return a neutral value when unavailable. Never use local/demo credentials or cached member responses for production API calls.
 
-Clerk resolution is not route authorization. Keep independent readiness gates for linked-member access and for registration/onboarding routes; the latter remain legacy-JWT-dependent until replaced with Clerk-safe flows. A `/api/me` projection must not change those gates.
+Clerk resolution is not route authorization. A future authoritative registered-account result may open Home regardless of membership or member ID; it must not grant booking, queue, trip, or other member-only capabilities, which remain backend-authorized. Keep registration/onboarding readiness separate, and never infer registration from a `/api/me` projection.
 
-**Why:** The existing `/api/me` projection has no authoritative linked, registration-required, or onboarding-required outcome, while the existing account screens still use the legacy Bluebird token.
+**Why:** The existing `/api/me` projection has no authoritative registered-versus-new outcome or stable feature-eligibility result. Membership and profile completeness do not identify registration state.
 
-**How to apply:** Before connecting a new Clerk account decision to navigation, require a documented semantic backend contract and explicit capability for each destination. Keep all capability flags closed until token acceptance, identity mapping, and endpoint behavior are confirmed.
+**How to apply:** Before connecting a new Clerk account decision to navigation, require an explicit registered-versus-new result. Gate Home on registered status only; keep member-only requests and writes under Main API authorization, and do not route new users through legacy-JWT-dependent screens or single-airport writes when the journey uses multi-airport selection.

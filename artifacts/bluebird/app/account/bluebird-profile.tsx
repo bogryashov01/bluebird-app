@@ -457,22 +457,11 @@ export default function BluebirdProfileScreen() {
               />
             )}
 
-            {onboardingStep === 'membership_choice' && (
-              <View style={[styles.infoCard, { backgroundColor: colors.primary + '12', borderColor: colors.border }]} testID="profile-membership-decision">
-                <Text style={[styles.cardTitle, { color: colors.textOnSurface }]}>Review membership options</Text>
-                <Text style={[styles.helper, { color: colors.mutedForegroundLight }]}>
-                  The API reports that a plan decision is still needed. You can review the current plans, but there is no documented API operation to save a plan or no-plan choice. Reviewing plans will not enroll you or change your account.
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => router.push('/membership/plans' as any)}
-                  style={[styles.inlineAction, { backgroundColor: colors.primary }]}
-                  testID="profile-review-membership-plans"
-                >
-                  <Text style={[styles.inlineActionText, { color: colors.primaryForeground }]}>Review available plans</Text>
-                </Pressable>
-              </View>
-            )}
+            <StateCard
+              colors={colors}
+              message="The Main API does not provide an authoritative registered-versus-new result. Profile completion and membership do not determine which post-login journey applies."
+              testID="profile-registration-state-unverified"
+            />
 
             {visibleLoadState.result.completion === 'unverified' ? (
               <StateCard

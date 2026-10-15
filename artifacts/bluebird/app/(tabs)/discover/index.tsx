@@ -13,7 +13,7 @@ import {
   type QueueEntry, type Trip,
 } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
-import { isLegacyMemberQueryEnabled } from '@/lib/clerkAuthSession';
+import { isLegacyMemberQueryEnabled, shouldUseLocalFlightReadMode } from '@/lib/clerkAuthSession';
 import FlightMapView from '@/components/FlightMap';
 import {
   fetchProductionAirports,
@@ -284,7 +284,7 @@ export default function DiscoverScreen() {
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
 
-  const localReadMode = isLocalFlightReadMode();
+  const localReadMode = shouldUseLocalFlightReadMode(authMode, isLocalFlightReadMode());
   const memberQueryEnabled = isLegacyMemberQueryEnabled({
     authMode,
     localDemoFlow: localReadMode,
