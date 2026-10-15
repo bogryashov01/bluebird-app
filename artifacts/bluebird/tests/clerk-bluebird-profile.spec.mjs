@@ -21,9 +21,14 @@ import {
   prefillClerkProfileForm,
   consumeClerkVerifiedRegistrationCompletion,
   setClerkHomeAirportDraft,
+  setClerkPreferredCityConfirmed,
+  setClerkPreferredCityDraft,
   setClerkProfileFormDraft,
+  setClerkProfileRegistrationDraft,
   setClerkRegistrationProfileResult,
   setClerkVerifiedRegistrationCompletion,
+  suggestClerkPreferredCity,
+  toggleClerkAdditionalAirportDraft,
   toggleClerkFavoriteCityDraft,
   validateClerkAirportCitySelection,
   setClerkAirportSelectionDraft,
@@ -222,15 +227,17 @@ test("profile form validates names, verified phone, date-only DOB, gender and op
   assert.equal(validateClerkProfileForm({ ...values, weightLbs: "" }), null);
 });
 
-test("registration fields, save confirmation and weight persistence disclosure are visible", () => {
+test("registration has three explicit steps and keeps personal information draft-only", () => {
   assert.match(CLERK_PROFILE_SAVE_LIMITATION, /date of birth/i);
   assert.match(CLERK_PROFILE_SAVE_LIMITATION, /home airport/i);
-  assert.match(CLERK_PROFILE_SAVE_LIMITATION, /favorite city/i);
+  assert.match(CLERK_PROFILE_SAVE_LIMITATION, /Preferred City/i);
   assert.match(CLERK_PROFILE_SAVE_LIMITATION, /weight is optional/i);
   const source = readFileSync(resolve(projectRoot, "app/account/bluebird-profile.tsx"), "utf8");
   for (const label of ["First Name", "Last Name", "Phone", "Date of Birth", "Gender", "Weight (lbs)"]) {
     assert.ok(source.includes(label), `profile is missing ${label}`);
   }
+  assert.ok(source.includes("Step 1 of 3 · Personal Information"));
+  assert.ok(source.includes("Continue to Select Airports"));
   assert.ok(source.includes('keyboardType="number-pad"'), "weight should use the numeric keyboard");
   assert.ok(source.includes("accessibilityState={{ selected: values.gender === gender }}"));
   assert.ok(source.includes("validateClerkProfileForm(values)"));
@@ -245,11 +252,22 @@ test("registration fields, save confirmation and weight persistence disclosure a
   assert.equal(source.includes("updateProfile("), false);
   assert.equal(source.includes("startPhoneVerification("), false);
   const airportSource = readFileSync(resolve(projectRoot, "app/airport-picker.tsx"), "utf8");
-  assert.ok(airportSource.includes("Confirm and save profile"));
-  assert.ok(airportSource.includes("saveClerkBluebirdRegistration"));
-  assert.ok(airportSource.includes("savingRef.current"));
+  assert.ok(airportSource.includes("STEP 2 OF 3"));
+  assert.ok(airportSource.includes("Additional Airports"));
+  assert.ok(airportSource.includes("Optional · these selections are for this registration only"));
+  assert.ok(airportSource.includes("continue-to-registration-review"));
   assert.ok(airportSource.includes("fetchProductionAirportSearch"));
-  assert.ok(airportSource.includes("fetchProductionAirportCities"));
+  assert.equal(airportSource.includes("Favorite Cities"), false);
+  assert.equal(airportSource.includes("favoriteCityKeys"), false);
+  const reviewSource = readFileSync(resolve(projectRoot, "app/registration-review.tsx"), "utf8");
+  assert.ok(reviewSource.includes("STEP 3 OF 3"));
+  assert.ok(reviewSource.includes("Review &amp; Save"));
+  assert.ok(reviewSource.includes("saveClerkBluebirdRegistration"));
+  assert.ok(reviewSource.includes("savingRef.current"));
+  assert.ok(reviewSource.includes("confirm-preferred-city"));
+  assert.ok(reviewSource.includes("additional-airports-not-saved"));
+  assert.ok(reviewSource.includes("weight-save-disclosure"));
+  assert.equal(reviewSource.includes("additionalAirportCodes: data"), false);
 });
 
 test("registration draft keeps selections by Clerk identity and supports only one home airport", () => {
@@ -264,28 +282,54 @@ test("registration draft keeps selections by Clerk identity and supports only on
     dob: "1986-02-01",
   });
   setClerkHomeAirportDraft("registration-user-a", "SFO");
+  assert.deepEqual(toggleClerkAdditionalAirportDraft("registration-user-a", "JFK"), ["JFK"]);
+  assert.deepEqual(toggleClerkAdditionalAirportDraft("registration-user-a", "LAX"), ["JFK", "LAX"]);
   setClerkHomeAirportDraft("registration-user-a", "JFK");
   assert.equal(getClerkProfileRegistrationDraft("registration-user-a").values.firstName, "Draft name");
   assert.deepEqual(getClerkAirportSelectionDraft("registration-user-a"), ["JFK"]);
+  assert.deepEqual(getClerkProfileRegistrationDraft("registration-user-a").additionalAirportCodes, ["LAX"]);
   assert.equal(getClerkProfileRegistrationDraft("registration-user-b").values.firstName, "");
   assert.deepEqual(getClerkProfileRegistrationDraft("registration-user-b").favoriteCityKeys, []);
+  assert.deepEqual(getClerkProfileRegistrationDraft("registration-user-b").additionalAirportCodes, []);
 });
 
-test("favorite cities toggle only exact canonical catalog keys", () => {
+test("preferred city suggestion uses unique catalog airport mappings and selection requires confirmation", () => {
   const canonicalKeys = ["new-york-city", "san-francisco"];
-  assert.deepEqual(toggleClerkFavoriteCityDraft("registration-city-user", "new-york-city", canonicalKeys), ["new-york-city"]);
-  assert.deepEqual(toggleClerkFavoriteCityDraft("registration-city-user", "SFO", canonicalKeys), ["new-york-city"]);
-  assert.deepEqual(toggleClerkFavoriteCityDraft("registration-city-user", "san-francisco", canonicalKeys), ["new-york-city", "san-francisco"]);
-  assert.deepEqual(toggleClerkFavoriteCityDraft("registration-city-user", "new-york-city", canonicalKeys), ["san-francisco"]);
+  const cities = [
+    { key: "new-york-city", airportCodes: ["JFK", "LGA"] },
+    { key: "san-francisco", airportCodes: ["SFO", "OAK"] },
+  ];
+  assert.equal(suggestClerkPreferredCity("sfo", cities), "san-francisco");
+  assert.equal(suggestClerkPreferredCity("JFK", cities), "new-york-city");
+  assert.equal(suggestClerkPreferredCity("SEA", cities), null);
+  assert.equal(suggestClerkPreferredCity("SFO", [
+    ...cities,
+    { key: "duplicate-sf-mapping", airportCodes: ["SFO"] },
+  ]), null);
+  assert.equal(setClerkPreferredCityDraft("registration-city-user", "SFO", canonicalKeys), false);
+  assert.equal(setClerkPreferredCityDraft("registration-city-user", "new-york-city", canonicalKeys), true);
+  assert.equal(getClerkProfileRegistrationDraft("registration-city-user").preferredCityConfirmed, false);
+  setClerkPreferredCityConfirmed("registration-city-user", true);
+  assert.equal(getClerkProfileRegistrationDraft("registration-city-user").preferredCityConfirmed, true);
+  assert.equal(setClerkPreferredCityDraft("registration-city-user", "san-francisco", canonicalKeys), true);
+  assert.equal(getClerkProfileRegistrationDraft("registration-city-user").preferredCityConfirmed, false);
+  assert.deepEqual(getClerkProfileRegistrationDraft("registration-city-user").favoriteCityKeys, ["san-francisco"]);
   assert.match(validateClerkAirportCitySelection({
     homeAirportCode: "SFO",
     favoriteCityKeys: ["SFO"],
     catalogKeys: canonicalKeys,
   }), /no longer available/i);
+  assert.match(validateClerkAirportCitySelection({
+    homeAirportCode: "SFO",
+    favoriteCityKeys: ["san-francisco"],
+    catalogKeys: canonicalKeys,
+    preferredCityConfirmed: false,
+  }), /confirm your Preferred City/i);
   assert.equal(validateClerkAirportCitySelection({
     homeAirportCode: "sfo",
     favoriteCityKeys: ["san-francisco"],
     catalogKeys: canonicalKeys,
+    preferredCityConfirmed: true,
   }), null);
 });
 
@@ -303,6 +347,7 @@ test("request composition uses date-only DOB, one airport, exact city keys and o
     homeAirportCode: "sfo",
     favoriteCityKeys: ["san-francisco"],
     catalogKeys: ["san-francisco"],
+    preferredCityConfirmed: true,
     profile: { ...profile, phoneCountry: null },
   });
   assert.deepEqual(request, {
@@ -316,36 +361,51 @@ test("request composition uses date-only DOB, one airport, exact city keys and o
   });
   assert.equal("email" in request, false);
   assert.equal("phoneE164" in request, false);
+  assert.equal("additionalAirportCodes" in request, false);
+  assert.throws(() => buildClerkProfileUpdateRequest({
+    values,
+    homeAirportCode: "SFO",
+    favoriteCityKeys: ["san-francisco"],
+    catalogKeys: ["san-francisco"],
+    preferredCityConfirmed: false,
+    profile,
+  }), /confirm your Preferred City/i);
 });
 
-test("Clerk airport registration uses searchable single-select and catalog multi-select, then saves explicitly", () => {
+test("airport step has searchable single and optional multi-selects; review provides city selection and save", () => {
   assert.deepEqual(getClerkAirportSelectionDraft("member-a", ["sfo", "SFO", "bad code"]), ["SFO"]);
   setClerkAirportSelectionDraft("member-a", ["JFK", "lax", "jfk"]);
   assert.deepEqual(getClerkAirportSelectionDraft("member-a"), ["JFK"]);
   assert.deepEqual(getClerkAirportSelectionDraft("member-b"), []);
 
   const airportSource = readFileSync(resolve(projectRoot, "app/airport-picker.tsx"), "utf8");
-  assert.ok(airportSource.includes("registration-tab-${key}"));
-  assert.ok(airportSource.includes("['airport', 'Home Airport']"));
-  assert.ok(airportSource.includes("['cities', 'Favorite Cities']"));
-  assert.ok(airportSource.includes('accessibilityRole="radio"'));
-  assert.ok(airportSource.includes('accessibilityRole="checkbox"'));
-  assert.ok(airportSource.includes("city.key"));
-  assert.ok(airportSource.includes("city.displayName"));
-  assert.ok(airportSource.includes("Review &amp; save"));
-  assert.ok(airportSource.includes("Continue to onboarding"));
-  assert.ok(airportSource.includes("Profile saved, weight not confirmed"));
+  assert.ok(airportSource.includes("registration-home-airport-search"));
+  assert.ok(airportSource.includes("registration-additional-airport-search"));
+  assert.ok(airportSource.includes("mode === 'single' ? 'radio' : 'checkbox'"));
+  assert.ok(airportSource.includes("mode === 'single' ? { selected } : { checked: selected }"));
+  assert.equal(airportSource.includes("Favorite Cities"), false);
+  const reviewSource = readFileSync(resolve(projectRoot, "app/registration-review.tsx"), "utf8");
+  assert.ok(reviewSource.includes("suggestClerkPreferredCity"));
+  assert.ok(reviewSource.includes("fetchProductionAirportCities"));
+  assert.ok(reviewSource.includes("preferred-city-search"));
+  assert.ok(reviewSource.includes("Confirm &amp; Save"));
+  assert.ok(reviewSource.includes("Profile saved, weight not confirmed"));
+  assert.ok(reviewSource.includes("additionalAirportCodes"));
+  assert.equal(reviewSource.includes("favoriteAirportCodes:"), false);
 });
 
-test("only the matching incomplete Clerk identity can open the airport and tour steps", () => {
+test("only the matching incomplete Clerk identity can open airports and review; tour remains verified", () => {
   const incomplete = { status: "profile_incomplete", clerkUserId: "member-a", currentUser: {} };
   const complete = { status: "profile_complete", clerkUserId: "member-a", currentUser: {} };
   assert.equal(canAccessClerkProfileOnboardingRoute(["airport-picker"], incomplete, "member-a"), true);
+  assert.equal(canAccessClerkProfileOnboardingRoute(["registration-review"], incomplete, "member-a"), true);
+  assert.equal(canAccessClerkProfileOnboardingRoute(["registration-review"], complete, "member-a"), false);
   assert.equal(canAccessClerkProfileOnboardingRoute(["(auth)", "welcome-tour"], incomplete, "member-a"), true);
   assert.equal(canAccessClerkProfileOnboardingRoute(["(auth)", "welcome-tour"], complete, "member-a"), true);
   assert.equal(canAccessClerkProfileOnboardingRoute(["(tabs)", "discover"], incomplete, "member-a"), false);
   assert.equal(canAccessClerkProfileOnboardingRoute(["airport-picker"], incomplete, "member-b"), false);
   assert.equal(canAccessClerkProfileOnboardingRoute(["airport-picker"], complete, "member-a"), false);
+  assert.equal(canAccessClerkProfileOnboardingRoute(["registration-review"], incomplete, "member-b"), false);
   assert.equal(getClerkOnboardingAfterTourDestination(true), "/(tabs)/discover");
   assert.equal(getClerkOnboardingAfterTourDestination(false), "/(auth)/onboarding");
 });
@@ -621,6 +681,43 @@ test("registration does not enter the tour for unauthenticated, incomplete or co
     { ...request, weightLbs: 142 },
   );
   assert.equal(weightResult.weightSaved, false);
+});
+
+test("a failed registration save leaves all identity-scoped selections and form values intact", async () => {
+  const userId = "registration-save-error-user";
+  const before = {
+    ...getClerkProfileRegistrationDraft(userId),
+    values: {
+      firstName: "Avery",
+      lastName: "Passenger",
+      phoneE164: "+15555550123",
+      dob: "1985-04-03",
+      gender: "female",
+      weightLbs: "142",
+    },
+    homeAirportCode: "SFO",
+    additionalAirportCodes: ["JFK", "LAX"],
+    favoriteCityKeys: ["san-francisco"],
+    preferredCityConfirmed: true,
+  };
+  setClerkProfileRegistrationDraft(userId, before);
+  const api = fakeApi();
+  api.updateProfile = async (data, options) => {
+    api.calls.push({ method: "PUT", path: "/me/profile", data, options });
+    throw new Error("temporary save failure");
+  };
+  const result = await loadClerkBluebirdProfile(fakeApi());
+  const request = {
+    firstName: "Avery",
+    lastName: "Passenger",
+    dob: "1985-04-03",
+    gender: "female",
+    homeAirportCode: "SFO",
+    favoriteCityKeys: ["san-francisco"],
+  };
+  await assert.rejects(saveClerkBluebirdRegistration(api, result, request), /temporary save failure/);
+  assert.deepEqual(getClerkProfileRegistrationDraft(userId), before);
+  assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), ["PUT /me/profile"]);
 });
 
 test("only matching API-confirmed registration completion is available to the tour", () => {

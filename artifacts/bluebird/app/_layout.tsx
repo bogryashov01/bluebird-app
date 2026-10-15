@@ -175,6 +175,10 @@ function RootLayoutNav() {
         options={{ headerShown: false, presentation: 'modal' }}
       />
       <Stack.Screen
+        name="registration-review"
+        options={{ headerShown: false, presentation: 'card', gestureEnabled: false }}
+      />
+      <Stack.Screen
         name="community"
         options={{ headerShown: true, title: 'Community', ...headerOptions }}
       />

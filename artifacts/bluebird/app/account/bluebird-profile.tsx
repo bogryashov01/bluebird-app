@@ -252,7 +252,7 @@ function ClerkProfileForm({
   return (
     <View style={styles.formCard} testID="clerk-profile-form">
       <Text style={[styles.title, { color: colors.textOnSurface }]}>
-        {completionRequired ? 'Complete your profile' : 'Personal profile'}
+        {completionRequired ? 'Step 1 of 3 · Personal Information' : 'Personal profile'}
       </Text>
       <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
         Add a few details to get your Bluebird account ready.
@@ -372,7 +372,7 @@ function ClerkProfileForm({
       ) : null}
 
       <ActionButton
-        label="Continue to airport selection"
+        label="Continue to Select Airports"
         onPress={continueToAirports}
         testID="continue-to-airport-selection"
       />
