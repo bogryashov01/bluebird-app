@@ -10,6 +10,7 @@ export type ClerkEntryState =
   | 'member-unlinked'
   | 'member-linked'
   | 'registered-home'
+  | 'profile-required'
   | 'registration-required'
   | 'onboarding-required'
   | 'error';
@@ -23,8 +24,11 @@ export function getClerkEntryState(input: {
   if (input.isSignedIn !== true) return 'signed-out';
   const resolution = input.memberResolution ?? { status: 'resolving' };
   switch (resolution.status) {
+    case 'profile_complete':
     case 'registered':
       return 'registered-home';
+    case 'profile_incomplete':
+      return 'profile-required';
     case 'linked':
       return resolution.memberId.trim() ? 'member-linked' : 'member-unlinked';
     case 'registration_required':

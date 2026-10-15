@@ -71,9 +71,10 @@ export type BluebirdProfileLoadResult =
 export async function loadClerkBluebirdProfile(
   api: ClerkBluebirdProfileApi,
   signal?: AbortSignal,
+  verifiedCurrentUser?: ProductionCurrentUser,
 ): Promise<BluebirdProfileLoadResult> {
   const options = signal ? { signal } : undefined;
-  const currentUser = await api.getMe(options);
+  const currentUser = verifiedCurrentUser ?? await api.getMe(options);
   if (!currentUser.isAuthenticated) {
     return { kind: 'api_not_authenticated', currentUser };
   }

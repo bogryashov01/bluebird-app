@@ -23,11 +23,6 @@ export function ClerkSignedInScreen() {
     clerkMemberResolution,
     CLERK_MEMBER_NAVIGATION_READINESS,
   );
-  const hasAuthoritativeRegistration = [
-    'registered',
-    'registration_required',
-    'onboarding_required',
-  ].includes(clerkMemberResolution.status);
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -57,6 +52,9 @@ export function ClerkSignedInScreen() {
     );
   }
   if (!isSignedIn) return <Redirect href="/(clerk-auth)/sign-in" />;
+  if (postLoginJourney.kind === 'profile') {
+    return <Redirect href={postLoginJourney.destination} />;
+  }
   if (postLoginJourney.kind === 'home') {
     return <Redirect href={postLoginJourney.destination} />;
   }
@@ -85,9 +83,7 @@ export function ClerkSignedInScreen() {
         <View style={[styles.contractCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: colors.textOnSurface }]}>What the API needs to confirm</Text>
           <Text style={[styles.memberGateNote, { color: colors.mutedForegroundLight }]} testID="clerk-registration-contract-blocker">
-            {hasAuthoritativeRegistration
-              ? 'A stable Bluebird member ID and server-authorized feature eligibility are still needed for member-only actions. The current /me fields isMember, isProfileComplete, and needsPlanDecision do not supply that feature result.'
-              : 'An authoritative registration result for this Clerk account (registered or registration required) is missing. The current /me fields isMember, isProfileComplete, and needsPlanDecision do not provide that decision.'}
+            Routing requires /api/me to confirm isAuthenticated === true and return a strict boolean isProfileComplete value. An HTTP success status alone does not authorize Home or profile completion.
           </Text>
           <Text style={[styles.memberGateNote, { color: colors.mutedForegroundLight }]} testID="clerk-airport-contract-blocker">
             New-account setup also needs a profile contract that saves and returns all selected home airports. /me/profile currently supports one homeAirportCode, while Bluebird’s airport step allows multiple selections.

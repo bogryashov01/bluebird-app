@@ -13,26 +13,35 @@ export type ClerkMemberResolution =
   | { status: 'signed_out' }
   | { status: 'resolving'; clerkUserId?: string | null }
   | { status: 'not_checked'; clerkUserId?: string | null }
+  | {
+      status: 'profile_complete';
+      clerkUserId: string;
+      currentUser: ProductionCurrentUser;
+    }
+  | {
+      status: 'profile_incomplete';
+      clerkUserId: string;
+      currentUser: ProductionCurrentUser;
+    }
   | { status: 'registered'; memberId?: string | null }
   | { status: 'linked'; memberId: string }
   | { status: 'registration_required' }
   | { status: 'onboarding_required' }
-  | { status: 'unresolved'; reason: 'projection_only' | 'missing_authoritative_decision' }
+  | {
+      status: 'unresolved';
+      reason: 'projection_only' | 'missing_authoritative_decision' | 'unauthenticated';
+    }
   | {
       status: 'error';
       reason: 'unauthorized' | 'network' | 'backend' | 'invalid_response' | 'token' | 'cancelled' | 'unknown';
     };
 
 export function shouldAutomaticallyResolveClerkMember(input: {
-  isDevelopment: boolean;
   isClerkMode: boolean;
   isLoaded: boolean;
   isSignedIn: boolean | undefined;
 }): boolean {
-  // A signed-in session is not consent to call the Main API. Resolution is
-  // available only through an explicit user-driven action.
-  void input;
-  return false;
+  return input.isClerkMode && input.isLoaded && input.isSignedIn === true;
 }
 
 /**
@@ -54,9 +63,8 @@ export interface ClerkMemberResolutionOptions {
 }
 
 /**
- * Resolve through the existing authenticated GET /api/me adapter. The checked
- * in endpoint is projection-only, so all successful projections remain
- * unresolved until an authoritative decision is added to the backend contract.
+ * Resolve only the profile-routing decision explicitly supported by the
+ * authenticated /api/me projection. This does not grant member capabilities.
  */
 export async function resolveClerkMember(
   options: ClerkMemberResolutionOptions,
@@ -76,18 +84,56 @@ export async function resolveClerkMember(
       ...(options.fetcher ? { fetcher: options.fetcher } : {}),
     });
     const currentUser = await api.getMe({ signal: options.signal });
-    return resolveProjection(currentUser);
+    return resolveProjection(currentUser, options.clerkUserId);
   } catch (error) {
     return { status: 'error', reason: getResolutionErrorReason(error) };
   }
 }
 
-/**
- * The existing /api/me fields are not identity evidence: neither a positive
- * member projection nor an anonymous/negative projection identifies an account.
- */
-export function resolveProjection(_currentUser: ProductionCurrentUser): ClerkMemberResolution {
-  return { status: 'unresolved', reason: 'projection_only' };
+/** Profile booleans guide navigation only; they do not identify a Bluebird member. */
+export function resolveProjection(
+  currentUser: ProductionCurrentUser,
+  clerkUserId?: string | null,
+): ClerkMemberResolution {
+  if (currentUser.isAuthenticated !== true) {
+    return { status: 'unresolved', reason: 'unauthenticated' };
+  }
+  if (typeof clerkUserId !== 'string' || !clerkUserId.trim()) {
+    return { status: 'unresolved', reason: 'missing_authoritative_decision' };
+  }
+  if (currentUser.isProfileComplete === true) {
+    return { status: 'profile_complete', clerkUserId, currentUser };
+  }
+  if (currentUser.isProfileComplete === false) {
+    return { status: 'profile_incomplete', clerkUserId, currentUser };
+  }
+  return { status: 'unresolved', reason: 'missing_authoritative_decision' };
+}
+
+/** Do not let a result for the previous Clerk account authorize current routes. */
+export function getClerkResolutionForIdentity(
+  resolution: ClerkMemberResolution,
+  clerkUserId: string | null,
+): ClerkMemberResolution {
+  if (
+    (resolution.status === 'profile_complete' || resolution.status === 'profile_incomplete') &&
+    resolution.clerkUserId !== clerkUserId
+  ) {
+    return clerkUserId
+      ? { status: 'resolving', clerkUserId }
+      : { status: 'signed_out' };
+  }
+  return resolution;
+}
+
+export function isClerkMemberResolutionCurrent(input: {
+  requestedClerkUserId: string;
+  currentClerkUserId: string | null;
+  aborted: boolean;
+}): boolean {
+  return !input.aborted &&
+    !!input.requestedClerkUserId &&
+    input.requestedClerkUserId === input.currentClerkUserId;
 }
 
 /**
@@ -112,7 +158,8 @@ export function mapAuthoritativeMemberDecision(
 }
 
 export type ClerkMemberDestination =
-  | '/(tabs)/discover';
+  | '/(tabs)/discover'
+  | '/account/bluebird-profile';
 
 /** Explicit capabilities required before a semantic outcome can open its route. */
 export interface ClerkMemberNavigationReadiness {
@@ -129,6 +176,7 @@ export const CLERK_NEW_USER_JOURNEY_STEPS = [
 
 export type ClerkPostLoginJourney =
   | { kind: 'home'; destination: '/(tabs)/discover' }
+  | { kind: 'profile'; destination: '/account/bluebird-profile' }
   | { kind: 'new_user_blocked'; steps: typeof CLERK_NEW_USER_JOURNEY_STEPS }
   | { kind: 'unverified'; reason: string }
   | { kind: 'error'; reason: string };
@@ -137,6 +185,12 @@ export function getClerkPostLoginJourney(
   resolution: ClerkMemberResolution,
   readiness: ClerkMemberNavigationReadiness,
 ): ClerkPostLoginJourney {
+  if (resolution.status === 'profile_complete') {
+    return { kind: 'home', destination: '/(tabs)/discover' };
+  }
+  if (resolution.status === 'profile_incomplete') {
+    return { kind: 'profile', destination: '/account/bluebird-profile' };
+  }
   if (resolution.status === 'registered') {
     return isClerkHomeAvailable(resolution, readiness)
       ? { kind: 'home', destination: '/(tabs)/discover' }
@@ -168,13 +222,19 @@ export function getClerkPostLoginStatusMessage(
 ): string {
   const journey = getClerkPostLoginJourney(resolution, readiness);
   if (journey.kind === 'home') {
-    return 'The Main API confirmed a registered account. Home is ready.';
+    return 'The Main API confirmed your profile is complete. Home is ready.';
+  }
+  if (journey.kind === 'profile') {
+    return 'The Main API confirmed that your profile needs completion. Your saved profile values will be loaded before you make changes.';
   }
   if (journey.kind === 'new_user_blocked') {
     return 'The Main API confirmed a new account. Setup is paused until Bluebird can save the complete profile and every selected home airport.';
   }
   if (journey.kind === 'error') {
     return 'Bluebird could not verify the next step with the Main API. No registration state was inferred and no account changes were made.';
+  }
+  if (journey.reason === 'unauthenticated') {
+    return 'The Main API did not confirm this Clerk session. No profile, airport, or membership changes were made.';
   }
   if (journey.reason === 'projection_only' || journey.reason === 'missing_authoritative_decision') {
     return 'The Main API has not supplied an authoritative registered-versus-new result. Bluebird will not infer the route from profile or membership fields.';
@@ -194,6 +254,7 @@ export function isClerkHomeAvailable(
 ): boolean {
   if (resolution.status === 'registered') return readiness.registeredHome;
   if (resolution.status === 'linked') return readiness.linkedMember;
+  if (resolution.status === 'profile_complete') return true;
   return false;
 }
 
@@ -202,9 +263,12 @@ export function getClerkMemberDestination(
   resolution: ClerkMemberResolution,
 ): ClerkMemberDestination | null {
   switch (resolution.status) {
+    case 'profile_complete':
     case 'registered':
     case 'linked':
       return '/(tabs)/discover';
+    case 'profile_incomplete':
+      return '/account/bluebird-profile';
     default:
       return null;
   }
@@ -235,6 +299,7 @@ export function getClerkAuthRootDestination(input: {
 }): ClerkAuthRootDestination {
   const journey = getClerkPostLoginJourney(input.resolution, input.readiness);
   if (journey.kind === 'home') return journey.destination;
+  if (journey.kind === 'profile') return journey.destination;
   return input.clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(auth)/splash';
 }
 

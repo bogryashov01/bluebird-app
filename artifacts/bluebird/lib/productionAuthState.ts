@@ -19,13 +19,12 @@ export const PRODUCTION_AUTH_AVAILABILITY = {
 };
 
 /**
- * An authoritative registered result is sufficient for Home and independent
- * of member identity. Member-only routes remain closed until their own safe
- * capability is confirmed; new-user routes remain blocked on Clerk-safe APIs.
+ * Readiness for legacy semantic registration outcomes. Current /api/me
+ * profile-completion routing is handled separately and grants Home only.
+ * Member-only routes remain closed until their own safe capability is confirmed.
  */
 export const CLERK_MEMBER_NAVIGATION_READINESS = {
-  // A future authoritative registered status is enough for Home; it does not
-  // authorize member-only operations, which remain backend-gated.
+  // A registered status may open Home, not member-only operations.
   registeredHome: true,
   linkedMember: false,
 } as const;

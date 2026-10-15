@@ -12,6 +12,7 @@ import {
 import { Redirect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { useAuth as useBluebirdAuth } from '@/context/AuthContext';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
@@ -46,7 +47,14 @@ export default function BluebirdProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const session = useClerkAuthSnapshot();
+  const { clerkMemberResolution } = useBluebirdAuth();
   const configuration = getMainBluebirdApiConfigurationOrNull();
+  const verifiedCurrentUser =
+    (clerkMemberResolution.status === 'profile_complete' ||
+      clerkMemberResolution.status === 'profile_incomplete') &&
+    clerkMemberResolution.clerkUserId === session?.userId
+      ? clerkMemberResolution.currentUser
+      : undefined;
   const [loadState, setLoadState] = useState<LoadState>({ kind: 'loading' });
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -107,7 +115,11 @@ export default function BluebirdProfileScreen() {
     setFormError(null);
     try {
       const api = createApi();
-      const result = await loadClerkBluebirdProfile(api.authenticated, signal);
+      const result = await loadClerkBluebirdProfile(
+        api.authenticated,
+        signal,
+        verifiedCurrentUser,
+      );
       const cities = result.kind === 'authenticated'
         ? await api.public.getAirportCities({ signal })
         : [];
@@ -133,7 +145,7 @@ export default function BluebirdProfileScreen() {
       if (signal.aborted || currentIdentity.current !== requestedClerkUserId) return;
       setLoadState({ kind: 'error', message: getProfileErrorMessage(error) });
     }
-  }, [createApi, ...profileLoadDependencies]);
+  }, [createApi, verifiedCurrentUser, ...profileLoadDependencies]);
 
   useEffect(() => {
     if (!session?.isLoaded || session.isSignedIn !== true || !session.userId) {

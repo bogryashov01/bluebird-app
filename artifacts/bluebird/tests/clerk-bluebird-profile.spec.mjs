@@ -118,6 +118,24 @@ test("an API-authenticated nonmember can load their incomplete profile without m
   ]);
 });
 
+test("profile screen reuses the already-verified post-login /me response", async () => {
+  const api = fakeApi();
+  const verifiedMe = currentUser({
+    isProfileComplete: false,
+    firstName: "Saved",
+    lastName: "Member",
+  });
+  const result = await loadClerkBluebirdProfile(api, undefined, verifiedMe);
+
+  assert.equal(result.kind, "authenticated");
+  assert.equal(result.currentUser, verifiedMe);
+  assert.equal(result.currentUser.firstName, "Saved");
+  assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), [
+    "GET /me/profile",
+    "GET /membership",
+  ]);
+});
+
 test("an anonymous-shaped /api/me response does not fetch a profile or imply registration", async () => {
   const api = fakeApi({
     me: currentUser({

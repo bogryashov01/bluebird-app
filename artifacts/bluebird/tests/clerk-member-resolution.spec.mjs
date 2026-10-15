@@ -7,6 +7,8 @@ import {
   getClerkMemberDestination,
   getClerkPostLoginJourney,
   getClerkPostLoginStatusMessage,
+  getClerkResolutionForIdentity,
+  isClerkMemberResolutionCurrent,
   mapAuthoritativeMemberDecision,
   resolveClerkMember as resolveClerkMemberInternal,
   shouldAutomaticallyResolveClerkMember,
@@ -23,6 +25,7 @@ process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY = development
 process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER = "https://clerk.example.com";
 const resolveClerkMember = (options) => resolveClerkMemberInternal({
   configuration: developmentConfiguration,
+  clerkUserId: "clerk-user-a",
   ...options,
 });
 
@@ -59,8 +62,9 @@ function jsonResponse(body, status = 200) {
   };
 }
 
-test("fresh Clerk token resolves /api/me, but a positive projection stays unresolved", async () => {
+test("one fresh authenticated GET /api/me resolves a complete profile without writes", async () => {
   let tokenCalls = 0;
+  let fetchCalls = 0;
   let request;
   const result = await resolveClerkMember({
     session: makeSession({
@@ -70,36 +74,97 @@ test("fresh Clerk token resolves /api/me, but a positive projection stays unreso
       },
     }),
     fetcher: async (url, init) => {
+      fetchCalls += 1;
       request = { url, init };
       return jsonResponse(projection);
     },
   });
 
-  assert.deepEqual(result, { status: "unresolved", reason: "projection_only" });
+  assert.deepEqual(result, {
+    status: "profile_complete",
+    clerkUserId: "clerk-user-a",
+    currentUser: projection,
+  });
   assert.equal(tokenCalls, 1);
+  assert.equal(fetchCalls, 1);
+  assert.equal(request.init.method, "GET");
   assert.equal(new URL(request.url).pathname, "/api/me");
   assert.equal(request.init.headers.Authorization, "Bearer fresh-clerk-session-token");
   assert.equal(request.init.credentials, "omit");
 });
 
-test("negative or anonymous /api/me projections never imply registration is required", async () => {
-  for (const currentUser of [
-    { ...projection, isAuthenticated: false, isMember: false, memberTier: null },
-    { ...projection, isMember: false, memberTier: null },
-    { ...projection, isAuthenticated: false },
-    {
+test("only authenticated profile booleans route, regardless of membership or plan decision", async () => {
+  const completeNonmemberProjection = {
+    ...projection,
+    isMember: false,
+    memberTier: null,
+    needsPlanDecision: true,
+  };
+  const completeNonmember = await resolveClerkMember({
+    session: makeSession(),
+    fetcher: async () => jsonResponse(completeNonmemberProjection),
+  });
+  assert.deepEqual(completeNonmember, {
+    status: "profile_complete",
+    clerkUserId: "clerk-user-a",
+    currentUser: completeNonmemberProjection,
+  });
+  assert.deepEqual(getClerkPostLoginJourney(completeNonmember, {
+    registeredHome: false,
+    linkedMember: false,
+  }), { kind: "home", destination: "/(tabs)/discover" });
+
+  const incompleteProjection = {
+    ...projection,
+    isProfileComplete: false,
+    isMember: false,
+  };
+  const incomplete = await resolveClerkMember({
+    session: makeSession(),
+    fetcher: async () => jsonResponse(incompleteProjection),
+  });
+  assert.deepEqual(incomplete, {
+    status: "profile_incomplete",
+    clerkUserId: "clerk-user-a",
+    currentUser: incompleteProjection,
+  });
+  assert.deepEqual(getClerkPostLoginJourney(incomplete, {
+    registeredHome: true,
+    linkedMember: true,
+  }), {
+    kind: "profile",
+    destination: "/account/bluebird-profile",
+  });
+  assert.equal(getClerkAuthRootDestination({
+    clerkSignedIn: true,
+    resolution: incomplete,
+    readiness: { registeredHome: true, linkedMember: true },
+  }), "/account/bluebird-profile");
+  assert.equal(getClerkAuthRootDestination({
+    clerkSignedIn: true,
+    resolution: completeNonmember,
+    readiness: { registeredHome: false, linkedMember: false },
+  }), "/(tabs)/discover");
+
+  const unauthenticated = await resolveClerkMember({
+    session: makeSession(),
+    fetcher: async () => jsonResponse({
       ...projection,
+      isAuthenticated: false,
       isProfileComplete: false,
-      email: "same@example.test",
-      phoneE164: "+15555550123",
-    },
-  ]) {
-    const result = await resolveClerkMember({
-      session: makeSession(),
-      fetcher: async () => jsonResponse(currentUser),
-    });
-    assert.deepEqual(result, { status: "unresolved", reason: "projection_only" });
-  }
+      isMember: false,
+      memberTier: null,
+    }),
+  });
+  assert.deepEqual(unauthenticated, {
+    status: "unresolved",
+    reason: "unauthenticated",
+  });
+  assert.equal(getClerkAuthRootDestination({
+    clerkSignedIn: true,
+    resolution: unauthenticated,
+    readiness: { registeredHome: true, linkedMember: true },
+  }), "/(clerk-auth)/signed-in");
 
   assert.deepEqual(
     await resolveClerkMember({
@@ -256,7 +321,7 @@ test("unloaded and signed-out sessions make no API request", async () => {
 
   assert.deepEqual(
     await resolveClerkMember({ session: makeSession({ isLoaded: false }), fetcher }),
-    { status: "resolving", clerkUserId: undefined },
+    { status: "resolving", clerkUserId: "clerk-user-a" },
   );
   assert.deepEqual(
     await resolveClerkMember({ session: makeSession({ isSignedIn: false }), fetcher }),
@@ -265,15 +330,13 @@ test("unloaded and signed-out sessions make no API request", async () => {
   assert.equal(requests, 0);
 });
 
-test("member resolution never runs automatically after Clerk sign-in", () => {
+test("member resolution runs only for a loaded signed-in Clerk session", () => {
   assert.equal(shouldAutomaticallyResolveClerkMember({
-    isDevelopment: true,
     isClerkMode: true,
     isLoaded: true,
     isSignedIn: true,
-  }), false);
+  }), true);
   assert.equal(shouldAutomaticallyResolveClerkMember({
-    isDevelopment: true,
     isClerkMode: true,
     isLoaded: true,
     isSignedIn: false,
@@ -285,11 +348,46 @@ test("member resolution never runs automatically after Clerk sign-in", () => {
     isSignedIn: true,
   }), false);
   assert.equal(shouldAutomaticallyResolveClerkMember({
-    isDevelopment: false,
     isClerkMode: true,
     isLoaded: true,
     isSignedIn: true,
+  }), true);
+  assert.equal(shouldAutomaticallyResolveClerkMember({
+    isClerkMode: false,
+    isLoaded: true,
+    isSignedIn: true,
   }), false);
+});
+
+test("resolution from an earlier identity cannot navigate after an account change or sign-out", () => {
+  const result = { status: "profile_complete", clerkUserId: "clerk-user-a" };
+  assert.deepEqual(getClerkResolutionForIdentity(result, "clerk-user-b"), {
+    status: "resolving",
+    clerkUserId: "clerk-user-b",
+  });
+  assert.deepEqual(getClerkResolutionForIdentity(result, null), { status: "signed_out" });
+  assert.deepEqual(getClerkResolutionForIdentity({
+    status: "profile_incomplete",
+    clerkUserId: "clerk-user-a",
+  }, "clerk-user-b"), {
+    status: "resolving",
+    clerkUserId: "clerk-user-b",
+  });
+  assert.equal(isClerkMemberResolutionCurrent({
+    requestedClerkUserId: "clerk-user-a",
+    currentClerkUserId: "clerk-user-b",
+    aborted: false,
+  }), false);
+  assert.equal(isClerkMemberResolutionCurrent({
+    requestedClerkUserId: "clerk-user-a",
+    currentClerkUserId: "clerk-user-a",
+    aborted: true,
+  }), false);
+  assert.equal(isClerkMemberResolutionCurrent({
+    requestedClerkUserId: "clerk-user-a",
+    currentClerkUserId: "clerk-user-a",
+    aborted: false,
+  }), true);
 });
 
 test("unauthorized, network, backend, malformed, and cancelled requests remain errors", async () => {

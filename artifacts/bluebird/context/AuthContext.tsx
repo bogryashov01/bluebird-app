@@ -12,12 +12,14 @@ import {
   createLegacyAuthTokenGetter,
 } from '@/lib/clerkAuthSession';
 import {
+  getClerkResolutionForIdentity,
+  isClerkMemberResolutionCurrent,
   resolveClerkMember,
   shouldAutomaticallyResolveClerkMember,
   type ClerkMemberResolution,
 } from '@/lib/clerkMemberResolution';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
-import { getMainBluebirdApiConfiguration } from '@/lib/mainBluebirdApiConfig';
+import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 
 const TOKEN_KEY = 'bluebird_token';
 const USER_KEY = 'bluebird_user';
@@ -59,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const clerkSession = useClerkAuthSnapshot();
   const clerkMode = CLERK_AUTH_CONFIGURATION.enabled;
+  const clerkApiConfiguration = clerkMode ? getMainBluebirdApiConfigurationOrNull() : null;
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -67,6 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [clerkResolutionRetry, setClerkResolutionRetry] = useState(0);
   const registerPushToken = useRegisterNetworkingPushToken();
   const previousClerkIdentity = useRef<string | null | undefined>(undefined);
+  const clerkSessionRef = useRef(clerkSession);
+  clerkSessionRef.current = clerkSession;
 
   useEffect(() => {
     if (!clerkMode) return;
@@ -107,26 +112,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setClerkMemberResolution({ status: 'signed_out' });
       return;
     }
-    const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
     if (!shouldAutomaticallyResolveClerkMember({
-      isDevelopment,
       isClerkMode: clerkMode,
       isLoaded: clerkSession.isLoaded,
       isSignedIn: clerkSession.isSignedIn,
     })) {
-      setClerkMemberResolution({ status: 'not_checked', clerkUserId: clerkSession.userId });
+      setClerkMemberResolution({ status: 'signed_out' });
       return;
     }
 
+    const requestedClerkUserId = clerkSession.userId;
+    if (!requestedClerkUserId) {
+      setClerkMemberResolution({
+        status: 'unresolved',
+        reason: 'missing_authoritative_decision',
+      });
+      return;
+    }
+    const configuration = clerkApiConfiguration;
+    if (!configuration) {
+      setClerkMemberResolution({ status: 'error', reason: 'unknown' });
+      return;
+    }
     const controller = new AbortController();
-    setClerkMemberResolution({ status: 'resolving', clerkUserId: clerkSession.userId });
+    setClerkMemberResolution({ status: 'resolving', clerkUserId: requestedClerkUserId });
     void resolveClerkMember({
       session: clerkSession,
-      configuration: getMainBluebirdApiConfiguration(),
-      clerkUserId: clerkSession.userId,
+      configuration,
+      clerkUserId: requestedClerkUserId,
       signal: controller.signal,
     }).then((resolution) => {
-      if (!controller.signal.aborted) setClerkMemberResolution(resolution);
+      const currentSession = clerkSessionRef.current;
+      if (isClerkMemberResolutionCurrent({
+        requestedClerkUserId,
+        currentClerkUserId: currentSession?.isLoaded && currentSession.isSignedIn === true
+          ? currentSession.userId
+          : null,
+        aborted: controller.signal.aborted,
+      })) {
+        setClerkMemberResolution(resolution);
+      }
     });
     return () => controller.abort();
   }, [
@@ -134,7 +159,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clerkSession?.isLoaded,
     clerkSession?.isSignedIn,
     clerkSession?.userId,
-    clerkSession?.getToken,
+    clerkApiConfiguration?.environment,
+    clerkApiConfiguration?.apiBaseUrl,
+    clerkApiConfiguration?.clerkPublishableKey,
     clerkResolutionRetry,
   ]);
 
@@ -287,6 +314,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     AsyncStorage.setItem(USER_KEY, JSON.stringify(normalized)).catch(() => {});
   };
 
+  const currentClerkUserId = clerkMode &&
+    clerkSession?.isLoaded &&
+    clerkSession.isSignedIn === true
+    ? clerkSession.userId
+    : null;
+  const currentClerkMemberResolution = getClerkResolutionForIdentity(
+    clerkMemberResolution,
+    currentClerkUserId,
+  );
+
   return (
     <AuthContext.Provider value={{
       token: clerkMode ? null : token,
@@ -297,7 +334,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clerkUserId: clerkMode && clerkSession?.isLoaded && clerkSession.isSignedIn === true
         ? clerkSession.userId
         : null,
-      clerkMemberResolution: clerkMode ? clerkMemberResolution : { status: 'signed_out' },
+      clerkMemberResolution: clerkMode ? currentClerkMemberResolution : { status: 'signed_out' },
       retryClerkMemberResolution: () => setClerkResolutionRetry((attempt) => attempt + 1),
       memberAccessResolved: !clerkMode && !!token && !!user,
       signIn,

@@ -78,6 +78,23 @@ test("central Clerk resolution states gate member screens and distinguish outcom
     isSignedIn: true,
     memberResolution: { status: "registered" },
   }), "registered-home");
+  assert.equal(getClerkEntryState({
+    isLoaded: true,
+    isSignedIn: true,
+    memberResolution: { status: "profile_complete", clerkUserId: "clerk-user-a" },
+  }), "registered-home");
+  assert.equal(canAccessClerkMemberScreens({
+    isLoaded: true,
+    isSignedIn: true,
+    memberResolution: { status: "profile_complete", clerkUserId: "clerk-user-a" },
+  }), false);
+  assert.equal(getClerkEntryState({
+    isLoaded: true,
+    isSignedIn: true,
+    memberResolution: { status: "profile_incomplete", clerkUserId: "clerk-user-a" },
+  }), "profile-required");
+  assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["(tabs)", "trips"], false, true), true);
   assert.equal(canAccessClerkMemberScreens({
     isLoaded: true,
     isSignedIn: true,
