@@ -1,4 +1,7 @@
-import { getMainBluebirdApiConfigurationOrNull } from './mainBluebirdApiConfig';
+import {
+  getMainBluebirdApiConfigurationOrNull,
+  getMainBluebirdDevelopmentDiagnosticStatus,
+} from './mainBluebirdApiConfig';
 
 export interface ClerkAuthConfiguration {
   enabled: boolean;
@@ -29,10 +32,12 @@ export function resolveClerkAuthConfiguration(
   enabledFlag: unknown,
   publishableKey: unknown,
   isDevelopment = false,
+  clerkInstanceMatchVerified = false,
 ): ClerkAuthConfiguration {
   const key = typeof publishableKey === 'string' ? publishableKey.trim() : '';
   const enabled =
     isDevelopment &&
+    clerkInstanceMatchVerified &&
     enabledFlag === 'true' &&
     isValidClerkPublishableKey(key) &&
     key.startsWith('pk_test_');
@@ -93,6 +98,7 @@ export async function performClerkSignOut(
 }
 
 const selectedMainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
+const developmentDiagnosticStatus = getMainBluebirdDevelopmentDiagnosticStatus();
 
 /**
  * Clerk is mounted only when the selected Main API and its corresponding
@@ -106,5 +112,6 @@ export const CLERK_AUTH_CONFIGURATION: ClerkAuthConfiguration = {
     typeof __DEV__ !== 'undefined' &&
       __DEV__ &&
       selectedMainApiConfiguration?.environment === 'development',
+    developmentDiagnosticStatus.clerkInstanceMatchVerified,
   ),
 };

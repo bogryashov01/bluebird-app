@@ -14,12 +14,14 @@ import {
 } from "../scripts/.main-bluebird-api.test.mjs";
 
 process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "development";
-process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL = "https://main-api-development.example.test/api";
+process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL = "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api";
 process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY = "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k";
+process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL = "https://bluebirdjets.com/api";
+process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsuZXhhbXBsZS5jb20k";
 
 const development = resolveMainBluebirdApiConfiguration({
   environment: "development",
-  developmentApiBaseUrl: "https://main-api-development.example.test/api/",
+  developmentApiBaseUrl: "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api/",
   developmentClerkPublishableKey: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k",
 });
 const production = resolveMainBluebirdApiConfiguration({
@@ -43,17 +45,22 @@ function tokenProvider(environment, readToken = async () => "fresh-clerk-token")
 test("the explicit selector resolves matching Development and Production API/Clerk pairs", () => {
   assert.deepEqual(development, {
     environment: "development",
-    apiBaseUrl: "https://main-api-development.example.test/api",
+    apiBaseUrl: "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api",
     clerkPublishableKey: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k",
   });
   assert.equal(production.apiBaseUrl, "https://bluebirdjets.com/api");
+  assert.equal(getMainBluebirdApiConfiguration().environment, "development");
+  assert.equal(
+    getMainBluebirdApiConfiguration().apiBaseUrl,
+    "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api",
+  );
 
   for (const invalid of [
     { environment: undefined },
     { environment: "staging" },
     {
       environment: "development",
-      developmentApiBaseUrl: "https://main-api-development.example.test/api",
+      developmentApiBaseUrl: "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api",
     },
     {
       environment: "development",
@@ -62,12 +69,12 @@ test("the explicit selector resolves matching Development and Production API/Cle
     },
     {
       environment: "development",
-      developmentApiBaseUrl: "http://main-api-development.example.test/api",
+      developmentApiBaseUrl: "http://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api",
       developmentClerkPublishableKey: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k",
     },
     {
       environment: "development",
-      developmentApiBaseUrl: "https://main-api-development.example.test/api",
+      developmentApiBaseUrl: "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api",
       developmentClerkPublishableKey: "pk_live_Y2xlcmsuZXhhbXBsZS5jb20k",
     },
     {
@@ -107,6 +114,27 @@ test("configuration never infers a selected pair or falls back to legacy values"
       else process.env[name] = previous[name];
     }
   }
+});
+
+test("the configured Production pair stays inactive while Development is selected", () => {
+  let tokenReads = 0;
+  let requests = 0;
+  assert.equal(getMainBluebirdApiConfiguration().environment, "development");
+  assert.equal(production.apiBaseUrl, "https://bluebirdjets.com/api");
+  assert.throws(() => createMainBluebirdApiIntegration({
+    configuration: production,
+    tokenProvider: tokenProvider("production", async () => {
+      tokenReads += 1;
+      return "production-token-must-not-be-read";
+    }),
+    fetcher: async () => {
+      requests += 1;
+      return jsonResponse({});
+    },
+  }), MainBluebirdApiConfigurationError);
+  assert.equal(tokenReads, 0);
+  assert.equal(requests, 0);
+  assert.equal(getMainBluebirdApiConfiguration().environment, "development");
 });
 
 test("Development diagnostics report only safe status and require a matching API issuer", () => {
@@ -196,7 +224,7 @@ test("construction is inert, uses the selected API, and sends only a fresh Clerk
   });
   assert.equal(tokenReads, 1);
   assert.equal(requests.length, 1);
-  assert.equal(requests[0].url, "https://main-api-development.example.test/api/me");
+  assert.equal(requests[0].url, "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api/me");
   assert.equal(requests[0].init.method, "GET");
   assert.deepEqual(Object.keys(requests[0].init.headers).sort(), ["Accept", "Authorization"]);
   assert.equal(requests[0].init.headers.Authorization, "Bearer clerk-token-1");
@@ -274,7 +302,7 @@ test("public read adapters use the configured environment and remain inert until
   });
   assert.equal(requests.length, 0);
   assert.deepEqual(await api.public.searchAirports("test"), []);
-  assert.equal(requests[0].url, "https://main-api-development.example.test/api/airports/search?q=test");
+  assert.equal(requests[0].url, "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api/airports/search?q=test");
   assert.equal(requests[0].init.headers.Authorization, undefined);
 });
 

@@ -1,5 +1,8 @@
 import type { VerifiedProductionTokenProvider } from './productionAuthApi';
-import type { MainBluebirdApiEnvironment } from './mainBluebirdApiConfig';
+import {
+  getMainBluebirdApiConfigurationOrNull,
+  type MainBluebirdApiEnvironment,
+} from './mainBluebirdApiConfig';
 
 export interface ClerkSessionSnapshot {
   isLoaded: boolean;
@@ -20,12 +23,11 @@ export interface ClerkProductionTokenProvider extends VerifiedProductionTokenPro
 }
 
 /**
- * Read only the Expo-public Clerk key. This value is intentionally not sourced
- * from the demo AuthContext, AsyncStorage, or a server-only secret.
+ * Read only the Clerk key paired with the explicitly selected Main API
+ * environment. Legacy single-key configuration is never used as a fallback.
  */
 export function getClerkPublishableKey(): string | null {
-  const key = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
-  return key || null;
+  return getMainBluebirdApiConfigurationOrNull()?.clerkPublishableKey ?? null;
 }
 
 /**

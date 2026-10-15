@@ -6,14 +6,14 @@ import {
   runClerkApiConnectionTest,
 } from "../scripts/.clerk-api-connection.test.mjs";
 import { createAuthenticatedProductionApiClient } from "../scripts/.clerk-api-connection.test.mjs";
-const DEVELOPMENT_API_ME = "https://main-api-development.example.test/api/me";
+const DEVELOPMENT_API_ME = "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api/me";
 const DEVELOPMENT_CONFIGURATION = {
   environment: "development",
-  apiBaseUrl: "https://main-api-development.example.test/api",
+  apiBaseUrl: "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api",
   clerkPublishableKey: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k",
 };
 process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "development";
-process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL = "https://main-api-development.example.test/api";
+process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL = "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api";
 process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY = "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k";
 
 const currentUser = {
@@ -43,7 +43,7 @@ function makeClient({ tokenProvider, fetcher, timeoutMs, baseUrl, diagnostic }) 
   return createAuthenticatedProductionApiClient({
     tokenProvider: { environment: "development", ...tokenProvider },
     environment: "development",
-    baseUrl: baseUrl ?? "https://main-api-development.example.test/api",
+    baseUrl: baseUrl ?? "https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api",
     fetcher,
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
     ...(diagnostic === undefined ? {} : { diagnostic }),

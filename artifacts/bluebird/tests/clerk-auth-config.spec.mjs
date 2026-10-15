@@ -28,16 +28,24 @@ test("Clerk stays disabled unless the flag is exactly true and the public key is
     assert.equal(canAccessClerkAuthRoutes(config), false);
   }
 
-  const enabled = resolveClerkAuthConfiguration("true", ` ${validTestKey} `, true);
+  const enabled = resolveClerkAuthConfiguration("true", ` ${validTestKey} `, true, true);
   assert.deepEqual(enabled, { enabled: true, publishableKey: validTestKey });
   assert.equal(shouldMountClerkProvider(enabled), true);
   assert.equal(canAccessClerkAuthRoutes(enabled), true);
 });
 
-test("a key by itself never enables provider mounting or Clerk routes", () => {
-  const config = resolveClerkAuthConfiguration(undefined, validTestKey, true);
-  assert.equal(config.enabled, false);
-  assert.equal(shouldMountClerkProvider(config), false);
+test("Development Clerk auth stays disabled until the selected key matches the verified API issuer", () => {
+  for (const verified of [false, undefined]) {
+    const config = resolveClerkAuthConfiguration("true", validTestKey, true, verified);
+    assert.equal(config.enabled, false);
+    assert.equal(config.publishableKey, null);
+    assert.equal(shouldMountClerkProvider(config), false);
+    assert.equal(canAccessClerkAuthRoutes(config), false);
+  }
+
+  const configWithoutFlag = resolveClerkAuthConfiguration(undefined, validTestKey, true, true);
+  assert.equal(configWithoutFlag.enabled, false);
+  assert.equal(shouldMountClerkProvider(configWithoutFlag), false);
 });
 
 test("Clerk migration is disabled outside Development and rejects live keys", () => {

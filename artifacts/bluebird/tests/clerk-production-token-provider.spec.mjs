@@ -25,17 +25,31 @@ function makeSource(session) {
 }
 
 test("missing and blank public key are reported as unconfigured", () => {
-  const previous = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const previous = {
+    environment: process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT,
+    api: process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL,
+    key: process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY,
+    legacy: process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  };
   try {
-    delete process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+    delete process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT;
     assert.equal(getClerkPublishableKey(), null);
-    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = "   ";
+    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_live_legacyFallbackMustNotBeUsed";
     assert.equal(getClerkPublishableKey(), null);
-    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = "mock-publishable-value";
-    assert.equal(getClerkPublishableKey(), "mock-publishable-value");
+    process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "production";
+    assert.equal(
+      getClerkPublishableKey(),
+      process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY,
+    );
   } finally {
-    if (previous === undefined) delete process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
-    else process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = previous;
+    const restore = (name, value) => {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    };
+    restore("EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT", previous.environment);
+    restore("EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL", previous.api);
+    restore("EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY", previous.key);
+    restore("EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY", previous.legacy);
   }
 });
 
