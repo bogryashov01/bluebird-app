@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
-import { getClerkOnboardingAfterTourDestination } from '@/lib/clerkProfileOnboarding';
+import {
+  consumeClerkVerifiedRegistrationCompletion,
+  getClerkOnboardingAfterTourDestination,
+} from '@/lib/clerkProfileOnboarding';
+import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 
 export const WELCOME_TOUR_KEY_PREFIX = 'bluebird:welcomeTourSeen:';
 
@@ -68,12 +72,30 @@ const SLIDES: Slide[] = [
 export default function WelcomeTourScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { user } = useAuth();
+  const { user, confirmClerkProfileCompletion } = useAuth();
+  const clerkSession = useClerkAuthSnapshot();
   const params = useLocalSearchParams<{ clerkFlow?: string }>();
   const clerkFlow = params.clerkFlow === '1';
   const { width, height } = useWindowDimensions();
   const [index, setIndex] = useState(0);
   const listRef = useRef<FlatList<Slide>>(null);
+
+  useEffect(() => {
+    if (
+      !clerkFlow ||
+      !clerkSession?.isLoaded ||
+      clerkSession.isSignedIn !== true ||
+      !clerkSession.userId
+    ) return;
+    const verifiedUser = consumeClerkVerifiedRegistrationCompletion(clerkSession.userId);
+    if (verifiedUser) confirmClerkProfileCompletion(verifiedUser);
+  }, [
+    clerkFlow,
+    clerkSession?.isLoaded,
+    clerkSession?.isSignedIn,
+    clerkSession?.userId,
+    confirmClerkProfileCompletion,
+  ]);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;

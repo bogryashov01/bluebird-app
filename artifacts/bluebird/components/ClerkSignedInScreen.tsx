@@ -86,7 +86,7 @@ export function ClerkSignedInScreen() {
             Routing requires /api/me to confirm isAuthenticated === true and return a strict boolean isProfileComplete value. An HTTP success status alone does not authorize Home or profile completion.
           </Text>
           <Text style={[styles.memberGateNote, { color: colors.mutedForegroundLight }]} testID="clerk-airport-contract-blocker">
-            New-account setup also needs a profile contract that saves and returns all selected home airports. /me/profile currently supports one homeAirportCode, while Bluebird’s airport step allows multiple selections.
+            Registration saves one homeAirportCode and favoriteCityKeys selected from the Main API’s airport search and city catalog.
           </Text>
         </View>
 

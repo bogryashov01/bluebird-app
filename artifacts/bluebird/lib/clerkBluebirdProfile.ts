@@ -141,3 +141,43 @@ export async function updateClerkBluebirdProfileExplicitly(
   }
   return api.updateProfile(data, signal ? { signal } : undefined);
 }
+
+export class ClerkRegistrationCompletionError extends Error {
+  constructor() {
+    super('The API did not confirm an authenticated, complete profile after saving.');
+    this.name = 'ClerkRegistrationCompletionError';
+  }
+}
+
+export interface ClerkRegistrationSaveResult {
+  profile: ProductionUserProfile;
+  currentUser: ProductionCurrentUser;
+  weightSaved: boolean;
+}
+
+/** Save only from an API-confirmed incomplete profile, then verify the refreshed projection. */
+export async function saveClerkBluebirdRegistration(
+  api: ClerkBluebirdProfileApi,
+  result: BluebirdProfileLoadResult,
+  data: UpdateProductionUserProfileRequest,
+  signal?: AbortSignal,
+): Promise<ClerkRegistrationSaveResult> {
+  if (result.kind !== 'authenticated' || result.completion !== 'completion_required') {
+    throw new Error('The API has not verified that this profile requires registration.');
+  }
+  const options = signal ? { signal } : undefined;
+  const profile = await updateClerkBluebirdProfileExplicitly(api, result, data, signal);
+  const currentUser = await api.getMe(options);
+  if (
+    currentUser.isAuthenticated !== true ||
+    currentUser.isProfileComplete !== true ||
+    profile.isComplete !== true
+  ) {
+    throw new ClerkRegistrationCompletionError();
+  }
+  return {
+    profile,
+    currentUser,
+    weightSaved: data.weightLbs === undefined || profile.weightLbs === data.weightLbs,
+  };
+}

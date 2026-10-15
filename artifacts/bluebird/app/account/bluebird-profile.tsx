@@ -13,16 +13,17 @@ import {
   getClerkBluebirdProfileEffectDependencies,
   isClerkBluebirdProfileResultCurrent,
   loadClerkBluebirdProfile,
-  type BluebirdProfileLoadResult,
 } from '@/lib/clerkBluebirdProfile';
 import {
   CLERK_PROFILE_SAVE_LIMITATION,
   getVerifiedClerkPhoneNumber,
-  getClerkAirportSelectionDraft,
-  prefillClerkProfileForm,
+  getClerkProfileRegistrationDraft,
+  setClerkProfileFormDraft,
+  setClerkRegistrationProfileResult,
   validateClerkProfileForm,
 } from '@/lib/clerkProfileOnboarding';
 import type { ProductionUserProfile } from '@/lib/productionAuthApi';
+import type { BluebirdProfileLoadResult } from '@/lib/clerkBluebirdProfile';
 
 type ApiClient = ReturnType<typeof createMainBluebirdApiIntegration>;
 type LoadState =
@@ -188,6 +189,7 @@ export default function BluebirdProfileScreen() {
             profile={profile}
             verifiedPhoneNumber={verifiedPhoneNumber}
             completionRequired={completionRequired}
+            profileResult={authenticatedResult}
           />
         )}
       </KeyboardAwareScrollViewCompat>
@@ -200,19 +202,33 @@ function ClerkProfileForm({
   profile,
   verifiedPhoneNumber,
   completionRequired,
+  profileResult,
 }: {
   clerkUserId: string;
   profile: ProductionUserProfile;
   verifiedPhoneNumber: string | null;
   completionRequired: boolean;
+  profileResult: Extract<BluebirdProfileLoadResult, { kind: 'authenticated' }>;
 }) {
   const colors = useColors();
-  const [values, setValues] = useState(() => prefillClerkProfileForm(profile, verifiedPhoneNumber));
+  const [values, setValues] = useState(() => getClerkProfileRegistrationDraft(
+    clerkUserId,
+    profile,
+    verifiedPhoneNumber,
+  ).values);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
-    setValues((current) => ({ ...current, phoneE164: verifiedPhoneNumber ?? '' }));
-  }, [verifiedPhoneNumber]);
+    setClerkRegistrationProfileResult(clerkUserId, profileResult);
+  }, [clerkUserId, profileResult]);
+
+  useEffect(() => {
+    setValues((current) => {
+      const next = { ...current, phoneE164: verifiedPhoneNumber ?? '' };
+      setClerkProfileFormDraft(clerkUserId, next);
+      return next;
+    });
+  }, [clerkUserId, verifiedPhoneNumber]);
 
   const continueToAirports = () => {
     const error = validateClerkProfileForm(values);
@@ -220,15 +236,16 @@ function ClerkProfileForm({
       setFormError(error);
       return;
     }
-    getClerkAirportSelectionDraft(clerkUserId, [
-      profile.homeAirportCode ?? '',
-      ...profile.favoriteAirportCodes,
-    ]);
+    setClerkProfileFormDraft(clerkUserId, values);
     router.push({ pathname: '/airport-picker', params: { clerkFlow: '1' } });
   };
 
-  const update = (field: 'firstName' | 'lastName' | 'weightLbs', value: string) => {
-    setValues((current) => ({ ...current, [field]: value }));
+  const update = (field: 'firstName' | 'lastName' | 'dob' | 'weightLbs', value: string) => {
+    setValues((current) => {
+      const next = { ...current, [field]: value };
+      setClerkProfileFormDraft(clerkUserId, next);
+      return next;
+    });
     setFormError(null);
   };
 
@@ -280,6 +297,22 @@ function ClerkProfileForm({
         ) : null}
       </FormField>
 
+      <FormField label="Date of Birth">
+        <ProfileInput
+          value={values.dob}
+          onChangeText={(value) => update('dob', value)}
+          placeholder="YYYY-MM-DD"
+          keyboardType="numbers-and-punctuation"
+          autoCapitalize="none"
+          maxLength={10}
+          returnKeyType="next"
+          testID="profile-date-of-birth"
+        />
+        <Text style={[styles.helper, { color: colors.mutedForegroundLight }]}>
+          Use year-month-day, for example 1985-04-03.
+        </Text>
+      </FormField>
+
       <FormField label="Gender">
         <View style={styles.choiceRow}>
           {(['female', 'male'] as const).map((gender) => (
@@ -288,7 +321,11 @@ function ClerkProfileForm({
               accessibilityRole="button"
               accessibilityState={{ selected: values.gender === gender }}
               onPress={() => {
-                setValues((current) => ({ ...current, gender }));
+                setValues((current) => {
+                  const next = { ...current, gender };
+                  setClerkProfileFormDraft(clerkUserId, next);
+                  return next;
+                });
                 setFormError(null);
               }}
               style={[

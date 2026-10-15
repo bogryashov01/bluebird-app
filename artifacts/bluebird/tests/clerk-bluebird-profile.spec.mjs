@@ -6,15 +6,26 @@ import {
   getClerkBluebirdProfileEffectDependencies,
   isClerkBluebirdProfileResultCurrent,
   loadClerkBluebirdProfile,
+  saveClerkBluebirdRegistration,
+  ClerkRegistrationCompletionError,
   updateClerkBluebirdProfileExplicitly,
 } from "../scripts/.clerk-bluebird-profile.test.mjs";
 import {
   CLERK_PROFILE_SAVE_LIMITATION,
+  buildClerkProfileUpdateRequest,
   canAccessClerkProfileOnboardingRoute,
+  getClerkProfileRegistrationDraft,
   getVerifiedClerkPhoneNumber,
   getClerkAirportSelectionDraft,
   getClerkOnboardingAfterTourDestination,
   prefillClerkProfileForm,
+  consumeClerkVerifiedRegistrationCompletion,
+  setClerkHomeAirportDraft,
+  setClerkProfileFormDraft,
+  setClerkRegistrationProfileResult,
+  setClerkVerifiedRegistrationCompletion,
+  toggleClerkFavoriteCityDraft,
+  validateClerkAirportCitySelection,
   setClerkAirportSelectionDraft,
   validateClerkProfileForm,
 } from "../scripts/.clerk-profile-onboarding.test.mjs";
@@ -156,6 +167,7 @@ test("profile form prefills only the requested fields and uses Clerk's verified 
     ...profile,
     firstName: "Avery",
     lastName: "Passenger",
+    dob: "1985-04-03",
     gender: "female",
     phoneE164: "+15555550111",
     weightLbs: 142,
@@ -164,6 +176,7 @@ test("profile form prefills only the requested fields and uses Clerk's verified 
     firstName: "Avery",
     lastName: "Passenger",
     phoneE164: "+15555550123",
+    dob: "1985-04-03",
     gender: "female",
     weightLbs: "142",
   });
@@ -171,6 +184,7 @@ test("profile form prefills only the requested fields and uses Clerk's verified 
     firstName: "",
     lastName: "",
     phoneE164: "",
+    dob: "",
     gender: null,
     weightLbs: "",
   });
@@ -189,29 +203,32 @@ test("phone prefill requires a verified phone on the same active Clerk identity"
   assert.equal(getVerifiedClerkPhoneNumber({ ...sameIdentity, sessionUserId: null }), null);
 });
 
-test("profile form validates names, verified phone, gender and optional whole-number pounds", () => {
+test("profile form validates names, verified phone, date-only DOB, gender and optional whole-number pounds", () => {
   const values = {
     firstName: " Avery ",
     lastName: " Passenger ",
     phoneE164: "+15555550123",
+    dob: "1985-04-03",
     gender: "female",
     weightLbs: "142",
   };
   assert.equal(validateClerkProfileForm(values), null);
   assert.match(validateClerkProfileForm({ ...values, phoneE164: "" }), /verified phone/i);
   assert.match(validateClerkProfileForm({ ...values, gender: null }), /gender/i);
+  assert.match(validateClerkProfileForm({ ...values, dob: "1985-02-30" }), /YYYY-MM-DD/i);
+  assert.match(validateClerkProfileForm({ ...values, dob: "2999-01-01" }), /YYYY-MM-DD/i);
   assert.match(validateClerkProfileForm({ ...values, weightLbs: "142.5" }), /whole-number weight/i);
   assert.match(validateClerkProfileForm({ ...values, weightLbs: "0" }), /1 and 1,500/i);
   assert.equal(validateClerkProfileForm({ ...values, weightLbs: "" }), null);
 });
 
-test("unsupported profile fields and unconfirmed weight persistence are disclosed without a save call", () => {
+test("registration fields, save confirmation and weight persistence disclosure are visible", () => {
   assert.match(CLERK_PROFILE_SAVE_LIMITATION, /date of birth/i);
   assert.match(CLERK_PROFILE_SAVE_LIMITATION, /home airport/i);
   assert.match(CLERK_PROFILE_SAVE_LIMITATION, /favorite city/i);
-  assert.match(CLERK_PROFILE_SAVE_LIMITATION, /weight.*not confirmed/i);
+  assert.match(CLERK_PROFILE_SAVE_LIMITATION, /weight is optional/i);
   const source = readFileSync(resolve(projectRoot, "app/account/bluebird-profile.tsx"), "utf8");
-  for (const label of ["First Name", "Last Name", "Phone", "Gender", "Weight (lbs)"]) {
+  for (const label of ["First Name", "Last Name", "Phone", "Date of Birth", "Gender", "Weight (lbs)"]) {
     assert.ok(source.includes(label), `profile is missing ${label}`);
   }
   assert.ok(source.includes('keyboardType="number-pad"'), "weight should use the numeric keyboard");
@@ -227,13 +244,97 @@ test("unsupported profile fields and unconfirmed weight persistence are disclose
   }
   assert.equal(source.includes("updateProfile("), false);
   assert.equal(source.includes("startPhoneVerification("), false);
+  const airportSource = readFileSync(resolve(projectRoot, "app/airport-picker.tsx"), "utf8");
+  assert.ok(airportSource.includes("Confirm and save profile"));
+  assert.ok(airportSource.includes("saveClerkBluebirdRegistration"));
+  assert.ok(airportSource.includes("savingRef.current"));
+  assert.ok(airportSource.includes("fetchProductionAirportSearch"));
+  assert.ok(airportSource.includes("fetchProductionAirportCities"));
 });
 
-test("airport choices stay in an identity-scoped in-memory draft, not account persistence", () => {
+test("registration draft keeps selections by Clerk identity and supports only one home airport", () => {
+  const saved = { ...profile, firstName: "Avery", dob: "1985-04-03" };
+  const initial = getClerkProfileRegistrationDraft("registration-user-a", saved, "+15555550123");
+  assert.equal(initial.values.firstName, "Avery");
+  assert.equal(initial.values.dob, "1985-04-03");
+  assert.deepEqual(initial.favoriteCityKeys, []);
+  setClerkProfileFormDraft("registration-user-a", {
+    ...initial.values,
+    firstName: "Draft name",
+    dob: "1986-02-01",
+  });
+  setClerkHomeAirportDraft("registration-user-a", "SFO");
+  setClerkHomeAirportDraft("registration-user-a", "JFK");
+  assert.equal(getClerkProfileRegistrationDraft("registration-user-a").values.firstName, "Draft name");
+  assert.deepEqual(getClerkAirportSelectionDraft("registration-user-a"), ["JFK"]);
+  assert.equal(getClerkProfileRegistrationDraft("registration-user-b").values.firstName, "");
+  assert.deepEqual(getClerkProfileRegistrationDraft("registration-user-b").favoriteCityKeys, []);
+});
+
+test("favorite cities toggle only exact canonical catalog keys", () => {
+  const canonicalKeys = ["new-york-city", "san-francisco"];
+  assert.deepEqual(toggleClerkFavoriteCityDraft("registration-city-user", "new-york-city", canonicalKeys), ["new-york-city"]);
+  assert.deepEqual(toggleClerkFavoriteCityDraft("registration-city-user", "SFO", canonicalKeys), ["new-york-city"]);
+  assert.deepEqual(toggleClerkFavoriteCityDraft("registration-city-user", "san-francisco", canonicalKeys), ["new-york-city", "san-francisco"]);
+  assert.deepEqual(toggleClerkFavoriteCityDraft("registration-city-user", "new-york-city", canonicalKeys), ["san-francisco"]);
+  assert.match(validateClerkAirportCitySelection({
+    homeAirportCode: "SFO",
+    favoriteCityKeys: ["SFO"],
+    catalogKeys: canonicalKeys,
+  }), /no longer available/i);
+  assert.equal(validateClerkAirportCitySelection({
+    homeAirportCode: "sfo",
+    favoriteCityKeys: ["san-francisco"],
+    catalogKeys: canonicalKeys,
+  }), null);
+});
+
+test("request composition uses date-only DOB, one airport, exact city keys and only contract-supported options", () => {
+  const values = {
+    firstName: " Avery ",
+    lastName: " Passenger ",
+    phoneE164: "+15555550123",
+    dob: "1985-04-03",
+    gender: "female",
+    weightLbs: "142",
+  };
+  const request = buildClerkProfileUpdateRequest({
+    values,
+    homeAirportCode: "sfo",
+    favoriteCityKeys: ["san-francisco"],
+    catalogKeys: ["san-francisco"],
+    profile: { ...profile, phoneCountry: null },
+  });
+  assert.deepEqual(request, {
+    firstName: "Avery",
+    lastName: "Passenger",
+    dob: "1985-04-03",
+    gender: "female",
+    homeAirportCode: "SFO",
+    favoriteCityKeys: ["san-francisco"],
+    weightLbs: 142,
+  });
+  assert.equal("email" in request, false);
+  assert.equal("phoneE164" in request, false);
+});
+
+test("Clerk airport registration uses searchable single-select and catalog multi-select, then saves explicitly", () => {
   assert.deepEqual(getClerkAirportSelectionDraft("member-a", ["sfo", "SFO", "bad code"]), ["SFO"]);
   setClerkAirportSelectionDraft("member-a", ["JFK", "lax", "jfk"]);
-  assert.deepEqual(getClerkAirportSelectionDraft("member-a"), ["JFK", "LAX"]);
+  assert.deepEqual(getClerkAirportSelectionDraft("member-a"), ["JFK"]);
   assert.deepEqual(getClerkAirportSelectionDraft("member-b"), []);
+
+  const airportSource = readFileSync(resolve(projectRoot, "app/airport-picker.tsx"), "utf8");
+  assert.ok(airportSource.includes("registration-tab-${key}"));
+  assert.ok(airportSource.includes("['airport', 'Home Airport']"));
+  assert.ok(airportSource.includes("['cities', 'Favorite Cities']"));
+  assert.ok(airportSource.includes('accessibilityRole="radio"'));
+  assert.ok(airportSource.includes('accessibilityRole="checkbox"'));
+  assert.ok(airportSource.includes("city.key"));
+  assert.ok(airportSource.includes("city.displayName"));
+  assert.ok(airportSource.includes("Review &amp; save"));
+  assert.ok(airportSource.includes("Continue to onboarding"));
+  assert.ok(airportSource.includes("Profile saved, weight not confirmed"));
 });
 
 test("only the matching incomplete Clerk identity can open the airport and tour steps", () => {
@@ -241,6 +342,7 @@ test("only the matching incomplete Clerk identity can open the airport and tour 
   const complete = { status: "profile_complete", clerkUserId: "member-a", currentUser: {} };
   assert.equal(canAccessClerkProfileOnboardingRoute(["airport-picker"], incomplete, "member-a"), true);
   assert.equal(canAccessClerkProfileOnboardingRoute(["(auth)", "welcome-tour"], incomplete, "member-a"), true);
+  assert.equal(canAccessClerkProfileOnboardingRoute(["(auth)", "welcome-tour"], complete, "member-a"), true);
   assert.equal(canAccessClerkProfileOnboardingRoute(["(tabs)", "discover"], incomplete, "member-a"), false);
   assert.equal(canAccessClerkProfileOnboardingRoute(["airport-picker"], incomplete, "member-b"), false);
   assert.equal(canAccessClerkProfileOnboardingRoute(["airport-picker"], complete, "member-a"), false);
@@ -248,19 +350,12 @@ test("only the matching incomplete Clerk identity can open the airport and tour 
   assert.equal(getClerkOnboardingAfterTourDestination(false), "/(auth)/onboarding");
 });
 
-test("airport picker keeps the searchable multi-select UI and Clerk continues into the original tour without saving", () => {
-  const airportSource = readFileSync(resolve(projectRoot, "app/airport-picker.tsx"), "utf8");
-  const selectorSource = readFileSync(resolve(projectRoot, "components/AirportMultiSelect.tsx"), "utf8");
+test("the saved Clerk completion is consumed by the original three-slide tour before Home", () => {
   const tourSource = readFileSync(resolve(projectRoot, "app/(auth)/welcome-tour.tsx"), "utf8");
-  assert.ok(airportSource.includes("<AirportMultiSelect"));
-  assert.ok(airportSource.includes("actionLabel={isClerkOnboarding ? 'Continue' : 'Save'}"));
-  assert.ok(airportSource.includes("router.push({ pathname: '/(auth)/welcome-tour'"));
-  assert.ok(airportSource.includes("setClerkAirportSelectionDraft"));
-  assert.ok(selectorSource.includes('testID="airport-search-input"'));
-  assert.ok(selectorSource.includes("toggleAirport("));
-  assert.ok(selectorSource.includes("selected.includes("));
   assert.ok(tourSource.includes("getClerkOnboardingAfterTourDestination(clerkFlow)"));
+  assert.ok(tourSource.includes("consumeClerkVerifiedRegistrationCompletion"));
   assert.ok(tourSource.includes("if (!clerkFlow && user?.id)"));
+  assert.ok(tourSource.includes("confirmClerkProfileCompletion(verifiedUser)"));
 });
 
 test("an anonymous-shaped /api/me response does not fetch a profile or imply registration", async () => {
@@ -426,6 +521,117 @@ test("only an explicit editable-profile update calls PUT and returns API values"
     "PUT /me/profile",
   ]);
   assert.deepEqual(api.calls[3].data, update);
+});
+
+test("registration sends one explicit update, refreshes /me and only completes when both API projections agree", async () => {
+  const savedProfile = { ...profile, isComplete: true, weightLbs: 142 };
+  const api = fakeApi({ updateResult: savedProfile });
+  api.getMe = async (options) => {
+    api.calls.push({ method: "GET", path: "/me", options });
+    return currentUser({ isProfileComplete: true, needsSignupPhone: false });
+  };
+  const result = await loadClerkBluebirdProfile(fakeApi());
+  const request = {
+    firstName: "Avery",
+    lastName: "Passenger",
+    dob: "1985-04-03",
+    gender: "female",
+    homeAirportCode: "SFO",
+    favoriteCityKeys: ["san-francisco"],
+    weightLbs: 142,
+  };
+
+  const saved = await saveClerkBluebirdRegistration(api, result, request);
+  assert.equal(saved.currentUser.isAuthenticated, true);
+  assert.equal(saved.currentUser.isProfileComplete, true);
+  assert.equal(saved.profile.isComplete, true);
+  assert.equal(saved.weightSaved, true);
+  assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), [
+    "PUT /me/profile",
+    "GET /me",
+  ]);
+  assert.deepEqual(api.calls[0].data, request);
+});
+
+test("registration does not enter the tour for unauthenticated, incomplete or contradictory post-save state", async () => {
+  const initialApi = fakeApi();
+  const result = await loadClerkBluebirdProfile(initialApi);
+  const request = {
+    firstName: "Avery",
+    lastName: "Passenger",
+    dob: "1985-04-03",
+    gender: "female",
+    homeAirportCode: "SFO",
+    favoriteCityKeys: ["san-francisco"],
+  };
+
+  const incompleteProfileApi = fakeApi({
+    updateResult: { ...profile, isComplete: false },
+  });
+  incompleteProfileApi.getMe = async () => currentUser({ isProfileComplete: true });
+  await assert.rejects(
+    saveClerkBluebirdRegistration(incompleteProfileApi, result, request),
+    ClerkRegistrationCompletionError,
+  );
+
+  const incompleteProjectionApi = fakeApi({
+    updateResult: { ...profile, isComplete: true },
+  });
+  incompleteProjectionApi.getMe = async () => currentUser({ isProfileComplete: false });
+  await assert.rejects(
+    saveClerkBluebirdRegistration(incompleteProjectionApi, result, request),
+    ClerkRegistrationCompletionError,
+  );
+
+  const unauthenticatedApi = fakeApi({
+    updateResult: { ...profile, isComplete: true },
+  });
+  unauthenticatedApi.getMe = async () => currentUser({
+    isAuthenticated: false,
+    isProfileComplete: true,
+  });
+  await assert.rejects(
+    saveClerkBluebirdRegistration(unauthenticatedApi, result, request),
+    ClerkRegistrationCompletionError,
+  );
+
+  const failedRefreshApi = fakeApi({
+    updateResult: { ...profile, isComplete: true },
+  });
+  failedRefreshApi.getMe = async (options) => {
+    failedRefreshApi.calls.push({ method: "GET", path: "/me", options });
+    throw new Error("refresh unavailable");
+  };
+  await assert.rejects(
+    saveClerkBluebirdRegistration(failedRefreshApi, result, request),
+    /refresh unavailable/,
+  );
+  assert.deepEqual(failedRefreshApi.calls.map(({ method, path }) => `${method} ${path}`), [
+    "PUT /me/profile",
+    "GET /me",
+  ]);
+
+  const rejectedWeightApi = fakeApi({
+    updateResult: { ...profile, isComplete: true, weightLbs: null },
+  });
+  rejectedWeightApi.getMe = async () => currentUser({ isProfileComplete: true });
+  const weightResult = await saveClerkBluebirdRegistration(
+    rejectedWeightApi,
+    result,
+    { ...request, weightLbs: 142 },
+  );
+  assert.equal(weightResult.weightSaved, false);
+});
+
+test("only matching API-confirmed registration completion is available to the tour", () => {
+  const completeMe = currentUser({ isProfileComplete: true });
+  assert.equal(setClerkVerifiedRegistrationCompletion("tour-user-a", completeMe), true);
+  assert.equal(consumeClerkVerifiedRegistrationCompletion("tour-user-b"), null);
+  assert.deepEqual(consumeClerkVerifiedRegistrationCompletion("tour-user-a"), completeMe);
+  assert.equal(consumeClerkVerifiedRegistrationCompletion("tour-user-a"), null);
+  assert.equal(setClerkVerifiedRegistrationCompletion("tour-user-a", currentUser({
+    isProfileComplete: false,
+  })), false);
 });
 
 test("stale and cancelled profile responses are discarded when the Clerk identity changes", () => {

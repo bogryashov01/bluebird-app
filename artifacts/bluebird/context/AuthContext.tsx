@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthTokenGetter, logout, type User } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -15,11 +15,13 @@ import {
   getClerkResolutionForIdentity,
   isClerkMemberResolutionCurrent,
   resolveClerkMember,
+  resolveProjection,
   shouldAutomaticallyResolveClerkMember,
   type ClerkMemberResolution,
 } from '@/lib/clerkMemberResolution';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
+import type { ProductionCurrentUser } from '@/lib/productionAuthApi';
 
 const TOKEN_KEY = 'bluebird_token';
 const USER_KEY = 'bluebird_user';
@@ -35,6 +37,7 @@ interface AuthContextType {
   clerkUserId: string | null;
   clerkMemberResolution: ClerkMemberResolution;
   retryClerkMemberResolution: () => void;
+  confirmClerkProfileCompletion: (currentUser: ProductionCurrentUser) => boolean;
   memberAccessResolved: boolean;
   signIn: (token: string, user: AuthUser) => Promise<void>;
   signOut: () => Promise<void>;
@@ -72,6 +75,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const previousClerkIdentity = useRef<string | null | undefined>(undefined);
   const clerkSessionRef = useRef(clerkSession);
   clerkSessionRef.current = clerkSession;
+  const verifiedProfileCompletionRef = useRef<{
+    clerkUserId: string;
+    currentUser: ProductionCurrentUser;
+    revision: number;
+  } | null>(null);
+  const profileCompletionRevisionRef = useRef(0);
 
   useEffect(() => {
     if (!clerkMode) return;
@@ -85,6 +94,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!clerkMode || !clerkSession?.isLoaded) return;
     const nextIdentity = clerkSession.isSignedIn === true ? clerkSession.userId : null;
+    if (verifiedProfileCompletionRef.current?.clerkUserId !== nextIdentity) {
+      verifiedProfileCompletionRef.current = null;
+      profileCompletionRevisionRef.current += 1;
+    }
     // Clear before member routes can be exposed for the new identity.
     if (clearClerkMemberCacheOnIdentityChange(
       queryClient,
@@ -135,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     const controller = new AbortController();
+    const requestProfileRevision = profileCompletionRevisionRef.current;
     setClerkMemberResolution({ status: 'resolving', clerkUserId: requestedClerkUserId });
     void resolveClerkMember({
       session: clerkSession,
@@ -150,7 +164,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : null,
         aborted: controller.signal.aborted,
       })) {
-        setClerkMemberResolution(resolution);
+        const accepted = verifiedProfileCompletionRef.current;
+        if (
+          accepted?.clerkUserId === requestedClerkUserId &&
+          accepted.revision > requestProfileRevision
+        ) {
+          setClerkMemberResolution(resolveProjection(accepted.currentUser, requestedClerkUserId));
+        } else {
+          setClerkMemberResolution(resolution);
+        }
       }
     });
     return () => controller.abort();
@@ -313,6 +335,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(normalized);
     AsyncStorage.setItem(USER_KEY, JSON.stringify(normalized)).catch(() => {});
   };
+  const confirmClerkProfileCompletion = useCallback((currentUser: ProductionCurrentUser) => {
+    const activeSession = clerkSessionRef.current;
+    if (
+      !clerkMode ||
+      !activeSession?.isLoaded ||
+      activeSession.isSignedIn !== true ||
+      !activeSession.userId ||
+      currentUser.isAuthenticated !== true ||
+      currentUser.isProfileComplete !== true
+    ) return false;
+    verifiedProfileCompletionRef.current = {
+      clerkUserId: activeSession.userId,
+      currentUser,
+      revision: ++profileCompletionRevisionRef.current,
+    };
+    setClerkMemberResolution(resolveProjection(currentUser, activeSession.userId));
+    return true;
+  }, [clerkMode]);
 
   const currentClerkUserId = clerkMode &&
     clerkSession?.isLoaded &&
@@ -336,6 +376,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         : null,
       clerkMemberResolution: clerkMode ? currentClerkMemberResolution : { status: 'signed_out' },
       retryClerkMemberResolution: () => setClerkResolutionRetry((attempt) => attempt + 1),
+      confirmClerkProfileCompletion,
       memberAccessResolved: !clerkMode && !!token && !!user,
       signIn,
       signOut,

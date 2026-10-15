@@ -1,12 +1,27 @@
 import type { ClerkMemberResolution } from './clerkMemberResolution';
-import type { UserGender, ProductionUserProfile } from './productionAuthApi';
+import type {
+  BluebirdProfileLoadResult,
+} from './clerkBluebirdProfile';
+import type {
+  ProductionCurrentUser,
+  ProductionUserProfile,
+  UpdateProductionUserProfileRequest,
+  UserGender,
+} from './productionAuthApi';
 
 export interface ClerkProfileFormValues {
   firstName: string;
   lastName: string;
   phoneE164: string;
+  dob: string;
   gender: UserGender | null;
   weightLbs: string;
+}
+
+export interface ClerkProfileRegistrationDraft {
+  values: ClerkProfileFormValues;
+  homeAirportCode: string;
+  favoriteCityKeys: string[];
 }
 
 export function getVerifiedClerkPhoneNumber(input: {
@@ -31,6 +46,7 @@ export function prefillClerkProfileForm(
     firstName: profile.firstName ?? '',
     lastName: profile.lastName ?? '',
     phoneE164: verifiedPhoneNumber ?? '',
+    dob: profile.dob ?? '',
     gender: profile.gender,
     weightLbs: profile.weightLbs == null ? '' : String(profile.weightLbs),
   };
@@ -46,6 +62,9 @@ export function validateClerkProfileForm(values: ClerkProfileFormValues): string
   if (!/^\+[1-9]\d{7,14}$/.test(values.phoneE164)) {
     return 'A verified phone number is required to continue.';
   }
+  if (!isValidClerkDateOfBirth(values.dob)) {
+    return 'Enter your date of birth as YYYY-MM-DD.';
+  }
   if (!values.gender) return 'Choose a gender to continue.';
   if (values.weightLbs.trim()) {
     const weight = Number(values.weightLbs);
@@ -56,32 +75,205 @@ export function validateClerkProfileForm(values: ClerkProfileFormValues): string
   return null;
 }
 
-export const CLERK_PROFILE_SAVE_LIMITATION =
-  'Changes to this form are not saved. The Main API requires date of birth, a home airport, and at least one favorite city to save a profile. The mobile client accepts weight in pounds, but server persistence for weight is not confirmed.';
-
-const airportSelectionsByUser = new Map<string, string[]>();
-
-function normalizeAirportCodes(codes: readonly string[]): string[] {
-  return [...new Set(codes
-    .map((code) => code.trim().toUpperCase())
-    .filter((code) => /^[A-Z0-9]{3,4}$/.test(code)))];
+export function isValidClerkDateOfBirth(value: string, now = new Date()): boolean {
+  const date = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.valueOf()) || parsed.toISOString().slice(0, 10) !== date) return false;
+  return parsed <= new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
-/** In-memory only: selection survives profile↔airport navigation, not a restart or account write. */
+export const CLERK_PROFILE_SAVE_LIMITATION =
+  'The Main API requires date of birth, one home airport, and at least one favorite city. Weight is optional; we’ll tell you if the API does not return it as saved.';
+
+const registrationDraftsByUser = new Map<string, ClerkProfileRegistrationDraft>();
+const registrationProfileResultsByUser = new Map<
+  string,
+  Extract<BluebirdProfileLoadResult, { kind: 'authenticated' }>
+>();
+
+function normalizeAirportCode(code: string | null | undefined): string {
+  const normalized = code?.trim().toUpperCase() ?? '';
+  return /^[A-Z0-9]{3,4}$/.test(normalized) ? normalized : '';
+}
+
+function copyRegistrationDraft(draft: ClerkProfileRegistrationDraft): ClerkProfileRegistrationDraft {
+  return {
+    values: { ...draft.values },
+    homeAirportCode: draft.homeAirportCode,
+    favoriteCityKeys: [...draft.favoriteCityKeys],
+  };
+}
+
+/** Keep the registration draft in memory and scoped to the active Clerk subject. */
+export function getClerkProfileRegistrationDraft(
+  clerkUserId: string,
+  profile?: ProductionUserProfile,
+  verifiedPhoneNumber: string | null = null,
+): ClerkProfileRegistrationDraft {
+  const existing = registrationDraftsByUser.get(clerkUserId);
+  if (existing) return copyRegistrationDraft(existing);
+  const draft = {
+    values: profile
+      ? prefillClerkProfileForm(profile, verifiedPhoneNumber)
+      : {
+          firstName: '',
+          lastName: '',
+          phoneE164: verifiedPhoneNumber ?? '',
+          dob: '',
+          gender: null,
+          weightLbs: '',
+        },
+    homeAirportCode: normalizeAirportCode(profile?.homeAirportCode),
+    favoriteCityKeys: [...(profile?.favoriteCityKeys ?? [])],
+  };
+  registrationDraftsByUser.set(clerkUserId, draft);
+  return copyRegistrationDraft(draft);
+}
+
+export function setClerkProfileRegistrationDraft(
+  clerkUserId: string,
+  draft: ClerkProfileRegistrationDraft,
+): void {
+  if (!clerkUserId.trim()) return;
+  registrationDraftsByUser.set(clerkUserId, {
+    values: { ...draft.values },
+    homeAirportCode: normalizeAirportCode(draft.homeAirportCode),
+    favoriteCityKeys: [...new Set(draft.favoriteCityKeys.filter((key) => key.trim()))],
+  });
+}
+
+export function setClerkRegistrationProfileResult(
+  clerkUserId: string,
+  result: Extract<BluebirdProfileLoadResult, { kind: 'authenticated' }>,
+): void {
+  if (!clerkUserId.trim()) return;
+  registrationProfileResultsByUser.set(clerkUserId, result);
+}
+
+export function getClerkRegistrationProfileResult(
+  clerkUserId: string,
+): Extract<BluebirdProfileLoadResult, { kind: 'authenticated' }> | null {
+  return registrationProfileResultsByUser.get(clerkUserId) ?? null;
+}
+
+const verifiedRegistrationCompletions = new Map<string, ProductionCurrentUser>();
+
+export function setClerkVerifiedRegistrationCompletion(
+  clerkUserId: string,
+  currentUser: ProductionCurrentUser,
+): boolean {
+  if (
+    !clerkUserId.trim() ||
+    currentUser.isAuthenticated !== true ||
+    currentUser.isProfileComplete !== true
+  ) return false;
+  verifiedRegistrationCompletions.set(clerkUserId, currentUser);
+  return true;
+}
+
+export function consumeClerkVerifiedRegistrationCompletion(
+  clerkUserId: string,
+): ProductionCurrentUser | null {
+  const currentUser = verifiedRegistrationCompletions.get(clerkUserId) ?? null;
+  verifiedRegistrationCompletions.delete(clerkUserId);
+  if (
+    !currentUser ||
+    currentUser.isAuthenticated !== true ||
+    currentUser.isProfileComplete !== true
+  ) return null;
+  return currentUser;
+}
+
+export function setClerkProfileFormDraft(
+  clerkUserId: string,
+  values: ClerkProfileFormValues,
+): void {
+  const draft = getClerkProfileRegistrationDraft(clerkUserId);
+  setClerkProfileRegistrationDraft(clerkUserId, { ...draft, values });
+}
+
+export function setClerkHomeAirportDraft(clerkUserId: string, airportCode: string): void {
+  const draft = getClerkProfileRegistrationDraft(clerkUserId);
+  setClerkProfileRegistrationDraft(clerkUserId, { ...draft, homeAirportCode: airportCode });
+}
+
+export function toggleClerkFavoriteCityDraft(
+  clerkUserId: string,
+  cityKey: string,
+  catalogKeys: readonly string[],
+): string[] {
+  if (!catalogKeys.includes(cityKey)) return getClerkProfileRegistrationDraft(clerkUserId).favoriteCityKeys;
+  const draft = getClerkProfileRegistrationDraft(clerkUserId);
+  const favoriteCityKeys = draft.favoriteCityKeys.includes(cityKey)
+    ? draft.favoriteCityKeys.filter((key) => key !== cityKey)
+    : [...draft.favoriteCityKeys, cityKey];
+  setClerkProfileRegistrationDraft(clerkUserId, { ...draft, favoriteCityKeys });
+  return favoriteCityKeys;
+}
+
+export function validateClerkAirportCitySelection(input: {
+  homeAirportCode: string;
+  favoriteCityKeys: readonly string[];
+  catalogKeys: readonly string[];
+}): string | null {
+  if (!normalizeAirportCode(input.homeAirportCode)) return 'Choose one home airport to continue.';
+  if (input.favoriteCityKeys.length === 0) return 'Choose at least one favorite city to continue.';
+  const canonicalKeys = new Set(input.catalogKeys);
+  if (input.favoriteCityKeys.some((key) => !canonicalKeys.has(key))) {
+    return 'One of your favorite cities is no longer available. Choose it again from the city catalog.';
+  }
+  return null;
+}
+
+export function buildClerkProfileUpdateRequest(input: {
+  values: ClerkProfileFormValues;
+  homeAirportCode: string;
+  favoriteCityKeys: readonly string[];
+  catalogKeys: readonly string[];
+  profile: ProductionUserProfile;
+}): UpdateProductionUserProfileRequest {
+  const profileError = validateClerkProfileForm(input.values);
+  if (profileError) throw new TypeError(profileError);
+  const selectionError = validateClerkAirportCitySelection(input);
+  if (selectionError) throw new TypeError(selectionError);
+
+  const data: UpdateProductionUserProfileRequest = {
+    firstName: input.values.firstName.trim(),
+    lastName: input.values.lastName.trim(),
+    dob: input.values.dob.trim(),
+    gender: input.values.gender!,
+    homeAirportCode: normalizeAirportCode(input.homeAirportCode),
+    favoriteCityKeys: [...input.favoriteCityKeys],
+  };
+  if (input.values.phoneE164 && input.profile.phoneCountry) {
+    data.phoneE164 = input.values.phoneE164;
+    data.phoneCountry = input.profile.phoneCountry;
+  }
+  if (input.values.weightLbs.trim()) {
+    data.weightLbs = Number(input.values.weightLbs);
+  } else if (input.profile.weightLbs !== null) {
+    data.weightLbs = null;
+  }
+  return data;
+}
+
+/** Compatibility helpers for the legacy Home Airports settings flow. */
 export function getClerkAirportSelectionDraft(
   clerkUserId: string,
   initialCodes: readonly string[] = [],
 ): string[] {
-  const existing = airportSelectionsByUser.get(clerkUserId);
-  if (existing) return [...existing];
-  const initial = normalizeAirportCodes(initialCodes);
-  airportSelectionsByUser.set(clerkUserId, initial);
-  return [...initial];
+  const draft = getClerkProfileRegistrationDraft(clerkUserId);
+  if (!draft.homeAirportCode && initialCodes.length) {
+    const code = normalizeAirportCode(initialCodes[0]);
+    if (code) setClerkHomeAirportDraft(clerkUserId, code);
+  }
+  const selected = getClerkProfileRegistrationDraft(clerkUserId).homeAirportCode;
+  return selected ? [selected] : [];
 }
 
 export function setClerkAirportSelectionDraft(clerkUserId: string, codes: readonly string[]): void {
-  if (!clerkUserId.trim()) return;
-  airportSelectionsByUser.set(clerkUserId, normalizeAirportCodes(codes));
+  setClerkHomeAirportDraft(clerkUserId, codes[0] ?? '');
 }
 
 export function canAccessClerkProfileOnboardingRoute(
@@ -90,15 +282,19 @@ export function canAccessClerkProfileOnboardingRoute(
   currentClerkUserId: string | null,
 ): boolean {
   if (
-    resolution.status !== 'profile_incomplete' ||
+    (resolution.status !== 'profile_incomplete' && resolution.status !== 'profile_complete') ||
     !currentClerkUserId ||
     resolution.clerkUserId !== currentClerkUserId
   ) return false;
 
-  return (
-    (segments.length === 1 && segments[0] === 'airport-picker') ||
-    (segments.length === 2 && segments[0] === '(auth)' && segments[1] === 'welcome-tour')
-  );
+  const isAirportStep = segments.length === 1 && segments[0] === 'airport-picker';
+  const isWelcomeTour = segments.length === 2 &&
+    segments[0] === '(auth)' &&
+    segments[1] === 'welcome-tour';
+  return isAirportStep
+    ? resolution.status === 'profile_incomplete'
+    : isWelcomeTour &&
+        (resolution.status === 'profile_incomplete' || resolution.status === 'profile_complete');
 }
 
 export function getClerkOnboardingAfterTourDestination(clerkFlow: boolean):
