@@ -1,0 +1,94 @@
+TASK: Trace Bluebird API Diagnostic Request Execution
+
+PROJECT: Bluebird Mobile
+
+CONTEXT:
+
+The Development-only diagnostic button
+"Test Bluebird API Connection" is implemented.
+
+After clicking and confirming the test,
+the UI displays:
+
+HTTP status: Unavailable
+Failure: browser transport (ambiguous)
+
+However, in browser DevTools Network,
+the developer cannot find any request to:
+
+https://bluebirdjets.com/api/me
+
+Only Clerk and Replit requests are visible.
+
+GOAL:
+
+Determine whether the Bluebird API request
+is actually being initiated by the application.
+
+IMPORTANT:
+
+Do not modify the production backend.
+Do not change Clerk configuration.
+Do not deploy.
+Do not send any live API requests.
+Do not expose authentication tokens.
+Do not disable member-access protection.
+
+TASKS:
+
+1. Trace the diagnostic button handler.
+
+2. Trace the confirmation callback.
+
+3. Trace Clerk getToken() execution.
+
+4. Trace production API client creation.
+
+5. Trace the final fetch() invocation.
+
+6. Verify the resolved request URL is exactly:
+   https://bluebirdjets.com/api/me
+
+7. Check for any early returns, exceptions,
+   cancellation, or incorrect environment flags.
+
+8. Add Development-only sanitized diagnostics
+   showing execution stages:
+
+   - Button clicked
+   - Confirmation accepted
+   - Clerk token obtained (boolean only)
+   - API client initialized
+   - Fetch initiated
+   - Fetch completed or failed
+
+9. Never display or log:
+   - JWTs
+   - Authorization headers
+   - Session IDs
+   - Phone numbers
+   - Personal information
+
+10. Ensure the stage tracker does not
+    accidentally trigger additional requests.
+
+11. Add mocked tests covering:
+    - Successful request initiation
+    - Token acquisition failure
+    - Early cancellation
+    - Fetch rejection
+    - Incorrect API URL
+
+12. Run TypeScript checks.
+
+DELIVERABLE:
+
+Identify the exact point where execution
+stops or fails.
+
+Explain whether fetch() is actually called.
+
+If a code defect prevents the request,
+fix it within Bluebird Mobile only.
+
+Do not make any live production request.
