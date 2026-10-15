@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-const PLANS_URL = "https://bluebirdjets.com/api/plans";
 const user = {
   id: "plan-catalog-test-user",
   name: "Plan Catalog Tester",
@@ -76,9 +75,9 @@ async function setupMemberPage(page, { productionPlansHandler } = {}) {
   await page.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    if (url.hostname === "bluebirdjets.com" && url.pathname === "/api/plans") {
+    if (url.pathname === "/api/plans") {
       if (productionPlansHandler) return productionPlansHandler(route);
-      return route.continue();
+      return route.fulfill({ status: 200, json: liveCatalogFixture });
     }
     if (url.hostname === "bluebirdjets.com") return route.continue();
     if (!url.pathname.startsWith("/api/")) return route.continue();
@@ -112,7 +111,7 @@ test("membership plan surfaces render the live public catalog without purchase m
   const plansRequests = [];
   const mutations = [];
   page.on("request", (request) => {
-    if (request.url() === PLANS_URL) plansRequests.push(request);
+    if (new URL(request.url()).pathname === "/api/plans") plansRequests.push(request);
     if (request.method() !== "GET" && new URL(request.url()).pathname.startsWith("/api/")) {
       mutations.push(`${request.method()} ${request.url()}`);
     }

@@ -1,5 +1,6 @@
 import type {
   ProductionCurrentUser,
+  ProductionMembership,
   ProductionUserProfile,
   ProductionRequestOptions,
   UpdateProductionUserProfileRequest,
@@ -44,6 +45,7 @@ export function getClerkBluebirdProfileEffectDependencies(input: {
 export interface ClerkBluebirdProfileApi {
   getMe: (options?: ProductionRequestOptions) => Promise<ProductionCurrentUser>;
   getProfile: (options?: ProductionRequestOptions) => Promise<ProductionUserProfile>;
+  getMembership: (options?: ProductionRequestOptions) => Promise<ProductionMembership>;
   updateProfile: (
     data: UpdateProductionUserProfileRequest,
     options?: ProductionRequestOptions,
@@ -57,6 +59,8 @@ export type BluebirdProfileLoadResult =
       currentUser: ProductionCurrentUser;
       profile: ProductionUserProfile;
       completion: 'complete' | 'completion_required' | 'unverified';
+      membership: ProductionMembership | null;
+      membershipState: 'available' | 'unavailable' | 'conflict';
     };
 
 /**
@@ -74,11 +78,41 @@ export async function loadClerkBluebirdProfile(
     return { kind: 'api_not_authenticated', currentUser };
   }
 
-  const profile = await api.getProfile(options);
+  const [profile, membership] = await Promise.all([
+    api.getProfile(options),
+    api.getMembership(options).catch(() => null),
+  ]);
   const completion = profile.isComplete === currentUser.isProfileComplete
     ? profile.isComplete ? 'complete' : 'completion_required'
     : 'unverified';
-  return { kind: 'authenticated', currentUser, profile, completion };
+  const membershipState = membership === null
+    ? 'unavailable'
+    : membershipMatchesProjection(currentUser, membership) ? 'available' : 'conflict';
+  return { kind: 'authenticated', currentUser, profile, completion, membership, membershipState };
+}
+
+function membershipMatchesProjection(
+  currentUser: ProductionCurrentUser,
+  membership: ProductionMembership,
+): boolean {
+  if (currentUser.isMember !== membership.isMember) return false;
+  if (!currentUser.isMember) return currentUser.memberTier === null && membership.tier === null;
+  return currentUser.memberTier !== null &&
+    membership.tier !== null &&
+    currentUser.memberTier === membership.tier;
+}
+
+export type ClerkOnboardingStep = 'profile' | 'membership_choice' | 'complete' | 'unverified';
+
+/** Resolve only explicit API-reported steps; membership is never registration evidence. */
+export function getClerkOnboardingStep(result: BluebirdProfileLoadResult): ClerkOnboardingStep {
+  if (result.kind !== 'authenticated') return 'unverified';
+  if (result.completion === 'completion_required') return 'profile';
+  if (result.completion !== 'complete' || result.membershipState !== 'available') return 'unverified';
+  if (result.currentUser.needsPlanDecision) {
+    return result.membership?.isMember === false ? 'membership_choice' : 'unverified';
+  }
+  return 'complete';
 }
 
 export function canEditClerkBluebirdProfile(

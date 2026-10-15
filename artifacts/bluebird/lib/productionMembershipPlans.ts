@@ -1,10 +1,9 @@
 import {
-  PRODUCTION_API_BASE_URL,
   fetchProductionJson,
   type ReadRequestOptions,
 } from '@/lib/productionFlights';
 
-export const PRODUCTION_MEMBERSHIP_PLANS_URL = `${PRODUCTION_API_BASE_URL}/plans`;
+export const MAIN_BLUEBIRD_MEMBERSHIP_PLANS_PATH = '/plans';
 
 export type ProductionPlanFeatureValue = boolean | string;
 
@@ -185,5 +184,7 @@ export function productionPlanPurchaseNotice(
 export async function fetchProductionMembershipPlans(
   options: ProductionPlanReadOptions = {},
 ): Promise<ProductionMembershipPlanCatalog> {
-  return mapProductionMembershipPlans(await fetchProductionJson('/plans', options));
+  return mapProductionMembershipPlans(
+    await fetchProductionJson(MAIN_BLUEBIRD_MEMBERSHIP_PLANS_PATH, options),
+  );
 }

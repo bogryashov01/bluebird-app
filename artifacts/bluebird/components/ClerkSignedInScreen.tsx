@@ -4,48 +4,18 @@ import { Redirect, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth as useClerkAuth } from '@clerk/expo';
-import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { getClerkAuthErrorMessage, performClerkSignOut } from '@/lib/clerkAuthConfig';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAuth as useBluebirdAuth } from '@/context/AuthContext';
-import { confirmDialog } from '@/lib/confirmDialog';
-import {
-  getClerkApiConnectionFailureGuidance,
-  isClerkApiConnectionTestVisible,
-  runClerkApiConnectionTest,
-  type ClerkApiDiagnosticStage,
-  type ClerkApiConnectionDiagnosticResult,
-} from '@/lib/clerkApiConnectionDiagnostic';
-import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
-import {
-  getMainBluebirdApiConfigurationOrNull,
-  getMainBluebirdDevelopmentDiagnosticStatus,
-} from '@/lib/mainBluebirdApiConfig';
 
 export function ClerkSignedInScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { isLoaded, isSignedIn, signOut, getToken } = useClerkAuth();
-  const { clerkMemberResolution, retryClerkMemberResolution } = useBluebirdAuth();
+  const { isLoaded, isSignedIn, signOut } = useClerkAuth();
   const queryClient = useQueryClient();
-  const mainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
   const [error, setError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isTestingApi, setIsTestingApi] = useState(false);
-  const [apiDiagnostic, setApiDiagnostic] = useState<ClerkApiConnectionDiagnosticResult | null>(null);
-  const [apiDiagnosticStages, setApiDiagnosticStages] = useState<ClerkApiDiagnosticStage[] | null>(null);
   const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
-  const developmentDiagnosticStatus = getMainBluebirdDevelopmentDiagnosticStatus();
-  const canRunApiConnectionTest = isClerkApiConnectionTestVisible({
-    isDevelopment,
-    environment: mainApiConfiguration?.environment ?? null,
-    configurationValid: developmentDiagnosticStatus.developmentConfigurationValid,
-    clerkInstanceMatchVerified: developmentDiagnosticStatus.clerkInstanceMatchVerified,
-    clerkAuthEnabled: developmentDiagnosticStatus.clerkAuthEnabled,
-    isLoaded,
-    isSignedIn,
-  });
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
@@ -61,46 +31,6 @@ export function ClerkSignedInScreen() {
       return;
     }
     router.replace('/(auth)/welcome');
-  };
-
-  const handleApiConnectionTest = async () => {
-    if (
-      isTestingApi ||
-      !canRunApiConnectionTest ||
-      !mainApiConfiguration ||
-      mainApiConfiguration.environment !== 'development'
-    ) return;
-    setIsTestingApi(true);
-    setApiDiagnostic(null);
-    setApiDiagnosticStages(null);
-    try {
-      const result = await runClerkApiConnectionTest({
-        isDevelopment,
-        environment: mainApiConfiguration.environment,
-        configuration: mainApiConfiguration,
-        configurationValid: developmentDiagnosticStatus.developmentConfigurationValid,
-        clerkInstanceMatchVerified: developmentDiagnosticStatus.clerkInstanceMatchVerified,
-        clerkAuthEnabled: developmentDiagnosticStatus.clerkAuthEnabled,
-        isLoaded,
-        isSignedIn,
-        executionPlatform: Platform.OS,
-        confirm: confirmDialog,
-        createApiClient: (diagnostic) => createMainBluebirdApiIntegration({
-          configuration: mainApiConfiguration,
-          tokenProvider: {
-            environment: mainApiConfiguration.environment,
-            getVerifiedAccessToken: getToken,
-          },
-          diagnostic,
-        }).authenticated,
-        onStages: setApiDiagnosticStages,
-      });
-      if (result) setApiDiagnostic(result);
-    } catch {
-      // The diagnostic helper sanitizes expected failures; never surface raw errors here.
-    } finally {
-      setIsTestingApi(false);
-    }
   };
 
   if (!isLoaded) {
@@ -121,71 +51,40 @@ export function ClerkSignedInScreen() {
     >
       <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.content}>
-        <Text style={[styles.eyebrow, { color: colors.paleBlue }]}>BLUEBIRD ACCOUNT</Text>
-        <Text style={[styles.title, { color: colors.textOnBrand }]}>Your Bluebird account</Text>
+        <Text style={[styles.eyebrow, { color: colors.paleBlue }]}>WELCOME BACK</Text>
+        <Text style={[styles.title, { color: colors.textOnBrand }]}>Your Bluebird journey</Text>
         <Text style={[styles.body, { color: colors.mutedOnBrand }]}>
-          Your Clerk session is active. View your API-backed Bluebird profile separately from membership; member-only flight, queue, and trip features remain unavailable until the backend confirms eligibility.
+          Your phone sign-in is ready. Open your Bluebird profile to check what the Development API confirms and continue any required profile setup.
         </Text>
-        <Text style={[styles.pending, { color: colors.mutedOnBrand }]} testID="clerk-member-pending">
-          {getResolutionMessage(clerkMemberResolution)}
-        </Text>
-        <View style={styles.profileAction}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push('/account/bluebird-profile' as any)}
-            style={[styles.primaryButton, { backgroundColor: colors.primary }]}
-            testID="open-bluebird-profile"
-          >
-            <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>
-              Open my Bluebird profile
-            </Text>
-          </Pressable>
-          <Text style={[styles.profileNote, { color: colors.mutedOnBrand }]}>
-            Opening the profile may synchronize phone details already verified by Clerk.
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/account/bluebird-profile' as any)}
+          style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+          testID="open-bluebird-profile"
+        >
+          <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>
+            Continue to my Bluebird profile
           </Text>
-        </View>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/membership/plans' as any)}
+          style={[styles.secondaryButton, { borderColor: colors.border }]}
+          testID="open-membership-plans"
+        >
+          <Text style={[styles.secondaryButtonText, { color: colors.textOnBrand }]}>Review membership plans</Text>
+        </Pressable>
+        <Text style={[styles.memberGateNote, { color: colors.mutedOnBrand }]} testID="clerk-member-eligibility-gate">
+          Flights, queues, and trips stay protected until the API provides a stable Bluebird member identity and confirms feature eligibility. No membership or registration status is inferred from isMember.
+        </Text>
         {isDevelopment && isLoaded && isSignedIn && (
-          <View style={styles.diagnosticSection}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ disabled: isTestingApi || !canRunApiConnectionTest, busy: isTestingApi }}
-              disabled={isTestingApi || !canRunApiConnectionTest}
-              onPress={handleApiConnectionTest}
-              style={[
-                styles.retryButton,
-                { borderColor: colors.border },
-                (isTestingApi || !canRunApiConnectionTest) && styles.disabled,
-              ]}
-              testID="clerk-api-connection-test"
-            >
-              {isTestingApi ? (
-                <ActivityIndicator color={colors.textOnBrand} />
-              ) : (
-                <Text style={[styles.retryButtonText, { color: colors.textOnBrand }]}>
-                  Test Bluebird API Connection
-                </Text>
-              )}
-            </Pressable>
-            <View accessibilityLiveRegion="polite" style={styles.diagnosticResult} testID="clerk-api-connection-result">
-              <DiagnosticResultText
-                result={apiDiagnostic}
-                stages={apiDiagnosticStages ?? apiDiagnostic?.stages ?? []}
-                configurationStatus={developmentDiagnosticStatus}
-                currentSessionExists={isSignedIn === true}
-                currentEnvironment={mainApiConfiguration?.environment ?? null}
-                color={colors.mutedOnBrand}
-              />
-            </View>
-          </View>
-        )}
-        {clerkMemberResolution.status === 'error' && (
           <Pressable
             accessibilityRole="button"
-            onPress={retryClerkMemberResolution}
-            style={[styles.retryButton, { borderColor: colors.border }]}
-            testID="clerk-member-retry"
+            onPress={() => router.push('/(clerk-auth)/development' as any)}
+            style={[styles.developmentLink, { borderColor: colors.border }]}
+            testID="open-development-tools"
           >
-            <Text style={[styles.retryButtonText, { color: colors.textOnBrand }]}>Try membership check again</Text>
+            <Text style={[styles.secondaryButtonText, { color: colors.textOnBrand }]}>Development tools</Text>
           </Pressable>
         )}
         {error && (
@@ -214,102 +113,6 @@ export function ClerkSignedInScreen() {
   );
 }
 
-function getResolutionMessage(resolution: ReturnType<typeof useBluebirdAuth>['clerkMemberResolution']): string {
-  switch (resolution.status) {
-    case 'signed_out':
-      return 'Account status: signed out.';
-    case 'not_checked':
-      return 'API profile status: not checked. Member access remains disabled.';
-    case 'resolving':
-      return 'Account status: identity link is not confirmed.';
-    case 'linked':
-      return 'Account status: a Bluebird member identity was confirmed.';
-    case 'registration_required':
-      return 'Account status: the backend confirmed that registration is required.';
-    case 'onboarding_required':
-      return 'Account status: the backend confirmed that onboarding is required.';
-    case 'unresolved':
-      return 'Account status: identity link remains unverified. Profile access does not establish membership.';
-    case 'error':
-      return resolution.reason === 'unauthorized'
-        ? 'Account status: the backend did not accept this session. No registration or member access was inferred.'
-        : 'Account status: Bluebird could not verify the account link. No registration or member access was inferred.';
-  }
-}
-
-function DiagnosticResultText({
-  result,
-  stages,
-  configurationStatus,
-  currentSessionExists,
-  currentEnvironment,
-  color,
-}: {
-  result: ClerkApiConnectionDiagnosticResult | null;
-  stages: ClerkApiDiagnosticStage[];
-  configurationStatus: ReturnType<typeof getMainBluebirdDevelopmentDiagnosticStatus>;
-  currentSessionExists: boolean;
-  currentEnvironment: 'development' | 'production' | null;
-  color: string;
-}) {
-  const lines = [
-    'Development connection prerequisites:',
-    ...configurationStatus.checks.map(({ name, status }) => `${name}: ${status}`),
-    `Development API configuration valid: ${formatBoolean(configurationStatus.developmentConfigurationValid)}`,
-    `Development Clerk instance match verified: ${formatBoolean(configurationStatus.clerkInstanceMatchVerified)}`,
-    ...(configurationStatus.missingPrerequisites.length
-      ? ['Missing prerequisites:', ...configurationStatus.missingPrerequisites.map((item) => `• ${item}`)]
-      : []),
-    '',
-    `API environment: ${result?.environment ?? currentEnvironment ?? 'Unavailable'}`,
-    `Clerk session exists: ${formatBoolean(result?.clerkSessionExists ?? currentSessionExists)}`,
-    ...(result ? [
-      `API target: ${result.target ? `${result.target.origin}${result.target.path}` : 'Unavailable'}`,
-      `Clerk token obtained: ${formatBoolean(result.tokenObtained)}`,
-      `Fetch invoked: ${formatBoolean(result.fetchInvoked)}`,
-      `HTTP status: ${result.httpStatus ?? 'Unavailable'}`,
-      `API response received: ${formatBoolean(result.apiResponseReceived)}`,
-      `API authentication accepted: ${formatBoolean(result.authenticationAccepted)}`,
-      ...(result.requestMetadata ? [
-        '',
-        'Sanitized request options:',
-        `Method: ${result.requestMetadata.method}`,
-        `Header names: ${result.requestMetadata.headerNames.join(', ') || 'None'}`,
-        `Credentials mode: ${result.requestMetadata.credentials}`,
-        `Abort signal passed: ${formatBoolean(result.requestMetadata.abortSignalPassed)}`,
-        `Timeout: ${result.requestMetadata.timeoutMs} ms`,
-        `Fetch receiver: ${result.requestMetadata.fetchInvocationReceiver}`,
-        `Execution platform: ${result.requestMetadata.executionPlatform}`,
-      ] : []),
-      'Bluebird member identity: unresolved',
-      ...(result.failureCategory ? [`Failure: ${result.failureCategory}`] : []),
-      ...(getClerkApiConnectionFailureGuidance(result.failureCategory) ?? []),
-    ] : []),
-    ...(stages.length ? ['', 'Execution stages:'] : []),
-    ...stages.map(formatDiagnosticStage),
-  ];
-  return <Text style={[styles.diagnosticText, { color }]}>{lines.join('\n')}</Text>;
-}
-
-function formatDiagnosticStage(stage: ClerkApiDiagnosticStage): string {
-  switch (stage.name) {
-    case 'button':
-      return `Button clicked: ${stage.status === 'clicked' ? 'Yes' : 'No'}`;
-    case 'confirmation':
-      return `Confirmation: ${stage.status}`;
-    case 'client':
-      return `API client: ${stage.status}`;
-    case 'token':
-      return `Clerk token obtained: ${formatBoolean(stage.tokenObtained ?? null)}${stage.status === 'failed' ? ' (acquisition failed)' : ''}`;
-    case 'fetch':
-      return `Fetch: ${stage.status}`;
-  }
-}
-
-function formatBoolean(value: boolean | null): string {
-  return value === null ? 'Unavailable' : value ? 'Yes' : 'No';
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 24 },
   centered: { justifyContent: 'center', alignItems: 'center' },
@@ -317,14 +120,10 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 12, fontFamily: 'Inter_600SemiBold', letterSpacing: 1.4, marginBottom: 10 },
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
   body: { fontSize: 15, fontFamily: 'Inter_400Regular', lineHeight: 22, marginTop: 10, marginBottom: 24 },
-  pending: { fontSize: 13, fontFamily: 'Inter_500Medium', lineHeight: 20, marginBottom: 24 },
-  retryButton: { minHeight: 46, borderWidth: 1, borderRadius: 999, justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
-  retryButtonText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
-  diagnosticSection: { marginBottom: 18 },
-  profileAction: { marginBottom: 20, gap: 8 },
-  profileNote: { fontSize: 12, lineHeight: 18, fontFamily: 'Inter_400Regular', textAlign: 'center' },
-  diagnosticResult: { marginTop: 10 },
-  diagnosticText: { fontSize: 12, fontFamily: 'Inter_400Regular', lineHeight: 18 },
+  secondaryButton: { minHeight: 48, borderWidth: 1, borderRadius: 999, justifyContent: 'center', alignItems: 'center', marginTop: 12 },
+  secondaryButtonText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
+  memberGateNote: { fontSize: 12, lineHeight: 18, marginTop: 20, textAlign: 'center', fontFamily: 'Inter_400Regular' },
+  developmentLink: { minHeight: 42, borderWidth: 1, borderRadius: 999, justifyContent: 'center', alignItems: 'center', marginTop: 18 },
   error: { fontSize: 14, fontFamily: 'Inter_400Regular', lineHeight: 21, marginBottom: 14 },
   primaryButton: { minHeight: 50, borderRadius: 999, justifyContent: 'center', alignItems: 'center' },
   primaryButtonText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },

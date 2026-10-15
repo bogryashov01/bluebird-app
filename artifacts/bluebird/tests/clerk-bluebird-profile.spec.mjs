@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   canEditClerkBluebirdProfile,
+  getClerkOnboardingStep,
   getClerkBluebirdProfileEffectDependencies,
   isClerkBluebirdProfileResultCurrent,
   loadClerkBluebirdProfile,
@@ -43,6 +44,13 @@ const profile = {
   weightLbs: null,
 };
 
+const nonmemberMembership = {
+  isMember: false,
+  tier: null,
+  cancelAtPeriodEnd: false,
+  recentEvents: [],
+};
+
 function currentUser(overrides = {}) {
   return {
     isAuthenticated: true,
@@ -61,7 +69,13 @@ function currentUser(overrides = {}) {
   };
 }
 
-function fakeApi({ me = currentUser(), loadedProfile = profile, updateResult = profile } = {}) {
+function fakeApi({
+  me = currentUser(),
+  loadedProfile = profile,
+  loadedMembership = nonmemberMembership,
+  membershipError = null,
+  updateResult = profile,
+} = {}) {
   const calls = [];
   return {
     calls,
@@ -72,6 +86,11 @@ function fakeApi({ me = currentUser(), loadedProfile = profile, updateResult = p
     getProfile: async (options) => {
       calls.push({ method: "GET", path: "/me/profile", options });
       return loadedProfile;
+    },
+    getMembership: async (options) => {
+      calls.push({ method: "GET", path: "/membership", options });
+      if (membershipError) throw membershipError;
+      return loadedMembership;
     },
     updateProfile: async (data, options) => {
       calls.push({ method: "PUT", path: "/me/profile", data, options });
@@ -89,10 +108,13 @@ test("an API-authenticated nonmember can load their incomplete profile without m
   assert.equal(result.currentUser.isMember, false);
   assert.equal(result.currentUser.needsSignupPhone, true);
   assert.equal(result.completion, "completion_required");
+  assert.equal(result.membershipState, "available");
+  assert.equal(getClerkOnboardingStep(result), "profile");
   assert.equal(canEditClerkBluebirdProfile(result), true);
   assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), [
     "GET /me",
     "GET /me/profile",
+    "GET /membership",
   ]);
 });
 
@@ -129,7 +151,7 @@ test("profile and /api/me completion disagreement stays unverified and cannot be
     updateClerkBluebirdProfileExplicitly(api, result, {}),
     /not verified/,
   );
-  assert.deepEqual(api.calls.map(({ method }) => method), ["GET", "GET"]);
+  assert.deepEqual(api.calls.map(({ method }) => method), ["GET", "GET", "GET"]);
 });
 
 test("profile completion is based on matching API-owned state, not membership or missing fields", async () => {
@@ -140,6 +162,12 @@ test("profile completion is based on matching API-owned state, not membership or
       isProfileComplete: true,
       needsSignupPhone: false,
     }),
+    loadedMembership: {
+      isMember: true,
+      tier: "plus",
+      cancelAtPeriodEnd: false,
+      recentEvents: [],
+    },
     loadedProfile: {
       ...profile,
       firstName: "Bluebird",
@@ -151,7 +179,76 @@ test("profile completion is based on matching API-owned state, not membership or
 
   assert.equal(result.kind, "authenticated");
   assert.equal(result.completion, "complete");
+  assert.equal(result.membershipState, "available");
+  assert.equal(getClerkOnboardingStep(result), "complete");
   assert.equal(canEditClerkBluebirdProfile(result), true);
+});
+
+test("membership decision is independent from registration and no-membership remains an account state", async () => {
+  const api = fakeApi({
+    me: currentUser({ isProfileComplete: true, needsPlanDecision: true }),
+    loadedProfile: { ...profile, isComplete: true },
+  });
+  const result = await loadClerkBluebirdProfile(api);
+  assert.equal(result.currentUser.isMember, false);
+  assert.equal(result.completion, "complete");
+  assert.equal(getClerkOnboardingStep(result), "membership_choice");
+  assert.equal(canEditClerkBluebirdProfile(result), true);
+  assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), [
+    "GET /me",
+    "GET /me/profile",
+    "GET /membership",
+  ]);
+});
+
+test("a returning complete nonmember stays on the account path when no plan decision is required", async () => {
+  const result = await loadClerkBluebirdProfile(fakeApi({
+    me: currentUser({
+      isMember: false,
+      memberTier: null,
+      isProfileComplete: true,
+      needsPlanDecision: false,
+      needsSignupPhone: false,
+    }),
+    loadedProfile: {
+      ...profile,
+      firstName: "Returning",
+      lastName: "User",
+      isComplete: true,
+    },
+  }));
+
+  assert.equal(result.kind, "authenticated");
+  assert.equal(result.currentUser.isMember, false);
+  assert.equal(result.completion, "complete");
+  assert.equal(result.membershipState, "available");
+  assert.equal(getClerkOnboardingStep(result), "complete");
+  assert.equal(canEditClerkBluebirdProfile(result), true);
+});
+
+test("membership errors and contradictory membership fields stay unverified", async () => {
+  const unavailable = await loadClerkBluebirdProfile(fakeApi({
+    me: currentUser({ isProfileComplete: true }),
+    loadedProfile: { ...profile, isComplete: true },
+    membershipError: new Error("membership unavailable"),
+  }));
+  assert.equal(unavailable.kind, "authenticated");
+  assert.equal(unavailable.membershipState, "unavailable");
+  assert.equal(getClerkOnboardingStep(unavailable), "unverified");
+  assert.equal(canEditClerkBluebirdProfile(unavailable), true);
+
+  const mismatch = await loadClerkBluebirdProfile(fakeApi({
+    me: currentUser({ isProfileComplete: true, isMember: false, memberTier: null }),
+    loadedProfile: { ...profile, isComplete: true },
+    loadedMembership: {
+      isMember: true,
+      tier: "plus",
+      cancelAtPeriodEnd: false,
+      recentEvents: [],
+    },
+  }));
+  assert.equal(mismatch.membershipState, "conflict");
+  assert.equal(getClerkOnboardingStep(mismatch), "unverified");
 });
 
 test("only an explicit editable-profile update calls PUT and returns API values", async () => {
@@ -180,9 +277,10 @@ test("only an explicit editable-profile update calls PUT and returns API values"
   assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), [
     "GET /me",
     "GET /me/profile",
+    "GET /membership",
     "PUT /me/profile",
   ]);
-  assert.deepEqual(api.calls[2].data, update);
+  assert.deepEqual(api.calls[3].data, update);
 });
 
 test("stale and cancelled profile responses are discarded when the Clerk identity changes", () => {

@@ -93,6 +93,8 @@ test("fresh signed-out startup reaches Welcome and Sign In, and refresh/back sta
   await page.goto("/welcome");
   await page.reload();
   await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("clerk-api-connection-test")).toHaveCount(0);
+  await expect(page.getByTestId("main-bluebird-development-config")).toHaveCount(0);
 });
 
 test("empty browser storage keeps root reloads and direct Flights routes signed out", async ({ page }) => {
@@ -148,6 +150,8 @@ test("Clerk-enabled Welcome routes the phone journey into Clerk without starting
   await page.goto("/welcome");
   await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
   await expect(page.getByText("Continue with Phone", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("clerk-api-connection-test")).toHaveCount(0);
+  await expect(page.getByTestId("main-bluebird-development-config")).toHaveCount(0);
   expect(authApiCalls).toEqual([]);
 
   await page.getByTestId("welcome-phone-entry").click();

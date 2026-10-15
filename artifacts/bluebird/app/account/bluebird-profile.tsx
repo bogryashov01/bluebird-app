@@ -17,6 +17,7 @@ import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import {
   canEditClerkBluebirdProfile,
+  getClerkOnboardingStep,
   getClerkBluebirdProfileEffectDependencies,
   isClerkBluebirdProfileResultCurrent,
   loadClerkBluebirdProfile,
@@ -182,6 +183,7 @@ export default function BluebirdProfileScreen() {
   const profile = authenticatedResult?.profile ?? null;
   const currentUser = authenticatedResult?.currentUser ?? null;
   const completionRequired = authenticatedResult?.completion === 'completion_required';
+  const onboardingStep = loadedResult ? getClerkOnboardingStep(loadedResult) : 'unverified';
   const phoneRequired = !!(profile?.phoneVerificationRequired || currentUser?.needsSignupPhone);
   const profileCanBeSaved = !!editable && (
     !phoneRequired ||
@@ -352,6 +354,8 @@ export default function BluebirdProfileScreen() {
           completion: savedProfile.isComplete === nextCurrentUser.isProfileComplete
             ? savedProfile.isComplete ? 'complete' : 'completion_required'
             : 'unverified',
+          membership: loadedResult.membership,
+          membershipState: loadedResult.membershipState,
         },
                         cities: visibleLoadState.kind === 'loaded' ? visibleLoadState.cities : [],
       });
@@ -409,6 +413,8 @@ export default function BluebirdProfileScreen() {
           <StateCard
             colors={colors}
             message="The API did not confirm this session. Profile data and registration status are unavailable; no new account is inferred."
+            action="Try again"
+            onAction={() => setLoadAttempt((attempt) => attempt + 1)}
           />
         ) : (
           <>
@@ -427,14 +433,46 @@ export default function BluebirdProfileScreen() {
             <StatusRow
               colors={colors}
               label="Membership"
-              value={visibleLoadState.result.currentUser.isMember
-                ? `Active${visibleLoadState.result.currentUser.memberTier ? ` · ${visibleLoadState.result.currentUser.memberTier}` : ''}`
-                : 'No active membership'}
+              value={visibleLoadState.result.membershipState === 'unavailable'
+                ? 'Unavailable'
+                : visibleLoadState.result.membershipState === 'conflict'
+                  ? 'Unverified · API responses disagree'
+                  : visibleLoadState.result.membership?.isMember
+                    ? `Active${visibleLoadState.result.membership.tier ? ` · ${visibleLoadState.result.membership.tier}` : ''}`
+                    : 'No active membership'}
               testID="profile-membership-state"
             />
             <Text style={[styles.helper, { color: colors.mutedForegroundLight }]}>
               Membership is reported separately. Having no active membership does not mean you are unregistered.
             </Text>
+
+            {visibleLoadState.result.membershipState !== 'available' && (
+              <StateCard
+                colors={colors}
+                message={visibleLoadState.result.membershipState === 'unavailable'
+                  ? 'The profile is available, but /membership could not confirm your membership state. Try reloading before making account decisions.'
+                  : 'The /me and /membership responses disagree about membership or tier. Bluebird cannot verify this state yet.'}
+                action="Reload profile"
+                onAction={() => setLoadAttempt((attempt) => attempt + 1)}
+              />
+            )}
+
+            {onboardingStep === 'membership_choice' && (
+              <View style={[styles.infoCard, { backgroundColor: colors.primary + '12', borderColor: colors.border }]} testID="profile-membership-decision">
+                <Text style={[styles.cardTitle, { color: colors.textOnSurface }]}>Review membership options</Text>
+                <Text style={[styles.helper, { color: colors.mutedForegroundLight }]}>
+                  The API reports that a plan decision is still needed. You can review the current plans, but there is no documented API operation to save a plan or no-plan choice. Reviewing plans will not enroll you or change your account.
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push('/membership/plans' as any)}
+                  style={[styles.inlineAction, { backgroundColor: colors.primary }]}
+                  testID="profile-review-membership-plans"
+                >
+                  <Text style={[styles.inlineActionText, { color: colors.primaryForeground }]}>Review available plans</Text>
+                </Pressable>
+              </View>
+            )}
 
             {visibleLoadState.result.completion === 'unverified' ? (
               <StateCard
@@ -457,6 +495,13 @@ export default function BluebirdProfileScreen() {
                       </Text>
                     )}
                   </View>
+                )}
+                {onboardingStep === 'unverified' && visibleLoadState.result.completion === 'complete' && (
+                  <StateCard
+                    colors={colors}
+                    message="Your profile is complete, but the API cannot verify the next account step. /me and /membership do not provide a stable Bluebird member ID or member-feature eligibility decision; flights, queues, and trips remain protected."
+                    testID="profile-member-eligibility-unverified"
+                  />
                 )}
 
                 {!isEditing ? (
@@ -522,6 +567,9 @@ export default function BluebirdProfileScreen() {
                       placeholder="SFO"
                       testID="profile-home-airport"
                     />
+                    <Text style={[styles.helper, { color: colors.mutedForegroundLight }]}>
+                      The profile API stores one home airport. It does not support saving multiple home airports.
+                    </Text>
                     <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Favorite cities</Text>
                     <View style={styles.cityGrid}>
                       {visibleLoadState.cities.map((city) => (
@@ -801,6 +849,7 @@ function StateCard({
   loading = false,
   action,
   onAction,
+  testID,
 }: {
   colors: ReturnType<typeof useColors>;
   message: string;
@@ -808,9 +857,10 @@ function StateCard({
   loading?: boolean;
   action?: string;
   onAction?: () => void;
+  testID?: string;
 }) {
   return (
-    <View style={[styles.stateCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <View style={[styles.stateCard, { backgroundColor: colors.surface, borderColor: colors.border }]} testID={testID}>
       {loading && <ActivityIndicator color={colors.primary} />}
       {title && <Text style={[styles.cardTitle, { color: colors.textOnSurface }]}>{title}</Text>}
       <Text style={[styles.helper, { color: colors.mutedForegroundLight }]}>{message}</Text>
@@ -897,6 +947,8 @@ const styles = StyleSheet.create({
   stateCard: { borderWidth: 1, borderRadius: 16, padding: 18, gap: 12, marginTop: 8 },
   formCard: { borderWidth: 1, borderRadius: 18, padding: 16, gap: 12, marginTop: 4 },
   cardTitle: { fontSize: 18, lineHeight: 24, fontFamily: 'Inter_700Bold' },
+  inlineAction: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 16, paddingVertical: 11, marginTop: 4 },
+  inlineActionText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
   valueRow: { gap: 4, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth },
   valueLabel: { fontSize: 12, fontFamily: 'Inter_500Medium' },
   value: { fontSize: 15, lineHeight: 21, fontFamily: 'Inter_500Medium' },

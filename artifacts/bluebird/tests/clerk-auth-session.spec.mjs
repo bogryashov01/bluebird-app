@@ -82,6 +82,8 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["(auth)", "complete-registration"], false), true);
   assert.equal(shouldRedirectClerkRoute(["(auth)", "onboarding"], false), true);
   assert.equal(shouldRedirectClerkRoute(["account", "bluebird-profile"], false), false);
+  assert.equal(shouldRedirectClerkRoute(["membership", "plans"], false), false);
+  assert.equal(shouldRedirectClerkRoute(["membership", "join"], false), true);
   assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false), true);
   assert.equal(shouldRedirectClerkRoute(["(auth)", "welcome"], false), false);
   assert.equal(shouldRedirectClerkRoute(["(clerk-auth)", "sign-in"], false), false);

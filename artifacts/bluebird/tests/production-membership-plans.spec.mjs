@@ -5,8 +5,16 @@ import {
   mapProductionMembershipPlans,
   productionPlanFeatureLabel,
   productionPlanPurchaseNotice,
-  PRODUCTION_MEMBERSHIP_PLANS_URL,
+  MAIN_BLUEBIRD_MEMBERSHIP_PLANS_PATH,
 } from "../scripts/.production-membership-plans.test.mjs";
+
+const developmentApiBaseUrl = "https://main-api-development.example.test/api";
+process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "development";
+process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL = developmentApiBaseUrl;
+process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY =
+  "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k";
+process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER =
+  "https://clerk.example.com";
 
 const responseFixture = {
   plans: [
@@ -130,8 +138,8 @@ const fetched = await fetchProductionMembershipPlans({
   },
 });
 assert.equal(requests.length, 1);
-assert.equal(requests[0].url, "https://bluebirdjets.com/api/plans");
-assert.equal(requests[0].url, PRODUCTION_MEMBERSHIP_PLANS_URL);
+assert.equal(MAIN_BLUEBIRD_MEMBERSHIP_PLANS_PATH, "/plans");
+assert.equal(requests[0].url, `${developmentApiBaseUrl}/plans`);
 assert.equal(requests[0].init.method, "GET");
 assert.equal(requests[0].init.headers.Accept, "application/json");
 assert.equal(requests[0].init.headers.Authorization, undefined);

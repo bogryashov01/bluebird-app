@@ -11,6 +11,7 @@ export default function ClerkAuthLayout() {
       <Stack.Screen name="sign-in" />
       <Stack.Screen name="sign-up" />
       <Stack.Screen name="signed-in" />
+      <Stack.Screen name="development" />
     </Stack>
   );
 }

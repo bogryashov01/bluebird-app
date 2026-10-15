@@ -61,6 +61,9 @@ export function shouldRedirectClerkRoute(
   // This one account route is explicitly user-opened and reads only the
   // authenticated user's API profile; it does not grant member capabilities.
   if (group === 'account' && route === 'bluebird-profile') return false;
+  // The plan catalog is a public, read-only surface. Purchase and membership
+  // actions remain unavailable until their own API contract is supported.
+  if (group === 'membership' && route === 'plans') return false;
   return true;
 }
 

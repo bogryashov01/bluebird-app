@@ -25,7 +25,7 @@
     "test:production-membership-plans": "pnpm --filter @workspace/api-server exec esbuild '../bluebird/lib/productionMembershipPlans.ts' --bundle --platform=node --format=esm --outfile='../bluebird/scripts/.production-membership-plans.test.mjs' && node tests/production-membership-plans.spec.mjs; status=$?; rm -f scripts/.production-membership-plans.test.mjs; exit $status",
     "test:network-reliability": "EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE=production playwright test tests/network-reliability.spec.mjs --workers=1",
     "test:production-queue-readiness": "EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE=production playwright test tests/production-queue-readiness.spec.mjs --workers=1",
-    "test:membership-plans": "playwright test tests/membership-plans.spec.mjs",
+    "test:membership-plans": "EXPO_PUBLIC_ENABLE_CLERK_AUTH=false playwright test tests/membership-plans.spec.mjs",
     "test:family-mobile": "playwright test tests/family-mobile.spec.mjs",
     "test:networking-samples": "playwright test tests/networking-samples.spec.mjs",
     "test:profile-photo-native": "pnpm --filter @workspace/api-server exec esbuild '../bluebird/tests/profile-photo-native.spec.mjs' --bundle --platform=node --format=esm --outfile='../bluebird/scripts/.profile-photo-native.test.mjs' && node scripts/.profile-photo-native.test.mjs; status=$?; rm -f scripts/.profile-photo-native.test.mjs; exit $status",
