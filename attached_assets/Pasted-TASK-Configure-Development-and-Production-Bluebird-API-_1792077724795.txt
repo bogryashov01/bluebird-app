@@ -1,0 +1,159 @@
+TASK: Configure Development and Production Bluebird API Environments
+
+PROJECT:
+BLUEBIRD MOBILE REPLIT
+
+MODE:
+BUILD
+
+CONTEXT:
+
+The mobile app must use the existing
+Main Bluebird API for all functionality.
+
+Task #417 implemented the shared Main API client.
+Task #420 implemented fail-closed diagnostics.
+
+We now have both API base URLs.
+
+DEVELOPMENT API:
+
+https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api
+
+PRODUCTION API:
+
+https://bluebirdjets.com/api
+
+GOAL:
+
+Configure both API environments in the
+existing mobile integration.
+
+Do not create a new API client.
+
+==================================================
+1. DEVELOPMENT CONFIGURATION
+==================================================
+
+Use:
+
+EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT=development
+
+Development API base URL:
+
+https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api
+
+Use the existing environment variable
+names established in Task #417.
+
+Do not invent new configuration names
+unless strictly necessary.
+
+The Development Clerk publishable key
+must match the Clerk instance used
+by the Main Bluebird Development API.
+
+If the correct key is missing,
+keep authentication checks disabled.
+
+Do not substitute an unrelated pk_test_ key.
+
+==================================================
+2. PRODUCTION CONFIGURATION
+==================================================
+
+Configure the Production API URL:
+
+https://bluebirdjets.com/api
+
+Production Clerk must use the matching
+pk_live_ publishable key.
+
+Do not activate Production mode yet.
+
+Do not enable Production Clerk login yet.
+
+Do not send Production API requests.
+
+Do not deploy.
+
+==================================================
+3. ENVIRONMENT SAFETY
+==================================================
+
+Development must never silently
+fall back to Production.
+
+Production must never silently
+fall back to Development.
+
+Reject mismatched API URLs and Clerk keys.
+
+Never send Clerk Development tokens
+to the Production API.
+
+Never send Clerk Production tokens
+to the Development API.
+
+Keep the existing issuer verification
+and fail-closed guards.
+
+==================================================
+4. CONFIGURATION
+==================================================
+
+Use the existing configuration
+architecture from Task #417.
+
+Store API URLs as non-secret configuration.
+
+Store Clerk publishable keys using
+the existing Expo public environment
+configuration mechanism.
+
+Never place Clerk secret keys
+in the mobile project.
+
+Do not print or log tokens.
+
+==================================================
+5. VERIFICATION
+==================================================
+
+Run:
+
+- TypeScript typecheck
+- Existing API client tests
+- Clerk integration tests
+- Environment safety tests
+
+Use mocked requests only.
+
+Do not make live API requests.
+
+==================================================
+DELIVERABLE
+==================================================
+
+Report:
+
+1. Exact environment variables used.
+2. Development API configuration status.
+3. Production API configuration status.
+4. Missing Clerk publishable keys.
+5. Missing issuer verification evidence.
+6. Test results.
+
+IMPORTANT:
+
+Do not modify the main Bluebird website.
+
+Do not modify the legacy JWT backend.
+
+Do not change existing mobile screens.
+
+Do not send SMS.
+
+Do not access Production API.
+
+Do not deploy.

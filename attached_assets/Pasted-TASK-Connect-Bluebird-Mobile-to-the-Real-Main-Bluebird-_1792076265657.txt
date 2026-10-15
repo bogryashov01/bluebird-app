@@ -1,0 +1,176 @@
+TASK: Connect Bluebird Mobile to the Real Main Bluebird Development API
+
+PROJECT:
+BLUEBIRD MOBILE REPLIT
+
+MODE:
+BUILD
+
+CONTEXT:
+
+Task #417 is complete.
+
+The mobile app now has:
+
+- Shared Main Bluebird API client
+- Clerk Bearer token integration
+- Explicit Development/Production configuration
+- Environment matching
+- Fail-closed authentication
+- Mocked API tests
+
+Our goal is to connect this existing
+implementation to the REAL Main Bluebird
+Development API.
+
+We must not modify the main website.
+
+==================================================
+STEP 1 — VERIFY CONFIGURATION
+==================================================
+
+Inspect the configuration implemented
+in Task #417.
+
+Identify the exact environment variables
+required for:
+
+- API environment
+- Development API base URL
+- Clerk Development publishable key
+- Clerk authentication enablement
+
+Do not invent variable names.
+
+Do not expose secret values or tokens.
+
+Check whether the configured Clerk
+Development instance matches the
+Main Bluebird Development API instance.
+
+If this cannot be verified from available
+non-secret configuration, report the
+specific missing information.
+
+Do not assume matching pk_test_ prefixes
+mean the instances match.
+
+==================================================
+STEP 2 — PREPARE REAL CONNECTION
+==================================================
+
+Use the existing Main Bluebird API client.
+
+Do not create a new API client.
+
+Do not use the legacy JWT backend.
+
+Do not introduce a proxy.
+
+Do not change the Main Bluebird website.
+
+Do not automatically send requests
+when the app starts.
+
+Use the existing Development-only,
+manually confirmed connection control.
+
+==================================================
+STEP 3 — SAFE AUTHENTICATED CHECK
+==================================================
+
+Prepare a manually triggered request:
+
+GET /api/me
+
+Authorization:
+Bearer <current Clerk session token>
+
+The request must use the configured
+Main Bluebird Development API only.
+
+Do not use production.
+
+Do not call:
+
+GET /api/me/profile
+
+or any endpoint with possible
+database write side effects.
+
+Do not send SMS.
+
+Do not create users or profiles.
+
+Do not modify memberships.
+
+Do not make the request automatically.
+
+If configuration and test-environment
+isolation are verified, allow the
+developer to explicitly trigger
+the existing connection check.
+
+If environment isolation cannot be
+verified, keep the check disabled
+and explain what is missing.
+
+==================================================
+STEP 4 — DIAGNOSTICS
+==================================================
+
+Show a safe Development-only result:
+
+- API environment
+- Whether a Clerk session exists
+- Whether a token was obtained
+- HTTP status, if received
+- Network or authentication error
+- Whether the request reached the API
+
+Never display or log the token itself.
+
+IMPORTANT:
+
+A guest-shaped HTTP 200 from /api/me
+does not prove successful authentication.
+
+Do not classify the user as new.
+
+Do not unlock member screens.
+
+==================================================
+STEP 5 — VERIFICATION
+==================================================
+
+Run local typecheck and mocked tests.
+
+Do not send real requests automatically.
+
+Do not deploy.
+
+Do not modify production settings.
+
+==================================================
+DELIVERABLE
+==================================================
+
+Report:
+
+1. Exact configuration variable names.
+2. Whether Development API URL is configured.
+3. Whether Clerk instance matching is confirmed.
+4. Whether the safe connection check is ready.
+5. Any missing prerequisites.
+6. Test results.
+
+IMPORTANT:
+
+Implement necessary mobile-side
+configuration and diagnostics.
+
+Do not perform another general audit.
+
+Do not modify the main Bluebird API.
+
+Do not migrate member screens yet.
