@@ -13,3 +13,9 @@ Post-merge setup must rely on API startup migrations rather than automatic Drizz
 **Why:** Schema push requested truncation of the populated users table during unattended setup, then returned a successful process status despite a TTY prompt error. Forcing it would risk data loss.
 
 **How to apply:** Keep dependency installation non-interactive, allow adequate installation time, and let workflow reconciliation restart the API to run its explicit migrations. Never add forced schema push to merge setup.
+
+Rule: the mobile profile contract accepts `weightLbs`, but server-side weight persistence is unverified. Do not describe weight edits as saved without confirming the API route and storage path.
+
+**Why:** A mobile request type only proves client-side acceptance; it does not establish durable server persistence.
+
+**How to apply:** When profile saving is in scope, inspect the server implementation before promising persistence or enabling an explicit save action.

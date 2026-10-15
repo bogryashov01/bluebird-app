@@ -27,6 +27,8 @@ import { useAuth } from '@/context/AuthContext';
 import { shouldRedirectClerkRoute } from '@/lib/clerkAuthSession';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
+import { canAccessClerkProfileOnboardingRoute } from '@/lib/clerkProfileOnboarding';
+import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -48,6 +50,7 @@ function RootLayoutNav() {
   const colors = useColors();
   const segments = useSegments();
   const { authMode, clerkSignedIn, clerkMemberResolution, memberAccessResolved } = useAuth();
+  const clerkSession = useClerkAuthSnapshot();
   const isClerkProfileRoute = segments[0] === 'account' && segments[1] === 'bluebird-profile';
   if (isClerkProfileRoute && authMode !== 'clerk') {
     return <Redirect href="/(auth)/welcome" />;
@@ -56,8 +59,18 @@ function RootLayoutNav() {
     clerkMemberResolution,
     CLERK_MEMBER_NAVIGATION_READINESS,
   );
+  const incompleteProfileOnboardingRoute =
+    authMode === 'clerk' &&
+    clerkSession?.isLoaded === true &&
+    clerkSession.isSignedIn === true &&
+    canAccessClerkProfileOnboardingRoute(
+      segments,
+      clerkMemberResolution,
+      clerkSession.userId,
+    );
   const clerkRouteGuarded =
     authMode === 'clerk' &&
+    !incompleteProfileOnboardingRoute &&
     shouldRedirectClerkRoute(segments, memberAccessResolved, registeredHomeReady);
   if (clerkRouteGuarded) {
     return <Redirect href={clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(clerk-auth)/sign-in'} />;

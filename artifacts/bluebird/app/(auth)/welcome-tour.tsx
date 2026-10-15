@@ -10,12 +10,13 @@ import {
   useWindowDimensions,
   type ViewToken,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { getClerkOnboardingAfterTourDestination } from '@/lib/clerkProfileOnboarding';
 
 export const WELCOME_TOUR_KEY_PREFIX = 'bluebird:welcomeTourSeen:';
 
@@ -68,6 +69,8 @@ export default function WelcomeTourScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { user } = useAuth();
+  const params = useLocalSearchParams<{ clerkFlow?: string }>();
+  const clerkFlow = params.clerkFlow === '1';
   const { width, height } = useWindowDimensions();
   const [index, setIndex] = useState(0);
   const listRef = useRef<FlatList<Slide>>(null);
@@ -83,11 +86,10 @@ export default function WelcomeTourScreen() {
   }).current;
 
   const finish = async () => {
-    if (user?.id) {
+    if (!clerkFlow && user?.id) {
       await AsyncStorage.setItem(welcomeTourKey(user.id), '1').catch(() => {});
     }
-    // Registration continues into home-airport selection (skip included).
-    router.replace('/(auth)/onboarding');
+    router.replace(getClerkOnboardingAfterTourDestination(clerkFlow));
   };
 
   const next = () => {

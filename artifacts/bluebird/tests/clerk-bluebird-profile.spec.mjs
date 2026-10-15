@@ -8,6 +8,21 @@ import {
   loadClerkBluebirdProfile,
   updateClerkBluebirdProfileExplicitly,
 } from "../scripts/.clerk-bluebird-profile.test.mjs";
+import {
+  CLERK_PROFILE_SAVE_LIMITATION,
+  canAccessClerkProfileOnboardingRoute,
+  getVerifiedClerkPhoneNumber,
+  getClerkAirportSelectionDraft,
+  getClerkOnboardingAfterTourDestination,
+  prefillClerkProfileForm,
+  setClerkAirportSelectionDraft,
+  validateClerkProfileForm,
+} from "../scripts/.clerk-profile-onboarding.test.mjs";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const profile = {
   firstName: null,
@@ -134,6 +149,118 @@ test("profile screen reuses the already-verified post-login /me response", async
     "GET /me/profile",
     "GET /membership",
   ]);
+});
+
+test("profile form prefills only the requested fields and uses Clerk's verified phone", () => {
+  const saved = {
+    ...profile,
+    firstName: "Avery",
+    lastName: "Passenger",
+    gender: "female",
+    phoneE164: "+15555550111",
+    weightLbs: 142,
+  };
+  assert.deepEqual(prefillClerkProfileForm(saved, "+15555550123"), {
+    firstName: "Avery",
+    lastName: "Passenger",
+    phoneE164: "+15555550123",
+    gender: "female",
+    weightLbs: "142",
+  });
+  assert.deepEqual(prefillClerkProfileForm(profile, null), {
+    firstName: "",
+    lastName: "",
+    phoneE164: "",
+    gender: null,
+    weightLbs: "",
+  });
+});
+
+test("phone prefill requires a verified phone on the same active Clerk identity", () => {
+  const sameIdentity = {
+    sessionUserId: "member-a",
+    clerkUserId: "member-a",
+    phoneNumber: "+15555550123",
+    verificationStatus: "verified",
+  };
+  assert.equal(getVerifiedClerkPhoneNumber(sameIdentity), "+15555550123");
+  assert.equal(getVerifiedClerkPhoneNumber({ ...sameIdentity, verificationStatus: "unverified" }), null);
+  assert.equal(getVerifiedClerkPhoneNumber({ ...sameIdentity, clerkUserId: "member-b" }), null);
+  assert.equal(getVerifiedClerkPhoneNumber({ ...sameIdentity, sessionUserId: null }), null);
+});
+
+test("profile form validates names, verified phone, gender and optional whole-number pounds", () => {
+  const values = {
+    firstName: " Avery ",
+    lastName: " Passenger ",
+    phoneE164: "+15555550123",
+    gender: "female",
+    weightLbs: "142",
+  };
+  assert.equal(validateClerkProfileForm(values), null);
+  assert.match(validateClerkProfileForm({ ...values, phoneE164: "" }), /verified phone/i);
+  assert.match(validateClerkProfileForm({ ...values, gender: null }), /gender/i);
+  assert.match(validateClerkProfileForm({ ...values, weightLbs: "142.5" }), /whole-number weight/i);
+  assert.match(validateClerkProfileForm({ ...values, weightLbs: "0" }), /1 and 1,500/i);
+  assert.equal(validateClerkProfileForm({ ...values, weightLbs: "" }), null);
+});
+
+test("unsupported profile fields and unconfirmed weight persistence are disclosed without a save call", () => {
+  assert.match(CLERK_PROFILE_SAVE_LIMITATION, /date of birth/i);
+  assert.match(CLERK_PROFILE_SAVE_LIMITATION, /home airport/i);
+  assert.match(CLERK_PROFILE_SAVE_LIMITATION, /favorite city/i);
+  assert.match(CLERK_PROFILE_SAVE_LIMITATION, /weight.*not confirmed/i);
+  const source = readFileSync(resolve(projectRoot, "app/account/bluebird-profile.tsx"), "utf8");
+  for (const label of ["First Name", "Last Name", "Phone", "Gender", "Weight (lbs)"]) {
+    assert.ok(source.includes(label), `profile is missing ${label}`);
+  }
+  assert.ok(source.includes('keyboardType="number-pad"'), "weight should use the numeric keyboard");
+  assert.ok(source.includes("accessibilityState={{ selected: values.gender === gender }}"));
+  assert.ok(source.includes("validateClerkProfileForm(values)"));
+  for (const diagnostic of [
+    "profile-api-auth-state",
+    "profile-membership-state",
+    "profile-completion-state",
+    "Not provided",
+  ]) {
+    assert.equal(source.includes(diagnostic), false, `diagnostic UI remains: ${diagnostic}`);
+  }
+  assert.equal(source.includes("updateProfile("), false);
+  assert.equal(source.includes("startPhoneVerification("), false);
+});
+
+test("airport choices stay in an identity-scoped in-memory draft, not account persistence", () => {
+  assert.deepEqual(getClerkAirportSelectionDraft("member-a", ["sfo", "SFO", "bad code"]), ["SFO"]);
+  setClerkAirportSelectionDraft("member-a", ["JFK", "lax", "jfk"]);
+  assert.deepEqual(getClerkAirportSelectionDraft("member-a"), ["JFK", "LAX"]);
+  assert.deepEqual(getClerkAirportSelectionDraft("member-b"), []);
+});
+
+test("only the matching incomplete Clerk identity can open the airport and tour steps", () => {
+  const incomplete = { status: "profile_incomplete", clerkUserId: "member-a", currentUser: {} };
+  const complete = { status: "profile_complete", clerkUserId: "member-a", currentUser: {} };
+  assert.equal(canAccessClerkProfileOnboardingRoute(["airport-picker"], incomplete, "member-a"), true);
+  assert.equal(canAccessClerkProfileOnboardingRoute(["(auth)", "welcome-tour"], incomplete, "member-a"), true);
+  assert.equal(canAccessClerkProfileOnboardingRoute(["(tabs)", "discover"], incomplete, "member-a"), false);
+  assert.equal(canAccessClerkProfileOnboardingRoute(["airport-picker"], incomplete, "member-b"), false);
+  assert.equal(canAccessClerkProfileOnboardingRoute(["airport-picker"], complete, "member-a"), false);
+  assert.equal(getClerkOnboardingAfterTourDestination(true), "/(tabs)/discover");
+  assert.equal(getClerkOnboardingAfterTourDestination(false), "/(auth)/onboarding");
+});
+
+test("airport picker keeps the searchable multi-select UI and Clerk continues into the original tour without saving", () => {
+  const airportSource = readFileSync(resolve(projectRoot, "app/airport-picker.tsx"), "utf8");
+  const selectorSource = readFileSync(resolve(projectRoot, "components/AirportMultiSelect.tsx"), "utf8");
+  const tourSource = readFileSync(resolve(projectRoot, "app/(auth)/welcome-tour.tsx"), "utf8");
+  assert.ok(airportSource.includes("<AirportMultiSelect"));
+  assert.ok(airportSource.includes("actionLabel={isClerkOnboarding ? 'Continue' : 'Save'}"));
+  assert.ok(airportSource.includes("router.push({ pathname: '/(auth)/welcome-tour'"));
+  assert.ok(airportSource.includes("setClerkAirportSelectionDraft"));
+  assert.ok(selectorSource.includes('testID="airport-search-input"'));
+  assert.ok(selectorSource.includes("toggleAirport("));
+  assert.ok(selectorSource.includes("selected.includes("));
+  assert.ok(tourSource.includes("getClerkOnboardingAfterTourDestination(clerkFlow)"));
+  assert.ok(tourSource.includes("if (!clerkFlow && user?.id)"));
 });
 
 test("an anonymous-shaped /api/me response does not fetch a profile or imply registration", async () => {

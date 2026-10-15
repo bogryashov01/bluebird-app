@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo, useRef } from 'react';
-import { ClerkProvider, useAuth } from '@clerk/expo';
+import { ClerkProvider, useAuth, useUser } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import {
   createClerkProductionTokenProvider,
@@ -14,19 +14,29 @@ import { getMainBluebirdApiConfigurationOrNull } from './mainBluebirdApiConfig';
 
 export interface ClerkAuthSnapshot extends ClerkSessionSnapshot {
   userId: string | null;
+  verifiedPhoneNumber: string | null;
 }
 
 const ClerkAuthSnapshotContext = createContext<ClerkAuthSnapshot | null>(null);
 
 function ClerkAuthSnapshotBridge({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
+  const { isLoaded: isUserLoaded, user } = useUser();
+  const phone = user?.primaryPhoneNumber;
+  const verifiedPhoneNumber =
+    isUserLoaded &&
+    user?.id === auth.userId &&
+    phone?.verification.status === 'verified'
+      ? phone.phoneNumber
+      : null;
   const snapshot = useMemo<ClerkAuthSnapshot>(() => ({
     isLoaded: auth.isLoaded,
     isSignedIn: auth.isSignedIn,
     userId: auth.userId ?? null,
+    verifiedPhoneNumber,
     getToken: auth.getToken,
     signOut: async () => { await auth.signOut(); },
-  }), [auth.isLoaded, auth.isSignedIn, auth.userId, auth.getToken, auth.signOut]);
+  }), [auth.isLoaded, auth.isSignedIn, auth.userId, auth.getToken, auth.signOut, verifiedPhoneNumber]);
 
   return (
     <ClerkAuthSnapshotContext.Provider value={snapshot}>

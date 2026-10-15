@@ -499,6 +499,8 @@ test("phone status encodes query data and profile weight/body rules are enforced
     return jsonResponse(profile);
   });
   assert.throws(() => guardedClient.updateProfile({ ...profileUpdate, firstName: undefined }), TypeError);
+  assert.throws(() => guardedClient.updateProfile({ ...profileUpdate, dob: undefined }), TypeError);
+  assert.throws(() => guardedClient.updateProfile({ ...profileUpdate, homeAirportCode: undefined }), TypeError);
   assert.throws(() => guardedClient.updateProfile({ ...profileUpdate, weightLbs: 170.5 }), TypeError);
   assert.throws(() => guardedClient.updateProfile({ ...profileUpdate, favoriteCityKeys: [] }), TypeError);
   assert.throws(() => guardedClient.addEmptyLegPassenger(81001, { ...passengerInput, weight: 165.5 }), TypeError);
