@@ -1,0 +1,195 @@
+TASK: Restore Real Bluebird Mobile Authentication and Registration Flow
+
+PROJECT: BLUEBIRD MOBILE
+MODE: BUILD
+
+CONTEXT:
+
+Tasks #417, #420, and #421 are complete.
+
+The Main Bluebird Development API URL is configured:
+
+https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api
+
+Production API is configured but must remain inactive.
+
+The mobile application already has an existing
+Clerk Development instance originally provided
+for the Bluebird project.
+
+Clerk SMS login previously worked in Preview.
+
+Task #421 disabled Clerk authentication because
+the Main API Clerk issuer could not be
+independently verified.
+
+IMPORTANT PRODUCT REQUIREMENT:
+
+We do NOT want a developer preview,
+mock Home screen, fake user, or authentication bypass.
+
+We want the REAL application workflow:
+
+Welcome
+→ Clerk Login / Sign Up
+→ SMS Verification
+→ Main Bluebird API
+→ Account / Registration Resolution
+→ Registration if required
+→ Membership
+→ Home
+
+Existing members must reach their real account.
+
+New users must complete real registration.
+
+All account data must come from the Main Bluebird API.
+
+==================================================
+PHASE 1 — RESTORE REAL CLERK LOGIN
+==================================================
+
+Inspect the existing Clerk configuration.
+
+Reuse the existing Clerk Development instance.
+
+Do not create another Clerk instance.
+
+Do not replace existing credentials.
+
+Determine the issuer represented by the
+currently configured mobile Clerk key.
+
+Verify whether the Main API Development
+Clerk issuer has already been independently
+confirmed in existing project evidence.
+
+If independently verified and matching,
+restore normal Development Clerk login.
+
+If not verified, preserve the issuer guard.
+
+Do not bypass authentication checks.
+
+Report exactly what external confirmation
+is needed to unblock the real login.
+
+==================================================
+PHASE 2 — MAIN API CONNECTION
+==================================================
+
+Use the shared Main API client from Task #417.
+
+Use fresh Clerk session tokens.
+
+Authenticated requests must use:
+
+Authorization: Bearer <Clerk session token>
+
+Do not use the legacy mobile JWT backend.
+
+Do not send Development tokens to Production.
+
+Do not automatically call endpoints until
+the Development environment and Clerk issuer
+are confirmed.
+
+Once confirmed, use the existing
+explicitly confirmed diagnostic flow
+for one authenticated GET /api/me.
+
+Do not interpret HTTP 200 alone as success.
+
+Do not interpret isMember=false as proof
+that a user is new.
+
+==================================================
+PHASE 3 — REAL REGISTRATION FLOW
+==================================================
+
+Inspect the existing mobile Registration,
+Onboarding, Membership, and Home routes.
+
+Map their current legacy API dependencies
+to existing Main Bluebird API endpoints.
+
+Implement only flows whose Main API contract
+is already sufficiently verified.
+
+Preserve all existing screens and navigation.
+
+Do not invent API endpoints.
+
+Do not create fake users or fake membership data.
+
+Do not automatically create a new profile
+when the server cannot reliably distinguish
+a new user from an existing user.
+
+Do not infer registration status solely
+from /api/me or isMember=false.
+
+If reliable registration resolution is
+not possible with the existing Main API,
+keep the affected routing gated and report
+the exact missing server contract.
+
+Do not implement unsafe workarounds.
+
+==================================================
+PHASE 4 — SAFETY
+==================================================
+
+Do not modify the main Bluebird website.
+
+Do not modify Production configuration.
+
+Do not send Production API requests.
+
+Do not deploy.
+
+Do not access or mutate Production data.
+
+Do not send SMS automatically.
+
+Do not trigger payments.
+
+Do not change database records.
+
+Do not disable Clerk security checks.
+
+Do not modify or remove the legacy backend yet.
+
+==================================================
+PHASE 5 — VERIFICATION
+==================================================
+
+Run:
+
+- TypeScript typecheck
+- Clerk authentication tests
+- Main API client tests
+- Registration routing tests
+- Environment isolation tests
+
+Use mocked transport for automated tests.
+
+Clearly distinguish mocked tests from
+actual live API verification.
+
+==================================================
+DELIVERABLE
+==================================================
+
+Report:
+
+1. Is real Clerk Development login enabled?
+2. If blocked, what exact evidence is missing?
+3. Can Mobile authenticate with Main Bluebird API?
+4. Which real registration steps are integrated?
+5. Which steps still depend on legacy API?
+6. What prevents completing the full workflow?
+7. What is the smallest next action to unblock it?
+
+Do not claim the full workflow works
+unless it has actually been verified.
