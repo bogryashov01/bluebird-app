@@ -61,6 +61,7 @@ function confirmedOptions(overrides = {}) {
     clerkAuthEnabled: true,
     isLoaded: true,
     isSignedIn: true,
+    executionPlatform: "web",
     confirm: async () => true,
     createApiClient: (diagnostic) => makeClient({
       tokenProvider: { getVerifiedAccessToken: async () => "fresh-test-token" },
@@ -190,8 +191,8 @@ test("confirmation happens before a single configured Development request and us
           },
         },
         diagnostic,
-        fetcher: async (url, init) => {
-          requests.push({ url, init });
+        fetcher: async function (url, init) {
+          requests.push({ url, init, receiver: this });
           return makeResponse(currentUser);
         },
       });
@@ -210,6 +211,8 @@ test("confirmation happens before a single configured Development request and us
   assert.equal(requests[0].init.headers.Authorization, "Bearer fresh-clerk-token-1");
   assert.deepEqual(Object.keys(requests[0].init.headers).sort(), ["Accept", "Authorization"]);
   assert.equal(requests[0].init.credentials, "omit");
+  assert.equal(requests[0].init.signal instanceof AbortSignal, true);
+  assert.equal(requests[0].receiver, globalThis);
   assert.equal(requests[0].init.headers.Cookie, undefined);
   assert.deepEqual(stageEvents, [
     "button:clicked",
@@ -233,6 +236,15 @@ test("confirmation happens before a single configured Development request and us
     httpStatus: 200,
     apiResponseReceived: true,
     authenticationAccepted: true,
+    requestMetadata: {
+      method: "GET",
+      headerNames: ["Accept", "Authorization"],
+      credentials: "omit",
+      abortSignalPassed: true,
+      timeoutMs: 10000,
+      fetchInvocationReceiver: "globalThis",
+      executionPlatform: "web",
+    },
     failureCategory: null,
     stages: [
       { name: "button", status: "clicked" },
@@ -247,7 +259,7 @@ test("confirmation happens before a single configured Development request and us
     path: "/api/me",
   });
   assert.equal(result.fetchInvoked, true);
-  assert.doesNotMatch(JSON.stringify(result), /fresh-clerk-token|example|Private|Person|plus|admin|Authorization/i);
+  assert.doesNotMatch(JSON.stringify(result), /fresh-clerk-token|example|Private|Person|plus|admin|Cookie|response body/i);
 });
 
 test("HTTP status, invalid JSON, and invalid schema remain distinct and sanitized", async () => {
@@ -263,9 +275,10 @@ test("HTTP status, invalid JSON, and invalid schema remain distinct and sanitize
     assert.equal(result.fetchInvoked, true);
     assert.equal(result.apiResponseReceived, true);
     assert.equal(result.authenticationAccepted, expectedAccepted);
+    assert.deepEqual(result.requestMetadata.headerNames, ["Accept", "Authorization"]);
     assert.equal(result.failureCategory, "HTTP");
     assert.equal(result.stages.find((stage) => stage.name === "fetch").status, "completed");
-    assert.doesNotMatch(JSON.stringify(result), /private response|private-token|Authorization|message/i);
+    assert.doesNotMatch(JSON.stringify(result), /private response|private-token|message/i);
   }
 
   const invalidSchema = await runClerkApiConnectionTest(confirmedOptions({
@@ -278,8 +291,9 @@ test("HTTP status, invalid JSON, and invalid schema remain distinct and sanitize
   assert.equal(invalidSchema.httpStatus, 200);
   assert.equal(invalidSchema.fetchInvoked, true);
   assert.equal(invalidSchema.apiResponseReceived, true);
+  assert.equal(invalidSchema.requestMetadata.fetchInvocationReceiver, "globalThis");
   assert.equal(invalidSchema.failureCategory, "invalid schema");
-  assert.doesNotMatch(JSON.stringify(invalidSchema), /private|secret|Authorization/i);
+  assert.doesNotMatch(JSON.stringify(invalidSchema), /private|secret/i);
 
   const invalidJson = await runClerkApiConnectionTest(confirmedOptions({
     createApiClient: (diagnostic) => makeClient({
@@ -295,8 +309,9 @@ test("HTTP status, invalid JSON, and invalid schema remain distinct and sanitize
   assert.equal(invalidJson.httpStatus, 200);
   assert.equal(invalidJson.fetchInvoked, true);
   assert.equal(invalidJson.apiResponseReceived, true);
+  assert.equal(invalidJson.requestMetadata.abortSignalPassed, true);
   assert.equal(invalidJson.failureCategory, "invalid JSON");
-  assert.doesNotMatch(JSON.stringify(invalidJson), /private|response body|Authorization/i);
+  assert.doesNotMatch(JSON.stringify(invalidJson), /private|response body/i);
 });
 
 test("guest-shaped HTTP 200 is a received API response, not a Bluebird member identity", async () => {
@@ -462,7 +477,7 @@ test("Fetch rejection is marked failed and remains an ambiguous browser transpor
   assert.equal(result.apiResponseReceived, false);
   assert.equal(result.httpStatus, null);
   assert.equal(result.stages.find((stage) => stage.name === "fetch").status, "failed");
-  assert.doesNotMatch(JSON.stringify(result), /private-token|555-0100|Authorization/i);
+  assert.doesNotMatch(JSON.stringify(result), /private-token|555-0100|private|phone/i);
 });
 
 test("confirmation and API client setup exceptions are sanitized before any request", async () => {

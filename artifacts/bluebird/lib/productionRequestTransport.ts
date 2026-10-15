@@ -7,6 +7,15 @@ export interface ProductionTransportErrorFactory {
   schema: (error: unknown) => Error;
 }
 
+export interface ProductionRequestMetadata {
+  method: string;
+  headerNames: string[];
+  credentials: RequestCredentials;
+  abortSignalPassed: boolean;
+  timeoutMs: number;
+  fetchInvocationReceiver: 'globalThis';
+}
+
 export interface ProductionJsonRequestOptions<T> {
   url: string;
   fetcher: typeof fetch;
@@ -20,10 +29,17 @@ export interface ProductionJsonRequestOptions<T> {
   onFetchInitiated?: () => void;
   onFetchCompleted?: () => void;
   onFetchFailed?: () => void;
+  onRequestMetadata?: (metadata: ProductionRequestMetadata) => void;
   prepareHeaders?: (signal: AbortSignal) => Promise<Record<string, string>>;
   parse: (value: unknown) => T;
   errors: ProductionTransportErrorFactory;
 }
+
+const SAFE_REQUEST_HEADER_NAMES = new Map([
+  ['accept', 'Accept'],
+  ['authorization', 'Authorization'],
+  ['content-type', 'Content-Type'],
+]);
 
 /**
  * Shared production JSON transport. Callers supply error types and response
@@ -73,15 +89,29 @@ export async function requestProductionJson<T>(
 
     let response: Response;
     try {
-      fetchStarted = true;
-      notify(options.onFetchInitiated);
-      response = await options.fetcher(options.url, {
+      const requestHeaders = { ...options.headers, ...extraHeaders };
+      const requestInit: RequestInit = {
         method: options.method,
-        headers: { ...options.headers, ...extraHeaders },
+        headers: requestHeaders,
         ...(options.body === undefined ? {} : { body: options.body }),
         credentials: options.credentials,
         signal: controller.signal,
+      };
+      fetchStarted = true;
+      notify(options.onFetchInitiated);
+      notifyRequestMetadata(options.onRequestMetadata, {
+        method: options.method,
+        headerNames: [...new Set(
+          Object.keys(requestHeaders)
+            .map((name) => SAFE_REQUEST_HEADER_NAMES.get(name.toLowerCase()))
+            .filter((name): name is string => name !== undefined),
+        )].sort(),
+        credentials: options.credentials,
+        abortSignalPassed: requestInit.signal !== undefined,
+        timeoutMs: options.timeoutMs,
+        fetchInvocationReceiver: 'globalThis',
       });
+      response = await options.fetcher.call(globalThis, options.url, requestInit);
       if (!fetchSettled) {
         fetchSettled = true;
         notify(options.onFetchCompleted);
@@ -122,6 +152,17 @@ export async function requestProductionJson<T>(
 function notify(callback: (() => void) | undefined): void {
   try {
     callback?.();
+  } catch {
+    // Diagnostic observers must never change request behavior.
+  }
+}
+
+function notifyRequestMetadata(
+  callback: ((metadata: ProductionRequestMetadata) => void) | undefined,
+  metadata: ProductionRequestMetadata,
+): void {
+  try {
+    callback?.(metadata);
   } catch {
     // Diagnostic observers must never change request behavior.
   }

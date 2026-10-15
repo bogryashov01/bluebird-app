@@ -1,4 +1,7 @@
-import { requestProductionJson } from './productionRequestTransport';
+import {
+  requestProductionJson,
+  type ProductionRequestMetadata,
+} from './productionRequestTransport';
 import {
   getMainBluebirdApiConfiguration,
   getMainBluebirdDevelopmentDiagnosticStatus,
@@ -27,10 +30,12 @@ export interface ProductionAuthApiOptions {
 /** Hooks used only by the explicit Development API diagnostic. */
 export interface ProductionAuthDiagnosticHooks {
   expectedUrl: string;
+  executionPlatform: string;
   onTokenResult: (tokenObtained: boolean) => void;
   onFetchInitiated: () => void;
   onFetchCompleted: () => void;
   onFetchFailed: () => void;
+  onRequestMetadata: (metadata: ProductionRequestMetadata) => void;
 }
 
 export class ProductionAuthConfigurationError extends Error {
@@ -1189,6 +1194,7 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
       onFetchInitiated: options.diagnostic?.onFetchInitiated,
       onFetchCompleted: options.diagnostic?.onFetchCompleted,
       onFetchFailed: options.diagnostic?.onFetchFailed,
+      onRequestMetadata: options.diagnostic?.onRequestMetadata,
       prepareHeaders: async (signal) => {
         let token: string | null;
         try {

@@ -327,6 +327,16 @@ test("construction is inert and /api/me HTTP 200 false is a signed-out result", 
   assert.equal(requests, 1);
 });
 
+test("invokes the fetch implementation with the global fetch receiver", async () => {
+  let fetchReceiver;
+  const client = makeClient(async function (_url, _init) {
+    fetchReceiver = this;
+    return jsonResponse(anonymous);
+  });
+  await client.getMe();
+  assert.equal(fetchReceiver, globalThis);
+});
+
 test("/api/me returns projections without inferring linked or registration state", async () => {
   for (const projection of [
     anonymous,

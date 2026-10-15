@@ -10,6 +10,7 @@ import {
   type MainBluebirdApiConfiguration,
   type MainBluebirdApiEnvironment,
 } from './mainBluebirdApiConfig';
+import type { ProductionRequestMetadata } from './productionRequestTransport';
 export { createAuthenticatedProductionApiClient } from './productionAuthApi';
 
 export type ClerkApiConnectionFailureCategory =
@@ -60,8 +61,13 @@ export interface ClerkApiConnectionDiagnosticResult {
   httpStatus: number | null;
   apiResponseReceived: boolean;
   authenticationAccepted: boolean | null;
+  requestMetadata: ClerkApiConnectionRequestMetadata | null;
   failureCategory: ClerkApiConnectionFailureCategory | null;
   stages: ClerkApiDiagnosticStage[];
+}
+
+export interface ClerkApiConnectionRequestMetadata extends ProductionRequestMetadata {
+  executionPlatform: 'ios' | 'android' | 'web' | 'windows' | 'macos' | 'native' | 'unknown';
 }
 
 export interface ClerkApiConnectionClient {
@@ -122,6 +128,7 @@ function emptyResult(
   clerkSessionExists = false,
   httpStatus: number | null = null,
   target: ClerkApiConnectionDiagnosticResult['target'] = null,
+  requestMetadata: ClerkApiConnectionRequestMetadata | null = null,
 ): ClerkApiConnectionDiagnosticResult {
   const tokenStage = stages.find((stage) => stage.name === 'token');
   const fetchStage = stages.find((stage) => stage.name === 'fetch');
@@ -136,6 +143,7 @@ function emptyResult(
     httpStatus,
     apiResponseReceived: httpStatus !== null,
     authenticationAccepted: null,
+    requestMetadata,
     failureCategory,
     stages,
   };
@@ -150,6 +158,7 @@ export async function runClerkApiConnectionTest(input: {
   clerkAuthEnabled: boolean;
   isLoaded: boolean;
   isSignedIn: boolean | undefined;
+  executionPlatform?: string;
   confirm: (title: string, message: string, confirmLabel: string) => Promise<boolean>;
   createApiClient: (hooks: ProductionAuthDiagnosticHooks) => ClerkApiConnectionClient;
   onStages?: (stages: ClerkApiDiagnosticStage[]) => void;
@@ -227,9 +236,11 @@ export async function runClerkApiConnectionTest(input: {
 
   let fetchInitiated = false;
   let responseStatus: number | null = null;
+  let requestMetadata: ClerkApiConnectionRequestMetadata | null = null;
   let client: ClerkApiConnectionClient;
   const hooks: ProductionAuthDiagnosticHooks = {
     expectedUrl,
+    executionPlatform: input.executionPlatform ?? 'unknown',
     onTokenResult: (tokenObtained) =>
       updateStage('token', tokenObtained ? 'obtained' : 'failed', tokenObtained),
     onFetchInitiated: () => {
@@ -238,6 +249,12 @@ export async function runClerkApiConnectionTest(input: {
     },
     onFetchCompleted: () => updateStage('fetch', 'completed'),
     onFetchFailed: () => updateStage('fetch', 'failed'),
+    onRequestMetadata: (metadata) => {
+      requestMetadata = {
+        ...metadata,
+        executionPlatform: sanitizeExecutionPlatform(input.executionPlatform),
+      };
+    },
   };
 
   updateStage('client', 'waiting');
@@ -269,6 +286,7 @@ export async function runClerkApiConnectionTest(input: {
       httpStatus: status,
       apiResponseReceived: true,
       authenticationAccepted: currentUser.isAuthenticated,
+      requestMetadata,
       failureCategory: null,
       stages,
     };
@@ -281,6 +299,7 @@ export async function runClerkApiConnectionTest(input: {
       input.environment ?? 'development',
       input.isSignedIn === true,
       target,
+      requestMetadata,
     );
   }
 }
@@ -293,16 +312,31 @@ export function sanitizeDiagnosticFailure(
   environment: MainBluebirdApiEnvironment = 'development',
   clerkSessionExists = false,
   target: ClerkApiConnectionDiagnosticResult['target'] = null,
+  requestMetadata: ClerkApiConnectionRequestMetadata | null = null,
 ): ClerkApiConnectionDiagnosticResult {
   if (error instanceof ProductionAuthHttpError) {
     return {
-      ...emptyResult(stages, 'HTTP', environment, clerkSessionExists, error.status, target),
+      ...emptyResult(stages, 'HTTP', environment, clerkSessionExists, error.status, target, requestMetadata),
       authenticationAccepted: error.status === 401 ? false : null,
     };
   }
 
   const category = getFailureCategory(error, fetchInitiated);
-  return emptyResult(stages, category, environment, clerkSessionExists, responseStatus, target);
+  return emptyResult(stages, category, environment, clerkSessionExists, responseStatus, target, requestMetadata);
+}
+
+function sanitizeExecutionPlatform(value: string | undefined): ClerkApiConnectionRequestMetadata['executionPlatform'] {
+  switch (value) {
+    case 'ios':
+    case 'android':
+    case 'web':
+    case 'windows':
+    case 'macos':
+    case 'native':
+      return value;
+    default:
+      return 'unknown';
+  }
 }
 
 function getSetupFailureCategory(error: unknown): 'URL/configuration' | 'client setup' {
