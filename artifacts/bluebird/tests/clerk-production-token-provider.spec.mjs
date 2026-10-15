@@ -6,6 +6,10 @@ import {
   getClerkPublishableKey,
 } from "../scripts/.clerk-production-token-provider.test.mjs";
 
+process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "production";
+process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL = "https://bluebirdjets.com/api";
+process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsuZXhhbXBsZS5jb20k";
+
 function makeSession(overrides = {}) {
   return {
     isLoaded: true,
@@ -46,7 +50,7 @@ test("unloaded or signed-out Clerk sessions return null without requesting a tok
       reads += 1;
       return "must-not-be-read";
     };
-    const provider = createClerkProductionTokenProvider(makeSource(session));
+    const provider = createClerkProductionTokenProvider(makeSource(session), "production");
     assert.equal(await provider.getVerifiedAccessToken(), null);
     assert.equal(reads, 0);
   }
@@ -61,7 +65,7 @@ test("each token request asks Clerk again and observes refreshed sessions", asyn
       return currentToken;
     },
   });
-  const provider = createClerkProductionTokenProvider(makeSource(session));
+  const provider = createClerkProductionTokenProvider(makeSource(session), "production");
 
   assert.equal(await provider.getVerifiedAccessToken(), "mock-clerk-token-v1");
   currentToken = "mock-clerk-token-v2";
@@ -75,7 +79,7 @@ test("sign-out cleanup delegates to Clerk's session signOut", async () => {
     signOut: async () => {
       cleanups += 1;
     },
-  })));
+  })), "production");
 
   await provider.clearClerkSession();
   assert.equal(cleanups, 1);
@@ -85,7 +89,7 @@ test("demo JWT is never used as a fallback when Clerk has no session token", asy
   const demoTokenInUnrelatedStorage = "local-demo-session";
   const provider = createClerkProductionTokenProvider(makeSource(makeSession({
     getToken: async () => null,
-  })));
+  })), "production");
 
   assert.notEqual(await provider.getVerifiedAccessToken(), demoTokenInUnrelatedStorage);
   assert.equal(await provider.getVerifiedAccessToken(), null);
@@ -96,8 +100,10 @@ test("production API authorization uses the Clerk adapter and only the mocked fe
   let authorization;
   const tokenProvider = createClerkProductionTokenProvider(makeSource(makeSession({
     getToken: async () => "mock-clerk-api-token",
-  })));
+  })), "production");
   const client = createAuthenticatedProductionApiClient({
+    environment: "production",
+    baseUrl: "https://bluebirdjets.com/api",
     tokenProvider,
     fetcher: async (_url, init) => {
       requests += 1;

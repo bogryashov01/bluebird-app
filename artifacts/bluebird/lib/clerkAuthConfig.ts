@@ -1,3 +1,5 @@
+import { getMainBluebirdApiConfigurationOrNull } from './mainBluebirdApiConfig';
+
 export interface ClerkAuthConfiguration {
   enabled: boolean;
   publishableKey: string | null;
@@ -90,8 +92,19 @@ export async function performClerkSignOut(
   }
 }
 
-export const CLERK_AUTH_CONFIGURATION = resolveClerkAuthConfiguration(
-  process.env.EXPO_PUBLIC_ENABLE_CLERK_AUTH,
-  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
-  typeof __DEV__ !== 'undefined' && __DEV__,
-);
+const selectedMainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
+
+/**
+ * Clerk is mounted only when the selected Main API and its corresponding
+ * Clerk publishable key are both valid. Legacy single-key variables are not
+ * used as a fallback.
+ */
+export const CLERK_AUTH_CONFIGURATION: ClerkAuthConfiguration = {
+  ...resolveClerkAuthConfiguration(
+    process.env.EXPO_PUBLIC_ENABLE_CLERK_AUTH,
+    selectedMainApiConfiguration?.clerkPublishableKey,
+    typeof __DEV__ !== 'undefined' &&
+      __DEV__ &&
+      selectedMainApiConfiguration?.environment === 'development',
+  ),
+};

@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  CLERK_API_CONNECTION_TARGET,
   getClerkApiConnectionFailureGuidance,
   isClerkApiConnectionTestVisible,
   runClerkApiConnectionTest,
 } from "../scripts/.clerk-api-connection.test.mjs";
 import { createAuthenticatedProductionApiClient } from "../scripts/.clerk-api-connection.test.mjs";
+const DEVELOPMENT_API_ME = "https://main-api-development.example.test/api/me";
+process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "development";
+process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL = "https://main-api-development.example.test/api";
+process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY = "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k";
 
 const currentUser = {
   isAuthenticated: true,
@@ -33,10 +36,11 @@ function makeResponse(body, status = 200) {
 
 function makeClient({ tokenProvider, fetcher, timeoutMs, baseUrl, diagnostic }) {
   return createAuthenticatedProductionApiClient({
-    tokenProvider,
+    tokenProvider: { environment: "development", ...tokenProvider },
+    environment: "development",
+    baseUrl: baseUrl ?? "https://main-api-development.example.test/api",
     fetcher,
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
-    ...(baseUrl === undefined ? {} : { baseUrl }),
     ...(diagnostic === undefined ? {} : { diagnostic }),
   });
 }
@@ -44,6 +48,8 @@ function makeClient({ tokenProvider, fetcher, timeoutMs, baseUrl, diagnostic }) 
 function confirmedOptions(overrides = {}) {
   return {
     isDevelopment: true,
+    environment: "development",
+    targetUrl: DEVELOPMENT_API_ME,
     isLoaded: true,
     isSignedIn: true,
     confirm: async () => true,
@@ -59,14 +65,16 @@ function confirmedOptions(overrides = {}) {
 test("test button visibility requires Development plus a loaded signed-in session", () => {
   assert.equal(isClerkApiConnectionTestVisible({
     isDevelopment: true,
+    environment: "development",
     isLoaded: true,
     isSignedIn: true,
   }), true);
   for (const input of [
-    { isDevelopment: false, isLoaded: true, isSignedIn: true },
-    { isDevelopment: true, isLoaded: false, isSignedIn: true },
-    { isDevelopment: true, isLoaded: true, isSignedIn: false },
-    { isDevelopment: true, isLoaded: true, isSignedIn: undefined },
+    { isDevelopment: false, environment: "development", isLoaded: true, isSignedIn: true },
+    { isDevelopment: true, environment: "production", isLoaded: true, isSignedIn: true },
+    { isDevelopment: true, environment: "development", isLoaded: false, isSignedIn: true },
+    { isDevelopment: true, environment: "development", isLoaded: true, isSignedIn: false },
+    { isDevelopment: true, environment: "development", isLoaded: true, isSignedIn: undefined },
   ]) {
     assert.equal(isClerkApiConnectionTestVisible(input), false);
   }
@@ -114,9 +122,10 @@ test("gated or cancelled test creates no client, reads no token, and sends no re
   assert.equal(requests, 0);
 
   for (const gate of [
-    { isDevelopment: false, isLoaded: true, isSignedIn: true },
-    { isDevelopment: true, isLoaded: false, isSignedIn: true },
-    { isDevelopment: true, isLoaded: true, isSignedIn: false },
+    { isDevelopment: false, environment: "development", isLoaded: true, isSignedIn: true },
+    { isDevelopment: true, environment: "production", isLoaded: true, isSignedIn: true },
+    { isDevelopment: true, environment: "development", isLoaded: false, isSignedIn: true },
+    { isDevelopment: true, environment: "development", isLoaded: true, isSignedIn: false },
   ]) {
     assert.equal(await runClerkApiConnectionTest({ ...options, ...gate }), null);
   }
@@ -126,7 +135,7 @@ test("gated or cancelled test creates no client, reads no token, and sends no re
   assert.equal(requests, 0);
 });
 
-test("confirmation happens before a single production request and uses one fresh token", async () => {
+test("confirmation happens before a single configured Development request and uses one fresh token", async () => {
   const order = [];
   const stageEvents = [];
   const requests = [];
@@ -135,8 +144,7 @@ test("confirmation happens before a single production request and uses one fresh
     confirm: async (title, message, label) => {
       order.push("confirm");
       assert.equal(title, "Test Bluebird API Connection");
-      assert.match(message, /one authenticated GET request to the production Bluebird API/);
-      assert.match(message, /cross-origin.*Authorization.*OPTIONS CORS preflight/);
+      assert.match(message, /one authenticated GET request to the configured Bluebird Development API/);
       assert.equal(label, "Send request");
       assert.equal(tokenReads, 0);
       assert.equal(requests.length, 0);
@@ -167,7 +175,7 @@ test("confirmation happens before a single production request and uses one fresh
   assert.deepEqual(order, ["confirm", "client"]);
   assert.equal(tokenReads, 1);
   assert.equal(requests.length, 1);
-  assert.equal(requests[0].url, CLERK_API_CONNECTION_TARGET);
+  assert.equal(requests[0].url, DEVELOPMENT_API_ME);
   assert.equal(requests[0].init.method, "GET");
   assert.equal(requests[0].init.headers.Authorization, "Bearer fresh-clerk-token-1");
   assert.deepEqual(stageEvents, [

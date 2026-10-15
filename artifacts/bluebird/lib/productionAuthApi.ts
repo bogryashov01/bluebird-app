@@ -1,30 +1,31 @@
-import {
-  PRODUCTION_API_BASE_URL,
-  resolveFlightReadConfiguration,
-} from './productionFlights';
 import { requestProductionJson } from './productionRequestTransport';
+import {
+  getMainBluebirdApiConfiguration,
+  validateMainBluebirdApiBaseUrl,
+  type MainBluebirdApiEnvironment,
+} from './mainBluebirdApiConfig';
 
 /**
  * This provider is deliberately isolated from AuthContext and demo JWT storage.
  * A caller must supply an independently verified production access token.
  */
 export interface VerifiedProductionTokenProvider {
+  environment: MainBluebirdApiEnvironment;
   getVerifiedAccessToken: () => Promise<string | null>;
 }
 
 export interface ProductionAuthApiOptions {
   tokenProvider: VerifiedProductionTokenProvider;
-  baseUrl?: string;
+  environment: MainBluebirdApiEnvironment;
+  baseUrl: string;
   fetcher?: typeof fetch;
   timeoutMs?: number;
   diagnostic?: ProductionAuthDiagnosticHooks;
 }
 
-export const PRODUCTION_AUTH_DIAGNOSTIC_TARGET_URL = 'https://bluebirdjets.com/api/me';
-
 /** Hooks used only by the explicit Development API diagnostic. */
 export interface ProductionAuthDiagnosticHooks {
-  expectedUrl: typeof PRODUCTION_AUTH_DIAGNOSTIC_TARGET_URL;
+  expectedUrl: string;
   onTokenResult: (tokenObtained: boolean) => void;
   onFetchInitiated: () => void;
   onFetchCompleted: () => void;
@@ -33,7 +34,7 @@ export interface ProductionAuthDiagnosticHooks {
 
 export class ProductionAuthConfigurationError extends Error {
   constructor() {
-    super('Production API configuration is invalid.');
+    super('Main Bluebird API configuration is invalid.');
     this.name = 'ProductionAuthConfigurationError';
   }
 }
@@ -433,7 +434,7 @@ export class ProductionAuthRequestError extends Error {
 export class ProductionAuthHttpError extends ProductionAuthRequestError {
   constructor(readonly status: number) {
     super(
-      `Authenticated production request failed (HTTP ${status}).`,
+      `Authenticated Main API request failed (HTTP ${status}).`,
       status === 401 ? 'session_expired' : 'http',
     );
     this.name = 'ProductionAuthHttpError';
@@ -442,21 +443,21 @@ export class ProductionAuthHttpError extends ProductionAuthRequestError {
 
 export class ProductionAuthTimeoutError extends ProductionAuthRequestError {
   constructor(readonly timeoutMs: number) {
-    super(`Authenticated production request timed out after ${timeoutMs} ms.`, 'timeout');
+    super(`Authenticated Main API request timed out after ${timeoutMs} ms.`, 'timeout');
     this.name = 'ProductionAuthTimeoutError';
   }
 }
 
 export class ProductionAuthCancelledError extends ProductionAuthRequestError {
   constructor() {
-    super('Authenticated production request was cancelled.', 'cancelled');
+    super('Authenticated Main API request was cancelled.', 'cancelled');
     this.name = 'ProductionAuthCancelledError';
   }
 }
 
 export class ProductionAuthNetworkError extends ProductionAuthRequestError {
   constructor() {
-    super('Authenticated production request could not reach the service.', 'network');
+    super('Authenticated Main API request could not reach the service.', 'network');
     this.name = 'ProductionAuthNetworkError';
   }
 }
@@ -1124,15 +1125,29 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new RangeError('Production auth timeout must be a positive finite number.');
   let baseUrl: string;
   try {
-    baseUrl = resolveFlightReadConfiguration({
-      isDev: false,
-      mode: 'production',
-      baseUrl: options.baseUrl ??
-        process.env.EXPO_PUBLIC_BLUEBIRD_FLIGHT_API_BASE_URL ??
-        PRODUCTION_API_BASE_URL,
-    }).baseUrl;
+    if (
+      !options.environment ||
+      !options.baseUrl ||
+      options.tokenProvider.environment !== options.environment
+    ) {
+      throw new Error('The selected Main API and Clerk environments must match.');
+    }
+    const selected = getMainBluebirdApiConfiguration();
+    baseUrl = validateMainBluebirdApiBaseUrl(options.baseUrl, options.environment);
+    if (
+      selected.environment !== options.environment ||
+      selected.apiBaseUrl !== baseUrl
+    ) {
+      throw new Error('Main API client configuration does not match the selected environment.');
+    }
   } catch {
-    if (!options.diagnostic) throw new Error('Production API configuration is invalid.');
+    if (!options.diagnostic) throw new Error('Main Bluebird API configuration is invalid.');
+    throw new ProductionAuthConfigurationError();
+  }
+  if (
+    options.diagnostic &&
+    options.diagnostic.expectedUrl !== `${baseUrl}${PRODUCTION_AUTH_PATHS.me}`
+  ) {
     throw new ProductionAuthConfigurationError();
   }
   const fetcher = options.fetcher ?? fetch;
@@ -1147,7 +1162,7 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
     const url = `${baseUrl}${path}`;
     if (
       options.diagnostic &&
-      (url !== PRODUCTION_AUTH_DIAGNOSTIC_TARGET_URL || url !== options.diagnostic.expectedUrl)
+      url !== options.diagnostic.expectedUrl
     ) {
       throw new ProductionAuthConfigurationError();
     }
@@ -1173,19 +1188,19 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
           token = await options.tokenProvider.getVerifiedAccessToken();
         } catch {
           notifyDiagnosticTokenResult(options.diagnostic, false);
-          throw new ProductionAuthRequestError('Production access token is unavailable.', 'token');
+          throw new ProductionAuthRequestError('Main API access token is unavailable.', 'token');
         }
         const tokenObtained = typeof token === 'string' && token.trim().length > 0;
         notifyDiagnosticTokenResult(options.diagnostic, tokenObtained);
         if (signal.aborted) throw new ProductionAuthCancelledError();
         if (!tokenObtained) {
-          throw new ProductionAuthRequestError('Production access token is unavailable.', 'token');
+          throw new ProductionAuthRequestError('Main API access token is unavailable.', 'token');
         }
         if (typeof token !== 'string') {
-          throw new ProductionAuthRequestError('Production access token is invalid.', 'token');
+          throw new ProductionAuthRequestError('Main API access token is invalid.', 'token');
         }
         if (/\s/.test(token)) {
-          throw new ProductionAuthRequestError('Production access token is invalid.', 'token');
+          throw new ProductionAuthRequestError('Main API access token is invalid.', 'token');
         }
         return { Authorization: `Bearer ${token}` };
       },
@@ -1226,7 +1241,7 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
           onResponseStatus?.(responseStatus);
         },
       });
-      if (status === null) throw new ProductionAuthRequestError('Production response status was unavailable.', 'network');
+      if (status === null) throw new ProductionAuthRequestError('Main API response status was unavailable.', 'network');
       return { status, currentUser };
     },
     getProfile: (requestOptions?: ProductionRequestOptions) =>

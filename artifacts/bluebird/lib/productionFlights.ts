@@ -1,5 +1,10 @@
 import type { Flight } from '@workspace/api-client-react';
 import { requestProductionJson } from './productionRequestTransport';
+import {
+  getMainBluebirdApiConfiguration,
+  validateMainBluebirdApiBaseUrl,
+  type MainBluebirdApiEnvironment,
+} from './mainBluebirdApiConfig';
 
 export const PRODUCTION_API_BASE_URL = 'https://bluebirdjets.com/api';
 export const PRODUCTION_API_ORIGIN = 'https://bluebirdjets.com';
@@ -142,6 +147,7 @@ export interface AirportRecord extends ProductionAirportResponse {}
 export interface ReadRequestOptions {
   signal?: AbortSignal;
   baseUrl?: string;
+  environment?: MainBluebirdApiEnvironment;
   fetcher?: typeof fetch;
   timeoutMs?: number;
 }
@@ -631,19 +637,25 @@ export function mapLocalFlight(flight: Flight): FlightView {
   };
 }
 
-function getConfiguredBaseUrl(override?: string): string {
-  return resolveFlightReadConfiguration({
-    isDev: false,
-    mode: process.env.EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE,
-    baseUrl: override ?? process.env.EXPO_PUBLIC_BLUEBIRD_FLIGHT_API_BASE_URL,
-  }).baseUrl;
+function getConfiguredBaseUrl(options: ReadRequestOptions): string {
+  const selected = getMainBluebirdApiConfiguration();
+  if (options.environment && options.environment !== selected.environment) {
+    throw new Error('Selected Main Bluebird API environment does not match the configured reader.');
+  }
+  const requestedBaseUrl = options.baseUrl
+    ? validateMainBluebirdApiBaseUrl(options.baseUrl, selected.environment)
+    : selected.apiBaseUrl;
+  if (requestedBaseUrl !== selected.apiBaseUrl) {
+    throw new Error('Public reader URL does not match the selected Main Bluebird API.');
+  }
+  return selected.apiBaseUrl;
 }
 
 export async function fetchProductionJson(
   path: string,
   options: ReadRequestOptions,
 ): Promise<unknown> {
-  const baseUrl = getConfiguredBaseUrl(options.baseUrl);
+  const baseUrl = getConfiguredBaseUrl(options);
   const fetcher = options.fetcher ?? fetch;
   const timeoutMs = options.timeoutMs ?? PRODUCTION_READ_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {

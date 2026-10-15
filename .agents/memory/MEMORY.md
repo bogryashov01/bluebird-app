@@ -3,6 +3,7 @@
 - [Demo auth controls](demo-auth-controls.md) — verification/reset flows need real single-use hashed tokens + routing gates even in demo; only email *delivery* may be simulated.
 - [Bluebird local session restoration](bluebird-local-session-restoration.md) — validate cached identity before auth state; bound restore checks and keep offline fallback local-only.
 - [API contract & schema sync](api-contract-sync.md) — new endpoints/fields go through openapi.yaml + codegen; new columns need ensureSchema() too, not just a live-DB ALTER.
+- [Main API environment isolation](main-api-environment-isolation.md) — select a matching API/Clerk pair explicitly; never let Main API clients inherit local or legacy defaults.
 - [Bluebird stack headers](bluebird-app-header.md) — default native-stack header hides behind the notch over NativeTabs; use the shared custom AppHeader.
 - [Bluebird theming](bluebird-theming.md) — all colors via useColors() tokens (no literals); semantic tokens & native-tabs caveat inside.
 - [OpenAPI schema naming](openapi-zod-naming.md) — component schema names must not equal `<OperationId>Response`; zod codegen exports collide.

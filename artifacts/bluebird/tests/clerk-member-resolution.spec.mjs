@@ -4,9 +4,22 @@ import {
   getAvailableClerkMemberDestination,
   getClerkMemberDestination,
   mapAuthoritativeMemberDecision,
-  resolveClerkMember,
+  resolveClerkMember as resolveClerkMemberInternal,
   shouldAutomaticallyResolveClerkMember,
 } from "../scripts/.clerk-member-resolution.test.mjs";
+
+const developmentConfiguration = {
+  environment: "development",
+  apiBaseUrl: "https://main-api-development.example.test/api",
+  clerkPublishableKey: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k",
+};
+process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "development";
+process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL = developmentConfiguration.apiBaseUrl;
+process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY = developmentConfiguration.clerkPublishableKey;
+const resolveClerkMember = (options) => resolveClerkMemberInternal({
+  configuration: developmentConfiguration,
+  ...options,
+});
 
 const projection = {
   isAuthenticated: true,
@@ -168,7 +181,7 @@ test("unloaded and signed-out sessions make no API request", async () => {
   assert.equal(requests, 0);
 });
 
-test("automatic member resolution is suppressed for every Development Clerk session", () => {
+test("member resolution never runs automatically after Clerk sign-in", () => {
   assert.equal(shouldAutomaticallyResolveClerkMember({
     isDevelopment: true,
     isClerkMode: true,
@@ -192,7 +205,7 @@ test("automatic member resolution is suppressed for every Development Clerk sess
     isClerkMode: true,
     isLoaded: true,
     isSignedIn: true,
-  }), true);
+  }), false);
 });
 
 test("unauthorized, network, backend, malformed, and cancelled requests remain errors", async () => {

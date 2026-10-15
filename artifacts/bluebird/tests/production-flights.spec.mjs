@@ -22,6 +22,10 @@ import {
   shouldRetryProductionRead,
 } from "../scripts/.production-flights.test.mjs";
 
+process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "production";
+process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL = "https://bluebirdjets.com/api";
+process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsuZXhhbXBsZS5jb20k";
+
 const rawFlight = {
   id: 98765,
   tripId: 98766,
@@ -212,15 +216,15 @@ const mockFetcher = async (url, init) => {
     headers: { "content-type": "application/json" },
   });
 };
-const previousMode = process.env.EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE;
-process.env.EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE = "invalid";
+const previousEnvironment = process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT;
+process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "invalid";
 await assert.rejects(
   () => fetchProductionFlights({ fetcher: mockFetcher }),
-  /flight read mode/i,
+  /configuration/i,
 );
 assert.equal(requests.length, 0);
-if (previousMode === undefined) delete process.env.EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE;
-else process.env.EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE = previousMode;
+if (previousEnvironment === undefined) delete process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT;
+else process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = previousEnvironment;
 
 const fetchedFlights = await fetchProductionFlights({ fetcher: mockFetcher });
 assert.equal(fetchedFlights[0].id, "98765");

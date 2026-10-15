@@ -7,6 +7,7 @@ import {
   createClerkProductionTokenProvider,
   type ClerkSessionSnapshot,
 } from './clerkProductionTokenProvider';
+import type { MainBluebirdApiConfiguration } from './mainBluebirdApiConfig';
 
 export type ClerkMemberResolution =
   | { status: 'signed_out' }
@@ -27,7 +28,10 @@ export function shouldAutomaticallyResolveClerkMember(input: {
   isLoaded: boolean;
   isSignedIn: boolean | undefined;
 }): boolean {
-  return input.isClerkMode && input.isLoaded && input.isSignedIn === true && !input.isDevelopment;
+  // A signed-in session is not consent to call the Main API. Resolution is
+  // available only through an explicit user-driven action.
+  void input;
+  return false;
 }
 
 /**
@@ -42,8 +46,8 @@ export type AuthoritativeMemberDecision =
 
 export interface ClerkMemberResolutionOptions {
   session: ClerkSessionSnapshot;
+  configuration: MainBluebirdApiConfiguration;
   clerkUserId?: string | null;
-  baseUrl?: string;
   fetcher?: typeof fetch;
   signal?: AbortSignal;
 }
@@ -63,10 +67,11 @@ export async function resolveClerkMember(
   try {
     const tokenProvider = createClerkProductionTokenProvider({
       getCurrentSession: () => session,
-    });
+    }, options.configuration.environment);
     const api = createAuthenticatedProductionApiClient({
       tokenProvider,
-      ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
+      environment: options.configuration.environment,
+      baseUrl: options.configuration.apiBaseUrl,
       ...(options.fetcher ? { fetcher: options.fetcher } : {}),
     });
     const currentUser = await api.getMe({ signal: options.signal });

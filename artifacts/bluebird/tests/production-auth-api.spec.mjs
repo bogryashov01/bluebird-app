@@ -11,6 +11,10 @@ import {
   ProductionAuthTimeoutError,
 } from "../scripts/.production-auth-api.test.mjs";
 
+process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "production";
+process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL = "https://bluebirdjets.com/api";
+process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsuZXhhbXBsZS5jb20k";
+
 const mockOnlyToken = "mock-only-token-never-log";
 
 const anonymous = {
@@ -277,10 +281,17 @@ function jsonResponse(body, status = 200) {
 }
 
 function makeClient(fetcher, overrides = {}) {
+  const { tokenProvider: suppliedTokenProvider, ...restOverrides } = overrides;
   return createAuthenticatedProductionApiClient({
-    tokenProvider: { getVerifiedAccessToken: async () => mockOnlyToken },
+    environment: "production",
+    baseUrl: "https://bluebirdjets.com/api",
+    tokenProvider: {
+      environment: "production",
+      ...suppliedTokenProvider,
+      ...(suppliedTokenProvider ? {} : { getVerifiedAccessToken: async () => mockOnlyToken }),
+    },
     fetcher,
-    ...overrides,
+    ...restOverrides,
   });
 }
 
@@ -292,7 +303,10 @@ test("construction is inert and /api/me HTTP 200 false is a signed-out result", 
   let tokenReads = 0;
   let requests = 0;
   const client = createAuthenticatedProductionApiClient({
+    environment: "production",
+    baseUrl: "https://bluebirdjets.com/api",
     tokenProvider: {
+      environment: "production",
       getVerifiedAccessToken: async () => {
         tokenReads += 1;
         return mockOnlyToken;
@@ -354,11 +368,12 @@ test("base URL safety and bearer-only request headers are preserved", async () =
   ]) {
     assert.throws(
       () => createAuthenticatedProductionApiClient({
-        tokenProvider: { getVerifiedAccessToken: async () => mockOnlyToken },
+        environment: "production",
+        tokenProvider: { environment: "production", getVerifiedAccessToken: async () => mockOnlyToken },
         baseUrl,
         fetcher: async () => jsonResponse(anonymous),
       }),
-      /production flight API/i,
+      /Main Bluebird API configuration/i,
     );
   }
 });
@@ -572,13 +587,17 @@ test("missing or failed token acquisition never reaches the injected fetcher", a
     return jsonResponse(anonymous);
   };
   const missing = createAuthenticatedProductionApiClient({
-    tokenProvider: { getVerifiedAccessToken: async () => null },
+    environment: "production",
+    baseUrl: "https://bluebirdjets.com/api",
+    tokenProvider: { environment: "production", getVerifiedAccessToken: async () => null },
     fetcher,
   });
   await assert.rejects(missing.getMe(), (error) => error.code === "token");
 
   const failed = createAuthenticatedProductionApiClient({
-    tokenProvider: { getVerifiedAccessToken: async () => { throw new Error(mockOnlyToken); } },
+    environment: "production",
+    baseUrl: "https://bluebirdjets.com/api",
+    tokenProvider: { environment: "production", getVerifiedAccessToken: async () => { throw new Error(mockOnlyToken); } },
     fetcher,
   });
   await assert.rejects(failed.getMe(), (error) => error.code === "token");
@@ -589,7 +608,10 @@ test("retrieves a fresh verified token for each explicit request", async () => {
   let tokenReads = 0;
   const authorizationHeaders = [];
   const client = createAuthenticatedProductionApiClient({
+    environment: "production",
+    baseUrl: "https://bluebirdjets.com/api",
     tokenProvider: {
+      environment: "production",
       getVerifiedAccessToken: async () => `mock-session-token-${++tokenReads}`,
     },
     fetcher: async (url, init) => {
@@ -617,7 +639,9 @@ test("network, timeout, and caller cancellation are distinct sanitized errors", 
 
   let requestsWhileTokenPending = 0;
   const stalledTokenClient = createAuthenticatedProductionApiClient({
-    tokenProvider: { getVerifiedAccessToken: () => new Promise(() => {}) },
+    environment: "production",
+    baseUrl: "https://bluebirdjets.com/api",
+    tokenProvider: { environment: "production", getVerifiedAccessToken: () => new Promise(() => {}) },
     timeoutMs: 5,
     fetcher: async () => {
       requestsWhileTokenPending += 1;

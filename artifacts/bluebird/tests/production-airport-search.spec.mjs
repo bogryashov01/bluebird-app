@@ -7,7 +7,12 @@ import {
   mapProductionAirport,
   mapProductionAirports,
   PRODUCTION_API_BASE_URL,
+  ProductionReadNetworkError,
 } from "../scripts/.production-airport-search.test.mjs";
+
+process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "production";
+process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL = "https://bluebirdjets.com/api";
+process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsuZXhhbXBsZS5jb20k";
 
 const airport = {
   code: "DAL",
@@ -134,7 +139,7 @@ await assert.rejects(
       throw new Error("network unavailable");
     },
   }),
-  /network unavailable/i,
+  (error) => error instanceof ProductionReadNetworkError,
   "network errors propagate without a fixture fallback",
 );
 

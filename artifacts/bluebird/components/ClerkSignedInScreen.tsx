@@ -18,7 +18,8 @@ import {
   type ClerkApiDiagnosticStage,
   type ClerkApiConnectionDiagnosticResult,
 } from '@/lib/clerkApiConnectionDiagnostic';
-import { createAuthenticatedProductionApiClient } from '@/lib/productionAuthApi';
+import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
+import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 
 export function ClerkSignedInScreen() {
   const insets = useSafeAreaInsets();
@@ -27,6 +28,7 @@ export function ClerkSignedInScreen() {
   const { clerkMemberResolution, retryClerkMemberResolution } = useBluebirdAuth();
   const queryClient = useQueryClient();
   const clerkTokenProvider = useDormantClerkProductionTokenProvider();
+  const mainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
   const [error, setError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isTestingApi, setIsTestingApi] = useState(false);
@@ -51,20 +53,27 @@ export function ClerkSignedInScreen() {
   };
 
   const handleApiConnectionTest = async () => {
-    if (isTestingApi) return;
+    if (
+      isTestingApi ||
+      !mainApiConfiguration ||
+      mainApiConfiguration.environment !== 'development'
+    ) return;
     setIsTestingApi(true);
     setApiDiagnostic(null);
     setApiDiagnosticStages(null);
     try {
       const result = await runClerkApiConnectionTest({
         isDevelopment,
+        environment: mainApiConfiguration.environment,
+        targetUrl: `${mainApiConfiguration.apiBaseUrl}/me`,
         isLoaded,
         isSignedIn,
         confirm: confirmDialog,
-        createApiClient: (diagnostic) => createAuthenticatedProductionApiClient({
+        createApiClient: (diagnostic) => createMainBluebirdApiIntegration({
+          configuration: mainApiConfiguration,
           tokenProvider: clerkTokenProvider,
           diagnostic,
-        }),
+        }).authenticated,
         onStages: setApiDiagnosticStages,
       });
       if (result) setApiDiagnostic(result);
@@ -101,7 +110,12 @@ export function ClerkSignedInScreen() {
         <Text style={[styles.pending, { color: colors.mutedOnBrand }]} testID="clerk-member-pending">
           {getResolutionMessage(clerkMemberResolution)}
         </Text>
-        {isClerkApiConnectionTestVisible({ isDevelopment, isLoaded, isSignedIn }) && (
+        {isClerkApiConnectionTestVisible({
+          isDevelopment,
+          environment: mainApiConfiguration?.environment ?? null,
+          isLoaded,
+          isSignedIn,
+        }) && (
           <View style={styles.diagnosticSection}>
             <Pressable
               accessibilityRole="button"

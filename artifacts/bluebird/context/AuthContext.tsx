@@ -17,6 +17,7 @@ import {
   type ClerkMemberResolution,
 } from '@/lib/clerkMemberResolution';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
+import { getMainBluebirdApiConfiguration } from '@/lib/mainBluebirdApiConfig';
 
 const TOKEN_KEY = 'bluebird_token';
 const USER_KEY = 'bluebird_user';
@@ -113,9 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoaded: clerkSession.isLoaded,
       isSignedIn: clerkSession.isSignedIn,
     })) {
-      if (isDevelopment) {
-        setClerkMemberResolution({ status: 'not_checked', clerkUserId: clerkSession.userId });
-      }
+      setClerkMemberResolution({ status: 'not_checked', clerkUserId: clerkSession.userId });
       return;
     }
 
@@ -123,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setClerkMemberResolution({ status: 'resolving', clerkUserId: clerkSession.userId });
     void resolveClerkMember({
       session: clerkSession,
+      configuration: getMainBluebirdApiConfiguration(),
       clerkUserId: clerkSession.userId,
       signal: controller.signal,
     }).then((resolution) => {

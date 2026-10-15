@@ -10,6 +10,7 @@ import {
   CLERK_AUTH_CONFIGURATION,
   shouldMountClerkProvider,
 } from './clerkAuthConfig';
+import { getMainBluebirdApiConfigurationOrNull } from './mainBluebirdApiConfig';
 
 export interface ClerkAuthSnapshot extends ClerkSessionSnapshot {
   userId: string | null;
@@ -61,13 +62,17 @@ export function useClerkAuthSnapshot(): ClerkAuthSnapshot | null {
  */
 export function useDormantClerkProductionTokenProvider(): ClerkProductionTokenProvider {
   const auth = useAuth();
+  const configuration = getMainBluebirdApiConfigurationOrNull();
   const currentAuth = useRef(auth);
   currentAuth.current = auth;
 
+  if (!configuration) {
+    throw new Error('Main Bluebird API and Clerk environment configuration is unavailable.');
+  }
   return useMemo(
     () => createClerkProductionTokenProvider({
       getCurrentSession: () => currentAuth.current as ClerkSessionSnapshot,
-    }),
-    [],
+    }, configuration.environment),
+    [configuration.environment],
   );
 }

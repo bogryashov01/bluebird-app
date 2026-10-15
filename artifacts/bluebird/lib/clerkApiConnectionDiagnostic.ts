@@ -4,11 +4,9 @@ import {
   ProductionAuthRequestError,
   type ProductionAuthDiagnosticHooks,
   type ProductionCurrentUser,
-  PRODUCTION_AUTH_DIAGNOSTIC_TARGET_URL,
 } from './productionAuthApi';
+import type { MainBluebirdApiEnvironment } from './mainBluebirdApiConfig';
 export { createAuthenticatedProductionApiClient } from './productionAuthApi';
-
-export const CLERK_API_CONNECTION_TARGET = PRODUCTION_AUTH_DIAGNOSTIC_TARGET_URL;
 
 export type ClerkApiConnectionFailureCategory =
   | 'HTTP'
@@ -77,7 +75,7 @@ export function getClerkApiConnectionFailureGuidance(
   if (category === 'URL/configuration') {
     return [
       'The resolved API URL did not match the allowed diagnostic endpoint, so no request was sent.',
-      'Check the local API URL configuration. The candidate URL is not displayed.',
+      'Check the configured Development Main API URL. The candidate URL is not displayed.',
     ];
   }
   return null;
@@ -85,10 +83,14 @@ export function getClerkApiConnectionFailureGuidance(
 
 export function isClerkApiConnectionTestVisible(input: {
   isDevelopment: boolean;
+  environment: MainBluebirdApiEnvironment | null;
   isLoaded: boolean;
   isSignedIn: boolean | undefined;
 }): boolean {
-  return input.isDevelopment && input.isLoaded && input.isSignedIn === true;
+  return input.isDevelopment &&
+    input.environment === 'development' &&
+    input.isLoaded &&
+    input.isSignedIn === true;
 }
 
 const INITIAL_STAGES: ClerkApiDiagnosticStage[] = [
@@ -117,6 +119,8 @@ function emptyResult(
 
 export async function runClerkApiConnectionTest(input: {
   isDevelopment: boolean;
+  environment: MainBluebirdApiEnvironment | null;
+  targetUrl: string | null;
   isLoaded: boolean;
   isSignedIn: boolean | undefined;
   confirm: (title: string, message: string, confirmLabel: string) => Promise<boolean>;
@@ -124,6 +128,28 @@ export async function runClerkApiConnectionTest(input: {
   onStages?: (stages: ClerkApiDiagnosticStage[]) => void;
 }): Promise<ClerkApiConnectionDiagnosticResult | null> {
   if (!isClerkApiConnectionTestVisible(input)) return null;
+
+  let expectedUrl: string;
+  try {
+    const parsed = new URL(input.targetUrl ?? '');
+    if (
+      parsed.protocol !== 'https:' ||
+      parsed.pathname.replace(/\/+$/, '') !== '/api/me' ||
+      parsed.search ||
+      parsed.hash ||
+      parsed.username ||
+      parsed.password ||
+      parsed.origin === 'https://bluebirdjets.com'
+    ) {
+      throw new Error('invalid target');
+    }
+    expectedUrl = parsed.toString();
+  } catch {
+    const failedStages = INITIAL_STAGES.map((stage) => ({ ...stage }));
+    failedStages[0] = { name: 'button', status: 'clicked' };
+    failedStages[2] = { name: 'client', status: 'failed' };
+    return emptyResult(failedStages, 'URL/configuration');
+  }
 
   let stages = INITIAL_STAGES.map((stage) => ({ ...stage }));
   const publishStages = () => {
@@ -156,7 +182,7 @@ export async function runClerkApiConnectionTest(input: {
   try {
     confirmed = await input.confirm(
       'Test Bluebird API Connection',
-      'This will send one authenticated GET request to the production Bluebird API. Because it is cross-origin and includes Authorization, the browser may first send an OPTIONS CORS preflight. Continue?',
+      'This will send one authenticated GET request to the configured Bluebird Development API. The request uses the matching Development Clerk session. Continue?',
       'Send request',
     );
   } catch {
@@ -174,7 +200,7 @@ export async function runClerkApiConnectionTest(input: {
   let responseStatus: number | null = null;
   let client: ClerkApiConnectionClient;
   const hooks: ProductionAuthDiagnosticHooks = {
-    expectedUrl: CLERK_API_CONNECTION_TARGET,
+    expectedUrl,
     onTokenResult: (tokenObtained) =>
       updateStage('token', tokenObtained ? 'obtained' : 'failed', tokenObtained),
     onFetchInitiated: () => {

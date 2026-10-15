@@ -1,4 +1,5 @@
 import type { VerifiedProductionTokenProvider } from './productionAuthApi';
+import type { MainBluebirdApiEnvironment } from './mainBluebirdApiConfig';
 
 export interface ClerkSessionSnapshot {
   isLoaded: boolean;
@@ -12,6 +13,8 @@ export interface ClerkSessionSource {
 }
 
 export interface ClerkProductionTokenProvider extends VerifiedProductionTokenProvider {
+  /** The Clerk instance is paired with exactly one Main API environment. */
+  environment: MainBluebirdApiEnvironment;
   /** Calls Clerk signOut so Clerk can remove its own session and SecureStore state. */
   clearClerkSession: () => Promise<void>;
 }
@@ -32,8 +35,10 @@ export function getClerkPublishableKey(): string | null {
  */
 export function createClerkProductionTokenProvider(
   sessionSource: ClerkSessionSource,
+  environment: MainBluebirdApiEnvironment,
 ): ClerkProductionTokenProvider {
   return {
+    environment,
     getVerifiedAccessToken: async () => {
       const session = sessionSource.getCurrentSession();
       if (!session.isLoaded || session.isSignedIn !== true) return null;
