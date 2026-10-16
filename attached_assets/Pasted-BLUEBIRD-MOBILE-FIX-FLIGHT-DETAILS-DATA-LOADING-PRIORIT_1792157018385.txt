@@ -1,0 +1,185 @@
+BLUEBIRD MOBILE — FIX FLIGHT DETAILS DATA LOADING
+
+PRIORITY: CRITICAL
+TYPE: VERIFIED BUG
+
+We have now identified a concrete failure in
+the REAL authenticated Expo Web Preview.
+
+When tapping the Discover flight:
+
+SAT → CXO
+
+The Flight Details screen mounts and attempts:
+
+GET /api/flights/26644
+
+The request goes to the Mobile Replit origin
+and returns:
+
+404 Not Found.
+
+However, the existing empty-legs flights API
+already returns this published flight:
+
+{
+  "id": 26644,
+  "originAirport": "SAT",
+  "destinationAirport": "CXO",
+  "status": "published",
+  "durationHours": 0.8
+}
+
+This confirms that the selected flight exists
+in the list response.
+
+The problem is NOT simply a missing card onPress.
+
+GOAL
+
+Make Flight Details open and display the
+correct real flight information.
+
+STRICT SCOPE
+
+BLUEBIRD MOBILE ONLY.
+
+DO NOT MODIFY:
+
+- Main Bluebird Website
+- Main Bluebird API
+- Database
+- Clerk
+- Authentication
+- Registration
+- Onboarding
+- CORS configuration
+- Production configuration
+- Membership authorization
+
+TASK 1 — TRACE THE DATA SOURCE
+
+Inspect:
+
+artifacts/bluebird/app/(tabs)/discover/index.tsx
+
+artifacts/bluebird/app/flight/[id].tsx
+
+And the existing API client.
+
+Determine:
+
+1. Which endpoint populates Discover flights?
+2. Which API origin is used for that request?
+3. Why Flight Details calls /api/flights/:id.
+4. Why this request goes to the Mobile origin.
+5. Whether /api/flights/:id is a documented
+   and supported endpoint.
+6. Whether a documented flight-detail endpoint
+   exists in the selected Development Main API.
+
+Do not invent endpoints.
+
+TASK 2 — USE EXISTING FLIGHT DATA
+
+The selected flight is already present in
+the Discover empty-legs response.
+
+Prefer reusing the real selected flight object
+or the existing query cache when navigating
+to Flight Details.
+
+Use a stable flight ID to identify the record.
+
+The detail screen should immediately render
+available flight information without requiring
+an unsupported /api/flights/:id request.
+
+If the documented Main API provides a supported
+detail endpoint, it may be used to refresh
+the data safely.
+
+Do not make an undocumented endpoint mandatory.
+
+TASK 3 — HANDLE DIRECT NAVIGATION
+
+If a user opens /flight/26644 directly:
+
+Attempt to resolve the flight using an existing,
+documented read-only API contract.
+
+If the record cannot be resolved, display
+a clear unavailable state.
+
+Do not fabricate flight data.
+
+TASK 4 — DISPLAY REAL FIELDS
+
+Use real API values:
+
+- Origin and destination
+- Departure and arrival
+- Flight duration
+- Aircraft information when available
+- Aircraft photos when available
+- Price when available
+- FBO information when available
+- Queue information when supported
+
+Respect airport time zones when displaying
+departure and arrival.
+
+Do not show fake:
+
+- Aircraft models
+- Prices
+- Available seats
+- Weather
+- Amenities
+- FBO details
+
+TASK 5 — PRESERVE UX
+
+Keep the existing Flight Details design.
+
+Preserve:
+
+Discover → Flight Details → Back → Discover
+
+Each card must open its own correct flight.
+
+Do not trigger queue joins or bookings.
+
+TASK 6 — VERIFICATION
+
+Test the actual scenario:
+
+1. Load published flights in Discover.
+2. Select flight ID 26644.
+3. Open Flight Details.
+4. Display SAT → CXO.
+5. Do not issue unsupported /api/flights/26644.
+6. Return to Discover.
+7. Open a different flight.
+8. Display its own correct data.
+
+Run TypeScript and focused tests.
+
+IMPORTANT:
+
+Synthetic navigation tests alone are insufficient.
+
+Verify the real data-loading path.
+
+FINAL REPORT
+
+1. Root cause of the 404
+2. Discover API endpoint
+3. Flight Details API endpoint before/after
+4. API origin used
+5. How selected flight data is reused
+6. Files changed
+7. Tests passed
+8. Real authenticated Preview verification status
+
+Apply the smallest safe Mobile-only fix.
