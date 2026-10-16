@@ -537,6 +537,43 @@ test("documented member methods use the production paths, verbs, and bodies", as
   assert.equal(requests[21].path, "/me/phone-verification/status");
 });
 
+test("Main API queue requests use Clerk bearer transport and reject HTTP or schema failures", async () => {
+  const requests = [];
+  const client = makeClient(async (url, init) => {
+    requests.push({ url, init });
+    const path = contractPath(url);
+    if (path === "/empty-legs/81001/queue" && init.method === "GET") return jsonResponse(publicQueue);
+    if (path === "/empty-legs/81001/queue" && init.method === "POST") return jsonResponse(queueEntry);
+    if (path === "/empty-legs/81001/queue" && init.method === "DELETE") return jsonResponse(queueStatus);
+    if (path === "/empty-legs/81001/skip-line") return jsonResponse(emptyLeg);
+    throw new Error(`Unexpected mocked route ${init.method} ${path}`);
+  });
+
+  await client.getEmptyLegQueue(81001);
+  await client.joinEmptyLegQueue(81001);
+  await client.leaveEmptyLegQueue(81001);
+  await client.skipLine(81001, { useCredit: true });
+
+  assert.deepEqual(requests.map(({ url, init }) => `${init.method} ${contractPath(url)}`), [
+    "GET /empty-legs/81001/queue",
+    "POST /empty-legs/81001/queue",
+    "DELETE /empty-legs/81001/queue",
+    "POST /empty-legs/81001/skip-line",
+  ]);
+  for (const { init } of requests) {
+    assert.equal(init.headers.Authorization, `Bearer ${mockOnlyToken}`);
+    assert.equal(init.credentials, "omit");
+    assert.equal(init.headers.Cookie, undefined);
+  }
+  assert.equal(requests[1].init.body, undefined);
+  assert.deepEqual(JSON.parse(requests[3].init.body), { useCredit: true });
+
+  const unauthorized = makeClient(async () => jsonResponse({ error: "Unauthorized" }, 401));
+  await assert.rejects(unauthorized.getEmptyLegQueue(81001), { status: 401, code: "session_expired" });
+  const malformed = makeClient(async () => jsonResponse([{ ...publicQueue[0], isViewer: "yes" }]));
+  await assert.rejects(malformed.getEmptyLegQueue(81001), { code: "invalid_schema" });
+});
+
 test("phone status encodes query data and profile weight/body rules are enforced", async () => {
   let requestedUrl;
   const client = makeClient(async (url) => {
