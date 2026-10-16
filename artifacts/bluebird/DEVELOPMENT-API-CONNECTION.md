@@ -35,3 +35,34 @@ confirms response receipt without proving acceptance of the current Clerk
 Development session or resolving a Bluebird member identity. The automated
 Preview browser has no Clerk session, so the signed-in Development button flow
 still needs a real Clerk-session run to verify those separately.
+
+## Development preflight observation (2026-10-16)
+
+For the running Expo Preview origin
+`https://cd8d8a20-320c-4224-accf-5c9dc7df2ff1-00-1ud53d7apx2xl-myfpo1zd.expo.worf.replit.dev`
+and selected Development API origin
+`https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev`,
+a credential-free `OPTIONS /api/me` was sent with:
+
+- `Origin`: the Preview origin above
+- `Access-Control-Request-Method`: `GET`
+- `Access-Control-Request-Headers`: `authorization,accept`
+
+It returned `204 No Content` with `Access-Control-Allow-Origin` matching the
+Preview origin, `Access-Control-Allow-Methods: GET,HEAD,PUT,PATCH,POST,DELETE`,
+`Access-Control-Allow-Headers: authorization,accept`, and
+`Access-Control-Allow-Credentials: true`. `Vary` included `Origin` and
+`Access-Control-Request-Headers`. The observed response therefore allows this
+preflight; the earlier missing-allow-origin browser report was not reproduced
+for the current origin pair.
+
+The Development API/Clerk selection is explicit, Clerk auth is enabled, and the
+configured Development issuer matches the Development publishable-key instance.
+The preflight did not send credentials and did not exercise authentication.
+Remote Development API access logs were not available, so the response cannot
+be attributed conclusively to the API application versus an intermediary; no
+authentication rejection was observed. The checked-in API middleware is
+configured to reflect the request origin and allow credentials before routing.
+No Mobile transport or API configuration change is indicated by this capture.
+The automated Preview has no signed-in Clerk session, so a real authenticated
+browser `GET /api/me` and its authentication acceptance remain unverified.
