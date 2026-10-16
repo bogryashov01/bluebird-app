@@ -68,8 +68,7 @@ export function shouldRedirectClerkRoute(
   if (
     registeredHomeReady &&
     group === '(tabs)' &&
-    route === 'discover' &&
-    (segments.length === 2 || (segments.length === 3 && segments[2] === 'index'))
+    isClerkCoreTabRoute(segments)
   ) return false;
   if (group === '(auth)' && (route === 'splash' || route === 'welcome')) return false;
   // This one account route is explicitly user-opened and reads only the
@@ -79,6 +78,14 @@ export function shouldRedirectClerkRoute(
   // actions remain unavailable until their own API contract is supported.
   if (group === 'membership' && route === 'plans') return false;
   return true;
+}
+
+/** Only the public Flights, Membership status, and Profile tabs are core app routes. */
+export function isClerkCoreTabRoute(segments: readonly string[]): boolean {
+  if (segments[0] !== '(tabs)') return false;
+  const route = segments[1];
+  if (route !== 'discover' && route !== 'membership' && route !== 'profile') return false;
+  return segments.length === 2 || (segments.length === 3 && segments[2] === 'index');
 }
 
 export function isLegacyMemberQueryEnabled(input: {

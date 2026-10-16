@@ -8,6 +8,7 @@ import {
   getClerkPostLoginJourney,
   getClerkPostLoginStatusMessage,
   getClerkResolutionForIdentity,
+  isClerkHomeAvailable,
   isClerkMemberResolutionCurrent,
   mapAuthoritativeMemberDecision,
   resolveClerkMember as resolveClerkMemberInternal,
@@ -44,6 +45,33 @@ const projection = {
   needsSignupPhone: false,
   impersonation: null,
 };
+
+test("complete profile opens core navigation equally for members and non-members", () => {
+  for (const isMember of [false, true]) {
+    const resolution = {
+      status: "profile_complete",
+      clerkUserId: "clerk-user-a",
+      currentUser: {
+        ...projection,
+        isMember,
+        memberTier: isMember ? "plus" : null,
+      },
+    };
+    assert.equal(isClerkHomeAvailable(resolution, {
+      registeredHome: true,
+      linkedMember: false,
+    }), true);
+  }
+
+  assert.equal(isClerkHomeAvailable({
+    status: "profile_incomplete",
+    clerkUserId: "clerk-user-a",
+    currentUser: projection,
+  }, {
+    registeredHome: true,
+    linkedMember: false,
+  }), false);
+});
 
 function makeSession(overrides = {}) {
   return {

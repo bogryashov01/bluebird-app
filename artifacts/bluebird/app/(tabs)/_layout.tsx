@@ -5,7 +5,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { isLiquidGlassAvailable } from 'expo-glass-effect';
-import { Redirect, Tabs, useSegments } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { SymbolView } from 'expo-symbols';
@@ -14,7 +14,7 @@ import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotifications';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
 
-function NativeTabLayout({ unreadCount, homeOnly }: { unreadCount: number; homeOnly: boolean }) {
+function NativeTabLayout({ unreadCount, restricted }: { unreadCount: number; restricted: boolean }) {
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index" hidden />
@@ -22,19 +22,19 @@ function NativeTabLayout({ unreadCount, homeOnly }: { unreadCount: number; homeO
         <NativeTabs.Trigger.Icon sf={{ default: 'paperplane', selected: 'paperplane.fill' }} />
         <NativeTabs.Trigger.Label>Flights</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="trips/index" hidden={homeOnly}>
+      <NativeTabs.Trigger name="trips/index" hidden={restricted}>
         <NativeTabs.Trigger.Icon sf={{ default: 'briefcase', selected: 'briefcase.fill' }} />
         <NativeTabs.Trigger.Label>Trips</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="connections" hidden={homeOnly}>
+      <NativeTabs.Trigger name="connections" hidden={restricted}>
         <NativeTabs.Trigger.Icon sf={{ default: 'person.2', selected: 'person.2.fill' }} />
         <NativeTabs.Trigger.Label>Connections</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="membership/index" hidden={homeOnly}>
+      <NativeTabs.Trigger name="membership/index">
         <NativeTabs.Trigger.Icon sf={{ default: 'star', selected: 'star.fill' }} />
         <NativeTabs.Trigger.Label>Membership</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile/index" hidden={homeOnly}>
+      <NativeTabs.Trigger name="profile/index">
         <NativeTabs.Trigger.Icon sf={{ default: 'person', selected: 'person.fill' }} />
         <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Badge hidden={unreadCount === 0}>{String(unreadCount)}</NativeTabs.Trigger.Badge>
@@ -43,7 +43,7 @@ function NativeTabLayout({ unreadCount, homeOnly }: { unreadCount: number; homeO
   );
 }
 
-function ClassicTabLayout({ unreadCount, homeOnly }: { unreadCount: number; homeOnly: boolean }) {
+function ClassicTabLayout({ unreadCount, restricted }: { unreadCount: number; restricted: boolean }) {
   const colors = useColors();
   const isIOS = Platform.OS === 'ios';
   const isWeb = Platform.OS === 'web';
@@ -96,7 +96,7 @@ function ClassicTabLayout({ unreadCount, homeOnly }: { unreadCount: number; home
       <Tabs.Screen
         name="trips/index"
         options={{
-          href: homeOnly ? null : undefined,
+          href: restricted ? null : undefined,
           title: 'Trips',
           tabBarIcon: ({ color }) =>
             isIOS ? (
@@ -109,7 +109,7 @@ function ClassicTabLayout({ unreadCount, homeOnly }: { unreadCount: number; home
       <Tabs.Screen
         name="connections"
         options={{
-          href: homeOnly ? null : undefined,
+          href: restricted ? null : undefined,
           title: 'Connections',
           tabBarIcon: ({ color }) =>
             isIOS ? (
@@ -122,7 +122,6 @@ function ClassicTabLayout({ unreadCount, homeOnly }: { unreadCount: number; home
       <Tabs.Screen
         name="membership/index"
         options={{
-          href: homeOnly ? null : undefined,
           title: 'Membership',
           tabBarIcon: ({ color }) =>
             isIOS ? (
@@ -135,7 +134,6 @@ function ClassicTabLayout({ unreadCount, homeOnly }: { unreadCount: number; home
       <Tabs.Screen
         name="profile/index"
         options={{
-          href: homeOnly ? null : undefined,
           title: 'Profile',
           tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
           tabBarBadgeStyle: {
@@ -159,7 +157,6 @@ function ClassicTabLayout({ unreadCount, homeOnly }: { unreadCount: number; home
 export default function TabLayout() {
   const { preference } = useTheme();
   const unreadCount = useUnreadNotificationsCount();
-  const segments = useSegments();
   const { token, isLoading, authMode, clerkSignedIn, clerkMemberResolution } = useAuth();
   const colors = useColors();
   const registeredHomeReady = isClerkHomeAvailable(
@@ -177,20 +174,15 @@ export default function TabLayout() {
     );
   }
   if (authMode === 'clerk') {
-    const homeOnly =
-      clerkSignedIn &&
-      registeredHomeReady &&
-      segments[0] === '(tabs)' &&
-      segments[1] === 'discover';
-    if (!homeOnly) {
+    if (!clerkSignedIn || !registeredHomeReady) {
       return clerkSignedIn
         ? <Redirect href="/(clerk-auth)/signed-in" />
         : <Redirect href="/(clerk-auth)/sign-in" />;
     }
     if (isLiquidGlassAvailable() && preference === 'system') {
-      return <NativeTabLayout unreadCount={0} homeOnly />;
+      return <NativeTabLayout unreadCount={0} restricted />;
     }
-    return <ClassicTabLayout unreadCount={0} homeOnly />;
+    return <ClassicTabLayout unreadCount={0} restricted />;
   }
   // Centralized guard: no session → auth flow. Prevents deep links from
   // bypassing sign-in.
@@ -198,7 +190,7 @@ export default function TabLayout() {
   // Native tabs follow the OS appearance only — use them just when the user's
   // theme preference is "System"; a forced Light/Dark needs the themed classic tabs.
   if (isLiquidGlassAvailable() && preference === 'system') {
-    return <NativeTabLayout unreadCount={unreadCount} homeOnly={false} />;
+    return <NativeTabLayout unreadCount={unreadCount} restricted={false} />;
   }
-  return <ClassicTabLayout unreadCount={unreadCount} homeOnly={false} />;
+  return <ClassicTabLayout unreadCount={unreadCount} restricted={false} />;
 }

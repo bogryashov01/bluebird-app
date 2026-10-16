@@ -76,7 +76,7 @@ function resolvePhotoUrl(path: string | null | undefined): string | null {
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { user, signOut, authMode } = useAuth();
+  const { user, signOut, authMode, clerkMemberResolution } = useAuth();
   const { preference } = useTheme();
   const localDemoFlow = isLocalFlightReadMode();
   const memberQueryEnabled = isLegacyMemberQueryEnabled({
@@ -102,6 +102,76 @@ export default function ProfileScreen() {
   const notifList = (notifications as Notification[]) ?? [];
   const recentActivity = notifList.slice(0, 5);
   const unreadCount = notifList.filter((n) => !n.read).length;
+
+  if (authMode === 'clerk') {
+    const currentUser = clerkMemberResolution.status === 'profile_complete'
+      ? clerkMemberResolution.currentUser
+      : null;
+    if (!currentUser?.isAuthenticated) {
+      return (
+        <ProductionAuthenticatedUnavailableNotice
+          title="Profile unavailable"
+          description="A complete authenticated Main API profile is required. No profile values were loaded."
+          testID="clerk-profile-unavailable"
+        />
+      );
+    }
+    const firstName = currentUser.firstName?.trim() || null;
+    const lastName = currentUser.lastName?.trim() || null;
+    const email = currentUser.email?.trim() || null;
+    const fullName = [firstName, lastName]
+      .filter((value): value is string => value !== null)
+      .join(' ');
+    return (
+      <View style={[styles.container, { backgroundColor: colors.offWhite }]} testID="clerk-profile">
+        <ScrollView
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingTop: topPad + 16, paddingBottom: bottomPad + 100 },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.avatarRow}>
+            <View style={[styles.avatar, { backgroundColor: colors.backgroundMid }]}>
+              <Text style={[styles.avatarText, { color: colors.textOnBrand }]}>
+                {fullName
+                  ? fullName.split(/\s+/).map((part) => part[0]).join('').toUpperCase().slice(0, 2)
+                  : '—'}
+              </Text>
+            </View>
+            <View>
+              <Text style={[styles.name, { color: colors.textOnSurface }]}>
+                {fullName || 'Name unavailable'}
+              </Text>
+              <Text style={[styles.memberSince, { color: colors.mutedForegroundLight }]}>
+                {email || 'Email unavailable'}
+              </Text>
+            </View>
+          </View>
+          <SettingsGroup
+            title="Account"
+            rows={[
+              { label: 'First name', hint: firstName || 'Unavailable' },
+              { label: 'Last name', hint: lastName || 'Unavailable' },
+              { label: 'Email', hint: email || 'Unavailable' },
+              { label: 'Additional profile details', hint: 'Unavailable in this preview' },
+            ]}
+          />
+          <SettingsGroup
+            title="Settings"
+            rows={[
+              {
+                label: 'Appearance',
+                hint: THEME_OPTIONS.find((option) => option.value === preference)?.label,
+                onPress: () => setAppearanceOpen(true),
+              },
+            ]}
+          />
+        </ScrollView>
+        <AppearanceSheet visible={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
+      </View>
+    );
+  }
 
   const initials    = user?.name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) ?? '?';
   const accountPhotoUrl = resolvePhotoUrl(user?.photoUrl);

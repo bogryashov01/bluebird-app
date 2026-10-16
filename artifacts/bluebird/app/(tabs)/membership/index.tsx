@@ -39,7 +39,7 @@ function fmtUsd(n: number) {
 export default function MembershipScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { user, authMode } = useAuth();
+  const { user, authMode, clerkMemberResolution } = useAuth();
   const localDemoFlow = isLocalFlightReadMode();
   const memberQueryEnabled = isLegacyMemberQueryEnabled({
     authMode,
@@ -53,8 +53,58 @@ export default function MembershipScreen() {
   const { data: membership, isLoading, isError, refetch } = useGetMembership({
     query: { enabled: memberQueryEnabled },
   });
-  const plansQuery = useProductionMembershipPlans({ enabled: localDemoFlow });
+  const plansQuery = useProductionMembershipPlans({
+    enabled: authMode !== 'clerk' && localDemoFlow,
+  });
   const mem = membership;
+
+  if (authMode === 'clerk') {
+    const currentUser = clerkMemberResolution.status === 'profile_complete'
+      ? clerkMemberResolution.currentUser
+      : null;
+    const tierLabel = currentUser?.isMember
+      ? currentUser.memberTier === 'base'
+        ? 'Base'
+        : currentUser.memberTier === 'plus'
+          ? 'Plus'
+          : 'Tier unavailable'
+      : currentUser?.isMember === false && currentUser.memberTier === null
+        ? 'Not a member yet'
+        : 'Membership status unavailable';
+    return (
+      <View style={[styles.root, { backgroundColor: colors.offWhite }]} testID="clerk-membership">
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingTop: topPad + 16, paddingBottom: botPad + 80 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={[styles.headerName, { color: colors.textOnSurface }]} numberOfLines={1}>
+            Membership
+          </Text>
+          <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.usageTitle, { color: colors.textOnSurface }]}>Current status</Text>
+            <Text
+              style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 8 }]}
+              testID="clerk-membership-status"
+            >
+              {currentUser?.isAuthenticated ? tierLabel : 'Unavailable in this preview'}
+            </Text>
+            <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 12 }]}>
+              {currentUser?.isAuthenticated
+                ? 'Only the status and tier in your verified account projection are shown. Pass balances, family details, and usage are unavailable here.'
+                : 'No authenticated membership data is available.'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push('/membership/plans' as any)}
+            style={styles.plansLink}
+          >
+            <Text style={[styles.plansLinkText, { color: colors.primary }]}>Compare public plans</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  }
 
   const currentTier: string = mem?.tier ?? user?.membershipTier ?? 'base';
   const currentIdx = TIER_ORDER[currentTier] ?? -1;

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   canAccessClerkMemberScreens,
+  isClerkCoreTabRoute,
   clearClerkMemberCacheOnIdentityChange,
   createLegacyAuthTokenGetter,
   getClerkEntryState,
@@ -18,6 +22,8 @@ import {
   CLERK_MEMBER_NAVIGATION_READINESS,
   PRODUCTION_AUTH_AVAILABILITY,
 } from "../scripts/.production-auth-state.test.mjs";
+
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 test("central Clerk resolution states gate member screens and distinguish outcomes", () => {
   assert.equal(getClerkEntryState({ isLoaded: false, isSignedIn: undefined }), "loading");
@@ -94,6 +100,13 @@ test("central Clerk resolution states gate member screens and distinguish outcom
     memberResolution: { status: "profile_incomplete", clerkUserId: "clerk-user-a" },
   }), "profile-required");
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], false, true), false);
+  for (const route of ["discover", "membership", "profile"]) {
+    assert.equal(shouldRedirectClerkRoute(["(tabs)", route], false, true), false);
+    assert.equal(shouldRedirectClerkRoute(["(tabs)", route, "index"], false, true), false);
+    assert.equal(shouldRedirectClerkRoute(["(tabs)", route], false, false), true);
+  }
+  assert.equal(isClerkCoreTabRoute(["(tabs)", "trips"]), false);
+  assert.equal(isClerkCoreTabRoute(["(tabs)", "connections"]), false);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "trips"], false, true), true);
   assert.equal(canAccessClerkMemberScreens({
     isLoaded: true,
@@ -113,6 +126,7 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "trips"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["queue", "join"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "profile"], false), true);
+  assert.equal(shouldRedirectClerkRoute(["(tabs)", "membership"], false), true);
   assert.equal(shouldRedirectClerkRoute(["notifications"], false), true);
   assert.equal(shouldRedirectClerkRoute(["(auth)", "complete-registration"], false), true);
   assert.equal(shouldRedirectClerkRoute(["(auth)", "onboarding"], false), true);
@@ -124,6 +138,42 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["(clerk-auth)", "sign-in"], false), false);
   assert.equal(shouldRedirectClerkRoute(["(clerk-auth)", "signed-in"], false), false);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], true), false);
+});
+
+test("restricted tab bars expose Flights, Membership, and Profile only", () => {
+  const source = readFileSync(resolve(projectRoot, "app/(tabs)/_layout.tsx"), "utf8");
+  assert.match(source, /name="trips\/index" hidden=\{restricted\}/);
+  assert.match(source, /name="connections" hidden=\{restricted\}/);
+  assert.match(source, /name="membership\/index">/);
+  assert.match(source, /name="profile\/index">/);
+  const classicScreens = source.slice(source.indexOf('<Tabs\n')).split('<Tabs.Screen');
+  const classicMembership = classicScreens.find((screen) => screen.includes('name="membership/index"'));
+  const classicProfile = classicScreens.find((screen) => screen.includes('name="profile/index"'));
+  assert.ok(classicMembership);
+  assert.ok(classicProfile);
+  assert.doesNotMatch(classicMembership, /href:/);
+  assert.doesNotMatch(classicProfile, /href:/);
+});
+
+test("Clerk account tabs show only confirmed values and keep Profile settings available", () => {
+  const profileSource = readFileSync(resolve(projectRoot, "app/(tabs)/profile/index.tsx"), "utf8");
+  const membershipSource = readFileSync(resolve(projectRoot, "app/(tabs)/membership/index.tsx"), "utf8");
+  const clerkProfile = profileSource
+    .split("if (authMode === 'clerk') {")[1]
+    ?.split("const initials")[0] ?? "";
+  const clerkMembership = membershipSource
+    .split("if (authMode === 'clerk') {")[1]
+    ?.split("const currentTier")[0] ?? "";
+
+  assert.match(clerkProfile, /currentUser\.firstName/);
+  assert.match(clerkProfile, /currentUser\.email/);
+  assert.match(clerkProfile, /Additional profile details.*Unavailable in this preview/);
+  assert.match(clerkProfile, /title="Settings"/);
+  assert.match(clerkProfile, /label: 'Appearance'/);
+  assert.match(clerkMembership, /currentUser\?\.isAuthenticated/);
+  assert.match(clerkMembership, /currentUser\.memberTier/);
+  assert.match(clerkMembership, /Pass balances, family details, and usage are unavailable here/);
+  assert.doesNotMatch(clerkMembership, /user\?\.membershipTier|linePassCount|annualFlightAllowance/);
 });
 
 test("member-data query gates require local demo mode and a legacy-auth member", () => {
