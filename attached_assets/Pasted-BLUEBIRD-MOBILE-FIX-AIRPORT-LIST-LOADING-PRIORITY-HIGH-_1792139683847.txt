@@ -1,0 +1,126 @@
+BLUEBIRD MOBILE — FIX AIRPORT LIST LOADING
+
+PRIORITY: HIGH
+PROJECT: Bluebird Mobile ONLY
+
+CURRENT ISSUE:
+
+On Step 2 of 3 — Locations, the Airports tab shows:
+
+"Couldn't load airports. Check your connection
+and retry."
+
+The user cannot browse the airport list.
+
+The Cities tab may already contain a selection.
+
+STRICT RESTRICTIONS:
+
+Do not modify:
+- Main Bluebird Website
+- Main Bluebird API
+- Database
+- Clerk configuration
+- Production configuration
+- Existing authentication flow
+
+Do not redesign registration.
+
+GOAL:
+
+Restore reliable airport list loading in the
+existing Locations screen.
+
+STEP 1 — DIAGNOSE
+
+Inspect the existing airport data-loading code.
+
+Determine:
+- Exact endpoint being called
+- HTTP method
+- API environment/origin
+- Whether authentication is required
+- HTTP status
+- Actual response structure
+- Where response parsing fails
+
+Check whether the airport endpoint supports
+initial browsing without a search query.
+
+Do not assume an empty query is valid.
+
+STEP 2 — FIX
+
+Use only the existing Main Bluebird API endpoints.
+
+Known available endpoints include:
+
+GET /api/airports/search?q=...
+GET /api/airports/cities
+GET /api/airports?codes=...
+
+Inspect their actual contracts.
+
+If airport search requires a nonempty query,
+do not repeatedly call it with an empty string.
+
+Find a supported way to display initial airport
+results without inventing an API endpoint.
+
+If the backend has no browse endpoint, show
+a clear search-first empty state instead of
+a misleading connection error.
+
+Keep search functional.
+
+Preserve:
+- Home Airport single-select
+- Additional Airports multi-select
+- Existing selected airports
+- Existing selected cities
+- Tab navigation
+- Step 2 → Review & Save
+
+STEP 3 — ERROR HANDLING
+
+Distinguish:
+- Network failure
+- Authentication failure
+- Invalid response
+- Unsupported empty search
+- No matching airports
+
+Do not display "Check your connection" for
+every type of failure.
+
+Provide Try Again only for retryable failures.
+
+STEP 4 — TESTING
+
+Run TypeScript and focused tests.
+
+Verify:
+- Initial Airports tab state
+- Airport search
+- Airport selection
+- Switching Airports/Cities tabs
+- Preserving selections
+- Empty search results
+- Network failure
+- Authentication failure
+
+IMPORTANT:
+
+Do not modify Main API.
+
+Do not hardcode fake airport results.
+
+Do not claim the list loads successfully
+without verifying its actual data source.
+
+Report:
+1. Exact failure cause
+2. Endpoint used
+3. Minimal Mobile-only fix
+4. Tests passed
+5. Whether live loading was verified
