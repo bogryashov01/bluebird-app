@@ -65,8 +65,16 @@ const flights = [
     originCity: "Dallas",
     destinationAirport: "SFO",
     destinationCity: "San Francisco",
+    originTz: "America/Chicago",
+    destinationTz: "America/Los_Angeles",
     departureTime: "2026-11-01T10:00:00.000Z",
+    arrivalTime: "2026-11-01T13:00:00.000Z",
+    durationHours: 3,
     aircraftType: "Citation Latitude",
+    aircraftTypeName: "Citation Latitude",
+    aircraftTypeCode: "LATITUDE",
+    queueCount: 4,
+    isInternational: false,
   },
   {
     id: 81002,
@@ -75,8 +83,9 @@ const flights = [
     originCity: "Miami",
     destinationAirport: "JFK",
     destinationCity: "New York",
+    originTz: "America/New_York",
+    destinationTz: "America/New_York",
     departureTime: "2026-11-02T10:00:00.000Z",
-    aircraftType: "Citation Latitude",
   },
   {
     id: 81003,
@@ -385,6 +394,10 @@ test("Discover cards open their selected flights and preserve search when return
   });
   await setupPreview(page, async (route, url) => {
     if (url.pathname === "/api/empty-legs") return json(route, 200, flights);
+    if (url.pathname === "/api/airports") {
+      const codes = url.searchParams.get("codes")?.split(",") ?? [];
+      return json(route, 200, codes.map((code) => airports[code]).filter(Boolean));
+    }
     return json(route, 503, { error: "Unexpected intercepted production request." });
   });
 
@@ -398,7 +411,22 @@ test("Discover cards open their selected flights and preserve search when return
   await dallasFlight.click({ position: { x: 16, y: 16 } });
   await expect(page).toHaveURL(/\/flight\/81001$/);
   await expect(page.getByTestId("flight-detail-route")).toHaveText("DAL → SFO");
-  await expect(page.getByText("Sunday, November 1", { exact: false })).toBeVisible();
+  await expect(page.getByText(/Sunday, November 1 · Departs/)).toBeVisible();
+  await expect(page.getByTestId("flight-info-section-title")).toBeVisible();
+  await expect(page.getByTestId("flight-info-departure")).toContainText("Dallas Love Field (DAL)");
+  await expect(page.getByTestId("flight-info-departure")).toContainText("Dallas, Texas, United States");
+  await expect(page.getByTestId("flight-info-arrival")).toContainText("San Francisco International (SFO)");
+  await expect(page.getByTestId("flight-info-arrival")).toContainText("San Francisco, California, United States");
+  await expect(page.getByTestId("flight-info-departure-date")).toHaveText("Sunday, November 1");
+  await expect(page.getByTestId("flight-info-departure-time")).toHaveText(/4:00 AM .+/);
+  await expect(page.getByTestId("flight-info-arrival-date")).toHaveText("Sunday, November 1");
+  await expect(page.getByTestId("flight-info-arrival-time")).toHaveText(/5:00 AM .+/);
+  await expect(page.getByTestId("flight-info-aircraft-type")).toHaveText("Citation Latitude");
+  await expect(page.getByTestId("flight-info-aircraft-code")).toHaveText("LATITUDE");
+  await expect(page.getByTestId("flight-info-duration")).toHaveText("3h");
+  await expect(page.getByTestId("flight-info-status")).toHaveText("Published");
+  await expect(page.getByTestId("flight-info-international")).toHaveText("Domestic");
+  await expect(page.getByTestId("flight-info-queue-count")).toHaveText("4");
 
   await page.goBack();
   await expect(dallasFlight).toBeVisible();
@@ -411,7 +439,14 @@ test("Discover cards open their selected flights and preserve search when return
   await miamiFlight.click();
   await expect(page).toHaveURL(/\/flight\/81002$/);
   await expect(page.getByTestId("flight-detail-route")).toHaveText("MIA → JFK");
-  await expect(page.getByText("Monday, November 2", { exact: false })).toBeVisible();
+  await expect(page.getByText(/Monday, November 2 · Departs/)).toBeVisible();
+  await expect(page.getByTestId("flight-info-departure-time")).toHaveText(/5:00 AM .+/);
+  await expect(page.getByTestId("flight-info-arrival-date")).toHaveCount(0);
+  await expect(page.getByTestId("flight-info-arrival-time")).toHaveCount(0);
+  await expect(page.getByTestId("flight-info-aircraft")).toHaveCount(0);
+  await expect(page.getByTestId("flight-info-duration")).toHaveCount(0);
+  await expect(page.getByTestId("flight-info-international")).toHaveCount(0);
+  await expect(page.getByTestId("flight-info-queue-count")).toHaveCount(0);
 
   await page.goBack();
   await expect(miamiFlight).toBeVisible();

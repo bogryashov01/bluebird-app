@@ -59,6 +59,8 @@ const rawFlight = {
   arrivalTime: "2026-10-08T14:00:00.000Z",
   durationHours: 0.4,
   aircraftType: null,
+  aircraftTypeName: null,
+  aircraftTypeCode: null,
   aircraftGalleryUrls: ["/fixtures/test-aircraft.jpg"],
   aircraftGalleryAlts: [null],
   userInQueue: false,
@@ -115,9 +117,12 @@ assert.equal(mappedFlight.originTz, "America/Chicago");
 assert.equal(mappedFlight.departureDate, "2026-10-08");
 assert.equal(mappedFlight.departureTime, "08:36");
 assert.ok(mappedFlight.departureTimeZone);
+assert.equal(mappedFlight.arrivalDate, "2026-10-08");
 assert.equal(mappedFlight.arrivalTime, "10:00");
 assert.equal(mappedFlight.duration, "24m");
 assert.equal(mappedFlight.aircraftType, null);
+assert.equal(mappedFlight.aircraftTypeName, null);
+assert.equal(mappedFlight.aircraftTypeCode, null);
 assert.equal(mappedFlight.imageUrl, "https://bluebirdjets.com/fixtures/test-aircraft.jpg");
 assert.equal(mappedFlight.queueCount, 2);
 assert.equal(mappedFlight.memberQueueCount, null);
@@ -167,6 +172,31 @@ assert.equal(
 );
 assert.equal(mapProductionFlight({ ...rawFlight, originAirport: " tst " }).fromAirport, "TST");
 assert.equal(mapProductionFlight({ ...rawFlight, isInternational: true }).international, true);
+const enrichedFlight = mapProductionFlight({
+  ...rawFlight,
+  aircraftTypeName: "Citation Latitude",
+  aircraftTypeCode: "LATITUDE",
+});
+assert.equal(enrichedFlight.arrivalDate, "2026-10-08");
+assert.equal(enrichedFlight.aircraftTypeName, "Citation Latitude");
+assert.equal(enrichedFlight.aircraftTypeCode, "LATITUDE");
+const flightWithoutArrivalOrAircraft = mapProductionFlight({
+  ...rawFlight,
+  arrivalTime: null,
+  aircraftType: null,
+  aircraftTypeName: null,
+  aircraftTypeCode: null,
+  durationHours: null,
+  isInternational: null,
+  queueCount: null,
+});
+assert.equal(flightWithoutArrivalOrAircraft.arrivalDate, null);
+assert.equal(flightWithoutArrivalOrAircraft.arrivalTime, null);
+assert.equal(flightWithoutArrivalOrAircraft.aircraftTypeName, null);
+assert.equal(flightWithoutArrivalOrAircraft.aircraftTypeCode, null);
+assert.equal(flightWithoutArrivalOrAircraft.duration, null);
+assert.equal(flightWithoutArrivalOrAircraft.international, null);
+assert.equal(flightWithoutArrivalOrAircraft.queueCount, null);
 assert.throws(() => mapProductionFlights({ data: [rawFlight] }), /flight array/i);
 assert.throws(() => mapProductionFlight({ ...rawFlight, id: "98765" }), /numeric ID/i);
 assert.equal(parseProductionFlightId("98765"), 98765);

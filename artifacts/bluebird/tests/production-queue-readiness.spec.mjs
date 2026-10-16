@@ -196,7 +196,7 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   await expect(page.getByText("25 kg per passenger", { exact: true })).toHaveCount(0);
   await expect(page.getByText("$2,000", { exact: true })).toHaveCount(0);
   await expect(page.getByText("$30,000", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Sunday, November 1", { exact: false })).toBeVisible();
+  await expect(page.getByText(/Sunday, November 1 · Departs/)).toBeVisible();
 
   await page.getByTestId("production-queue-read-only-cta").click();
   await expect(page.getByTestId("production-read-only-notice")).toBeVisible();
@@ -207,7 +207,7 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   await page.reload();
   await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
   await page.goto(appUrl(baseURL, "flight/not-a-number"));
-  await expect(page.getByText("Flight not found", { exact: true })).toBeVisible();
+  await expect(page.getByText("Flight unavailable", { exact: true })).toBeVisible();
 
   const directQueueRoutes = [
     `queue/join?flightId=${flightId}`,

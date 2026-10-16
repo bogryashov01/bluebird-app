@@ -39,6 +39,8 @@ export interface ProductionFlightResponse {
   queueClosesAt?: string | null;
   durationHours?: number | null;
   aircraftType?: string | null;
+  aircraftTypeName?: string | null;
+  aircraftTypeCode?: string | null;
   aircraftGalleryUrls?: Array<string | null> | null;
   aircraftGalleryAlts?: Array<string | null> | null;
   aircraftTailPhotoSlot?: number | null;
@@ -120,10 +122,13 @@ export interface FlightView {
   departureDate: string | null;
   departureTime: string | null;
   departureTimeZone: string | null;
+  arrivalDate: string | null;
   arrivalTime: string | null;
   arrivalTimeZone: string | null;
   duration: string | null;
   aircraftType: string | null;
+  aircraftTypeName: string | null;
+  aircraftTypeCode: string | null;
   imageUrl: string | null;
   featured: boolean | null;
   international: boolean | null;
@@ -568,10 +573,13 @@ export function mapProductionFlight(value: unknown): FlightView {
     departureDate: departure?.date ?? null,
     departureTime: departure?.time ?? null,
     departureTimeZone: departure?.zone ?? null,
+    arrivalDate: arrival?.date ?? null,
     arrivalTime: arrival?.time ?? null,
     arrivalTimeZone: arrival?.zone ?? null,
     duration: durationLabel(durationHours),
     aircraftType: getString(raw.aircraftType, 'aircraftType'),
+    aircraftTypeName: getString(raw.aircraftTypeName, 'aircraftTypeName'),
+    aircraftTypeCode: getString(raw.aircraftTypeCode, 'aircraftTypeCode'),
     imageUrl: resolveAircraftImageUrl(imageUrl),
     featured: null,
     international: getBoolean(raw.isInternational, 'isInternational'),
@@ -735,10 +743,13 @@ export function mapLocalFlight(flight: Flight): FlightView {
     departureDate: flight.departureDate ?? null,
     departureTime: flight.departureTime ?? null,
     departureTimeZone: null,
+    arrivalDate: null,
     arrivalTime: null,
     arrivalTimeZone: null,
     duration: flight.duration ?? null,
     aircraftType: flight.aircraftType ?? null,
+    aircraftTypeName: null,
+    aircraftTypeCode: null,
     imageUrl: resolveAircraftImageUrl(flight.imageUrl, localApiOrigin),
     featured: !!flight.featured,
     international: flight.international ?? null,
