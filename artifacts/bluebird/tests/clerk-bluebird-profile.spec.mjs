@@ -258,7 +258,12 @@ test("registration has three explicit steps and keeps personal information draft
   assert.ok(airportSource.includes("registration-${tab}-tab"));
   assert.ok(airportSource.includes("registration-airport-search"));
   assert.ok(airportSource.includes("registration-city-search"));
-  assert.ok(airportSource.includes("fetchProductionAirports([]"));
+  assert.ok(airportSource.includes("fetchProductionAirportSearch(debouncedAirportSearch"));
+  assert.ok(airportSource.includes("enabled: !!configuration && !!debouncedAirportSearch"));
+  assert.ok(airportSource.includes("registration-airport-search-prompt"));
+  assert.ok(airportSource.includes("registration-airport-no-match"));
+  assert.ok(airportSource.includes("airportSearchState.failure.retryable"));
+  assert.equal(airportSource.includes("fetchProductionAirports([]"), false);
   assert.ok(airportSource.includes("fetchProductionAirportCities"));
   assert.ok(airportSource.includes("registration-home-airport-${airport.code}"));
   assert.ok(airportSource.includes("registration-additional-airport-${airport.code}"));
@@ -276,7 +281,9 @@ test("registration has three explicit steps and keeps personal information draft
   assert.ok(reviewSource.includes("Confirm & Save"));
   assert.ok(reviewSource.includes("Additional airports are for this registration only."));
   assert.ok(reviewSource.includes("Weight is optional and will only be marked saved if Bluebird confirms it."));
-  assert.ok(reviewSource.includes("fetchProductionAirports([]"));
+  assert.ok(reviewSource.includes("fetchProductionAirports(selectedAirportCodes"));
+  assert.ok(reviewSource.includes("selectedAirportCodes.length > 0"));
+  assert.ok(reviewSource.includes("registration-airport-details-error"));
   assert.ok(reviewSource.includes("setClerkVerifiedRegistrationCompletion"));
   assert.equal(reviewSource.includes("additionalAirportCodes: data"), false);
 });
@@ -367,7 +374,7 @@ test("request composition uses date-only DOB, one airport, exact city keys and o
   }), /at least one city/i);
 });
 
-test("airport and city tabs render catalogs immediately, filter, scroll, and preserve independent selections", () => {
+test("airport and city tabs filter results, scroll, and preserve independent selections", () => {
   assert.deepEqual(getClerkAirportSelectionDraft("member-a", ["sfo", "SFO", "bad code"]), ["SFO"]);
   setClerkAirportSelectionDraft("member-a", ["JFK", "lax", "jfk"]);
   assert.deepEqual(getClerkAirportSelectionDraft("member-a"), ["JFK"]);
@@ -398,7 +405,13 @@ test("airport and city tabs render catalogs immediately, filter, scroll, and pre
   assert.ok(airportSource.includes("filterClerkRegistrationAirports"));
   assert.ok(airportSource.includes("filterClerkRegistrationCities"));
   assert.ok(airportSource.includes("KeyboardAwareScrollViewCompat"));
-  assert.ok(airportSource.includes("fetchProductionAirports([]"));
+  assert.ok(airportSource.includes("setActiveTab(tab)"));
+  assert.ok(airportSource.includes("setClerkHomeAirportDraft(clerkUserId, airport.code)"));
+  assert.ok(airportSource.includes("toggleClerkAdditionalAirportDraft(clerkUserId, airport.code)"));
+  assert.ok(airportSource.includes("toggleClerkFavoriteCityDraft(clerkUserId, city.key, catalogKeys)"));
+  assert.ok(airportSource.includes("Continue to Review &amp; Save"));
+  assert.ok(airportSource.includes("airportSearchState.kind === 'loading' || citiesQuery.isLoading || citiesQuery.isError"));
+  assert.equal(airportSource.includes("fetchProductionAirports([]"), false);
   assert.ok(airportSource.includes("fetchProductionAirportCities"));
   const reviewSource = readFileSync(resolve(projectRoot, "app/registration-review.tsx"), "utf8");
   assert.ok(reviewSource.includes("ReviewCard title=\"Personal Information\""));
@@ -406,6 +419,7 @@ test("airport and city tabs render catalogs immediately, filter, scroll, and pre
   assert.ok(reviewSource.includes("Confirm & Save"));
   assert.ok(reviewSource.includes("back-from-registration-review"));
   assert.ok(reviewSource.includes("draft.additionalAirportCodes.length > 0"));
+  assert.ok(reviewSource.includes("fetchProductionAirports(selectedAirportCodes"));
   assert.equal(reviewSource.includes("favoriteAirportCodes:"), false);
 });
 

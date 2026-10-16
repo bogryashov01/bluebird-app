@@ -116,7 +116,7 @@ async function json(route, status, payload, headers = {}) {
   });
 }
 
-async function setupPreview(page, productionHandler) {
+async function setupPreview(page, productionHandler, airportGroups = []) {
   await page.addInitScript((user) => {
     localStorage.setItem("bluebird_token", "network-reliability-local-shell");
     localStorage.setItem("bluebird_user", JSON.stringify(user));
@@ -125,7 +125,10 @@ async function setupPreview(page, productionHandler) {
   await page.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    if (url.origin === "https://bluebirdjets.com") {
+    if (
+      url.origin === "https://bluebirdjets.com" ||
+      url.origin === "https://main-api-development.example.test"
+    ) {
       if (url.pathname.startsWith("/api/")) {
         if (request.method() !== "GET") {
           return json(route, 405, { error: "Read-only test blocked a mutation." });
@@ -140,10 +143,12 @@ async function setupPreview(page, productionHandler) {
       return json(route, 405, { error: "Read-only test blocked a mutation." });
     }
     if (url.pathname === "/api/auth/me") return json(route, 200, localUser);
+    if (url.pathname === "/api/flights/airports") {
+      return json(route, 200, airportGroups);
+    }
     if (
       url.pathname === "/api/notifications" ||
       url.pathname === "/api/queue/status" ||
-      url.pathname === "/api/flights/airports" ||
       url.pathname === "/api/flights" ||
       url.pathname === "/api/trips"
     ) {
@@ -277,6 +282,10 @@ test("Flight Details reports a timed-out read and recovers with Retry", async ({
 
 test("Airport Search shows a 503 state and manual Retry recovers", async ({ page }) => {
   let searchRequests = 0;
+  const airportGroups = [{
+    city: "Dallas",
+    airports: [{ code: "DAL", name: "Dallas Love Field", city: "Dallas" }],
+  }];
   await setupPreview(page, async (route, url) => {
     if (url.pathname === "/api/airports/cities") return json(route, 200, []);
     if (url.pathname === "/api/airports/search") {
@@ -285,7 +294,7 @@ test("Airport Search shows a 503 state and manual Retry recovers", async ({ page
       return json(route, 200, [airports.DAL]);
     }
     return json(route, 503, { error: "Unexpected intercepted production request." });
-  });
+  }, airportGroups);
 
   await page.goto("/airport-picker");
   await page.getByTestId("airport-search-input").fill("DAL");
@@ -297,6 +306,10 @@ test("Airport Search shows a 503 state and manual Retry recovers", async ({ page
 
 test("Airport typeahead keeps the latest result when an older response arrives late", async ({ page }) => {
   let dallasRequests = 0;
+  const airportGroups = [
+    { city: "Dallas", airports: [{ code: "DAL", name: "Dallas Love Field", city: "Dallas" }] },
+    { city: "Miami", airports: [{ code: "MIA", name: "Miami International", city: "Miami" }] },
+  ];
   await setupPreview(page, async (route, url) => {
     if (url.pathname === "/api/airports/cities") return json(route, 200, []);
     if (url.pathname === "/api/airports/search") {
@@ -314,7 +327,7 @@ test("Airport typeahead keeps the latest result when an older response arrives l
       return json(route, 200, []);
     }
     return json(route, 503, { error: "Unexpected intercepted production request." });
-  });
+  }, airportGroups);
 
   await page.goto("/airport-picker");
   const input = page.getByTestId("airport-search-input");

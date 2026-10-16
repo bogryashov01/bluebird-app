@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import {
+  describeProductionReadFailure,
+  fetchProductionAirports,
   fetchProductionAirportCities,
   fetchProductionAirportSearch,
+  getProductionAirportSearchViewState,
   mapProductionAirportCityGroup,
   mapProductionAirportCityGroups,
   mapProductionAirport,
   mapProductionAirports,
   PRODUCTION_API_BASE_URL,
+  ProductionReadHttpError,
+  ProductionReadInvalidJsonError,
   ProductionReadNetworkError,
+  ProductionReadSchemaError,
+  ProductionReadTimeoutError,
 } from "../scripts/.production-airport-search.test.mjs";
 
 process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "production";
@@ -35,6 +42,58 @@ const cityGroup = {
 };
 
 assert.equal(PRODUCTION_API_BASE_URL, "https://bluebirdjets.com/api");
+assert.equal(
+  getProductionAirportSearchViewState({
+    configurationAvailable: true,
+    query: "",
+    isLoading: false,
+    resultCount: 0,
+  }).kind,
+  "unsupported-empty-query",
+  "the initial airport view prompts for a query without loading a catalog",
+);
+assert.equal(
+  getProductionAirportSearchViewState({
+    configurationAvailable: true,
+    query: "not a real airport",
+    isLoading: false,
+    resultCount: 0,
+  }).kind,
+  "no-match",
+);
+assert.equal(
+  getProductionAirportSearchViewState({
+    configurationAvailable: false,
+    query: "",
+    isLoading: false,
+    resultCount: 0,
+  }).kind,
+  "configuration-unavailable",
+);
+assert.equal(
+  getProductionAirportSearchViewState({
+    configurationAvailable: true,
+    query: "DAL",
+    isLoading: true,
+    resultCount: 0,
+  }).kind,
+  "loading",
+);
+for (const [error, expectedKind, retryable] of [
+  [new ProductionReadNetworkError("offline"), "network", true],
+  [new ProductionReadTimeoutError(10_000), "timeout", true],
+  [new ProductionReadHttpError(401, null), "authentication", false],
+  [new ProductionReadHttpError(403, null), "authentication", false],
+  [new ProductionReadHttpError(503, null), "temporarily-unavailable", true],
+  [new ProductionReadInvalidJsonError(), "invalid-response", false],
+  [new ProductionReadSchemaError("array"), "invalid-response", false],
+  [new ProductionReadHttpError(400, null), "request-failed", false],
+]) {
+  const failure = describeProductionReadFailure(error, "airport search");
+  assert.equal(failure.kind, expectedKind);
+  assert.equal(failure.retryable, retryable);
+}
+
 assert.equal(mapProductionAirport({ ...airport, code: " dal " }).code, "DAL");
 assert.deepEqual(mapProductionAirports([]), []);
 assert.deepEqual(mapProductionAirports([airport]), [airport]);
@@ -116,6 +175,23 @@ const fetchedCities = await fetchProductionAirportCities({
 });
 assert.deepEqual(fetchedCities, [cityGroup]);
 assert.equal(requests[0].url, `${PRODUCTION_API_BASE_URL}/airports/cities`);
+assert.equal(requests[0].init.method, "GET");
+assert.equal(requests[0].init.headers.Authorization, undefined);
+assert.equal(requests[0].init.credentials, "omit");
+
+requests.length = 0;
+const fetchedByCode = await fetchProductionAirports([" dal "], {
+  fetcher: async (url, init) => {
+    requests.push({ url: String(url), init });
+    return new Response(JSON.stringify([airport]), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  },
+});
+assert.deepEqual(fetchedByCode, [airport]);
+assert.equal(new URL(requests[0].url).pathname, `${new URL(PRODUCTION_API_BASE_URL).pathname}/airports`);
+assert.equal(new URL(requests[0].url).searchParams.get("codes"), "DAL");
 assert.equal(requests[0].init.method, "GET");
 assert.equal(requests[0].init.headers.Authorization, undefined);
 assert.equal(requests[0].init.credentials, "omit");

@@ -30,6 +30,7 @@ import {
   validateClerkProfileForm,
 } from '@/lib/clerkProfileOnboarding';
 import {
+  describeProductionReadFailure,
   fetchProductionAirportCities,
   fetchProductionAirports,
   productionReadRetryDelay,
@@ -62,6 +63,12 @@ export default function RegistrationReviewScreen() {
     : clerkUserId
       ? getClerkProfileRegistrationDraft(clerkUserId)
       : null;
+  const selectedAirportCodes = draft
+    ? [...new Set([draft.homeAirportCode, ...draft.additionalAirportCodes]
+      .map((code) => code?.trim().toUpperCase())
+      .filter((code): code is string => !!code))]
+    : [];
+  const selectedAirportCodesKey = selectedAirportCodes.join(',');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [weightNotConfirmed, setWeightNotConfirmed] = useState(false);
@@ -84,16 +91,16 @@ export default function RegistrationReviewScreen() {
   }, [clerkUserId]);
 
   const airportsQuery = useQuery({
-    queryKey: ['clerk-registration-review-airport-catalog', configuration?.environment],
+    queryKey: ['clerk-registration-review-airport-details', configuration?.environment, selectedAirportCodesKey],
     queryFn: ({ signal }) => {
       if (!configuration) throw new Error('Main Bluebird API configuration is unavailable.');
-      return fetchProductionAirports([], {
+      return fetchProductionAirports(selectedAirportCodes, {
         signal,
         environment: configuration.environment,
         baseUrl: configuration.apiBaseUrl,
       });
     },
-    enabled: !!configuration && isActiveIncompleteIdentity,
+    enabled: !!configuration && isActiveIncompleteIdentity && selectedAirportCodes.length > 0,
     retry: shouldRetryProductionRead,
     retryDelay: productionReadRetryDelay,
     staleTime: 24 * 60 * 60 * 1000,
@@ -115,6 +122,12 @@ export default function RegistrationReviewScreen() {
   });
   const airports = airportsQuery.data ?? [];
   const cities = citiesQuery.data ?? [];
+  const airportReadFailure = airportsQuery.isError
+    ? describeProductionReadFailure(airportsQuery.error, 'airport details')
+    : null;
+  const cityReadFailure = citiesQuery.isError
+    ? describeProductionReadFailure(citiesQuery.error, 'the city list')
+    : null;
   const cityKeys = cities.map((city) => city.key);
   const homeAirport = draft
     ? airports.find((airport) => airport.code === draft.homeAirportCode)
@@ -143,7 +156,7 @@ export default function RegistrationReviewScreen() {
       return;
     }
     if (airportsQuery.isError || citiesQuery.isError) {
-      setSaveError('We couldn’t verify your locations. Go back and try again.');
+      setSaveError('We couldn’t verify your locations. Use an available retry above or go back and search again.');
       return;
     }
     if (airportsQuery.isLoading || citiesQuery.isLoading) {
@@ -303,11 +316,24 @@ export default function RegistrationReviewScreen() {
               <Text style={[styles.bodyText, { color: colors.mutedForegroundLight }]}>Loading location details…</Text>
             </View>
           ) : null}
-          {airportsQuery.isError || citiesQuery.isError ? (
+          {airportReadFailure ? (
             <View style={styles.loadingRow}>
-              <Text style={[styles.inlineError, { color: colors.destructive }]}>
-                We couldn’t load your location details. Go back and try again.
-              </Text>
+              <ReviewReadFailure
+                label={airportReadFailure.message}
+                retryable={airportReadFailure.retryable}
+                onRetry={() => void airportsQuery.refetch()}
+                testID="registration-airport-details-error"
+              />
+            </View>
+          ) : null}
+          {cityReadFailure ? (
+            <View style={styles.loadingRow}>
+              <ReviewReadFailure
+                label={cityReadFailure.message}
+                retryable={cityReadFailure.retryable}
+                onRetry={() => void citiesQuery.refetch()}
+                testID="registration-city-details-error"
+              />
             </View>
           ) : null}
         </ReviewCard>
@@ -412,6 +438,32 @@ function CenteredState({ title, loading = false }: { title: string; loading?: bo
   );
 }
 
+function ReviewReadFailure({
+  label,
+  retryable,
+  onRetry,
+  testID,
+}: {
+  label: string;
+  retryable: boolean;
+  onRetry: () => void;
+  testID: string;
+}) {
+  const colors = useColors();
+  return (
+    <View style={{ flex: 1, gap: 4 }}>
+      <Text accessibilityLiveRegion="polite" style={[styles.inlineError, { color: colors.destructive }]} testID={testID}>
+        {label}
+      </Text>
+      {retryable ? (
+        <Pressable accessibilityRole="button" onPress={onRetry} style={{ alignSelf: 'flex-start' }}>
+          <Text style={[styles.retryText, { color: colors.primary }]}>Try again</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function getRegistrationSaveErrorMessage(error: unknown): string {
   const typed = error as { code?: string; status?: number };
   if (typed?.code === 'session_expired' || typed?.status === 401) {
@@ -445,6 +497,7 @@ const styles = StyleSheet.create({
   disclosure: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   inlineError: { fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 19 },
+  retryText: { fontFamily: 'Inter_600SemiBold', paddingVertical: 6, paddingHorizontal: 4 },
   warningCard: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 10 },
   optionTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14, lineHeight: 19 },
   footer: { borderTopWidth: 1, paddingHorizontal: 18, paddingTop: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },

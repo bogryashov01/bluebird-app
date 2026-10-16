@@ -30,8 +30,10 @@ import {
   filterClerkRegistrationCities,
 } from '@/lib/clerkProfileOnboarding';
 import {
-  fetchProductionAirports,
+  describeProductionReadFailure,
   fetchProductionAirportCities,
+  fetchProductionAirportSearch,
+  getProductionAirportSearchViewState,
   productionReadRetryDelay,
   shouldRetryProductionRead,
   type AirportRecord,
@@ -127,25 +129,30 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
   const [draft, setDraft] = useState(() => getClerkProfileRegistrationDraft(clerkUserId));
   const [activeTab, setActiveTab] = useState<'airports' | 'cities'>('airports');
   const [airportSearch, setAirportSearch] = useState('');
+  const [debouncedAirportSearch, setDebouncedAirportSearch] = useState('');
   const [citySearch, setCitySearch] = useState('');
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
   const configuration = getMainBluebirdApiConfigurationOrNull();
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedAirportSearch(airportSearch.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [airportSearch]);
   const airportsQuery = useQuery({
-    queryKey: ['clerk-registration-airport-catalog', configuration?.environment],
+    queryKey: ['clerk-registration-airport-search', configuration?.environment, debouncedAirportSearch],
     queryFn: ({ signal }) => {
       if (!configuration) throw new Error('Main Bluebird API configuration is unavailable.');
-      return fetchProductionAirports([], {
+      return fetchProductionAirportSearch(debouncedAirportSearch, {
         signal,
         environment: configuration.environment,
         baseUrl: configuration.apiBaseUrl,
       });
     },
-    enabled: !!configuration,
+    enabled: !!configuration && !!debouncedAirportSearch,
     retry: shouldRetryProductionRead,
     retryDelay: productionReadRetryDelay,
-    staleTime: 24 * 60 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
   const citiesQuery = useQuery({
     queryKey: ['clerk-registration-city-catalog', configuration?.environment],
@@ -162,7 +169,21 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
     retryDelay: productionReadRetryDelay,
     staleTime: 24 * 60 * 60 * 1000,
   });
-  const airports = filterClerkRegistrationAirports(airportsQuery.data ?? [], airportSearch);
+  const normalizedAirportSearch = airportSearch.trim();
+  const waitingForAirportSearch = normalizedAirportSearch !== debouncedAirportSearch;
+  const airports = normalizedAirportSearch === debouncedAirportSearch
+    ? filterClerkRegistrationAirports(airportsQuery.data ?? [], airportSearch)
+    : [];
+  const airportSearchState = getProductionAirportSearchViewState({
+    configurationAvailable: !!configuration,
+    query: airportSearch,
+    isLoading: waitingForAirportSearch || airportsQuery.isLoading,
+    error: waitingForAirportSearch ? undefined : airportsQuery.error,
+    resultCount: airports.length,
+  });
+  const cityReadFailure = citiesQuery.isError
+    ? describeProductionReadFailure(citiesQuery.error, 'the city list')
+    : null;
   const cities = filterClerkRegistrationCities(citiesQuery.data ?? [], citySearch);
   const catalogKeys = (citiesQuery.data ?? []).map((city) => city.key);
 
@@ -283,14 +304,31 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
             <Text style={[styles.selectionHint, { color: colors.mutedForegroundLight }]}>
               Choose one home airport and any additional airports you use.
             </Text>
-            {airportsQuery.isLoading ? <CatalogLoading label="Loading airports…" /> : null}
-            {airportsQuery.isError ? (
-              <CatalogError label="Couldn’t load airports. Check your connection and retry." onRetry={() => void airportsQuery.refetch()} />
+            {airportSearchState.kind === 'configuration-unavailable' ? (
+              <Text style={[styles.emptyText, { color: colors.destructive }]} testID="registration-airport-configuration-error">
+                Airport search is unavailable because the Main Bluebird API is not configured.
+              </Text>
             ) : null}
-            {!airportsQuery.isLoading && !airportsQuery.isError && !airports.length ? (
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No airports matched “{airportSearch.trim()}”.</Text>
+            {airportSearchState.kind === 'unsupported-empty-query' ? (
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]} testID="registration-airport-search-prompt">
+                Search by airport name, city, or code to find airports. Browsing the full airport list isn’t available.
+              </Text>
             ) : null}
-            {!airportsQuery.isLoading && !airportsQuery.isError ? airports.map((airport) => {
+            {airportSearchState.kind === 'loading' ? <CatalogLoading label="Searching airports…" /> : null}
+            {airportSearchState.kind === 'error' ? (
+              <CatalogError
+                label={airportSearchState.failure.message}
+                retryable={airportSearchState.failure.retryable}
+                onRetry={() => void airportsQuery.refetch()}
+                testID="registration-airport-search-error"
+              />
+            ) : null}
+            {airportSearchState.kind === 'no-match' ? (
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]} testID="registration-airport-no-match">
+                No airports matched “{airportSearch.trim()}”.
+              </Text>
+            ) : null}
+            {airportSearchState.kind === 'results' ? airports.map((airport) => {
               const isHome = draft.homeAirportCode === airport.code;
               const isAdditional = draft.additionalAirportCodes.includes(airport.code);
               return (
@@ -345,10 +383,18 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
               Select one or more cities. At least one is required.
             </Text>
             {citiesQuery.isLoading ? <CatalogLoading label="Loading cities…" /> : null}
-            {citiesQuery.isError ? (
-              <CatalogError label="Couldn’t load cities. Check your connection and retry." onRetry={() => void citiesQuery.refetch()} />
+            {cityReadFailure ? (
+              <CatalogError
+                label={cityReadFailure.message}
+                retryable={cityReadFailure.retryable}
+                onRetry={() => void citiesQuery.refetch()}
+                testID="registration-city-list-error"
+              />
             ) : null}
-            {!citiesQuery.isLoading && !citiesQuery.isError && !cities.length ? (
+            {!configuration ? (
+              <Text style={[styles.emptyText, { color: colors.destructive }]}>The Main Bluebird API is not configured, so cities aren’t available.</Text>
+            ) : null}
+            {!citiesQuery.isLoading && !citiesQuery.isError && cities.length === 0 && configuration ? (
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No cities matched “{citySearch.trim()}”.</Text>
             ) : null}
             {!citiesQuery.isLoading && !citiesQuery.isError ? cities.map((city) => {
@@ -397,7 +443,7 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
         <Pressable
           accessibilityRole="button"
           onPress={continueToReview}
-          disabled={airportsQuery.isLoading || citiesQuery.isLoading || airportsQuery.isError || citiesQuery.isError}
+          disabled={airportSearchState.kind === 'loading' || citiesQuery.isLoading || citiesQuery.isError}
           style={[styles.actionButton, { backgroundColor: colors.primary }]}
           testID="continue-to-registration-review"
         >
@@ -418,14 +464,26 @@ function CatalogLoading({ label }: { label: string }) {
   );
 }
 
-function CatalogError({ label, onRetry }: { label: string; onRetry: () => void }) {
+function CatalogError({
+  label,
+  retryable,
+  onRetry,
+  testID,
+}: {
+  label: string;
+  retryable: boolean;
+  onRetry: () => void;
+  testID: string;
+}) {
   const colors = useColors();
   return (
     <View style={styles.loadingState}>
-      <Text style={[styles.emptyText, { color: colors.destructive }]}>{label}</Text>
-      <Pressable accessibilityRole="button" onPress={onRetry}>
-        <Text style={[styles.retryText, { color: colors.primary }]}>Try again</Text>
-      </Pressable>
+      <Text accessibilityLiveRegion="polite" testID={testID} style={[styles.emptyText, { color: colors.destructive }]}>{label}</Text>
+      {retryable ? (
+        <Pressable accessibilityRole="button" onPress={onRetry}>
+          <Text style={[styles.retryText, { color: colors.primary }]}>Try again</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

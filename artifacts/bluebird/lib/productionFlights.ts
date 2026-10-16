@@ -200,6 +200,118 @@ export class ProductionReadSchemaError extends Error {
   }
 }
 
+export class ProductionReadUnsupportedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProductionReadUnsupportedError';
+  }
+}
+
+export type ProductionReadFailureKind =
+  | 'network'
+  | 'timeout'
+  | 'authentication'
+  | 'invalid-response'
+  | 'temporarily-unavailable'
+  | 'unsupported-empty-query'
+  | 'request-failed';
+
+export interface ProductionReadFailurePresentation {
+  kind: ProductionReadFailureKind;
+  message: string;
+  retryable: boolean;
+}
+
+export function describeProductionReadFailure(
+  error: unknown,
+  subject: string,
+): ProductionReadFailurePresentation {
+  if (error instanceof ProductionReadUnsupportedError) {
+    return {
+      kind: 'unsupported-empty-query',
+      message: `Search for ${subject} by name, city, or code. Browsing the full list isn’t available.`,
+      retryable: false,
+    };
+  }
+  if (error instanceof ProductionReadNetworkError) {
+    return {
+      kind: 'network',
+      message: `Bluebird couldn’t reach ${subject}. Check your connection and try again.`,
+      retryable: true,
+    };
+  }
+  if (error instanceof ProductionReadTimeoutError) {
+    return {
+      kind: 'timeout',
+      message: `The request for ${subject} timed out. Check your connection and try again.`,
+      retryable: true,
+    };
+  }
+  if (error instanceof ProductionReadHttpError) {
+    if (error.status === 401 || error.status === 403) {
+      return {
+        kind: 'authentication',
+        message: `Bluebird denied access to ${subject}. Check your sign-in and try again.`,
+        retryable: false,
+      };
+    }
+    if (error.status === 429 || error.status >= 500) {
+      return {
+        kind: 'temporarily-unavailable',
+        message: `${subject} is temporarily unavailable. Please try again.`,
+        retryable: true,
+      };
+    }
+    return {
+      kind: 'request-failed',
+      message: `Bluebird couldn’t complete the request for ${subject}. Check your search and try again.`,
+      retryable: false,
+    };
+  }
+  if (
+    error instanceof ProductionReadInvalidJsonError ||
+    error instanceof ProductionReadSchemaError
+  ) {
+    return {
+      kind: 'invalid-response',
+      message: `Bluebird returned unreadable data for ${subject}. Please try again later.`,
+      retryable: false,
+    };
+  }
+  return {
+    kind: 'request-failed',
+    message: `Bluebird couldn’t load ${subject}. Please try again later.`,
+    retryable: false,
+  };
+}
+
+export type ProductionAirportSearchViewState =
+  | { kind: 'configuration-unavailable' }
+  | { kind: 'unsupported-empty-query' }
+  | { kind: 'loading' }
+  | { kind: 'error'; failure: ProductionReadFailurePresentation }
+  | { kind: 'no-match' }
+  | { kind: 'results' };
+
+export function getProductionAirportSearchViewState(input: {
+  configurationAvailable: boolean;
+  query: string;
+  isLoading: boolean;
+  error?: unknown;
+  resultCount: number;
+}): ProductionAirportSearchViewState {
+  if (!input.configurationAvailable) return { kind: 'configuration-unavailable' };
+  if (!input.query.trim()) return { kind: 'unsupported-empty-query' };
+  if (input.isLoading) return { kind: 'loading' };
+  if (input.error) {
+    return {
+      kind: 'error',
+      failure: describeProductionReadFailure(input.error, 'airport search'),
+    };
+  }
+  return input.resultCount > 0 ? { kind: 'results' } : { kind: 'no-match' };
+}
+
 function abortError(): Error {
   return new ProductionReadCancelledError();
 }
@@ -741,9 +853,12 @@ export async function fetchProductionAirports(
   options: ReadRequestOptions = {},
 ): Promise<AirportRecord[]> {
   const unique = normalizeAirportCodes(codes);
-  const query = unique.length
-    ? `?${new URLSearchParams({ codes: unique.join(',') }).toString()}`
-    : '';
+  if (unique.length === 0) {
+    throw new ProductionReadUnsupportedError(
+      'Airport browsing without a code filter is not supported.',
+    );
+  }
+  const query = `?${new URLSearchParams({ codes: unique.join(',') }).toString()}`;
   return mapReadSchema(
     await fetchProductionJson(`/airports${query}`, options),
     mapProductionAirports,

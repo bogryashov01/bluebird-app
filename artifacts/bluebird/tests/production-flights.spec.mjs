@@ -17,6 +17,7 @@ import {
   ProductionReadNetworkError,
   ProductionReadSchemaError,
   ProductionReadTimeoutError,
+  ProductionReadUnsupportedError,
   resolveAircraftImageUrl,
   resolveFlightReadConfiguration,
   shouldRetryProductionRead,
@@ -359,18 +360,15 @@ assert.equal(new URL(requests[0].url).pathname, "/api/airports");
 assert.equal(requests[0].init.method, "GET");
 assert.equal(requests[0].init.headers.Authorization, undefined);
 requests.length = 0;
-const fullAirportCatalog = await fetchProductionAirports([], {
-  fetcher: async (url, init) => {
-    requests.push({ url: String(url), init });
-    assert.equal(new URL(String(url)).pathname, "/api/airports");
-    assert.equal(new URL(String(url)).search, "");
-    return new Response(JSON.stringify([airport]), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
-  },
-});
-assert.deepEqual(fullAirportCatalog, [airport]);
-assert.equal(requests.length, 1, "an empty code list reads the airport catalog");
+await assert.rejects(
+  () => fetchProductionAirports([], {
+    fetcher: async (...args) => {
+      requests.push(args);
+      throw new Error("unsupported empty code list must not issue a request");
+    },
+  }),
+  ProductionReadUnsupportedError,
+);
+assert.equal(requests.length, 0, "airport browsing without a code filter is unsupported");
 
 console.log("Production flight and airport read tests passed.");
