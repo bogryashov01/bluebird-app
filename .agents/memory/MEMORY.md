@@ -36,3 +36,4 @@
 - [Clerk SMS preparation](clerk-sms-preparation.md) — create legacy phone sign-ins with the identifier only, then prepare the phone-code factor once.
 - [Bluebird Development auth status](bluebird-development-auth-status.md) — the user reported that real Clerk Development sign-in and token acquisition work; separate transport failures from auth setup.
 - [Fetch global receiver](fetch-global-receiver.md) — invoke a stored browser Fetch function with `globalThis`, not as a property of the options object.
+- [Bluebird browser navigation verification](bluebird-browser-navigation-verification.md) — local mocked card taps do not prove hosted Preview behavior; report Clerk-gated live checks explicitly.

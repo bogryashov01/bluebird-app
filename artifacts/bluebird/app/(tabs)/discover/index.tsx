@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert,
   RefreshControl, ActivityIndicator, Platform, Image, ImageBackground,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -22,6 +22,7 @@ import {
   getFlightAirportCodes,
   isLocalFlightReadMode,
   mapLocalFlight,
+  parseProductionFlightId,
   productionReadRetryDelay,
   shouldRetryProductionRead,
   type AirportRecord,
@@ -77,6 +78,21 @@ function matchesQuery(flight: FlightView, q: string): boolean {
 
 function airportLabel(code: string | null, city: string | null): string {
   return code || city || '—';
+}
+
+function openFlightDetails(flight: FlightView): void {
+  const id = typeof flight.id === 'string' ? flight.id.trim() : '';
+  if (!id || (flight.source === 'production' && parseProductionFlightId(id) === null)) {
+    const message = 'Flight details are unavailable because this flight has no valid identifier.';
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined') window.alert(message);
+    } else {
+      Alert.alert('Flight unavailable', message);
+    }
+    return;
+  }
+
+  router.push({ pathname: '/flight/[id]', params: { id } });
 }
 
 interface HeaderProps {
@@ -147,7 +163,7 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
         <TouchableOpacity
           style={styles.featuredWrap}
           activeOpacity={0.85}
-          onPress={() => router.push(`/flight/${featured.id}`)}
+          onPress={() => openFlightDetails(featured)}
         >
           <ImageBackground source={HERO} style={styles.featuredImage} imageStyle={{ borderRadius: 24 }}>
             <View style={styles.featuredOverlay} />
@@ -383,7 +399,8 @@ export default function DiscoverScreen() {
       testID={item.source === 'production' ? `production-flight-card-${item.id}` : undefined}
       style={[styles.card, { backgroundColor: colors.card }]}
       activeOpacity={0.8}
-      onPress={() => router.push(`/flight/${item.id}`)}
+      onPress={() => openFlightDetails(item)}
+      accessibilityRole="button"
     >
       {getFlightImagePresentation(item) === 'unavailable' ? (
         <View style={[styles.cardThumb, styles.cardThumbPlaceholder, { backgroundColor: colors.muted }]}>

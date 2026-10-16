@@ -340,6 +340,51 @@ test("Airport typeahead keeps the latest result when an older response arrives l
   await expect(page.getByTestId("airport-result-DAL")).toHaveCount(0);
 });
 
+test("Discover cards open their selected flights and preserve search when returning", async ({ page }) => {
+  const mutationRequests = [];
+  page.on("request", (request) => {
+    if (request.method() !== "GET") {
+      mutationRequests.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    }
+  });
+  await setupPreview(page, async (route, url) => {
+    if (url.pathname === "/api/empty-legs") return json(route, 200, flights);
+    if (url.pathname === "/api/empty-legs/81001") return json(route, 200, flightDetail(81001));
+    if (url.pathname === "/api/empty-legs/81002") return json(route, 200, flightDetail(81002));
+    return json(route, 503, { error: "Unexpected intercepted production request." });
+  });
+
+  await page.goto("/discover");
+  const search = page.getByPlaceholder("Search routes, airports, aircraft");
+  await search.fill("DAL");
+
+  const dallasFlight = page.getByTestId("production-flight-card-81001");
+  await expect(dallasFlight).toBeVisible();
+  await expect(page.getByTestId("production-flight-card-81002")).toHaveCount(0);
+  await dallasFlight.click({ position: { x: 16, y: 16 } });
+  await expect(page).toHaveURL(/\/flight\/81001$/);
+  await expect(page.getByTestId("flight-detail-route")).toHaveText("DAL → SFO");
+  await expect(page.getByText("Sunday, November 1", { exact: false })).toBeVisible();
+
+  await page.goBack();
+  await expect(dallasFlight).toBeVisible();
+  await expect(search).toHaveValue("DAL");
+  await search.fill("MIA");
+
+  const miamiFlight = page.getByTestId("production-flight-card-81002");
+  await expect(miamiFlight).toBeVisible();
+  await expect(dallasFlight).toHaveCount(0);
+  await miamiFlight.click();
+  await expect(page).toHaveURL(/\/flight\/81002$/);
+  await expect(page.getByTestId("flight-detail-route")).toHaveText("MIA → JFK");
+  await expect(page.getByText("Monday, November 2", { exact: false })).toBeVisible();
+
+  await page.goBack();
+  await expect(miamiFlight).toBeVisible();
+  await expect(search).toHaveValue("MIA");
+  expect(mutationRequests).toEqual([]);
+});
+
 test("Flight Details keeps the selected flight after navigating while an older read is pending", async ({ page }) => {
   let firstFlightStarted = false;
   await setupPreview(page, async (route, url) => {
