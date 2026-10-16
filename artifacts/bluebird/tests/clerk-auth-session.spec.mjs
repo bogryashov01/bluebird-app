@@ -209,9 +209,18 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(personalInfoSource, /profile changes were requested/);
   assert.match(personalInfoSource, /onAction=\{\(\) => router\.replace\('\/\(tabs\)\/profile'\)\}/);
   const notificationsSource = readFileSync(resolve(projectRoot, "app/notifications.tsx"), "utf8");
-  assert.match(notificationsSource, /ClerkNotificationSettingsUnavailable/);
-  assert.match(notificationsSource, /No notification data was requested and no preferences were changed/);
-  assert.match(notificationsSource, /router\.replace\('\/\(tabs\)\/profile'\)/);
+  const clerkNotifications = notificationsSource
+    .split("function ClerkNotificationSettings() {")[1]
+    ?.split("function LegacyNotificationsScreen()")[0] ?? "";
+  assert.match(clerkNotifications, /api\.authenticated\.getProfile/);
+  assert.match(clerkNotifications, /notificationPrefs/);
+  assert.match(clerkNotifications, /Loading them may also synchronize your verified phone number/);
+  assert.match(clerkNotifications, /Unavailable: no Clerk-authenticated history read is verified/);
+  assert.match(clerkNotifications, /notificationPrefs does not define push-delivery settings/);
+  assert.match(clerkNotifications, /clerk-load-notification-preferences/);
+  assert.match(clerkNotifications, /enabled: false/);
+  assert.match(clerkNotifications, /preferencesQuery\.refetch\(\)/);
+  assert.doesNotMatch(clerkNotifications, /updateProfile|useUpdateMe|useMarkNotificationRead|useListNotifications/);
   assert.match(notificationsSource, /authMode === 'clerk'/);
   assert.match(clerkMembership, /currentUser\?\.isAuthenticated/);
   assert.match(clerkMembership, /currentUser\.memberTier/);
@@ -223,7 +232,9 @@ test("Clerk Trips stay unavailable without requesting member-only trips or queue
   const tripsSource = readFileSync(resolve(projectRoot, "app/(tabs)/trips/index.tsx"), "utf8");
   assert.match(tripsSource, /authMode === 'clerk'/);
   assert.match(tripsSource, /title="Trips unavailable"/);
-  assert.match(tripsSource, /You’re signed in with Clerk/);
+  assert.match(tripsSource, /documented Main API GET \/trips contract has not been verified for this Clerk session/);
+  assert.match(tripsSource, /no stable Bluebird member mapping is established/);
+  assert.match(tripsSource, /Clerk token acceptance for this endpoint is unverified/);
   assert.match(tripsSource, /No trip or queue data was requested/);
   assert.match(tripsSource, /authMode === 'legacy' && isLocalFlightReadMode\(\)/);
   assert.match(tripsSource, /enabled: memberQueryEnabled/);

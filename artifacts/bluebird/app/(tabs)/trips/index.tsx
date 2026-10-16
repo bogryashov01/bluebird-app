@@ -217,7 +217,7 @@ export default function TripsScreen() {
         </View>
         <TripAvailabilityState
           title="Trips unavailable"
-          description="You’re signed in with Clerk, but trip data is unavailable until the Main API can verify the matching Bluebird member account. No trip or queue data was requested."
+          description="The documented Main API GET /trips contract has not been verified for this Clerk session, and no stable Bluebird member mapping is established. Clerk token acceptance for this endpoint is unverified. No trip or queue data was requested."
           testID="clerk-trips-unavailable"
         />
       </View>

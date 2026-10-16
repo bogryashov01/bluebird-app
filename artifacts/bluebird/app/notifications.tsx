@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import {
   useListNotifications, useMarkNotificationRead, getListNotificationsQueryKey, useUpdateMe,
 } from '@workspace/api-client-react';
@@ -12,10 +13,15 @@ import type { Notification, User } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
+import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
+import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
+import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
+import { ProductionAuthHttpError } from '@/lib/productionAuthApi';
+import type { ProductionNotificationPrefs } from '@/lib/productionAuthApi';
+import { readClerkNotificationPreferences } from '@/lib/clerkNotificationPreferences';
 import { SettingsGroup } from '@/components/SettingsGroup';
 import { NETWORKING_INBOX_ROUTE, notificationRoute } from '@/lib/notificationRoute';
 import { usePersistedState } from '@/hooks/usePersistedState';
-import { TripAvailabilityState } from '@/components/TripAvailabilityState';
 
 // ── Toggle pill ───────────────────────────────────────────────────────────────
 function Toggle({ value, onToggle, activeColor, trackOff, knobColor, disabled = false }: { value: boolean; onToggle: () => void; activeColor: string; trackOff: string; knobColor: string; disabled?: boolean }) {
@@ -54,15 +60,211 @@ const DELIVERY_CHANNELS = [
 ] as const;
 type DeliveryChannel = NonNullable<User['notificationChannel']>;
 
-function ClerkNotificationSettingsUnavailable() {
+function notificationChannelLabel(channel: string | null): string {
+  if (channel === 'email') return 'Email';
+  if (channel === 'sms') return 'SMS';
+  if (channel === 'both') return 'Email + SMS';
+  return 'Not set';
+}
+
+function notificationModeLabel(mode: ProductionNotificationPrefs['mode']): string {
+  if (mode === 'off') return 'Off';
+  if (mode === 'all') return 'All flights';
+  return 'Specific flights';
+}
+
+function notificationReadError(error: unknown): string {
+  if (error instanceof ProductionAuthHttpError && error.status === 401) {
+    return 'Your Main API session was rejected (HTTP 401). Sign in again before retrying.';
+  }
+  if (error instanceof ProductionAuthHttpError && error.status === 403) {
+    return 'The Main API denied access to notification preferences (HTTP 403).';
+  }
+  if (error instanceof ProductionAuthHttpError) {
+    return `The Main API could not load notification preferences (HTTP ${error.status}).`;
+  }
+  return 'Notification preferences could not be loaded. Check the selected Main API and Clerk configuration, then try again.';
+}
+
+function ClerkNotificationSettings() {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const session = useClerkAuthSnapshot();
+  const { clerkMemberResolution } = useAuth();
+  const configuration = getMainBluebirdApiConfigurationOrNull();
+  const sessionRef = React.useRef(session);
+  sessionRef.current = session;
+
+  const currentUser =
+    clerkMemberResolution.status === 'profile_complete' &&
+    clerkMemberResolution.clerkUserId === session?.userId
+      ? clerkMemberResolution.currentUser
+      : null;
+  const canLoadPreferences =
+    !!configuration &&
+    session?.isLoaded === true &&
+    session.isSignedIn === true &&
+    !!session.userId &&
+    currentUser?.isAuthenticated === true;
+
+  const preferencesQuery = useQuery({
+    queryKey: [
+      'clerk-notification-preferences',
+      configuration?.environment ?? 'unconfigured',
+      session?.userId ?? 'signed-out',
+    ],
+    enabled: false,
+    retry: false,
+    staleTime: 0,
+    queryFn: async ({ signal }) => {
+      if (!configuration || !session?.userId || !canLoadPreferences) {
+        throw new Error('A complete authenticated Clerk profile and matching Main API configuration are required.');
+      }
+      const requestedClerkUserId = session.userId;
+      const api = createMainBluebirdApiIntegration({
+        configuration,
+        tokenProvider: {
+          environment: configuration.environment,
+          getVerifiedAccessToken: async () => {
+            const activeSession = sessionRef.current;
+            if (
+              !activeSession ||
+              activeSession.isLoaded !== true ||
+              activeSession.isSignedIn !== true ||
+              activeSession.userId !== requestedClerkUserId
+            ) return null;
+            return activeSession.getToken();
+          },
+        },
+      });
+      return readClerkNotificationPreferences({
+        getCurrentSession: () => sessionRef.current,
+        requestedClerkUserId,
+        readProfile: (requestOptions) => api.authenticated.getProfile(requestOptions),
+        signal,
+      });
+    },
+  });
+
+  const prefs = preferencesQuery.data;
+  const prefRows = prefs ? [
+    { label: 'Flight alert mode', hint: notificationModeLabel(prefs.mode) },
+    ...(prefs.mode === 'all'
+      ? [{ label: 'All flight alerts', hint: notificationChannelLabel(prefs.allChannels) }]
+      : []),
+    ...(prefs.mode === 'specific'
+      ? [
+          { label: 'Home airport flights', hint: notificationChannelLabel(prefs.emptyLegHomeAirport) },
+          { label: 'Departing from favorites', hint: notificationChannelLabel(prefs.departingFavorite) },
+          { label: 'Arriving at favorites', hint: notificationChannelLabel(prefs.arrivingFavorite) },
+        ]
+      : []),
+    { label: 'Queue updates', hint: notificationChannelLabel(prefs.queueUpdates) },
+    { label: 'Winning notifications', hint: notificationChannelLabel(prefs.winningNotifications) },
+  ] : [];
+
+  const topPad = Platform.OS === 'web' ? 60 : insets.top;
+  const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
+
   return (
-    <TripAvailabilityState
-      title="Notification settings unavailable"
-      description="Notification preferences and history are not supported for this authenticated Clerk account in this preview. No notification data was requested and no preferences were changed."
-      testID="clerk-notifications-unavailable"
-      actionLabel="Back to Profile"
-      onAction={() => router.replace('/(tabs)/profile')}
-    />
+    <View style={[styles.root, { backgroundColor: colors.offWhite }]} testID="clerk-notifications">
+      <View style={[
+        styles.header,
+        { paddingTop: topPad + 12, borderBottomColor: colors.separator },
+      ]}>
+        <TouchableOpacity
+          style={[styles.backBtn, { backgroundColor: colors.muted }]}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
+          <Text style={[styles.backChevron, { color: colors.textOnSurface }]}>‹</Text>
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.textOnSurface }]}>Notification Settings</Text>
+      </View>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.clerkScroll, { paddingBottom: botPad + 40 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>SAVED PREFERENCES</Text>
+        {!prefs ? (
+          <View style={[styles.preferenceNotice, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.noticeBody, { color: colors.textOnSurface }]}>
+              Preferences are read-only here. Loading them may also synchronize your verified phone number with your profile.
+            </Text>
+            {preferencesQuery.isError && (
+              <Text style={[styles.noticeError, { color: colors.destructive }]} testID="clerk-notification-preferences-error">
+                {notificationReadError(preferencesQuery.error)}
+              </Text>
+            )}
+            {canLoadPreferences ? (
+              <TouchableOpacity
+                style={[styles.loadPreferencesButton, { backgroundColor: colors.primary }]}
+                onPress={() => { void preferencesQuery.refetch(); }}
+                disabled={preferencesQuery.isFetching}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                testID="clerk-load-notification-preferences"
+              >
+                {preferencesQuery.isFetching ? (
+                  <ActivityIndicator size="small" color={colors.primaryForeground} />
+                ) : (
+                  <Text style={[styles.loadPreferencesText, { color: colors.primaryForeground }]}>
+                    {preferencesQuery.isError ? 'Try again' : 'Load saved preferences'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <Text style={[styles.noticeError, { color: colors.mutedForegroundLight }]}>
+                A complete authenticated profile and matching Main API configuration are required to load preferences.
+              </Text>
+            )}
+          </View>
+        ) : (
+          <>
+            <Text style={[styles.noticeBody, { color: colors.mutedForegroundLight }]}>
+              These saved preferences are read-only. Email and SMS are shown as separate delivery channels; they are not push settings.
+            </Text>
+            <SettingsGroup title="Flight alerts" rows={prefRows.slice(0, prefs.mode === 'specific' ? 4 : prefs.mode === 'all' ? 2 : 1)} />
+            <SettingsGroup title="Updates" rows={prefRows.slice(prefs.mode === 'specific' ? 4 : prefs.mode === 'all' ? 2 : 1)} />
+            <TouchableOpacity
+              style={[styles.refreshPreferencesButton, { borderColor: colors.border }]}
+              onPress={() => { void preferencesQuery.refetch(); }}
+              disabled={preferencesQuery.isFetching}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              testID="clerk-refresh-notification-preferences"
+            >
+              {preferencesQuery.isFetching ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={[styles.refreshPreferencesText, { color: colors.primary }]}>Refresh preferences</Text>
+              )}
+            </TouchableOpacity>
+            {preferencesQuery.isError && (
+              <Text style={[styles.noticeError, { color: colors.destructive }]} testID="clerk-notification-preferences-error">
+                {notificationReadError(preferencesQuery.error)}
+              </Text>
+            )}
+          </>
+        )}
+
+        <View style={styles.unavailableSections}>
+          <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>NOTIFICATION HISTORY</Text>
+          <SettingsGroup rows={[{
+            label: 'Recent notifications',
+            hint: 'Unavailable: no Clerk-authenticated history read is verified.',
+          }]} />
+          <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>PUSH DELIVERY</Text>
+          <SettingsGroup rows={[{
+            label: 'Push notification settings',
+            hint: 'Unavailable: notificationPrefs does not define push-delivery settings.',
+          }]} />
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -351,7 +553,7 @@ function LegacyNotificationsScreen() {
 export default function NotificationsScreen() {
   const { authMode } = useAuth();
   return authMode === 'clerk'
-    ? <ClerkNotificationSettingsUnavailable />
+    ? <ClerkNotificationSettings />
     : <LegacyNotificationsScreen />;
 }
 
@@ -370,7 +572,23 @@ const styles = StyleSheet.create({
   backChevron:  { fontFamily: 'Inter_500Medium', fontSize: 22, marginTop: -2 },
   headerTitle:  { fontFamily: 'Inter_700Bold', fontSize: 20 },
 
+  clerkScroll: { paddingHorizontal: 16, paddingTop: 20, gap: 10 },
   scroll: { paddingHorizontal: 16, paddingTop: 20 },
+
+  preferenceNotice: { borderRadius: 18, padding: 16, gap: 12 },
+  noticeBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19 },
+  noticeError: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17 },
+  loadPreferencesButton: {
+    minHeight: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  loadPreferencesText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  refreshPreferencesButton: {
+    minHeight: 42, borderRadius: 14, borderWidth: 1, alignItems: 'center',
+    justifyContent: 'center', paddingHorizontal: 16,
+  },
+  refreshPreferencesText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  unavailableSections: { gap: 10, marginTop: 14 },
 
   sectionLabel: {
     fontFamily: 'Inter_600SemiBold', fontSize: 11,

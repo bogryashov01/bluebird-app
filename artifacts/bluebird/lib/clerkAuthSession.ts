@@ -70,9 +70,8 @@ export function shouldRedirectClerkRoute(
     group === '(tabs)' &&
     isClerkCoreTabRoute(segments)
   ) return false;
-  // These destinations are read-only unavailable states for completed Clerk
-  // profiles until Main API account edits and notification preferences are
-  // supported. They do not enable legacy API calls or writes.
+  // These destinations are available to complete Clerk profiles. Screen-level
+  // reads remain separately gated by their verified Main API contracts.
   if (
     registeredHomeReady &&
     ((group === 'account' && route === 'personal-info' && segments.length === 2) ||

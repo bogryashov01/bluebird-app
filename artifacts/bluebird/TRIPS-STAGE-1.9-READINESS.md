@@ -41,6 +41,31 @@ This audit records the trip flow and contracts before the Stage 1.9 UI changes.
 | Checklist | **DEFERRED** | The current confirmation screen has static “Next Steps” content, not a persisted trip checklist. No checklist screen or transition was fabricated. |
 | Production trip integration | **DEFERRED** | Browser checks observed no trip, manifest, saved-passenger, or mutation requests from production-read My Trips, Trip Details, Passenger Information, or Boarding Pass. |
 
+### Clerk-authenticated account screens (2026-10-16)
+
+- A complete authenticated Clerk profile can open Discover, Trips, Membership,
+  and Profile regardless of `isMember`. Incomplete and signed-out users remain
+  guarded, and member-only actions retain their existing server checks.
+- Clerk Trips intentionally makes no trip or queue request. The API contract
+  documents `GET /trips`, but acceptance of the current Clerk token for that
+  endpoint and a stable Clerk-to-Bluebird member mapping have not been verified.
+  The existing typed method alone is not evidence of deployed authorization.
+- Notification preferences are read only after the user explicitly selects
+  **Load saved preferences**. The authenticated profile contract includes
+  `notificationPrefs`; the UI discloses that `GET /me/profile` may synchronize
+  verified phone data. No preference or profile write method is called by the
+  mobile screen. Notification history and push delivery remain separate,
+  scoped-unavailable sections because the verified profile projection does not
+  provide those capabilities.
+- Focused checks cover member/non-member navigation, incomplete/signed-out
+  route guards, the no-request Trips state, preference reads for the current
+  Clerk identity, unavailable responses, and no preference-write methods.
+  `test:clerk-session-isolation`, `test:clerk-member-resolution`,
+  `test:clerk-notification-preferences`, and `test:production-auth-api` pass.
+- No live Clerk profile read was made during verification. The signed-in UI
+  could not be device-verified in the unauthenticated preview; deployed
+  `GET /trips` Clerk acceptance remains blocked on API/member-mapping evidence.
+
 ### Backend-contract uncertainties
 
 - There is no authenticated production contract for listing a member’s trips or resolving a trip’s flight/leg reference. Production leg IDs and member trip IDs must remain separate.

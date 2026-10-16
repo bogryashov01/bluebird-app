@@ -467,7 +467,9 @@ test("documented member methods use the production paths, verbs, and bodies", as
   });
 
   assert.equal((await client.getMe()).isAuthenticated, true);
-  assert.equal((await client.getProfile()).weightLbs, 170);
+  const loadedProfile = await client.getProfile();
+  assert.equal(loadedProfile.weightLbs, 170);
+  assert.deepEqual(loadedProfile.notificationPrefs, notificationPrefs);
   assert.deepEqual(
     await client.updateProfile({ ...profileUpdate, localOnlyField: "must not escape" }),
     currentUser,
