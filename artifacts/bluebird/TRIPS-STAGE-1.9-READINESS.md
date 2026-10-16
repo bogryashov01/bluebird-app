@@ -66,6 +66,91 @@ This audit records the trip flow and contracts before the Stage 1.9 UI changes.
   could not be device-verified in the unauthenticated preview; deployed
   `GET /trips` Clerk acceptance remains blocked on API/member-mapping evidence.
 
+### Read-only source inspection and exact verification blockers (2026-10-16)
+
+The API owner has not verified Clerk authentication or member mapping for
+`GET /trips`. Trips therefore remains unavailable in Clerk mode. No live API
+request or token probe was made, and no Trips or Main API implementation was
+changed during this inspection.
+
+#### What this workspace proves
+
+- `lib/productionAuthApi.ts` declares `GET /trips` and parses a response shaped
+  as `{ current, past }`, each containing `{ leg, checklist }`. The parser
+  requires numeric leg/empty-leg IDs; route, schedule, aircraft and FBO
+  summary fields on `leg`; and the checklist timestamps, lock flag, remaining
+  step enum, passenger count, and award flag. This is a client-side contract
+  and mock-test evidence only; it does not prove the deployed endpoint's
+  response or authorization behavior.
+- `lib/mainBluebirdApi.ts` constructs an environment-bound authenticated
+  client and exposes `listTrips()`. The Clerk token provider obtains a fresh
+  token from the selected Clerk session and sends it as a bearer token, but the
+  Trips screen does not construct or call this client.
+- `lib/productionAuthState.ts` keeps authenticated production member data
+  unavailable for the two explicit reasons `clerk_token_acceptance_unverified`
+  and `member_identity_mapping_unverified`. `/api/me` profile booleans are not
+  a stable Bluebird member ID and do not establish trip ownership.
+- `app/(tabs)/trips/index.tsx` returns the unavailable state for Clerk mode
+  before any trip or queue query. Existing local-demo hooks and trip mutations
+  remain separate and must not be used as production fallbacks.
+- The checked-in `artifacts/api-server` is not evidence about the separately
+  deployed Main Bluebird API. Its `GET /api/trips` route uses
+  `authMiddleware`, which verifies the project's own signed JWT and takes
+  `userId` from that JWT. The route queries local trips by that ID, returns a
+  different legacy array projection, and invokes a departure sweep. No Clerk
+  issuer/JWKS validation or Clerk-subject mapping is present in that checked-in
+  middleware. The deployed Main API could differ; its source and runtime must
+  be checked directly before drawing a conclusion.
+
+#### What the Main Bluebird Website Replit project/API owner must verify
+
+Use the separate Main Bluebird Website project's **deployed source and an
+approved non-production environment**. Do not use this workspace's local API
+server as a substitute.
+
+1. **Target and deployment:** identify which Main API deployment serves the
+   Bluebird-selected Development or Production `/api/trips` URL, its deployed
+   revision, and the actual `GET /api/trips` route and middleware. Confirm the
+   route is the one described by the deployed contract.
+2. **Clerk token acceptance:** inspect the server-side verifier and confirm
+   which Clerk instance and token type/template it accepts, including the
+   expected issuer, signature/JWKS, audience or authorized-party checks, and
+   expiry/revocation behavior. Compare the expected issuer with the Clerk
+   instance paired to that selected mobile API environment. Confirm the exact
+   token choice (default session token or named template). Then exercise the
+   endpoint in non-production with that selected signed-in Clerk session.
+3. **Authoritative member mapping and ownership:** show how the verified Clerk
+   subject resolves to the canonical Bluebird member/account ID. Confirm the
+   lookup is authoritative and server-side (not based on matching email or
+   phone), and that the query filters trips using only that resolved identity;
+   the request must not accept a client-supplied member ID as the owner.
+4. **Isolation test:** in non-production, use two distinct Clerk accounts with
+   known, different trip fixtures. Verify each receives only its own trips,
+   receives no other account's trips, and receives `{ current: [], past: [] }`
+   when it has none. Also verify an unmapped account cannot receive another
+   member's data. Do not share tokens or credentials; provide only the test
+   result or a non-secret evidence reference.
+5. **Deployed response and read semantics:** confirm the deployed response is
+   exactly compatible with the mobile projection `{ current, past }` of
+   `{ leg, checklist }`, including current/past classification, cancelled and
+   completed trip handling, numeric Empty Leg IDs, nullable fields, and empty
+   arrays. Confirm the GET does not perform trip/queue mutations or expose
+   queue entries. The existing local route's departure sweep is not proof that
+   the deployed route is read-only.
+6. **Failure outcomes:** document the deployed statuses for missing/expired
+   Clerk sessions, authenticated-but-unmapped or unauthorized accounts, and
+   service failures. In particular, specify which response represents
+   authentication denial versus authorization denial so Bluebird can display
+   those separately from network, server, and invalid-response errors.
+
+**Activation remains blocked** until the API owner supplies non-secret evidence
+for items 1–6 in the selected environment. If the deployed contract differs
+from the mobile parser, resolve and document that contract before connecting
+the screen. After verification, a separate mobile change can wire only the
+authenticated `listTrips()` read, bind/cache it to the authoritative account,
+and add explicit empty, denied, and service-error states. It must not load queue
+data or expose trip mutations.
+
 ### Backend-contract uncertainties
 
 - There is no authenticated production contract for listing a member’s trips or resolving a trip’s flight/leg reference. Production leg IDs and member trip IDs must remain separate.
