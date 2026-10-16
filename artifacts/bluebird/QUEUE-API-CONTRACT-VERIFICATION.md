@@ -75,3 +75,24 @@ Do not run these live checks until explicitly authorized. A publishable-key pref
 ## Scope and safety record
 
 This reconciliation used the supplied Main-source audit, Mobile source, and a value-free local configuration diagnostic only. No network request, queue read or mutation, token or account-data access, database operation, or API/Clerk/environment change was performed. The local legacy API remains a distinct app-JWT contract and is never a fallback.
+
+## Live Development read verification (2026-10-16)
+
+**Outcome:** No request was sent. The selected Development configuration is structurally ready, but the required API-owner confirmations are not present in the available project evidence. The verification therefore stopped before obtaining a Clerk token or contacting any endpoint.
+
+| Requested status | Result | Sanitized evidence |
+| --- | --- | --- |
+| API environment match | **UNKNOWN** | The existing value-free diagnostic reports Development selected and a structurally valid Development API setting. No API-owner evidence confirms that this target is the audited Main Development deployment. |
+| Clerk issuer match | **UNKNOWN** | The diagnostic reports that the configured issuer host matches the host encoded in the Development test key. The API owner's authoritative issuer identity and confirmation that the selected target accepts that issuer are unavailable. |
+| Clerk authentication | **UNKNOWN** | No current-session token was obtained and no authenticated `/api/me` request was sent. A prior credential-free preflight and a historical test-bearer response do not establish authentication of the current Clerk Development session. |
+| Member identity mapping | **UNKNOWN** | The supplied source audit says a Clerk-user-to-member mapping exists, but there is no authenticated runtime response proving the current test account resolves to its intended Bluebird member. |
+| Queue endpoint compatibility | **UNKNOWN** | No `/api/trips` or per-flight queue read was sent, so live response shapes could not be compared in memory with the existing Mobile parsers. The checked-in parser and source audit are not live compatibility evidence. |
+| Trusted existing credit source | **UNKNOWN** | None of the approved reads was performed, and no available safe evidence establishes a trusted balance source that matches the server's authoritative check. No profile or other unapproved read was used. |
+
+**Request record:** `GET /api/me`, `GET /api/trips`, and `GET /api/empty-legs/:id/queue` were all skipped. The first two were blocked because the API-owner confirmation of the selected Main Development target and accepted Clerk issuer was missing; no current signed-in Mobile Clerk session was available to this verification run. The queue read additionally requires an API-owner-approved isolated Development flight/queue target and explicit confirmation that its response cannot expose unrelated members' data. No target ID was available or collected.
+
+**Task #538 gates:** None of the six runtime gates is cleared. Deployment identity, deployed request/response compatibility, API/Clerk pairing, live Clerk validation, runtime member identity, and trusted credit source all remain **UNKNOWN**. The value-free configuration checks establish local selection and shape only; they do not satisfy any of those gates. Queue reads and actions remain fail-closed.
+
+**Exact evidence needed to continue:** The API owner must confirm, without sharing credentials, that the selected Development target runs the audited Main service and specify its authoritative accepted Development Clerk issuer. For a queue read, the API owner must also supply or approve an isolated Development flight/queue and confirm its result cannot contain unrelated members' data. The authorized Development test account must be signed in to the matching Mobile Clerk session. To resolve credit status, the API owner must identify a safe, approved read-only source and document how its balance is authoritative and matches the server-side check; the prohibited profile read is not an acceptable substitute.
+
+No Development or Production request, Clerk token acquisition, account-data access, queue mutation, database operation, or configuration change was made during this verification. No raw URL, issuer, key, token, account identifier, personal data, trip contents, queue rows, or credit amount was recorded. The separate local legacy API remains unrelated and was not contacted.
