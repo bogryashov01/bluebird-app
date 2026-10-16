@@ -8,6 +8,7 @@
     "scheme": "bluebird",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "buildNumber": "1",
       "supportsTablet": false,
       "associatedDomains": [
         "applinks:bluebird.co"

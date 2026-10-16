@@ -3,6 +3,15 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal"
+    },
+    "production": {
+      "environment": "production",
+      "distribution": "store"
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {}
     }
   }
 }
