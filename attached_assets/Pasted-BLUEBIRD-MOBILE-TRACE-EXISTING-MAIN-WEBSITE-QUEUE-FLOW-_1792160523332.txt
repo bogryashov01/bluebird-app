@@ -1,0 +1,137 @@
+BLUEBIRD MOBILE — TRACE EXISTING MAIN WEBSITE QUEUE FLOW
+
+PRIORITY: CRITICAL
+MODE: READ-ONLY INVESTIGATION
+
+GOAL:
+
+Make Bluebird Mobile Queue and Skip the Line
+work with the EXISTING Main Bluebird backend.
+
+We do not want a showcase-only MVP.
+
+We need real working functionality.
+
+IMPORTANT CONTEXT:
+
+The Main Bluebird website already has
+Queue and Skip the Line functionality.
+
+Mobile already has isolated Clerk-backed
+queue components from Task #507.
+
+Task #521 found a mismatch between the
+Mobile queue contract and the checked-in
+legacy API server.
+
+However, this does NOT prove that the
+deployed Main Bluebird API lacks the
+required endpoints.
+
+YOUR TASK:
+
+Trace the existing Main Bluebird website's
+Queue and Skip the Line implementation.
+
+READ-ONLY INSPECTION IS ALLOWED.
+
+DO NOT MODIFY MAIN BLUEBIRD.
+
+STEP 1 — FRONTEND
+
+Find the existing Main Bluebird frontend
+implementation for:
+
+- Join Queue
+- Leave Queue
+- Queue position
+- Queue status
+- Skip the Line
+- Skip the Line credits
+
+Identify the actual API requests made
+by these actions.
+
+STEP 2 — BACKEND
+
+Trace each request to its existing
+server-side implementation.
+
+Identify:
+
+- HTTP method
+- Endpoint path
+- Request payload
+- Response format
+- Authentication mechanism
+- Membership requirements
+- Credit requirements
+
+STEP 3 — AUTHENTICATION
+
+Determine whether these operations use:
+
+- Clerk sessions
+- Legacy JWT
+- Cookies
+- Another authentication mechanism
+
+Do not assume Clerk compatibility.
+
+Do not change authentication.
+
+STEP 4 — MOBILE COMPATIBILITY
+
+Compare the actual Main website implementation
+against the Mobile components created
+in Task #507.
+
+Identify exactly what Mobile needs to change
+to use the existing backend safely.
+
+STEP 5 — IMPLEMENTATION PLAN
+
+Provide the smallest Mobile-only integration
+plan for:
+
+1. Join Queue
+2. View Queue Position
+3. Leave Queue
+4. Skip the Line
+
+Do not implement yet.
+
+STRICT RULES:
+
+- Do not modify Main Bluebird.
+- Do not modify Main API.
+- Do not modify database.
+- Do not modify Clerk.
+- Do not modify production configuration.
+- Do not perform real queue mutations.
+- Do not use or expose authentication tokens.
+- Do not invent endpoints.
+- Do not create mock success responses.
+- Do not modify Flight Details yet.
+
+DELIVERABLE:
+
+Provide a table:
+
+ACTION | ACTUAL MAIN ENDPOINT |
+AUTH METHOD | MOBILE COMPATIBLE |
+REQUIRED CHANGE
+
+Also identify:
+
+- Existing reusable Mobile components
+- Exact integration blockers
+- Whether backend changes are truly necessary
+- Fastest safe path to working Queue
+
+Use source-code evidence with file paths.
+
+IMPORTANT:
+
+We want a FUNCTIONAL MVP,
+not a read-only showcase.
