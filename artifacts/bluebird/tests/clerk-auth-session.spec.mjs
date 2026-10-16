@@ -22,6 +22,7 @@ import {
   CLERK_MEMBER_NAVIGATION_READINESS,
   PRODUCTION_AUTH_AVAILABILITY,
 } from "../scripts/.production-auth-state.test.mjs";
+import { isClerkHomeAvailable } from "../scripts/.clerk-member-resolution.test.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -139,6 +140,44 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false, false), true);
   assert.equal(shouldRedirectClerkRoute(["notifications"], false, false), true);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "connections"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "[id]"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["flight", "[id]"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "policy"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "confirmed"], false, true), true);
+  for (const resolution of [
+    { status: "signed_out" },
+    { status: "resolving", clerkUserId: "clerk-user-a" },
+    { status: "unresolved", reason: "missing_authoritative_decision" },
+    { status: "profile_incomplete", clerkUserId: "clerk-user-a" },
+  ]) {
+    const homeReady = isClerkHomeAvailable(resolution, CLERK_MEMBER_NAVIGATION_READINESS);
+    assert.equal(homeReady, false, `${resolution.status} must not authorize flight detail`);
+    assert.equal(shouldRedirectClerkRoute(["flight", "[id]"], false, homeReady), true);
+  }
+  const completeNonmember = {
+    status: "profile_complete",
+    clerkUserId: "clerk-user-a",
+    currentUser: { isAuthenticated: true, isProfileComplete: true, isMember: false },
+  };
+  const completeProfileHomeReady = isClerkHomeAvailable(
+    completeNonmember,
+    CLERK_MEMBER_NAVIGATION_READINESS,
+  );
+  assert.equal(completeProfileHomeReady, true);
+  assert.equal(canAccessClerkMemberScreens({
+    isLoaded: true,
+    isSignedIn: true,
+    memberResolution: completeNonmember,
+  }), false);
+  assert.equal(shouldRedirectClerkRoute(
+    ["flight", "[id]"],
+    false,
+    completeProfileHomeReady,
+  ), false);
+  const rootLayoutSource = readFileSync(resolve(projectRoot, "app/_layout.tsx"), "utf8");
+  const discoverSource = readFileSync(resolve(projectRoot, "app/(tabs)/discover/index.tsx"), "utf8");
+  assert.match(rootLayoutSource, /shouldRedirectClerkRoute\(segments, memberAccessResolved, registeredHomeReady\)/);
+  assert.match(discoverSource, /router\.push\(\{ pathname: '\/flight\/\[id\]', params: \{ id \} \}\)/);
   for (const path of [
     ["(tabs)", "discover"],
     ["(tabs)", "trips"],

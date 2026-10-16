@@ -77,6 +77,11 @@ export function shouldRedirectClerkRoute(
     ((group === 'account' && route === 'personal-info' && segments.length === 2) ||
       (group === 'notifications' && segments.length === 1))
   ) return false;
+  // Flight details render the public flight read in Clerk mode. This does not
+  // authorize queue, booking, or other member-only operations on that screen.
+  if (registeredHomeReady && group === 'flight' && route === '[id]' && segments.length === 2) {
+    return false;
+  }
   if (group === '(auth)' && (route === 'splash' || route === 'welcome')) return false;
   // This one account route is explicitly user-opened and reads only the
   // authenticated user's API profile; it does not grant member capabilities.

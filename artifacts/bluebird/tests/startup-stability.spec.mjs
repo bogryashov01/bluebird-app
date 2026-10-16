@@ -161,6 +161,9 @@ test("Clerk-enabled Welcome routes the phone journey into Clerk without starting
   await page.goto("/discover");
   await expect(page).toHaveURL(/\/sign-in$/);
   await expect(page.getByText("Browse available empty legs", { exact: true })).toHaveCount(0);
+  await page.goto("/flight/81001");
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByText("Flight Details", { exact: false })).toHaveCount(0);
   expect(authApiCalls).toEqual([]);
 });
 
