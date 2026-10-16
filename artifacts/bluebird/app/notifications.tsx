@@ -18,7 +18,8 @@ import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConf
 import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
 import { ProductionAuthHttpError } from '@/lib/productionAuthApi';
 import type { ProductionNotificationPrefs } from '@/lib/productionAuthApi';
-import { readClerkNotificationPreferences } from '@/lib/clerkNotificationPreferences';
+import { readClerkNotificationProfile, saveClerkNotificationPreferences, notificationPreferenceRows } from '@/lib/clerkNotificationPreferences';
+import { NotificationPreferenceEditor } from '@/components/NotificationPreferenceEditor';
 import { SettingsGroup } from '@/components/SettingsGroup';
 import { NETWORKING_INBOX_ROUTE, notificationRoute } from '@/lib/notificationRoute';
 import { usePersistedState } from '@/hooks/usePersistedState';
@@ -94,6 +95,10 @@ function ClerkNotificationSettings() {
   const configuration = getMainBluebirdApiConfigurationOrNull();
   const sessionRef = React.useRef(session);
   sessionRef.current = session;
+  const queryClient = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const saveController = React.useRef<AbortController | null>(null);
+  useEffect(() => () => saveController.current?.abort(), []);
 
   const currentUser =
     clerkMemberResolution.status === 'profile_complete' &&
@@ -107,12 +112,33 @@ function ClerkNotificationSettings() {
     !!session.userId &&
     currentUser?.isAuthenticated === true;
 
+  const queryKey = [
+    'clerk-notification-preferences',
+    configuration?.environment ?? 'unconfigured',
+    configuration?.apiBaseUrl ?? 'unconfigured',
+    session?.userId ?? 'signed-out',
+  ];
+  const createApi = () => {
+    if (!configuration || !session?.userId || !canLoadPreferences) {
+      throw new Error('A complete authenticated Clerk profile and matching Main API configuration are required.');
+    }
+    const requestedClerkUserId = session.userId;
+    return createMainBluebirdApiIntegration({
+      configuration,
+      tokenProvider: {
+        environment: configuration.environment,
+        getVerifiedAccessToken: async () => {
+          const active = sessionRef.current;
+          if (!active?.isLoaded || !active.isSignedIn || active.userId !== requestedClerkUserId) return null;
+          const token = await active.getToken();
+          const latest = sessionRef.current;
+          return latest?.isLoaded && latest.isSignedIn && latest.userId === requestedClerkUserId ? token : null;
+        },
+      },
+    });
+  };
   const preferencesQuery = useQuery({
-    queryKey: [
-      'clerk-notification-preferences',
-      configuration?.environment ?? 'unconfigured',
-      session?.userId ?? 'signed-out',
-    ],
+    queryKey,
     enabled: false,
     retry: false,
     staleTime: 0,
@@ -121,23 +147,8 @@ function ClerkNotificationSettings() {
         throw new Error('A complete authenticated Clerk profile and matching Main API configuration are required.');
       }
       const requestedClerkUserId = session.userId;
-      const api = createMainBluebirdApiIntegration({
-        configuration,
-        tokenProvider: {
-          environment: configuration.environment,
-          getVerifiedAccessToken: async () => {
-            const activeSession = sessionRef.current;
-            if (
-              !activeSession ||
-              activeSession.isLoaded !== true ||
-              activeSession.isSignedIn !== true ||
-              activeSession.userId !== requestedClerkUserId
-            ) return null;
-            return activeSession.getToken();
-          },
-        },
-      });
-      return readClerkNotificationPreferences({
+      const api = createApi();
+      return readClerkNotificationProfile({
         getCurrentSession: () => sessionRef.current,
         requestedClerkUserId,
         readProfile: (requestOptions) => api.authenticated.getProfile(requestOptions),
@@ -146,22 +157,35 @@ function ClerkNotificationSettings() {
     },
   });
 
-  const prefs = preferencesQuery.data;
-  const prefRows = prefs ? [
-    { label: 'Flight alert mode', hint: notificationModeLabel(prefs.mode) },
-    ...(prefs.mode === 'all'
-      ? [{ label: 'All flight alerts', hint: notificationChannelLabel(prefs.allChannels) }]
-      : []),
-    ...(prefs.mode === 'specific'
-      ? [
-          { label: 'Home airport flights', hint: notificationChannelLabel(prefs.emptyLegHomeAirport) },
-          { label: 'Departing from favorites', hint: notificationChannelLabel(prefs.departingFavorite) },
-          { label: 'Arriving at favorites', hint: notificationChannelLabel(prefs.arrivingFavorite) },
-        ]
-      : []),
-    { label: 'Queue updates', hint: notificationChannelLabel(prefs.queueUpdates) },
-    { label: 'Winning notifications', hint: notificationChannelLabel(prefs.winningNotifications) },
-  ] : [];
+  const profile = canLoadPreferences ? preferencesQuery.data : undefined;
+  const prefs = profile?.notificationPrefs;
+  const prefRows = prefs ? notificationPreferenceRows(prefs).map(({ key, label, value }) => ({
+    label,
+    hint: key === 'mode' ? notificationModeLabel(value as ProductionNotificationPrefs['mode']) : notificationChannelLabel(value),
+  })) : [];
+  const savePreferences = async (preferences: ProductionNotificationPrefs) => {
+    if (!session?.userId || saveController.current || preferencesQuery.isFetching) throw new Error('Refresh or save already in progress.');
+    setSaving(true);
+    const controller = new AbortController();
+    saveController.current = controller;
+    try {
+      const api = createApi();
+      const refreshed = await saveClerkNotificationPreferences({
+        getCurrentSession: () => sessionRef.current,
+        requestedClerkUserId: session.userId,
+        readProfile: (options) => api.authenticated.getProfile(options),
+        updateProfile: (data, options) => api.authenticated.updateProfile(data, options),
+        preferences,
+        signal: controller.signal,
+      });
+      queryClient.setQueryData(queryKey, refreshed);
+    } catch (error) {
+      throw new Error(notificationReadError(error).replace('load notification preferences', 'verify the preference update'));
+    } finally {
+      setSaving(false);
+      saveController.current = null;
+    }
+  };
 
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -192,7 +216,7 @@ function ClerkNotificationSettings() {
         {!prefs ? (
           <View style={[styles.preferenceNotice, { backgroundColor: colors.surface }]}>
             <Text style={[styles.noticeBody, { color: colors.textOnSurface }]}>
-              Preferences are read-only here. Loading them may also synchronize your verified phone number with your profile.
+              Loading them may also synchronize your verified phone number with your profile. Editing is available only when a safe complete profile update can be formed.
             </Text>
             {preferencesQuery.isError && (
               <Text style={[styles.noticeError, { color: colors.destructive }]} testID="clerk-notification-preferences-error">
@@ -225,14 +249,20 @@ function ClerkNotificationSettings() {
         ) : (
           <>
             <Text style={[styles.noticeBody, { color: colors.mutedForegroundLight }]}>
-              These saved preferences are read-only. Email and SMS are shown as separate delivery channels; they are not push settings.
+              These are the last loaded account preferences. Email and SMS are delivery channels, not push settings. Refreshing may also synchronize your verified phone number.
             </Text>
             <SettingsGroup title="Flight alerts" rows={prefRows.slice(0, prefs.mode === 'specific' ? 4 : prefs.mode === 'all' ? 2 : 1)} />
             <SettingsGroup title="Updates" rows={prefRows.slice(prefs.mode === 'specific' ? 4 : prefs.mode === 'all' ? 2 : 1)} />
+            {profile && <NotificationPreferenceEditor
+              key={preferencesQuery.dataUpdatedAt}
+              profile={profile}
+              disabled={saving || preferencesQuery.isFetching || preferencesQuery.isError}
+              onSave={savePreferences}
+            />}
             <TouchableOpacity
               style={[styles.refreshPreferencesButton, { borderColor: colors.border }]}
               onPress={() => { void preferencesQuery.refetch(); }}
-              disabled={preferencesQuery.isFetching}
+              disabled={preferencesQuery.isFetching || saving}
               activeOpacity={0.75}
               accessibilityRole="button"
               testID="clerk-refresh-notification-preferences"
@@ -411,11 +441,11 @@ function LegacyNotificationsScreen() {
 
         {/* Delivery channel */}
         <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight, marginTop: 24 }]}>
-          DELIVERY CHANNEL
+          LEGACY ACCOUNT DELIVERY CHANNEL
         </Text>
         <View style={[styles.channelCard, { backgroundColor: colors.surface }]}>
           <Text style={[styles.channelDescription, { color: colors.mutedForegroundLight }]}>
-            Choose where notification events are delivered.
+            Saved to the legacy demo account only. This App/Email field is separate from Main API email/SMS notificationPrefs; it does not configure push.
           </Text>
           {user && deliveryChannelUserId === user.id ? (
             <View style={styles.channelOptions}>
@@ -460,7 +490,10 @@ function LegacyNotificationsScreen() {
 
         {/* Flight notification toggles */}
         <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight, marginTop: 24 }]}>
-          FLIGHT NOTIFICATIONS
+          LOCAL DEMO FLIGHT CONTROLS
+        </Text>
+        <Text style={[styles.noticeBody, { color: colors.mutedForegroundLight, marginBottom: 12 }]}>
+          These demo toggles are stored on this device only. They are not saved to your account and do not control notification delivery.
         </Text>
         <View style={[styles.toggleCard, { backgroundColor: colors.surface }]}>
           {([
@@ -477,7 +510,7 @@ function LegacyNotificationsScreen() {
           ))}
         </View>
 
-        <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight, marginTop: 24 }]}>UPDATES</Text>
+        <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight, marginTop: 24 }]}>LOCAL DEMO UPDATES</Text>
         <View style={[styles.toggleCard, { backgroundColor: colors.surface }]}>
           {([
             ['queueUpdates',  'Queue Position Updates'],
@@ -496,7 +529,7 @@ function LegacyNotificationsScreen() {
 
         {/* Recent Activity */}
         <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight, marginTop: 28 }]}>
-          RECENT ACTIVITY
+          LEGACY DEMO RECENT ACTIVITY
         </Text>
 
         {!togglesHydrated || isLoading ? (
@@ -552,8 +585,10 @@ function LegacyNotificationsScreen() {
 
 export default function NotificationsScreen() {
   const { authMode } = useAuth();
+  const session = useClerkAuthSnapshot();
+  const configuration = getMainBluebirdApiConfigurationOrNull();
   return authMode === 'clerk'
-    ? <ClerkNotificationSettings />
+    ? <ClerkNotificationSettings key={`${session?.userId}:${session?.isSignedIn}:${configuration?.environment}:${configuration?.apiBaseUrl}`} />
     : <LegacyNotificationsScreen />;
 }
 

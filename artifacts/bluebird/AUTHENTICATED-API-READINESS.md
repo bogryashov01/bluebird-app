@@ -1,5 +1,82 @@
 # Bluebird authenticated production API readiness
 
+## Contract-driven Notification Settings (2026-10-16)
+
+Clerk Notification Settings displays only `notificationPrefs` from the existing
+strict `GET /api/me/profile` parser:
+
+- `mode`: `off`, `all`, or `specific`.
+- `allChannels` for all-flight mode; `emptyLegHomeAirport`,
+  `departingFavorite`, and `arrivingFavorite` for specific-flight mode.
+- `queueUpdates` and `winningNotifications` in every mode.
+- Channels are `email`, `sms`, and `both` (Email + SMS). Nullable flight
+  channels are displayed as **Not set**; queue/winning channels are not nullable.
+
+The initial GET remains disabled until **Load saved preferences** is pressed.
+The screen discloses that profile GET can synchronize verified phone data;
+refresh and save actions also disclose their profile reads.
+
+Editing is available only when the server profile can form a safe full
+`PUT /api/me/profile` request: complete profile, valid names, real adult DOB,
+gender, home airport, nonempty favorite city keys, valid existing email, and
+valid optional weight. SMS/both also require existing SMS consent and a
+verified phone without a pending verification requirement. The screen cannot
+grant consent or verify a phone. Otherwise it explains why preferences are
+read-only; it does not supply registration defaults or save locally.
+
+Save performs GET → PUT → GET, preserving the latest required first/last name,
+DOB, gender, home airport and favorite city fields. Existing editable email
+and optional weight are preserved; locked email is omitted. Phone and consent
+are omitted to leave them unchanged. The existing PUT adapter parses its
+observed `CurrentUser` response, not a preference response. Saved rows change
+only after the final strict profile GET succeeds; server-returned values,
+not the draft, are displayed. Reads/writes check identity and cancellation;
+query state is scoped to identity and selected API origin/environment.
+Saving disables refresh and editing. An error or unverifiable write keeps the
+last loaded rows and requires an explicit successful refresh before editing
+again; no automatic write retry or save-success message is used.
+
+Clerk notification history and push delivery remain noninteractive unavailable
+states. The legacy App/Email/Both `notificationChannel` update remains separate
+from Main API preferences and is labeled as legacy-demo-account-only. Retained
+flight/update demo toggles are explicitly device-only and do not control
+delivery; legacy history is labeled demo activity.
+
+### Verification and limitations
+
+- `pnpm run typecheck:libs` and
+  `pnpm --filter @workspace/bluebird run typecheck`: passed.
+- `test:clerk-notification-preferences`: 15 passed, including field projections,
+  payload preservation, unsafe read-only fallback, failed/unverified writes,
+  pending writes, identity changes during reads/PUT/refresh, and cancellation.
+- `test:notification-preference-editor`: 4 browser component tests passed,
+  using React Native Web and an isolated test theme. Covers applicable
+  categories, selected channels, pending controls, errors, refresh-required
+  recovery, read-only state and SMS consent restrictions. It does not bypass
+  app authentication or exercise a live Clerk session.
+- `test:clerk-session-isolation`: 9 passed; `test:production-auth-api`: 21 passed.
+- Restarted Expo and captured the running app's public startup screen. A direct
+  unauthenticated `/notifications` capture did not expose Notification Settings.
+  The signed-in full screen was not visually verified. No live profile request,
+  write, SMS, push registration or native iOS/Android device test was performed.
+  The workflow serves web despite an existing optional native DevTools
+  installation warning about a missing system library.
+- Existing complete airport/city selections are preserved rather than replaced.
+  The server remains authoritative for catalog validity and may reject stale
+  selections. GET immediately before PUT reduces stale-field overwrites but
+  cannot prevent concurrent updates between requests: the documented contract
+  has no conditional-write/version precondition. Actual delivery is unverified.
+
+Modified mobile files: `app/notifications.tsx`,
+`components/NotificationPreferenceEditor.tsx`,
+`lib/clerkNotificationPreferences.ts`, `package.json`,
+`tests/clerk-notification-preferences.spec.mjs`,
+`tests/clerk-auth-session.spec.mjs`,
+`tests/notification-preference-editor.spec.mjs`,
+`tests/notification-preference-editor.config.mjs`, and this readiness report.
+`lib/productionAuthApi.ts` is reused unchanged. No shared navigation, Main API,
+API Server, database, schema, Clerk configuration or other screen was changed.
+
 ## Public flight detail read resolution (2026-10-16)
 
 Discover and Flight Details now use the same auth-aware local-versus-Main-API

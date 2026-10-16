@@ -270,7 +270,9 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(clerkNotifications, /clerk-load-notification-preferences/);
   assert.match(clerkNotifications, /enabled: false/);
   assert.match(clerkNotifications, /preferencesQuery\.refetch\(\)/);
-  assert.doesNotMatch(clerkNotifications, /updateProfile|useUpdateMe|useMarkNotificationRead|useListNotifications/);
+   assert.match(clerkNotifications, /api\.authenticated\.updateProfile/);
+   assert.match(clerkNotifications, /saveClerkNotificationPreferences/);
+   assert.doesNotMatch(clerkNotifications, /useUpdateMe|useMarkNotificationRead|useListNotifications/);
   assert.match(notificationsSource, /authMode === 'clerk'/);
   assert.match(clerkMembership, /currentUser\?\.isAuthenticated/);
   assert.match(clerkMembership, /currentUser\.memberTier/);
