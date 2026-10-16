@@ -61,6 +61,7 @@ async function mockFlightApi(page, {
     bringingPet: false,
   },
   manifestErrorStatus,
+  statusErrorStatus,
 } = {}) {
   let joinBody;
 
@@ -78,10 +79,19 @@ async function mockFlightApi(page, {
     if (path === "/api/notifications") return route.fulfill({ json: [] });
     if (path === "/api/queue/status") return route.fulfill({ json: queueEntries });
     if (path === "/api/flights/flight-1") return route.fulfill({ json: flight });
-    if (path === "/api/flights/flight-1/my-status") return route.fulfill({ json: status });
+    if (path === "/api/flights/flight-1/my-status") {
+      if (statusErrorStatus) {
+        return route.fulfill({
+          status: statusErrorStatus,
+          json: { error: "Flight access could not be verified." },
+        });
+      }
+      return route.fulfill({ json: status });
+    }
     if (path === "/api/networking/flights/flight-1/front-member") {
       return route.fulfill({ json: { eligible: false } });
     }
+    if (path === "/api/concierge/history") return route.fulfill({ json: [] });
     if (path === "/api/trips/trip-1/manifest") {
       if (manifestErrorStatus) {
         return route.fulfill({
@@ -146,17 +156,87 @@ test("local trip detail API failures and locked manifests have explicit states",
   await expect(page.getByTestId("passenger-information-unavailable")).toContainText("Passenger information is locked.");
 });
 
-test("flight details defer passenger selection until after confirmation", async ({ page }) => {
-  await mockFlightApi(page);
+test("flight details omit unsupported facts and keep join requests unavailable", async ({ page }) => {
+  const { getJoinBody } = await mockFlightApi(page);
+  await page.setViewportSize({ width: 320, height: 700 });
   await page.goto("/flight/flight-1");
 
   await expect(page.getByText("Citation CJ3", { exact: true })).toBeVisible();
+  await expect(page.getByText("4 available", { exact: true })).toBeVisible();
   await expect(page.getByText("Passengers", { exact: true })).toHaveCount(0);
   await expect(page.getByText("View Flight Policy & Terms", { exact: true })).toBeVisible();
 
-  await page.getByText("Request to Join", { exact: true }).click();
-  await expect(page).toHaveURL(/\/queue\/join/);
-  expect(new URL(page.url()).searchParams.has("passengers")).toBe(false);
+  await expect(page.getByText("WiFi", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Pets", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("25 kg per passenger", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Request unavailable", { exact: true })).toBeVisible();
+  await expect(page.getByText("Request to Join", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Ask AI Concierge", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.getByText("Ask AI Concierge", { exact: true }).click();
+  await expect(page).toHaveURL(/\/concierge$/);
+  await expect(page.getByText(/I'm your AI Concierge/)).toBeVisible();
+  expect(getJoinBody()).toBeUndefined();
+});
+
+test("flight details explain when membership is required without opening purchase or queue flows", async ({ page }) => {
+  const nonMember = { ...user, id: "flight-flow-nonmember", membershipTier: "none" };
+  const { getJoinBody } = await mockFlightApi(page, { cachedUser: nonMember });
+  await page.goto("/flight/flight-1");
+
+  await expect(page.getByText("Membership required", { exact: true })).toBeVisible();
+  await expect(page.getByText("Request to Join", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Ask AI Concierge", { exact: true })).toBeVisible();
+  expect(getJoinBody()).toBeUndefined();
+});
+
+test("flight details show clear signed-out and unavailable access states without queue requests", async ({ page }) => {
+  const signedOut = await mockFlightApi(page, { cachedUser: null });
+  await page.goto("/flight/flight-1");
+  await expect(page.getByText("Sign in required", { exact: true })).toBeVisible();
+  await expect(page.getByText("Request to Join", { exact: true })).toHaveCount(0);
+  expect(signedOut.getJoinBody()).toBeUndefined();
+
+  await page.unroute("**/api/**");
+  const unavailable = await mockFlightApi(page, { statusErrorStatus: 503 });
+  await page.goto("/flight/flight-1");
+  await expect(page.getByText("Queue access unavailable", { exact: true })).toBeVisible();
+  await expect(page.getByText(/No queue or booking request was sent\./)).toBeVisible();
+  await expect(page.getByText("Request to Join", { exact: true })).toHaveCount(0);
+  expect(unavailable.getJoinBody()).toBeUndefined();
+});
+
+test("only confirmed-flight status data can disclose departure FBO details", async ({ page }) => {
+  await mockFlightApi(page, {
+    status: {
+      status: "confirmed",
+      tripId: "trip-1",
+      confirmedFlight: {
+        departureFbo: "Confirmed Departure FBO",
+        departureFboAddress: "100 Airport Way",
+      },
+    },
+  });
+  await page.goto("/flight/flight-1");
+  await expect(page.getByTestId("departure-fbo-directions")).toBeVisible();
+  await expect(page.getByText("100 Airport Way", { exact: true })).toBeVisible();
+
+  await page.unroute("**/api/**");
+  await mockFlightApi(page, {
+    status: {
+      status: "waiting",
+      queueEntryId: "queue-1",
+      confirmedFlight: {
+        departureFbo: "Unconfirmed FBO",
+        departureFboAddress: "200 Airport Way",
+      },
+    },
+  });
+  await page.goto("/flight/flight-1");
+  await expect(page.getByTestId("departure-fbo-directions")).toHaveCount(0);
+  await expect(page.getByText("Unconfirmed FBO", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("200 Airport Way", { exact: true })).toHaveCount(0);
 });
 
 test("confirmed flight details still open Passenger Information", async ({ page }) => {

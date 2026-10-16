@@ -129,7 +129,7 @@ async function installSyntheticLocalShellSession(page) {
   await page.route("**/api/notifications", (route) => route.fulfill({ json: [] }));
   await page.route("**/api/queue/status", (route) => route.fulfill({ json: [] }));
   await page.route("**/api/flights/airports", (route) => route.fulfill({ json: [] }));
-  await page.route("https://bluebirdjets.com/api/**", (route) => {
+  const fulfillReadOnlyApi = (route) => {
     const path = new URL(route.request().url()).pathname;
     if (route.request().method() !== "GET") {
       return route.fulfill({ status: 405, json: { error: "Production requests are read-only in this test." } });
@@ -141,7 +141,9 @@ async function installSyntheticLocalShellSession(page) {
     if (path === "/api/airports/cities") return route.fulfill({ json: [] });
     if (path === "/api/airports") return route.fulfill({ json: [airportFixture, destinationAirportFixture] });
     return route.fulfill({ status: 404, json: { error: "Unmocked production endpoint." } });
-  });
+  };
+  await page.route("https://bluebirdjets.com/api/**", fulfillReadOnlyApi);
+  await page.route("https://main-api-development.example.test/api/**", fulfillReadOnlyApi);
 }
 
 function isQueueOrAccountStateRequest(requestUrl) {
@@ -165,23 +167,36 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   await page.goto(appUrl(baseURL, "discover"));
   const firstCard = page.locator('[data-testid^="production-flight-card-"]').first();
   await expect(firstCard).toBeVisible({ timeout: 60_000 });
-
-  await page.getByText("Map", { exact: true }).click();
-  await expect(page.locator(".leaflet-container")).toBeVisible({ timeout: 60_000 });
-  await page.getByText("List", { exact: true }).click();
-
   const testId = await firstCard.getAttribute("data-testid");
   const flightId = Number(testId?.replace("production-flight-card-", ""));
   expect(Number.isSafeInteger(flightId)).toBe(true);
-  expect(flightId).toBeGreaterThan(0);
+  const search = page.getByPlaceholder("Search routes, airports, aircraft");
+  await search.fill("DAL");
+  await expect(firstCard).toBeVisible();
 
+  await page.getByText("Map", { exact: true }).click();
+  await expect(page.locator(".leaflet-container")).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator(".leaflet-overlay-pane path.leaflet-interactive").first()).toBeVisible();
+  await expect(search).toHaveValue("DAL");
+
+  await page.getByText("List", { exact: true }).click();
+
+  expect(flightId).toBeGreaterThan(0);
   await firstCard.click();
   await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
   expect(new URL(page.url()).pathname).toMatch(new RegExp(`/flight/${flightId}$`));
   await page.goBack();
   await expect(page.locator(`[data-testid="production-flight-card-${flightId}"]`)).toBeVisible();
+  await expect(search).toHaveValue("DAL");
   await page.locator(`[data-testid="production-flight-card-${flightId}"]`).click();
   await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
+  await expect(page.getByText("Request to Join", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("WiFi", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Pets", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("25 kg per passenger", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("$2,000", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("$30,000", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Sunday, November 1", { exact: false })).toBeVisible();
 
   await page.getByTestId("production-queue-read-only-cta").click();
   await expect(page.getByTestId("production-read-only-notice")).toBeVisible();

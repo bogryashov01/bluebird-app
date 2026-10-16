@@ -41,59 +41,57 @@ function aircraftImage(type: string | null) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function computeArrival(departureTime: string | null, duration: string | null): string | null {
-  if (!departureTime || !duration) return null;
-  const [depH, depM] = departureTime.split(':').map(Number);
-  if (!Number.isFinite(depH) || !Number.isFinite(depM)) return null;
-  const hours = duration.match(/(\d+)h/);
-  const mins  = duration.match(/(\d+)m/);
-  const totalMins = depH * 60 + depM
-    + (hours ? parseInt(hours[1]) * 60 : 0)
-    + (mins  ? parseInt(mins[1])       : 0);
-  const arrH = Math.floor(totalMins / 60) % 24;
-  const arrM = totalMins % 60;
-  return `${String(arrH).padStart(2, '0')}:${String(arrM).padStart(2, '0')}`;
-}
-
 function formatDate(d: string | null) {
-  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return 'Date unavailable';
+  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
   const [y, m, day] = d.split('-').map(Number);
-  return new Date(y, m - 1, day).toLocaleDateString('en-US', {
+  const value = new Date(y, m - 1, day);
+  if (value.getFullYear() !== y || value.getMonth() !== m - 1 || value.getDate() !== day) {
+    return null;
+  }
+  return value.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
 }
 
-function formatTime12(t: string | null): string {
-  if (!t || !/^\d{1,2}:\d{2}$/.test(t)) return 'Time unavailable';
+function formatTime12(t: string | null): string | null {
+  if (!t || !/^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(t)) return null;
   const [h, m] = t.split(':').map(Number);
   const ampm = h >= 12 ? 'PM' : 'AM';
   const hr = h % 12 === 0 ? 12 : h % 12;
   return `${hr}:${String(m).padStart(2, '0')} ${ampm}`;
 }
+function flightStatusText(status: string | null): string {
+  const value = status?.trim();
+  if (!value) return 'Unavailable';
+  if (value === 'available') return 'Available';
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
 function infoTiles(f: FlightView) {
   const tiles: { label: string; value: string }[] = [{
-    label: f.source === 'production' ? 'Status' : 'Queue',
-    value: f.source === 'production'
-      ? (f.status === 'published' ? 'Published' : f.status ?? 'Unavailable')
-      : (f.status === 'available' ? 'Open to join' : 'Closed'),
+    label: 'Status',
+    value: flightStatusText(f.status),
   }];
-  if (f.rangeNm !== null) tiles.push({ label: 'Range', value: `${f.rangeNm.toLocaleString()} nm` });
+  if (Number.isSafeInteger(f.seatsAvailable) && f.seatsAvailable! >= 0) {
+    tiles.push({
+      label: 'Seats',
+      value: `${f.seatsAvailable!.toLocaleString()} available`,
+    });
+  }
+  if (f.rangeNm !== null && Number.isFinite(f.rangeNm) && f.rangeNm > 0) {
+    tiles.push({ label: 'Range', value: `${f.rangeNm.toLocaleString()} nm` });
+  }
   return tiles;
 }
-
-const AMENITY_PILLS = [
-  { label: 'WiFi',    value: 'Onboard' },
-  { label: 'Pets',    value: 'Welcome' },
-];
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 export default function FlightDetailScreen() {
   const colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   // Scale hero with screen height so small iPhones keep content above the fold
   const heroHeight = Math.round(Math.min(300, Math.max(200, windowHeight * 0.32)));
+  const compactLayout = windowWidth < 380;
   const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
   const localReadMode = isLocalFlightReadMode();
@@ -133,7 +131,7 @@ export default function FlightDetailScreen() {
   });
   const { data: frontMember } = useGetNetworkingFrontMember(id!, {
     query: {
-      enabled: localReadMode && !!user && user.membershipTier !== 'none' && !!id,
+      enabled: localReadMode && !!user && String(user.membershipTier) !== 'none' && !!id,
       refetchInterval: 15000,
       refetchOnMount: 'always',
     },
@@ -268,6 +266,22 @@ export default function FlightDetailScreen() {
   const departureFbo = confirmedFbo?.departureFbo ?? null;
   const departureFboAddress = confirmedFbo?.departureFboAddress ?? null;
   const canOpenDirections = status === 'confirmed' && !!departureFboAddress?.trim();
+  const fromAirport = f.fromAirport?.trim() || null;
+  const fromCity = f.fromCity?.trim() || null;
+  const toAirport = f.toAirport?.trim() || null;
+  const toCity = f.toCity?.trim() || null;
+  const fromLabel = fromAirport ?? fromCity;
+  const toLabel = toAirport ?? toCity;
+  const departureTime = formatTime12(f.departureTime);
+  const arrivalTime = formatTime12(f.arrivalTime);
+  const dateLabel = formatDate(f.departureDate);
+  const scheduleParts = [
+    dateLabel,
+    departureTime
+      ? `Departs ${departureTime}${f.departureTimeZone ? ` ${f.departureTimeZone}` : ''}`
+      : null,
+  ].filter((part): part is string => !!part);
+  const hasRouteDetails = !!(fromLabel || toLabel);
 
   const showMapError = () => {
     const message = `We couldn't open maps. Search for this address instead:\n\n${departureFboAddress}`;
@@ -293,37 +307,6 @@ export default function FlightDetailScreen() {
     }
   };
 
-  const joinFlowParams = (extra: Record<string, string> = {}) => ({
-    flightId:      f.id,
-    fromCity:      f.fromCity ?? '',
-    toCity:        f.toCity ?? '',
-    from:          f.fromAirport ?? '',
-    to:            f.toAirport ?? '',
-    departureDate: f.departureDate ?? '',
-    departureTime: f.departureTime ?? '',
-    duration:      f.duration ?? '',
-    aircraftType:  f.aircraftType ?? '',
-    flightStatus:  f.status ?? '',
-    international: f.international ? '1' : '',
-    feeUsd:        String(f.internationalFeeUsd ?? 0),
-    ...extra,
-  });
-
-  const handleJoinQueue = () => {
-    if (!user) {
-      // Not signed in — send to the auth flow instead of an API call that
-      // would fail with 401. They can come back to the flight afterward.
-      router.push('/(auth)/welcome');
-      return;
-    }
-    if (user.membershipTier === 'none') {
-      // Non-member: joining a queue requires a membership purchase first.
-      router.push({ pathname: '/membership/join' as any, params: { flightId: f.id } });
-      return;
-    }
-    router.push({ pathname: '/queue/join', params: joinFlowParams() });
-  };
-
   const flightAvailable = f.status === 'available';
   const STATUS_LABELS: Record<string, string> = {
     boarding: 'Boarding',
@@ -340,8 +323,8 @@ export default function FlightDetailScreen() {
 
   // ── CTA footer rendering — branched on my-status ─────────────────────────
   function renderCTA() {
-    // Stage 1 connects production flight reads only. Keep the existing action
-    // flow for local fixtures, but do not expose a production mutation path.
+    // Production flight detail reads are public-only in this app. Keep the
+    // notice explicit and do not expose a production mutation path.
     if (readOnlyProduction) {
       return (
         <>
@@ -397,22 +380,32 @@ export default function FlightDetailScreen() {
     }
 
     if (!user) {
-      // Unauthenticated: show join CTA
-      return (
-        <TouchableOpacity style={[styles.joinBtn, { backgroundColor: colors.primary }]} onPress={handleJoinQueue} activeOpacity={0.8}>
-          <Text style={[styles.joinBtnText, { color: colors.primaryForeground }]}>Request to Join</Text>
-        </TouchableOpacity>
+      return renderUnavailableCTA(
+        'Sign in required',
+        'Sign in to review account-specific access. Queue and booking requests are unavailable from this screen.',
       );
     }
 
-    // Hold the CTA behind a spinner until we actually know the user's status —
-    // covers both the initial fetch and any state where data isn't available
-    // yet, so a confirmed user never sees a "Request to Join" flash.
-    if (statusLoading || !myStatus) {
+    if (String(user.membershipTier) === 'none') {
+      return renderUnavailableCTA(
+        'Membership required',
+        'A membership is required to join. Membership changes are unavailable from this flight detail screen.',
+      );
+    }
+
+    // Keep queue state explicit while it is loading; if the request fails,
+    // avoid leaving a spinner on screen or implying that a request was sent.
+    if (statusLoading) {
       return (
         <View style={styles.statusLoadingRow}>
           <ActivityIndicator color={colors.primary} size="small" />
         </View>
+      );
+    }
+    if (!myStatus) {
+      return renderUnavailableCTA(
+        'Queue access unavailable',
+        'We could not verify your access for this flight. No queue or booking request was sent.',
       );
     }
 
@@ -502,19 +495,19 @@ export default function FlightDetailScreen() {
       );
     }
 
-    // status === 'none' — full join flow
+    return renderUnavailableCTA(
+      'Request unavailable',
+      'Queue and booking requests are not available from this flight detail screen.',
+    );
+  }
+
+  function renderUnavailableCTA(title: string, message: string) {
     return (
       <>
-        <TouchableOpacity style={[styles.joinBtn, { backgroundColor: colors.primary }]} onPress={handleJoinQueue} activeOpacity={0.8}>
-          <Text style={[styles.joinBtnText, { color: colors.primaryForeground }]}>Request to Join</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.conciergeLink}
-          onPress={() => router.push('/concierge')}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.conciergeLinkText, { color: colors.mutedForegroundLight }]}>Ask AI Concierge about this flight</Text>
-        </TouchableOpacity>
+        <View style={[styles.unavailableBadge, { backgroundColor: colors.muted }]}>
+          <Text style={[styles.unavailableBadgeText, { color: colors.mutedForegroundLight }]}>{title}</Text>
+        </View>
+        <Text style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}>{message}</Text>
       </>
     );
   }
@@ -532,7 +525,7 @@ export default function FlightDetailScreen() {
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: botPad + 100 }}
+        contentContainerStyle={{ paddingBottom: botPad + 180 }}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Hero image with gradient ── */}
@@ -574,79 +567,92 @@ export default function FlightDetailScreen() {
               testID="flight-detail-route"
               style={[styles.routePillText, { color: imgSource ? colors.primaryForeground : colors.foreground }]}
             >
-              {f.fromAirport ?? f.fromCity ?? '—'} → {f.toAirport ?? f.toCity ?? '—'}
+              {fromLabel && toLabel
+                ? `${fromLabel} → ${toLabel}`
+                : fromLabel ?? toLabel ?? 'Route unavailable'}
             </Text>
           </View>
         </View>
 
-        {/* ── Title row ── */}
-        <View style={styles.titleRow}>
-          <Text style={[styles.aircraftName, { color: colors.textOnSurface }]} numberOfLines={1}>
-            {f.aircraftType ?? 'Aircraft details unavailable'}
+        {/* ── Aircraft name ── */}
+        {!!f.aircraftType?.trim() && (
+          <View style={styles.titleRow}>
+            <Text style={[styles.aircraftName, { color: colors.textOnSurface }]} numberOfLines={1}>
+              {f.aircraftType.trim()}
+            </Text>
+          </View>
+        )}
+
+        {/* ── Local schedule, when supplied ── */}
+        {scheduleParts.length > 0 && (
+          <Text style={[styles.dateText, { color: colors.mutedForegroundLight }]}>
+            {scheduleParts.join(' · ')}
           </Text>
-        </View>
+        )}
 
-        {/* ── Date · departure line ── */}
-        <Text style={[styles.dateText, { color: colors.mutedForegroundLight }]}>
-          {formatDate(f.departureDate)} · Departs {formatTime12(f.departureTime)}
-          {f.departureTimeZone ? ` ${f.departureTimeZone}` : ''}
-        </Text>
+        {/* ── Route and schedule details ── */}
+        {hasRouteDetails && (
+          <View style={[styles.routeCard, compactLayout && styles.routeCardCompact, { backgroundColor: colors.surface }]}>
+            <View style={styles.routeEndpoint}>
+              {fromLabel && (
+                <Text style={[styles.routeCode, compactLayout && styles.routeCodeCompact, { color: colors.textOnSurface }]} numberOfLines={1}>
+                  {fromLabel}
+                </Text>
+              )}
+              {departureTime && (
+                <Text style={[styles.routeTime, { color: colors.textOnSurface }]} numberOfLines={1}>
+                  {departureTime}{f.departureTimeZone ? ` ${f.departureTimeZone}` : ''}
+                </Text>
+              )}
+              {fromAirport && fromCity && (
+                <Text style={[styles.routeCity, { color: colors.mutedForegroundLight }]} numberOfLines={1}>{fromCity}</Text>
+              )}
+            </View>
+            <View style={[styles.routeCenter, compactLayout && styles.routeCenterCompact]}>
+              <View style={[styles.routeLine, { backgroundColor: colors.separator }]} />
+              <View style={[styles.routeDot, { backgroundColor: colors.primary }]} />
+              {!!f.duration && (
+                <Text style={[styles.routeDuration, compactLayout && styles.routeDurationCompact, { color: colors.mutedForegroundLight }]} numberOfLines={1}>
+                  {f.duration}
+                </Text>
+              )}
+              <View style={[styles.routeDot, { backgroundColor: colors.primary }]} />
+              <View style={[styles.routeLine, { backgroundColor: colors.separator }]} />
+            </View>
+            <View style={[styles.routeEndpoint, { alignItems: 'flex-end' }]}>
+              {toLabel && (
+                <Text style={[styles.routeCode, compactLayout && styles.routeCodeCompact, { color: colors.textOnSurface }]} numberOfLines={1}>
+                  {toLabel}
+                </Text>
+              )}
+              {arrivalTime && (
+                <Text style={[styles.routeTime, { color: colors.textOnSurface }]} numberOfLines={1}>
+                  {arrivalTime}{f.arrivalTimeZone ? ` ${f.arrivalTimeZone}` : ''}
+                </Text>
+              )}
+              {toAirport && toCity && (
+                <Text style={[styles.routeCity, { color: colors.mutedForegroundLight }]} numberOfLines={1}>{toCity}</Text>
+              )}
+            </View>
+          </View>
+        )}
 
-        {/* ── Horizontal route card ── */}
-        <View style={[styles.routeCard, { backgroundColor: colors.surface }]}>
-          <View style={styles.routeEndpoint}>
-            <Text style={[styles.routeCode, { color: colors.textOnSurface }]}>{f.fromAirport ?? '—'}</Text>
-            <Text style={[styles.routeTime, { color: colors.textOnSurface }]}>{f.departureTime}</Text>
-            <Text style={[styles.routeCity, { color: colors.mutedForegroundLight }]} numberOfLines={1}>{f.fromCity ?? ''}</Text>
-          </View>
-          <View style={styles.routeCenter}>
-            <View style={[styles.routeLine, { backgroundColor: colors.separator }]} />
-            <View style={[styles.routeDot, { backgroundColor: colors.primary }]} />
-            <Text style={[styles.routeDuration, { color: colors.mutedForegroundLight }]}>{f.duration ?? '—'}</Text>
-            <View style={[styles.routeDot, { backgroundColor: colors.primary }]} />
-            <View style={[styles.routeLine, { backgroundColor: colors.separator }]} />
-          </View>
-          <View style={[styles.routeEndpoint, { alignItems: 'flex-end' }]}>
-            <Text style={[styles.routeCode, { color: colors.textOnSurface }]}>{f.toAirport ?? '—'}</Text>
-            <Text style={[styles.routeTime, { color: colors.textOnSurface }]}>
-              {formatTime12(f.arrivalTime ?? computeArrival(f.departureTime, f.duration))}
-              {f.arrivalTime && f.arrivalTimeZone ? ` ${f.arrivalTimeZone}` : ''}
-            </Text>
-            <Text style={[styles.routeCity, { color: colors.mutedForegroundLight }]} numberOfLines={1}>{f.toCity ?? ''}</Text>
-          </View>
-        </View>
-
-        {/* ── Info tile grid (Seats / Range) ── */}
-        <View style={styles.amenityGrid}>
+        {/* ── Contract-backed flight details ── */}
+        <View style={[styles.amenityGrid, compactLayout && styles.amenityGridCompact]}>
           {infoTiles(f).map((a) => (
-            <View key={a.label} style={[styles.amenityTile, { backgroundColor: colors.surface }]}>
+            <View
+              key={a.label}
+              style={[
+                styles.amenityTile,
+                compactLayout && styles.amenityTileCompact,
+                { backgroundColor: colors.surface },
+              ]}
+            >
               <Text style={[styles.amenityLabel, { color: colors.mutedForegroundLight }]}>{a.label}</Text>
               <Text style={[styles.amenityValue, { color: colors.textOnSurface }]}>{a.value}</Text>
             </View>
           ))}
         </View>
-
-        {/* ── Compact amenity pills (WiFi / Pets) ── */}
-        {!readOnlyProduction && (
-          <>
-            <View style={styles.pillRow}>
-              {AMENITY_PILLS.map((p) => (
-                <View key={p.label} style={[styles.pill, { backgroundColor: colors.surface }]}>
-                  <Text style={[styles.pillLabel, { color: colors.mutedForegroundLight }]}>{p.label}</Text>
-                  <Text style={[styles.pillValue, { color: colors.textOnSurface }]}>{p.value}</Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={[styles.baggageCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.baggageLabel, { color: colors.mutedForegroundLight }]}>BAGGAGE ALLOWANCE</Text>
-              <Text style={[styles.baggageValue, { color: colors.textOnSurface }]}>25 kg per passenger</Text>
-              <Text style={[styles.baggageNotice, { color: colors.mutedForegroundLight }]}>
-                Subject to aircraft capacity and operational limitations.
-              </Text>
-            </View>
-          </>
-        )}
 
         {!!frontMember?.eligible && frontMember.member && (
           <View style={[styles.networkCard, { backgroundColor: colors.surface, borderColor: colors.primary + '35' }]}>
@@ -703,7 +709,7 @@ export default function FlightDetailScreen() {
               {canOpenDirections && <Feather name="navigation" size={19} color={colors.textOnBrand} />}
             </View>
             <Text style={[styles.fboValue, { color: colors.textOnBrand }]}>
-              {departureFbo} — {f.fromAirport}
+              {departureFbo}{fromAirport ? ` — ${fromAirport}` : ''}
             </Text>
             {canOpenDirections && (
               <>
@@ -776,6 +782,15 @@ export default function FlightDetailScreen() {
       {/* ── Bottom sticky CTA ── */}
       <View style={[styles.ctaBar, { backgroundColor: colors.offWhite, borderTopColor: colors.separator, paddingBottom: botPad + 12 }]}>
         {renderCTA()}
+        <TouchableOpacity
+          style={styles.conciergeLink}
+          onPress={() => router.push({ pathname: '/concierge' })}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Ask AI Concierge"
+        >
+          <Text style={[styles.conciergeLinkText, { color: colors.mutedForegroundLight }]}>Ask AI Concierge</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -830,43 +845,31 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, shadowOpacity: 0.05, elevation: 3,
     marginBottom: 14,
   },
+  routeCardCompact: { paddingHorizontal: 12 },
   routeEndpoint: { flex: 1, alignItems: 'flex-start' },
   routeCode:   { fontFamily: 'Inter_700Bold', fontSize: 18 },
+  routeCodeCompact: { fontSize: 16 },
   routeTime:   { fontFamily: 'Inter_500Medium', fontSize: 14, marginTop: 2 },
   routeCity:   { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 2 },
   routeCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  routeCenterCompact: { flex: 0.8, gap: 3 },
   routeLine:   { flex: 1, height: 1 },
   routeDot:    { width: 5, height: 5, borderRadius: 3 },
   routeDuration: { fontFamily: 'Inter_500Medium', fontSize: 11 },
+  routeDurationCompact: { fontSize: 10 },
 
-  // Amenity grid: 2-column
+  // Contract-backed detail grid
   amenityGrid: {
     flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 10, marginBottom: 14,
   },
+  amenityGridCompact: { paddingHorizontal: 16 },
   amenityTile: {
     width: '47.5%', borderRadius: 14, padding: 14,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
   },
+  amenityTileCompact: { width: '100%' },
   amenityLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 },
   amenityValue: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
-
-  // Compact amenity pills
-  pillRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginBottom: 14 },
-  pill: {
-    flex: 1, borderRadius: 14, paddingVertical: 10, alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
-  },
-  pillLabel: { fontFamily: 'Inter_500Medium', fontSize: 11 },
-  pillValue: { fontFamily: 'Inter_600SemiBold', fontSize: 13, marginTop: 2 },
-
-  baggageCard: {
-    marginHorizontal: 16, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18,
-    marginBottom: 14,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
-  },
-  baggageLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 1, marginBottom: 4 },
-  baggageValue: { fontFamily: 'Inter_700Bold', fontSize: 18 },
-  baggageNotice: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17, marginTop: 4 },
 
   // Dark FBO departure card
   fboCard: {
@@ -925,12 +928,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   statusLoadingRow: { alignItems: 'center', paddingVertical: 16 },
-
-  // none / join state
-  joinBtn: {
-    borderRadius: 14, paddingVertical: 15, alignItems: 'center',
-  },
-  joinBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
 
   // waiting state
   queuePositionCard: {
