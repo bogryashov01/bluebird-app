@@ -1344,11 +1344,14 @@ winner, passenger/pet mutation, SMS, or payment request was made.
 
 - Clerk is not activated in Bluebird's app session. `AuthContext` and demo
   tokens are not connected to the production client.
-- The checked-in API server still signs/verifies its own `JWT_SECRET` or
-  `SESSION_SECRET` tokens; it does not establish that the app's future Clerk
-  session tokens are accepted. The supplied document describes Clerk bearer
-  auth, but production Clerk instance parity and token compatibility remain
-  unverified. The production UI stays disabled.
+- The checked-in API server is the separate legacy app-JWT service: it
+  signs/verifies its own `JWT_SECRET` or `SESSION_SECRET` tokens and is not
+  evidence for the separate Main Website backend. The supplied read-only
+  Main-source audit verifies its per-flight queue routes, Clerk Bearer
+  handling, and Clerk-user-to-member mapping. It does not verify deployment,
+  selected API/Clerk pairing, live token acceptance, runtime member resolution,
+  or exact Mobile response compatibility. The production UI stays disabled
+  until those runtime gates are verified.
 - The exact response body for expired/malformed-token middleware errors,
   production session lifetime, and some caught identity/provider failures are
   unknown. The client exposes HTTP 401 as a session-expiration/authentication

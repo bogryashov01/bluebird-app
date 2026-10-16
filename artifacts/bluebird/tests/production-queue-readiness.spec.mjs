@@ -185,11 +185,16 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   await firstCard.click();
   await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
   const queueBlockers = page.getByTestId("production-queue-read-only-message");
-  await expect(queueBlockers).toContainText("deployed per-flight queue endpoints and exact request/response contract");
+  await expect(queueBlockers).toContainText("supplied Main-source audit verifies the per-flight route definitions");
+  await expect(queueBlockers).toContainText("Clerk Bearer handling, and Clerk-user-to-member mapping");
+  await expect(queueBlockers).toContainText("Mobile source verifies its prepared parsers and fail-closed integration, not live compatibility");
+  await expect(queueBlockers).toContainText("deployment of the Main service covered by the source audit is unverified");
+  await expect(queueBlockers).toContainText("exact deployed request/response compatibility with the Mobile client is unverified");
   await expect(queueBlockers).toContainText("selected Main API and Clerk issuer pairing");
-  await expect(queueBlockers).toContainText("server-side Clerk token validation");
-  await expect(queueBlockers).toContainText("stable Clerk-to-Bluebird-member identity mapping");
+  await expect(queueBlockers).toContainText("live server acceptance and validation of Clerk Bearer tokens is unverified");
+  await expect(queueBlockers).toContainText("runtime resolution of the Clerk user to the intended Bluebird member is unverified");
   await expect(queueBlockers).toContainText("trusted source of an existing Skip the Line credit balance");
+  await expect(queueBlockers).not.toContainText("per-flight queue endpoints are absent");
   await expect(page.getByText("Flight queue", { exact: true })).toHaveCount(0);
   expect(new URL(page.url()).pathname).toMatch(new RegExp(`/flight/${flightId}$`));
   await page.goBack();
@@ -208,8 +213,9 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   await page.getByTestId("production-queue-read-only-cta").click();
   await expect(page.getByTestId("production-read-only-notice")).toBeVisible();
   await expect(page.getByTestId("production-flight-id")).toHaveText(`Production flight ID: ${flightId}`);
-  await expect(page.getByTestId("production-read-only-notice")).toContainText("deployed per-flight queue endpoints and exact request/response contract");
-  await expect(page.getByTestId("production-read-only-notice")).toContainText("legacy app-JWT queue routes; no fallback is used");
+  await expect(page.getByTestId("production-read-only-notice")).toContainText("supplied Main-source audit verifies the per-flight route definitions");
+  await expect(page.getByTestId("production-read-only-notice")).toContainText("legacy API uses app-JWT /api/queue/* routes");
+  await expect(page.getByTestId("production-read-only-notice")).toContainText("neither evidence for nor a fallback to the Main API");
 
   await page.goto(appUrl(baseURL, `flight/${flightId}`));
   await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();

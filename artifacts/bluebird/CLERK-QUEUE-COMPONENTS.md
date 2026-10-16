@@ -7,9 +7,10 @@ existing authenticated Main API client. They do not change the existing
 `app/queue/*` routes, Flight Details, shared navigation, or the local/demo
 queue mutations.
 
-## Supported per-flight contract
+## Prepared Mobile per-flight contract
 
-The typed Main API client calls these environment-matched paths:
+The typed Mobile client is prepared to call these environment-matched paths.
+This records client expectations; it is not a claim of live compatibility:
 
 - `GET /api/empty-legs/{id}/queue` — public queue rows; the viewer is recognized
   only by exactly one response row with `isViewer: true`.
@@ -31,30 +32,33 @@ still authoritatively rechecks available credit when the action is submitted.
 The queue contract does not return a new credit balance, so the panel does not
 guess one.
 
-## Missing endpoints and auth boundary
+## Main-source evidence and separate legacy API boundary
 
-There is no member-wide Main API queue list/status endpoint in the current
-contract. The component can read one flight at a time only. Do not substitute
-the local `GET /api/queue/status` response: it has a different shape and auth
-contract.
+The supplied read-only audit of the separate Main Bluebird Website source
+verifies the four per-flight route definitions, Clerk Bearer handling, and
+Clerk-user-to-member mapping. It does not verify deployment, the selected
+API/Clerk pairing, live token acceptance or identity resolution, or exact
+deployed request/response compatibility with Mobile.
 
 The workspace's `lib/api-spec/openapi.yaml` and API-server queue routes describe
-legacy `/api/queue/*` behavior. The API server's `authMiddleware` validates
-tokens signed with the app's `JWT_SECRET`/`SESSION_SECRET`; it does not validate
-Clerk tokens. That OpenAPI spec has no `/api/empty-legs/{id}/queue` or
-`/api/empty-legs/{id}/skip-line` operations. Those paths exist in the separate
-typed Main API client contract/readiness documentation, but this repo does not
-establish that the deployed Main API accepts the selected Clerk token. A 401,
-404, or other API rejection is displayed as a failure; it is not treated as
-queue success and never triggers a demo fallback.
+a separate legacy `/api/queue/*` app-JWT contract. They neither disprove the
+Main-source audit nor establish support on the selected Main deployment. Do not
+send Clerk tokens to those legacy routes or substitute their member-wide queue
+status for a per-flight Main queue read.
 
-The queue hooks now have an explicit fail-closed evidence gate. It remains
-disabled until all five requirements are verified: deployed per-flight
-endpoint contract, selected Main API/Clerk pairing, server-side Clerk-token
-validation, stable Clerk-to-member mapping, and the trusted Skip the Line
-credit-balance source. Environment configuration and a signed-in Clerk session
-alone do not activate queue reads or actions. Flight Details keeps the panel
-unmounted and reports these blockers until then.
+The queue hooks have an explicit fail-closed runtime evidence gate. It remains
+disabled until all six requirements are verified: the audited Main service is
+deployed at the selected target; its exact request/response contract matches
+Mobile; the selected Main API/Clerk pairing is API-owner-confirmed; the live
+server validates the selected Clerk token; the Clerk identity resolves to the
+intended member at runtime; and the trusted existing-credit source is
+established. Environment configuration, source evidence, and a signed-in Clerk
+session alone do not activate queue reads or actions. Flight Details keeps the
+panel unmounted and displays the remaining gates.
+
+`ClerkQueuePanel` and `useClerkQueue` remain the only planned Flight Details
+integration. They never use local/demo queue operations. No request is sent
+while the gate is closed, and Main API errors do not trigger a legacy fallback.
 
 Skip the Line additionally requires an explicit confirmation, and all queue
 mutations disable automatic retries so an ambiguous request is not resent.

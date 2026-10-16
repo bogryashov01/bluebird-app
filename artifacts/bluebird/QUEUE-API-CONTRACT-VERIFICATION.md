@@ -1,120 +1,77 @@
-# Bluebird queue API contract verification
+# Bluebird queue API evidence and readiness
 
 **Reviewed:** 2026-10-16  
-**Decision:** Keep the prepared Clerk queue panel out of Flight Details until the API-owner and credit-source evidence below is verified.
+**Decision:** Keep the prepared Clerk queue panel out of Flight Details. Main-source existence, Mobile client preparation, deployment, and runtime acceptance are separate evidence claims.
 
-## Decision summary
+## Evidence summary
 
-The prepared Mobile client describes four per-flight operations under
-`/api/empty-legs/{id}`, and the supplied contract snapshot documents them as
-source-verified and Clerk-authenticated. However, the current checked-in
-OpenAPI and API-server route mounts/handlers do **not** implement those paths.
-They describe a different, legacy `/api/queue/*` API protected by this server's
-own JWT secret, not Clerk token validation.
+The supplied read-only audit was performed in the separate Main Bluebird Website source. It verifies that this source contains:
 
-The supplied contract is documentation from 2026-10-12 and explicitly says
-production runtime was not tested. Its queue entries cite
-`artifacts/api-server/src/routes/queue.ts` as their source, but the current
-checked-in file defines only the legacy queue routes listed below. Therefore
-that source attribution does not establish that the per-flight routes exist in
-the checked-in server or in any deployed service.
+- `GET /api/empty-legs/:id/queue`
+- `POST /api/empty-legs/:id/queue`
+- `DELETE /api/empty-legs/:id/queue`
+- `POST /api/empty-legs/:id/skip-line`
+- Clerk Bearer-token handling for member requests
+- Clerk user ID to `members.clerk_user_id` mapping
 
-No live request was made. There is no API-owner confirmation in the available
-evidence that the selected Development API matches the Clerk issuer, no
-authorization for a specific non-sensitive read target, and no guarantee that
-a queue response would contain no member data. No POST or DELETE was sent.
+That audit does **not** prove that the audited source is deployed at Mobile's selected target, that the live service accepts a token from the selected Clerk instance, or that the deployed request/response shapes match Mobile's parsers. The report below treats the supplied audit as evidence of those Main-source facts, not as runtime verification.
 
-## Requested endpoint comparison
+Mobile source independently verifies that it:
 
-“Documented” below means described in the supplied contract snapshot, not
-verified against a deployed service. “Clerk support” distinguishes that
-documentation from the checked-in server and runtime evidence.
+- selects one explicit Main API environment and that environment's API/Clerk settings; it ignores legacy API/Clerk defaults;
+- prepares the four per-flight requests with Clerk Bearer authentication and parses expected queue response shapes;
+- routes them through the isolated `ClerkQueuePanel` / `useClerkQueue` path, which has no local/demo API adapter;
+- keeps reads and mutations disabled until every runtime gate is explicitly verified.
 
-| Requested operation | Supplied contract | Checked-in OpenAPI and API server | Deployed existence | Clerk support / live verification |
-| --- | --- | --- | --- | --- |
-| `GET /api/empty-legs/{id}/queue` | **Described.** Public queue array; token may personalize `isViewer`. Contract says runtime not tested. | **Absent.** Neither the OpenAPI nor mounted route handlers define this per-flight path. | **Unverified.** No deployment/version evidence for a separate Main API was supplied. | Contract describes optional Clerk Bearer use; the checked-in server does not establish Clerk support. **Acceptance not live-verified.** No GET was sent. |
-| `POST /api/empty-legs/{id}/queue` (Join Queue) | **Described.** Clerk Bearer required; returns a `QueueEntry`. | **Absent.** The checked-in server instead has `POST /api/queue/join`, with a different request/response contract. | **Unverified.** | Clerk auth is described by the snapshot only; not proven for a deployed API. **Acceptance not live-verified.** No POST was sent. |
-| `DELETE /api/empty-legs/{id}/queue` (Leave Queue) | **Described.** Clerk Bearer required; returns a `QueueStatus`. | **Absent.** The checked-in server instead has `DELETE /api/queue/{id}` (entry ID, not flight ID). | **Unverified.** | Clerk auth is described by the snapshot only; not proven for a deployed API. **Acceptance not live-verified.** No DELETE was sent. |
-| `POST /api/empty-legs/{id}/skip-line` (Skip the Line) | **Described.** Clerk Bearer required; `{ "useCredit": true }` spends an existing credit and returns an `EmptyLeg`. | **Absent.** The checked-in server instead has `POST /api/queue/{id}/use-pass` (queue-entry ID, not flight ID). | **Unverified.** | Clerk auth is described by the snapshot only; not proven for a deployed API. **Acceptance not live-verified.** No POST was sent. |
+These Mobile facts prove client preparation, not server support or live compatibility.
 
-The Mobile client methods and hooks confirm only what the client is prepared to
-call. `productionAuthApi.ts` builds the four paths and validates their expected
-response shapes (lines 1351–1354, 1402–1448); `useClerkQueue.ts` obtains a
-current Clerk session token and wires reads and mutations to those methods
-(lines 17–49, 81–156). Neither proves that a server implements the paths.
-The panel documentation itself says the paths and Clerk acceptance remain
-unverified (`CLERK-QUEUE-COMPONENTS.md`, lines 41–54).
+## Safe Mobile environment assessment
 
-## Actual queue routes in the checked-in API
+The current value-free Development diagnostic reports: Development is selected; the Development API setting and Clerk test-key setting are present and structurally valid; Clerk auth is enabled; the configured issuer host matches the host encoded in the configured Clerk key; and the diagnostic's `canTest` status is true.
 
-`app.ts` mounts the router at `/api` (lines 36–40), and `routes/index.ts`
-mounts the queue router at `/queue` (lines 16–30). The current handler and
-OpenAPI surface is:
+This is a configuration-shape check only. It prints no URL, key, issuer, token, or account data. The host comparison does not establish that the configured issuer came from the API owner, that this API target is the audited Main deployment, or that its server validates this Clerk tenant. No environment setting was changed and no network request was made.
 
-| Checked-in operation | Route and behavior |
-| --- | --- |
-| Join | `POST /api/queue/join` — requires the legacy auth middleware; body includes `flightId` and other legacy join fields (`routes/queue.ts`, lines 53–90; OpenAPI, lines 740–765). |
-| Read current user's queues | `GET /api/queue/status` — requires the legacy auth middleware and returns active entries for that user (`routes/queue.ts`, lines 336–352; OpenAPI, lines 767–782). |
-| Leave/cancel | `DELETE /api/queue/{id}` — requires the legacy auth middleware and identifies a queue entry by its ID (`routes/queue.ts`, lines 419–455; OpenAPI, lines 784–809). |
-| Use a Skip the Line pass | `POST /api/queue/{id}/use-pass` — requires the legacy auth middleware and identifies an existing queue entry (`routes/queue.ts`, lines 515–545; OpenAPI, lines 811–854). |
+## Mobile contract prepared for the four operations
 
-These routes are not aliases for the prepared per-flight operations. In
-particular, do not send Clerk tokens to them and do not use them as a fallback.
-The queue-status route returns member-specific entries, so it is not a safe
-substitute for a public per-flight read.
+| Operation | Mobile client expectation | Main-source audit | Deployment / live compatibility |
+| --- | --- | --- | --- |
+| Queue Position: `GET /api/empty-legs/{id}/queue` | Parses public queue rows; identifies the viewer only when exactly one row has `isViewer: true`. | Route exists in Main source; Clerk Bearer handling and identity mapping are source-verified. | Deployment, exact response compatibility, privacy of the live response, Clerk acceptance, and correct viewer resolution are unverified. |
+| Join Queue: `POST /api/empty-legs/{id}/queue` | Sends the optional typed join body and expects a `QueueEntry` confirming the requested flight and a valid position. | Route exists in Main source; Clerk Bearer handling and identity mapping are source-verified. | Deployment, exact request/response compatibility, live Clerk acceptance, eligibility/result behavior, and correct member resolution are unverified. |
+| Leave Queue: `DELETE /api/empty-legs/{id}/queue` | Expects a `QueueStatus` confirming the requested flight and `userInQueue: false`. | Route exists in Main source; Clerk Bearer handling and identity mapping are source-verified. | Deployment, exact response compatibility, live Clerk acceptance, and correct member resolution are unverified. |
+| Credit-based Skip the Line: `POST /api/empty-legs/{id}/skip-line` | Sends only `{ "useCredit": true }`, requires explicit user confirmation and a positive existing credit count, and expects a validated `EmptyLeg` identifying the viewer as effective winner. | Route exists in Main source; Clerk Bearer handling and identity mapping are source-verified. | Deployment, exact request/response compatibility, live Clerk acceptance, correct member resolution, and a trusted existing-credit source are unverified. |
 
-## Authentication boundary and evidence limits
+## Separate checked-in legacy API
 
-The checked-in middleware requires a Bearer token, verifies it with
-`jsonwebtoken.verify(token, JWT_SECRET)`, and reads a local `userId` claim.
-`JWT_SECRET` is taken from `JWT_SECRET` or `SESSION_SECRET`; the middleware
-also checks its local revoked-token table (`artifacts/api-server/src/middlewares/auth.ts`,
-lines 8–19 and 34–52). This source proves only the local app-JWT boundary. It
-does not show Clerk JWKS/signature verification, issuer or audience validation,
-or a Clerk `sub` to Bluebird-member mapping. Do not infer that a Clerk token
-will pass it.
+This workspace also contains a separate legacy API contract under `/api/queue/*`, protected by its app-JWT middleware. It is not the separate Main Website source audited above. Its different routes, token contract, and member-wide queue response neither disprove Main-source support nor establish Main deployment or compatibility.
 
-The supplied snapshot states that member requests use Clerk Bearer tokens, but
-it also says it is documentation only, production runtime was **not** tested,
-and the production Clerk instance parity is unknown
-(`0_BLUEBIRD_MOBILE_PRODUCTION_API_CONTRACT_1791817009725.md`, lines 1–15).
-Its per-flight queue entries say “VERIFIED FROM SOURCE; production runtime NO”
-(lines 506–511, 556–561, 640–645, and 690–695). This is a source-derived
-claim in the supplied document, not deployment evidence; its attribution to
-the checked-in `routes/queue.ts` conflicts with the routes currently in that
-file.
+Do not send Clerk tokens to the legacy routes, substitute their member-specific status response for a per-flight Main read, or fall back to them on any Main API error. The Clerk queue adapter has no legacy-JWT or local/demo queue access.
 
-The readiness report likewise says the checked-in server does not prove Clerk
-token compatibility and requires API-owner confirmation of issuer, verification,
-claims, and identity mapping (`AUTHENTICATED-API-READINESS.md`, lines 502–517
-and 1343–1355). Local client configuration and successful token acquisition do
-not establish that the selected deployed server accepts that identity.
+## Current gates and Flight Details behavior
 
-## Enablement decision
+Queue reads and actions remain disabled until all of these are verified for the actual selected service:
 
-- **Join Queue:** cannot be enabled through the prepared Clerk panel today.
-- **Leave Queue:** cannot be enabled through the prepared Clerk panel today.
-- **Skip the Line:** cannot be enabled through the prepared Clerk panel today.
-- **Flight Details:** cannot safely connect the prepared panel until the API
-  owner confirms the deployed endpoint contract, the selected API/Clerk
-  environment match, and the server's Clerk identity mapping.
-- **Is backend work definitely required?** Not determined. If the intended
-  service is this checked-in API server, its paths and authentication do not
-  match the prepared client and backend/API contract work would be needed. A
-  separate deployed Main API could implement the documented contract, but that
-  is not established by the available evidence.
+1. The Main service covered by the audit is deployed at the selected target.
+2. Its exact live request/response contract is compatible with Mobile's expected shapes and transition checks.
+3. The selected Main API and Clerk issuer pairing is API-owner-confirmed.
+4. The live server accepts and validates the selected Clerk Bearer token.
+5. The Clerk user resolves at runtime to the intended Bluebird member.
+6. The source of the existing Skip the Line credit balance is trusted and matches the server's authoritative check.
 
-To resolve the remaining uncertainty, the API owner must provide authoritative
-deployment/contract evidence and verify the selected Development API/Clerk
-issuer pair. Any later live read requires explicit authorization for a
-synthetic or empty target and assurance that its response cannot expose member
-queue data. Until those conditions are met, deployed endpoint existence and
-Clerk acceptance remain **unverified**.
+The supplied Main-source audit satisfies only source-existence, Clerk Bearer-handling, and identity-mapping-exists evidence. It does not satisfy any of the six runtime gates. Flight Details therefore keeps its read-only notice and does not mount the Clerk panel or make Main queue reads or mutations. The existing `ClerkQueuePanel` and hooks remain the only planned integration path; no endpoint or duplicate queue implementation was added.
 
-## Scope and safety
+The existing client safeguards remain required after enablement: mutation retries are disabled; Skip the Line requires explicit confirmation and an existing credit; a success message requires a validated server transition; failures do not fall back to local/demo behavior.
 
-This report is based on checked-in source, OpenAPI, and supplied documentation
-only. No network request, queue read or mutation, token or user-data access,
-database operation, or Main API/Clerk configuration change was performed.
-Flight Details remains read-only and reports the missing verification. The
-report contains no token, user identifier, or queue contents.
+## Smallest remaining authorized verification
+
+Use only an API-owner-approved Development target, a disposable synthetic member, and an isolated test flight/queue. The API owner must first confirm that the target is the audited Main deployment, provide the authoritative Development issuer identity, and confirm that a queue read cannot expose unrelated member data. Compare the deployed OpenAPI/route contract and real responses with the Mobile parsers before considering any action. Do not test by mutating Production.
+
+- **Queue Position:** confirm the selected API/Clerk pairing, live Clerk validation, and runtime member mapping; obtain approval for a safe read; verify the live public-row schema and that the intended test member is represented only by the expected viewer marker.
+- **Join Queue:** after the read gates above, verify the live POST body/response against Mobile's parser using only an owner-approved disposable Development member and test flight; confirm the response identifies that flight and a valid joined position.
+- **Leave Queue:** verify the live DELETE response against Mobile's parser using only that Development test member's disposable queue entry; confirm the server reports the member out of the queue.
+- **Credit-based Skip the Line:** first verify the trusted Development credit source against the server's balance; then, only with an explicit test approval and disposable existing credit, verify the `{ "useCredit": true }` request and that the response confirms the intended member as effective winner.
+
+Do not run these live checks until explicitly authorized. A publishable-key prefix, successful local token acquisition, source code, or the diagnostic's `canTest` status is not authorization or proof of deployed behavior.
+
+## Scope and safety record
+
+This reconciliation used the supplied Main-source audit, Mobile source, and a value-free local configuration diagnostic only. No network request, queue read or mutation, token or account-data access, database operation, or API/Clerk/environment change was performed. The local legacy API remains a distinct app-JWT contract and is never a fallback.

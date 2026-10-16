@@ -20,3 +20,9 @@ For cross-service connection probes, keep the action disabled until an API-owner
 **Why:** Environment markers and response success do not establish which Clerk tenant verifies a token; `/api/me` can return an anonymous projection.
 
 **How to apply:** Validate the API-side issuer against the selected Clerk instance before asking for a token or sending a request. Keep configuration diagnostics value-free and do not probe the API to discover its identity.
+
+Source evidence from the separate Main Website must stay scoped to the audited source: route definitions, Clerk Bearer handling, and identity-mapping code do not prove deployment, live token acceptance, or Mobile response compatibility. The workspace's app-JWT API is a different service and is never a substitute or fallback.
+
+**Why:** A newer read-only Main-source audit confirmed those implementation facts while deployment and runtime behavior remained unverified; treating the local legacy API as representative would incorrectly reject the Main contract.
+
+**How to apply:** In Mobile queue readiness reports, distinguish supplied Main-source facts, Mobile client preparation, and authorized runtime checks. Keep queue traffic gated until the selected deployed pair and its live behavior are confirmed.
