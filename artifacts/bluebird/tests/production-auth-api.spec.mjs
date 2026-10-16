@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   createAuthenticatedProductionApiClient,
+  ProductionAuthConfigurationError,
   productionAuthenticatedQueryKey,
   ProductionAuthCancelledError,
   ProductionAuthHttpError,
@@ -9,6 +10,7 @@ import {
   ProductionAuthNetworkError,
   ProductionAuthSchemaError,
   ProductionAuthTimeoutError,
+  parseProfileDiagnosticSummary,
 } from "../scripts/.production-auth-api.test.mjs";
 
 process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "production";
@@ -293,6 +295,37 @@ function makeClient(fetcher, overrides = {}) {
     fetcher,
     ...restOverrides,
   });
+}
+
+function makeDevelopmentClient(fetcher) {
+  const values = {
+    EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT,
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL: process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL,
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY: process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY,
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER: process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER,
+  };
+  Object.assign(process.env, {
+    EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: "development",
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL: "https://development.bluebird.test/api",
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k",
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER: "https://clerk.example.com",
+  });
+  try {
+    return createAuthenticatedProductionApiClient({
+      environment: "development",
+      baseUrl: "https://development.bluebird.test/api",
+      tokenProvider: {
+        environment: "development",
+        getVerifiedAccessToken: async () => "development-only-mock-token",
+      },
+      fetcher,
+    });
+  } finally {
+    for (const [key, value] of Object.entries(values)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 }
 
 function contractPath(url) {
@@ -747,6 +780,103 @@ test("profile GET and PUT keep upgradeCreditBalances strict and capture status b
     (error) => error instanceof ProductionAuthHttpError && error.status === 503,
   );
   assert.equal(failedStatus, 503);
+});
+
+test("diagnostic projection reports only field presence and conditional completion requirements", () => {
+  const summary = parseProfileDiagnosticSummary({
+    ...profile,
+    upgradeCreditBalances: { skipTheLine: 0, internationalPass: 2 },
+  });
+  assert.deepEqual(summary.fields, {
+    firstName: "present",
+    lastName: "present",
+    dob: "present",
+    gender: "present",
+    homeAirport: "present",
+    favoriteCities: "present",
+    email: "present",
+    verifiedPhone: "present",
+  });
+  assert.equal(summary.profileIsComplete, true);
+  assert.equal(summary.emailRequired, true);
+  assert.equal(summary.emailLocked, true);
+  assert.equal(summary.signupChannel, "email");
+  assert.equal(summary.phoneVerificationRequired, false);
+  assert.equal(summary.verifiedPhoneRequirementSatisfied, true);
+  assert.equal(summary.upgradeCreditBalances, "valid");
+
+  const phoneRequired = parseProfileDiagnosticSummary({
+    ...profile,
+    phoneVerificationRequired: true,
+    phoneE164: "+15555550123",
+    phoneVerifiedAt: null,
+    email: null,
+    upgradeCreditBalances: undefined,
+  });
+  assert.equal(phoneRequired.fields.verifiedPhone, "absent");
+  assert.equal(phoneRequired.verifiedPhoneRequirementSatisfied, false);
+  assert.equal(phoneRequired.fields.email, "absent");
+  assert.equal(phoneRequired.upgradeCreditBalances, "missing");
+
+  const unknownPolicy = parseProfileDiagnosticSummary({
+    ...profile,
+    phoneVerificationRequired: "yes",
+    phoneVerifiedAt: null,
+    upgradeCreditBalances: { skipTheLine: -1, internationalPass: 0 },
+  });
+  assert.equal(unknownPolicy.phoneVerificationRequired, null);
+  assert.equal(unknownPolicy.verifiedPhoneRequirementSatisfied, null);
+  assert.equal(unknownPolicy.upgradeCreditBalances, "invalid");
+  const invalidRoot = parseProfileDiagnosticSummary(null);
+  assert.deepEqual(invalidRoot.fields, {
+    firstName: "unknown",
+    lastName: "unknown",
+    dob: "unknown",
+    gender: "unknown",
+    homeAirport: "unknown",
+    favoriteCities: "unknown",
+    email: "unknown",
+    verifiedPhone: "unknown",
+  });
+  assert.equal(invalidRoot.upgradeCreditBalances, "invalid");
+});
+
+test("manual profile diagnostic issues GETs only and requires authenticated /api/me first", async () => {
+  const requests = [];
+  const client = makeDevelopmentClient(async (url, init) => {
+    const path = contractPath(url);
+    requests.push(`${init.method} ${path}`);
+    if (path === "/me") return jsonResponse(currentUser);
+    if (path === "/me/profile") return jsonResponse({
+      ...profile,
+      firstName: null,
+      upgradeCreditBalances: undefined,
+    });
+    throw new Error(`Unexpected request ${init.method} ${path}`);
+  });
+
+  const me = await client.getMe();
+  assert.equal(me.isAuthenticated, true);
+  const result = await client.getProfileDiagnostic();
+  assert.equal(result.fields.firstName, "absent");
+  assert.equal(result.upgradeCreditBalances, "missing");
+  const serializedDiagnostic = JSON.stringify(result);
+  assert.equal(serializedDiagnostic.includes("Preview"), false);
+  assert.equal(serializedDiagnostic.includes("member@example.test"), false);
+  assert.equal(serializedDiagnostic.includes(mockOnlyToken), false);
+  assert.deepEqual(requests, ["GET /me", "GET /me/profile"]);
+  assert.equal(requests.some((request) => request.startsWith("PUT ")), false);
+
+  let productionRequests = 0;
+  const productionClient = makeClient(async () => {
+    productionRequests += 1;
+    return jsonResponse(profile);
+  });
+  assert.throws(
+    () => productionClient.getProfileDiagnostic(),
+    ProductionAuthConfigurationError,
+  );
+  assert.equal(productionRequests, 0, "production cannot issue the diagnostic profile request");
 });
 
 test("side-effecting GETs are never invoked during setup or used as probes", async () => {

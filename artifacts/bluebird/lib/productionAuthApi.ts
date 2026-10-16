@@ -129,6 +129,28 @@ export interface ProductionUserProfile {
   updatedAt?: Nullable<string>;
 }
 
+export type ProductionProfileDiagnosticPresence = 'present' | 'absent' | 'unknown';
+
+export interface ProductionProfileDiagnosticSummary {
+  fields: {
+    firstName: ProductionProfileDiagnosticPresence;
+    lastName: ProductionProfileDiagnosticPresence;
+    dob: ProductionProfileDiagnosticPresence;
+    gender: ProductionProfileDiagnosticPresence;
+    homeAirport: ProductionProfileDiagnosticPresence;
+    favoriteCities: ProductionProfileDiagnosticPresence;
+    email: ProductionProfileDiagnosticPresence;
+    verifiedPhone: ProductionProfileDiagnosticPresence;
+  };
+  profileIsComplete: boolean | null;
+  emailRequired: true;
+  emailLocked: boolean | null;
+  signupChannel: 'phone' | 'email' | null;
+  phoneVerificationRequired: boolean | null;
+  verifiedPhoneRequirementSatisfied: boolean | null;
+  upgradeCreditBalances: 'valid' | 'missing' | 'invalid';
+}
+
 /** Verified phone status uses a distinct projection without credit balances. */
 export type ProductionPhoneVerifiedProfile = Omit<ProductionUserProfile, 'upgradeCreditBalances' | 'updatedAt'> & {
   updatedAt: Nullable<string>;
@@ -678,6 +700,100 @@ function parseProfileShape(value: unknown, field: string, verifiedPhoneProjectio
 
 function parseProfile(value: unknown): ProductionUserProfile {
   return parseProfileShape(value, 'profile', false) as ProductionUserProfile;
+}
+
+/**
+ * Diagnostic-only projection for the explicit Development recovery action.
+ * This never returns profile values and does not make a malformed profile a
+ * valid ProductionUserProfile. The normal GET/PUT parser remains strict.
+ */
+export function parseProfileDiagnosticSummary(value: unknown): ProductionProfileDiagnosticSummary {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return {
+      fields: {
+        firstName: 'unknown',
+        lastName: 'unknown',
+        dob: 'unknown',
+        gender: 'unknown',
+        homeAirport: 'unknown',
+        favoriteCities: 'unknown',
+        email: 'unknown',
+        verifiedPhone: 'unknown',
+      },
+      profileIsComplete: null,
+      emailRequired: true,
+      emailLocked: null,
+      signupChannel: null,
+      phoneVerificationRequired: null,
+      verifiedPhoneRequirementSatisfied: null,
+      upgradeCreditBalances: 'invalid',
+    };
+  }
+
+  const raw = value as Record<string, unknown>;
+  const presence = (item: unknown): ProductionProfileDiagnosticPresence => {
+    if (item === null || item === undefined) return 'absent';
+    if (typeof item !== 'string') return 'unknown';
+    return item.trim() ? 'present' : 'absent';
+  };
+  const arrayPresence = (item: unknown): ProductionProfileDiagnosticPresence => {
+    if (item === null || item === undefined) return 'absent';
+    if (!Array.isArray(item)) return 'unknown';
+    if (item.some((entry) => typeof entry !== 'string')) return 'unknown';
+    return item.some((entry) => entry.trim().length > 0) ? 'present' : 'absent';
+  };
+  const phoneNumber = presence(raw.phoneE164);
+  const phoneVerifiedAt = presence(raw.phoneVerifiedAt);
+  const verifiedPhone = phoneNumber === 'unknown' || phoneVerifiedAt === 'unknown'
+    ? 'unknown'
+    : phoneNumber === 'present' && phoneVerifiedAt === 'present'
+      ? 'present'
+      : 'absent';
+  const gender = raw.gender === null || raw.gender === undefined
+    ? 'absent'
+    : raw.gender === 'male' || raw.gender === 'female'
+      ? 'present'
+      : 'unknown';
+  const phoneVerificationRequired = typeof raw.phoneVerificationRequired === 'boolean'
+    ? raw.phoneVerificationRequired
+    : null;
+  const balances = raw.upgradeCreditBalances;
+  const balanceObject = typeof balances === 'object' && balances !== null && !Array.isArray(balances)
+    ? balances as Record<string, unknown>
+    : null;
+  const upgradeCreditBalances = balances === undefined
+    ? 'missing'
+    : balanceObject &&
+        Number.isSafeInteger(balanceObject.skipTheLine) &&
+        Number.isSafeInteger(balanceObject.internationalPass) &&
+        (balanceObject.skipTheLine as number) >= 0 &&
+        (balanceObject.internationalPass as number) >= 0
+      ? 'valid'
+      : 'invalid';
+
+  return {
+    fields: {
+      firstName: presence(raw.firstName),
+      lastName: presence(raw.lastName),
+      dob: presence(raw.dob),
+      gender,
+      homeAirport: presence(raw.homeAirportCode),
+      favoriteCities: arrayPresence(raw.favoriteCityKeys),
+      email: presence(raw.email),
+      verifiedPhone,
+    },
+    profileIsComplete: typeof raw.isComplete === 'boolean' ? raw.isComplete : null,
+    emailRequired: true,
+    emailLocked: typeof raw.emailLocked === 'boolean' ? raw.emailLocked : null,
+    signupChannel: raw.signupChannel === 'phone' || raw.signupChannel === 'email'
+      ? raw.signupChannel
+      : null,
+    phoneVerificationRequired,
+    verifiedPhoneRequirementSatisfied: phoneVerificationRequired === null
+      ? null
+      : !phoneVerificationRequired || verifiedPhone === 'present',
+    upgradeCreditBalances,
+  };
 }
 
 function parsePhoneVerifiedProfile(value: unknown): ProductionPhoneVerifiedProfile {
@@ -1259,6 +1375,12 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
     },
     getProfile: (requestOptions?: ProductionRequestOptions) =>
       request(PRODUCTION_AUTH_PATHS.profile, 'GET', parseProfile, requestOptions),
+    getProfileDiagnostic: (requestOptions?: ProductionRequestOptions) => {
+      if (options.environment !== 'development') {
+        throw new ProductionAuthConfigurationError();
+      }
+      return request(PRODUCTION_AUTH_PATHS.profile, 'GET', parseProfileDiagnosticSummary, requestOptions);
+    },
     updateProfile: (data: UpdateProductionUserProfileRequest, requestOptions?: ProductionRequestOptions) => {
       validateProfileUpdate(data);
       return request(

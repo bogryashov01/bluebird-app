@@ -1,5 +1,38 @@
 # Bluebird authenticated production API readiness
 
+## Incomplete profile diagnostic (2026-10-16)
+
+The Registration Review recovery screen includes a manually invoked diagnostic
+only in a Development build, with the Main Bluebird API explicitly configured
+for Development and the signed-in Clerk identity still resolved as incomplete.
+It performs `GET /api/me`, then performs `GET /api/me/profile` only if the API
+confirms authentication. Before the action, the screen explains that profile
+GET may synchronize verified Clerk phone information. It does not write,
+automatically retry, clear drafts, or sign out.
+
+The output contains field-presence flags only (first/last name, DOB, gender,
+home airport, favorite cities, email, verified phone), the `/api/me` and profile
+completion flags, and server-owned email/phone conditions (`emailLocked`,
+`signupChannel`, `phoneVerificationRequired`). It never renders profile values,
+tokens, or identifiers. The ordinary profile response parser remains strict.
+The diagnostic-only parser can report those flags if the full response is
+malformed, and separately reports whether `upgradeCreditBalances` contains
+nonnegative integer `skipTheLine` and `internationalPass` values.
+
+The supplied evidence confirms an authenticated HTTP 200 from `/api/me` with
+`isProfileComplete: false` and reports a prior profile-save HTTP 200 whose body
+failed Mobile validation at `profile.upgradeCreditBalances`. No profile GET
+body or authenticated Development session was available for this work, so
+persisted DOB, gender, home airport, favorite cities, email, and verified-phone
+state remain unknown. No further save is justified by this evidence alone.
+The source-derived full `UserProfile` contract requires
+`upgradeCreditBalances: { skipTheLine: number, internationalPass: number }`
+with both values nonnegative integers; strict validation has not been weakened.
+`pnpm run typecheck:libs`, the Bluebird TypeScript check,
+`test:clerk-bluebird-profile` (32 tests), and `test:production-auth-api`
+(21 tests) pass with mocked requests. No live profile request was made, and the
+signed-in recovery screen was not visually verified.
+
 ## Registration save recovery (2026-10-16)
 
 The mobile review screen now reports the profile-write outcome separately from

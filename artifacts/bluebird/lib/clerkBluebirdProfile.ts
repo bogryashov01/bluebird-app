@@ -1,6 +1,7 @@
 import type {
   ProductionCurrentUser,
   ProductionMembership,
+  ProductionProfileDiagnosticSummary,
   ProductionUserProfile,
   ProductionRequestOptions,
   UpdateProductionUserProfileRequest,
@@ -45,11 +46,89 @@ export function getClerkBluebirdProfileEffectDependencies(input: {
 export interface ClerkBluebirdProfileApi {
   getMe: (options?: ProductionRequestOptions) => Promise<ProductionCurrentUser>;
   getProfile: (options?: ProductionRequestOptions) => Promise<ProductionUserProfile>;
+  getProfileDiagnostic: (
+    options?: ProductionRequestOptions,
+  ) => Promise<ProductionProfileDiagnosticSummary>;
   getMembership: (options?: ProductionRequestOptions) => Promise<ProductionMembership>;
   updateProfile: (
     data: UpdateProductionUserProfileRequest,
     options?: ProductionRequestOptions,
   ) => Promise<ProductionUserProfile>;
+}
+
+export type ClerkRegistrationProfileDiagnostic =
+  | {
+      kind: 'loaded';
+      meHttpStatus: number | null;
+      profileHttpStatus: number | null;
+      isAuthenticated: true;
+      isProfileComplete: boolean;
+      profile: ProductionProfileDiagnosticSummary;
+    }
+  | {
+      kind: 'not_authenticated';
+      meHttpStatus: number | null;
+      profileHttpStatus: null;
+      isAuthenticated: false;
+      isProfileComplete: boolean | null;
+    }
+  | {
+      kind: 'unavailable';
+      failedEndpoint: 'me' | 'profile';
+      meHttpStatus: number | null;
+      profileHttpStatus: number | null;
+    };
+
+/**
+ * Explicit recovery read. It never writes, retries, or fetches profile details
+ * until /api/me confirms that the current request is authenticated.
+ */
+export async function diagnoseClerkBluebirdRegistrationProfile(
+  api: Pick<ClerkBluebirdProfileApi, 'getMe' | 'getProfileDiagnostic'>,
+): Promise<ClerkRegistrationProfileDiagnostic> {
+  let meHttpStatus: number | null = null;
+  try {
+    const currentUser = await api.getMe({
+      onResponseStatus: (status) => { meHttpStatus = status; },
+    });
+    if (currentUser.isAuthenticated !== true) {
+      return {
+        kind: 'not_authenticated',
+        meHttpStatus,
+        profileHttpStatus: null,
+        isAuthenticated: false,
+        isProfileComplete: currentUser.isProfileComplete,
+      };
+    }
+    let profileHttpStatus: number | null = null;
+    try {
+      const profile = await api.getProfileDiagnostic({
+        onResponseStatus: (status) => { profileHttpStatus = status; },
+      });
+      return {
+        kind: 'loaded',
+        meHttpStatus,
+        profileHttpStatus,
+        isAuthenticated: true,
+        isProfileComplete: currentUser.isProfileComplete,
+        profile,
+      };
+    } catch {
+      return {
+        kind: 'unavailable',
+        failedEndpoint: 'profile',
+        meHttpStatus,
+        profileHttpStatus,
+      };
+    }
+  } catch {
+    return {
+      kind: 'unavailable',
+      failedEndpoint: 'me',
+      meHttpStatus,
+      profileHttpStatus: null,
+    };
+  }
 }
 
 export type BluebirdProfileLoadResult =

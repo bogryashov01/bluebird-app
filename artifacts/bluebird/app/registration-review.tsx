@@ -19,10 +19,12 @@ import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConf
 import {
   checkClerkBluebirdRegistrationStatus,
   ClerkRegistrationCompletionError,
+  diagnoseClerkBluebirdRegistrationProfile,
   getClerkRegistrationCompletionCheck,
   getClerkRegistrationWriteOutcome,
   saveClerkBluebirdRegistration,
   type ClerkRegistrationCompletionCheck,
+  type ClerkRegistrationProfileDiagnostic,
   type ClerkRegistrationSaveDiagnostic,
   type ClerkRegistrationWriteOutcome,
 } from '@/lib/clerkBluebirdProfile';
@@ -78,10 +80,13 @@ export default function RegistrationReviewScreen() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveDiagnostic, setSaveDiagnostic] = useState<ClerkRegistrationSaveDiagnostic | null>(null);
   const [completionCheck, setCompletionCheck] = useState<ClerkRegistrationCompletionCheck | null>(null);
+  const [profileDiagnostic, setProfileDiagnostic] = useState<ClerkRegistrationProfileDiagnostic | 'loading' | 'setup_unavailable' | null>(null);
+  const [isDiagnosingProfile, setIsDiagnosingProfile] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [weightNotConfirmed, setWeightNotConfirmed] = useState(false);
   const savingRef = useRef(false);
+  const profileDiagnosticRef = useRef(false);
   const currentIdentity = useRef<string | null>(clerkUserId);
   currentIdentity.current = session?.isSignedIn === true ? session.userId ?? null : null;
   const currentSession = useRef(session);
@@ -97,9 +102,12 @@ export default function RegistrationReviewScreen() {
     setSaveError(null);
     setSaveDiagnostic(null);
     setCompletionCheck(null);
+    setProfileDiagnostic(null);
+    setIsDiagnosingProfile(false);
     setIsCheckingStatus(false);
     setWeightNotConfirmed(false);
     savingRef.current = false;
+    profileDiagnosticRef.current = false;
   }, [clerkUserId]);
 
   const airportsQuery = useQuery({
@@ -287,6 +295,30 @@ export default function RegistrationReviewScreen() {
     }
   };
 
+  const canRunProfileDiagnostic =
+    __DEV__ &&
+    configuration?.environment === 'development' &&
+    isActiveIncompleteIdentity;
+  const diagnoseCurrentProfile = async () => {
+    if (
+      !canRunProfileDiagnostic ||
+      profileDiagnosticRef.current ||
+      currentIdentity.current !== clerkUserId
+    ) return;
+    profileDiagnosticRef.current = true;
+    setIsDiagnosingProfile(true);
+    setProfileDiagnostic('loading');
+    try {
+      const result = await diagnoseClerkBluebirdRegistrationProfile(createAuthenticatedApi().authenticated);
+      if (currentIdentity.current === clerkUserId) setProfileDiagnostic(result);
+    } catch {
+      if (currentIdentity.current === clerkUserId) setProfileDiagnostic('setup_unavailable');
+    } finally {
+      profileDiagnosticRef.current = false;
+      if (currentIdentity.current === clerkUserId) setIsDiagnosingProfile(false);
+    }
+  };
+
   const continueAfterConfirmation = () => {
     router.replace({ pathname: '/(auth)/welcome-tour', params: { clerkFlow: '1' } });
   };
@@ -379,6 +411,37 @@ export default function RegistrationReviewScreen() {
           </Text>
         ) : null}
 
+        {canRunProfileDiagnostic ? (
+          <View style={[styles.warningCard, { backgroundColor: colors.muted, borderColor: colors.border }]} testID="registration-profile-diagnostic">
+            <Text style={[styles.optionTitle, { color: colors.textOnSurface }]}>
+              Development profile diagnostic
+            </Text>
+            <Text style={[styles.bodyText, { color: colors.mutedForegroundLight }]}>
+              This manually requests GET /api/me, then requests GET /api/me/profile only if the API confirms you are signed in. The profile request may synchronize verified Clerk phone information. It does not save, retry, clear your draft, or sign you out.
+            </Text>
+            <ActionButton
+              label={isDiagnosingProfile ? 'Reading profile…' : 'Check saved profile details'}
+              onPress={() => void diagnoseCurrentProfile()}
+              disabled={isDiagnosingProfile || isSaving || isCheckingStatus}
+              loading={isDiagnosingProfile}
+              testID="diagnose-saved-profile"
+            />
+            {profileDiagnostic && profileDiagnostic !== 'loading' && profileDiagnostic !== 'setup_unavailable' ? (
+              <RegistrationProfileDiagnosticResult result={profileDiagnostic} />
+            ) : null}
+            {profileDiagnostic === 'loading' ? (
+              <Text accessibilityLiveRegion="polite" style={[styles.bodyText, { color: colors.mutedForegroundLight }]}>
+                Reading Development API status and profile details…
+              </Text>
+            ) : null}
+            {profileDiagnostic === 'setup_unavailable' ? (
+              <Text accessibilityLiveRegion="polite" style={[styles.bodyText, { color: colors.destructive }]}>
+                The Development diagnostic could not be started. No profile values were read.
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
         {saveDiagnostic && completionCheck ? (
           <View style={[styles.warningCard, { backgroundColor: colors.muted, borderColor: colors.border }]} testID="registration-recovery-status">
             <Text style={[styles.optionTitle, { color: colors.textOnSurface }]}>
@@ -453,6 +516,79 @@ function SummaryLine({ label, value }: { label: string; value: string }) {
     <View style={styles.summaryLine}>
       <Text style={[styles.summaryLabel, { color: colors.mutedForegroundLight }]}>{label}</Text>
       <Text style={[styles.summaryValue, { color: colors.textOnSurface }]}>{value}</Text>
+    </View>
+  );
+}
+
+function RegistrationProfileDiagnosticResult({
+  result,
+}: {
+  result: ClerkRegistrationProfileDiagnostic;
+}) {
+  const colors = useColors();
+  if (result.kind === 'not_authenticated') {
+    return (
+      <View style={styles.diagnosticResults} testID="registration-profile-diagnostic-result">
+        <SummaryLine label="GET /api/me" value={`HTTP ${result.meHttpStatus ?? 'unknown'} · not authenticated`} />
+        <Text style={[styles.bodyText, { color: colors.mutedForegroundLight }]}>
+          No profile details were requested because the API did not confirm authentication.
+        </Text>
+      </View>
+    );
+  }
+  if (result.kind === 'unavailable') {
+    const endpoint = result.failedEndpoint === 'me' ? 'GET /api/me' : 'GET /api/me/profile';
+    const status = result.failedEndpoint === 'me' ? result.meHttpStatus : result.profileHttpStatus;
+    return (
+      <View style={styles.diagnosticResults} testID="registration-profile-diagnostic-result">
+        <Text style={[styles.bodyText, { color: colors.destructive }]}>
+          {endpoint} could not be read (HTTP {status ?? 'unknown'}). Profile field values are unavailable.
+        </Text>
+      </View>
+    );
+  }
+
+  const profile = result.profile;
+  const presence = (value: typeof profile.fields.firstName) =>
+    value === 'present' ? 'Present' : value === 'absent' ? 'Absent' : 'Unknown';
+  const condition = (value: boolean | null) =>
+    value === null ? 'Unknown' : value ? 'Yes' : 'No';
+  return (
+    <View style={styles.diagnosticResults} testID="registration-profile-diagnostic-result">
+      <SummaryLine label="GET /api/me" value={`HTTP ${result.meHttpStatus ?? 'unknown'} · authenticated`} />
+      <SummaryLine label="/api/me.isProfileComplete" value={result.isProfileComplete ? 'Yes' : 'No'} />
+      <SummaryLine label="GET /api/me/profile" value={`HTTP ${result.profileHttpStatus ?? 'unknown'}`} />
+      <SummaryLine label="Profile isComplete" value={condition(profile.profileIsComplete)} />
+      <SummaryLine label="First name" value={presence(profile.fields.firstName)} />
+      <SummaryLine label="Last name" value={presence(profile.fields.lastName)} />
+      <SummaryLine label="Date of birth" value={presence(profile.fields.dob)} />
+      <SummaryLine label="Gender" value={presence(profile.fields.gender)} />
+      <SummaryLine label="Home airport" value={presence(profile.fields.homeAirport)} />
+      <SummaryLine label="Favorite cities" value={presence(profile.fields.favoriteCities)} />
+      <SummaryLine label="Email" value={`${presence(profile.fields.email)} · required by the API`} />
+      <SummaryLine
+        label="Email account condition"
+        value={`Editing ${profile.emailLocked === null ? 'unknown' : profile.emailLocked ? 'locked' : 'unlocked'} · signup type ${profile.signupChannel ?? 'unknown'}`}
+      />
+      <SummaryLine label="Verified phone" value={presence(profile.fields.verifiedPhone)} />
+      <SummaryLine
+        label="Verified phone required"
+        value={profile.phoneVerificationRequired === null
+          ? 'Unknown'
+          : profile.phoneVerificationRequired ? 'Yes' : 'No'}
+      />
+      <SummaryLine
+        label="Phone requirement satisfied"
+        value={condition(profile.verifiedPhoneRequirementSatisfied)}
+      />
+      <SummaryLine
+        label="upgradeCreditBalances contract"
+        value={profile.upgradeCreditBalances === 'valid'
+          ? 'Valid: both balances are nonnegative integers'
+          : profile.upgradeCreditBalances === 'missing'
+            ? 'Missing'
+            : 'Present but invalid'}
+      />
     </View>
   );
 }
@@ -577,6 +713,7 @@ const styles = StyleSheet.create({
   summaryLabel: { fontFamily: 'Inter_500Medium', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 },
   summaryValue: { fontFamily: 'Inter_600SemiBold', fontSize: 14, lineHeight: 20 },
   bodyText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19 },
+  diagnosticResults: { gap: 3 },
   disclosure: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   inlineError: { fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 19 },

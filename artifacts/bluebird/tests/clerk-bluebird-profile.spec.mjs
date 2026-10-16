@@ -9,6 +9,7 @@ import {
   saveClerkBluebirdRegistration,
   ClerkRegistrationCompletionError,
   checkClerkBluebirdRegistrationStatus,
+  diagnoseClerkBluebirdRegistrationProfile,
   getClerkRegistrationCompletionCheck,
   getClerkRegistrationWriteOutcome,
   updateClerkBluebirdProfileExplicitly,
@@ -302,6 +303,11 @@ test("registration has three explicit steps and keeps personal information draft
   assert.ok(reviewSource.includes("selectedAirportCodes.length > 0"));
   assert.ok(reviewSource.includes("registration-airport-details-error"));
   assert.ok(reviewSource.includes("setClerkVerifiedRegistrationCompletion"));
+  assert.ok(reviewSource.includes("__DEV__"));
+  assert.ok(reviewSource.includes("configuration?.environment === 'development'"));
+  assert.ok(reviewSource.includes('testID="diagnose-saved-profile"'));
+  assert.ok(reviewSource.includes("may synchronize verified Clerk phone information"));
+  assert.ok(reviewSource.includes("diagnoseClerkBluebirdRegistrationProfile"));
   assert.equal(reviewSource.includes("draft.additionalAirportCodes"), false);
   assert.equal(reviewSource.includes("additionalAirportCodes: data"), false);
 });
@@ -525,6 +531,67 @@ test("an anonymous-shaped /api/me response does not fetch a profile or imply reg
   assert.equal(result.currentUser.needsSignupPhone, false);
   assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), ["GET /me"]);
   assert.equal(canEditClerkBluebirdProfile(result), false);
+});
+
+test("manual registration diagnostic reads the authenticated profile once and never writes", async () => {
+  const calls = [];
+  const api = {
+    getMe: async (options) => {
+      calls.push("GET /api/me");
+      options?.onResponseStatus?.(200);
+      return currentUser({ isProfileComplete: false });
+    },
+    getProfileDiagnostic: async (options) => {
+      calls.push("GET /api/me/profile");
+      options?.onResponseStatus?.(200);
+      return {
+        fields: {
+          firstName: "absent",
+          lastName: "present",
+          dob: "present",
+          gender: "present",
+          homeAirport: "present",
+          favoriteCities: "present",
+          email: "absent",
+          verifiedPhone: "present",
+        },
+        profileIsComplete: false,
+        emailRequired: true,
+        emailLocked: false,
+        signupChannel: "phone",
+        phoneVerificationRequired: true,
+        verifiedPhoneRequirementSatisfied: true,
+        upgradeCreditBalances: "missing",
+      };
+    },
+  };
+  const result = await diagnoseClerkBluebirdRegistrationProfile(api);
+  assert.equal(result.kind, "loaded");
+  assert.equal(result.isAuthenticated, true);
+  assert.equal(result.isProfileComplete, false);
+  assert.equal(result.profile.fields.firstName, "absent");
+  assert.equal(result.profile.fields.email, "absent");
+  assert.deepEqual(calls, ["GET /api/me", "GET /api/me/profile"]);
+  assert.equal(calls.some((call) => call.startsWith("PUT ")), false);
+});
+
+test("manual diagnostic does not request profile when /api/me is not authenticated", async () => {
+  const calls = [];
+  const result = await diagnoseClerkBluebirdRegistrationProfile({
+    getMe: async (options) => {
+      calls.push("GET /api/me");
+      options?.onResponseStatus?.(200);
+      return currentUser({ isAuthenticated: false, isProfileComplete: false });
+    },
+    getProfileDiagnostic: async () => {
+      calls.push("GET /api/me/profile");
+      throw new Error("must not read profile");
+    },
+  });
+  assert.equal(result.kind, "not_authenticated");
+  assert.equal(result.meHttpStatus, 200);
+  assert.equal(result.profileHttpStatus, null);
+  assert.deepEqual(calls, ["GET /api/me"]);
 });
 
 test("profile and /api/me completion disagreement stays unverified and cannot be edited", async () => {
