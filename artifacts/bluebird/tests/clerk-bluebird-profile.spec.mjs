@@ -266,8 +266,18 @@ test("registration has three explicit steps and keeps personal information draft
   assert.equal(airportSource.includes("fetchProductionAirports([]"), false);
   assert.ok(airportSource.includes("fetchProductionAirportCities"));
   assert.ok(airportSource.includes("registration-home-airport-${airport.code}"));
-  assert.ok(airportSource.includes("registration-additional-airport-${airport.code}"));
+  assert.ok(airportSource.includes("fetchProductionAirports([draft.homeAirportCode]"));
+  assert.ok(airportSource.includes("enabled: !!configuration && !!draft.homeAirportCode"));
+  assert.ok(airportSource.includes("registration-home-airport-details-error"));
+  assert.ok(airportSource.includes("airport={resolvedHomeAirport}"));
+  assert.ok(airportSource.includes("testID={`registration-home-airport-${draft.homeAirportCode}`}"));
+  assert.match(airportSource, /\{\s*draft\.homeAirportCode\s*\}\s*<\/Text>/);
+  assert.ok(airportSource.includes("The full airport list isn’t available to browse."));
+  assert.equal(airportSource.includes("registration-additional-airport-"), false);
+  assert.equal(airportSource.includes("toggleClerkAdditionalAirportDraft"), false);
   assert.ok(airportSource.includes("registration-city-${city.key}"));
+  assert.ok(airportSource.includes("enabled: !!configuration"));
+  assert.ok(airportSource.includes("draft.favoriteCityKeys"));
   assert.ok(airportSource.includes("KeyboardAwareScrollViewCompat"));
   assert.ok(airportSource.includes("continue-to-registration-review"));
   assert.ok(airportSource.includes("toggleClerkFavoriteCityDraft"));
@@ -279,12 +289,12 @@ test("registration has three explicit steps and keeps personal information draft
   assert.ok(reviewSource.includes("savingRef.current"));
   assert.ok(reviewSource.includes("back-from-registration-review"));
   assert.ok(reviewSource.includes("Confirm & Save"));
-  assert.ok(reviewSource.includes("Additional airports are for this registration only."));
   assert.ok(reviewSource.includes("Weight is optional and will only be marked saved if Bluebird confirms it."));
   assert.ok(reviewSource.includes("fetchProductionAirports(selectedAirportCodes"));
   assert.ok(reviewSource.includes("selectedAirportCodes.length > 0"));
   assert.ok(reviewSource.includes("registration-airport-details-error"));
   assert.ok(reviewSource.includes("setClerkVerifiedRegistrationCompletion"));
+  assert.equal(reviewSource.includes("draft.additionalAirportCodes"), false);
   assert.equal(reviewSource.includes("additionalAirportCodes: data"), false);
 });
 
@@ -386,12 +396,54 @@ test("airport and city tabs filter results, scroll, and preserve independent sel
   ];
   assert.deepEqual(filterClerkRegistrationAirports(airports, ""), airports);
   assert.deepEqual(filterClerkRegistrationAirports(airports, "new york"), [airports[1]]);
+  assert.deepEqual(
+    filterClerkRegistrationAirports([...airports, { ...airports[0], name: "Duplicate SFO" }], "", ["JFK"]),
+    [airports[1], airports[0]],
+    "selected airports sort first and duplicate airport codes render once",
+  );
+  assert.deepEqual(
+    filterClerkRegistrationAirports(airports, "san francisco", ["JFK"]),
+    [airports[0]],
+    "airport search only shows matches and does not require the selected airport to match",
+  );
+  setClerkHomeAirportDraft("member-a", "SFO");
+  assert.deepEqual(
+    filterClerkRegistrationAirports(airports, "", getClerkAirportSelectionDraft("member-a")),
+    [airports[0], airports[1]],
+    "the newly selected home airport moves first immediately",
+  );
+  setClerkHomeAirportDraft("member-a", "JFK");
+  assert.deepEqual(getClerkAirportSelectionDraft("member-a"), ["JFK"], "selecting a new airport replaces the home airport");
   const cities = [
     { key: "san-francisco", displayName: "San Francisco", country: "United States" },
     { key: "new-york-city", displayName: "New York City", country: "United States" },
   ];
   assert.deepEqual(filterClerkRegistrationCities(cities, ""), cities);
   assert.deepEqual(filterClerkRegistrationCities(cities, "san-francisco"), [cities[0]]);
+  assert.deepEqual(
+    filterClerkRegistrationCities(
+      [...cities, { ...cities[0], displayName: "Duplicate San Francisco" }],
+      "",
+      ["new-york-city"],
+    ),
+    [cities[1], cities[0]],
+    "selected cities sort first and duplicate city keys render once",
+  );
+  assert.deepEqual(
+    filterClerkRegistrationCities(cities, "san-francisco", ["new-york-city"]),
+    [cities[0]],
+    "city search filters rows without removing hidden selections from the draft",
+  );
+  toggleClerkFavoriteCityDraft("member-a", "san-francisco", cities.map((city) => city.key));
+  assert.deepEqual(getClerkProfileRegistrationDraft("member-a").favoriteCityKeys, ["san-francisco"]);
+  assert.deepEqual(
+    filterClerkRegistrationCities(cities, "", getClerkProfileRegistrationDraft("member-a").favoriteCityKeys),
+    [cities[0], cities[1]],
+    "the newly selected city moves first immediately",
+  );
+  toggleClerkFavoriteCityDraft("member-a", "san-francisco", cities.map((city) => city.key));
+  assert.deepEqual(filterClerkRegistrationCities(cities, "", getClerkProfileRegistrationDraft("member-a").favoriteCityKeys), cities);
+  assert.deepEqual(getClerkAirportSelectionDraft("member-a"), ["JFK"], "changing tabs does not change the chosen airport");
 
   const airportSource = readFileSync(resolve(projectRoot, "app/airport-picker.tsx"), "utf8");
   for (const identifier of [
@@ -399,7 +451,6 @@ test("airport and city tabs filter results, scroll, and preserve independent sel
     "registration-airport-search",
     "registration-city-search",
     "registration-home-airport-${airport.code}",
-    "registration-additional-airport-${airport.code}",
     "registration-city-${city.key}",
   ]) assert.ok(airportSource.includes(identifier), `missing location control ${identifier}`);
   assert.ok(airportSource.includes("filterClerkRegistrationAirports"));
@@ -407,10 +458,11 @@ test("airport and city tabs filter results, scroll, and preserve independent sel
   assert.ok(airportSource.includes("KeyboardAwareScrollViewCompat"));
   assert.ok(airportSource.includes("setActiveTab(tab)"));
   assert.ok(airportSource.includes("setClerkHomeAirportDraft(clerkUserId, airport.code)"));
-  assert.ok(airportSource.includes("toggleClerkAdditionalAirportDraft(clerkUserId, airport.code)"));
   assert.ok(airportSource.includes("toggleClerkFavoriteCityDraft(clerkUserId, city.key, catalogKeys)"));
   assert.ok(airportSource.includes("Continue to Review &amp; Save"));
   assert.ok(airportSource.includes("airportSearchState.kind === 'loading' || citiesQuery.isLoading || citiesQuery.isError"));
+  assert.ok(airportSource.includes("citiesQuery.data ?? [],\n    citySearch,\n    draft.favoriteCityKeys"));
+  assert.ok(airportSource.includes("!normalizedAirportSearch && draft.homeAirportCode"));
   assert.equal(airportSource.includes("fetchProductionAirports([]"), false);
   assert.ok(airportSource.includes("fetchProductionAirportCities"));
   const reviewSource = readFileSync(resolve(projectRoot, "app/registration-review.tsx"), "utf8");
@@ -418,8 +470,9 @@ test("airport and city tabs filter results, scroll, and preserve independent sel
   assert.ok(reviewSource.includes("ReviewCard title=\"Locations\""));
   assert.ok(reviewSource.includes("Confirm & Save"));
   assert.ok(reviewSource.includes("back-from-registration-review"));
-  assert.ok(reviewSource.includes("draft.additionalAirportCodes.length > 0"));
   assert.ok(reviewSource.includes("fetchProductionAirports(selectedAirportCodes"));
+  assert.ok(reviewSource.includes("[draft.homeAirportCode]"));
+  assert.equal(reviewSource.includes("draft.additionalAirportCodes"), false);
   assert.equal(reviewSource.includes("favoriteAirportCodes:"), false);
 });
 

@@ -64,7 +64,7 @@ export default function RegistrationReviewScreen() {
       ? getClerkProfileRegistrationDraft(clerkUserId)
       : null;
   const selectedAirportCodes = draft
-    ? [...new Set([draft.homeAirportCode, ...draft.additionalAirportCodes]
+    ? [...new Set([draft.homeAirportCode]
       .map((code) => code?.trim().toUpperCase())
       .filter((code): code is string => !!code))]
     : [];
@@ -296,20 +296,6 @@ export default function RegistrationReviewScreen() {
                 : 'Choose at least one city'}
             </Text>
           </View>
-          {draft.additionalAirportCodes.length > 0 ? (
-            <>
-              <SummaryLine
-                label="Additional airports"
-                value={draft.additionalAirportCodes.map((code) => {
-                  const airport = airports.find((item) => item.code === code);
-                  return airport ? `${airport.name} (${code})` : code;
-                }).join(', ')}
-              />
-              <Text style={[styles.disclosure, { color: colors.mutedForegroundLight }]}>
-                Additional airports are for this registration only.
-              </Text>
-            </>
-          ) : null}
           {airportsQuery.isLoading || citiesQuery.isLoading ? (
             <View style={styles.loadingRow}>
               <ActivityIndicator color={colors.primary} />

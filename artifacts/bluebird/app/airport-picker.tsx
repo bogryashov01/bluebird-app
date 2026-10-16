@@ -23,7 +23,6 @@ import {
   getClerkProfileRegistrationDraft,
   setClerkHomeAirportDraft,
   setClerkProfileRegistrationDraft,
-  toggleClerkAdditionalAirportDraft,
   toggleClerkFavoriteCityDraft,
   validateClerkAirportCitySelection,
   filterClerkRegistrationAirports,
@@ -31,6 +30,7 @@ import {
 } from '@/lib/clerkProfileOnboarding';
 import {
   describeProductionReadFailure,
+  fetchProductionAirports,
   fetchProductionAirportCities,
   fetchProductionAirportSearch,
   getProductionAirportSearchViewState,
@@ -154,6 +154,21 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
     retryDelay: productionReadRetryDelay,
     staleTime: 5 * 60 * 1000,
   });
+  const homeAirportQuery = useQuery({
+    queryKey: ['clerk-registration-home-airport', configuration?.environment, draft.homeAirportCode],
+    queryFn: ({ signal }) => {
+      if (!configuration) throw new Error('Main Bluebird API configuration is unavailable.');
+      return fetchProductionAirports([draft.homeAirportCode], {
+        signal,
+        environment: configuration.environment,
+        baseUrl: configuration.apiBaseUrl,
+      });
+    },
+    enabled: !!configuration && !!draft.homeAirportCode,
+    retry: shouldRetryProductionRead,
+    retryDelay: productionReadRetryDelay,
+    staleTime: 24 * 60 * 60 * 1000,
+  });
   const citiesQuery = useQuery({
     queryKey: ['clerk-registration-city-catalog', configuration?.environment],
     queryFn: ({ signal }) => {
@@ -172,7 +187,11 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
   const normalizedAirportSearch = airportSearch.trim();
   const waitingForAirportSearch = normalizedAirportSearch !== debouncedAirportSearch;
   const airports = normalizedAirportSearch === debouncedAirportSearch
-    ? filterClerkRegistrationAirports(airportsQuery.data ?? [], airportSearch)
+    ? filterClerkRegistrationAirports(
+        airportsQuery.data ?? [],
+        airportSearch,
+        [draft.homeAirportCode],
+      )
     : [];
   const airportSearchState = getProductionAirportSearchViewState({
     configurationAvailable: !!configuration,
@@ -184,18 +203,21 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
   const cityReadFailure = citiesQuery.isError
     ? describeProductionReadFailure(citiesQuery.error, 'the city list')
     : null;
-  const cities = filterClerkRegistrationCities(citiesQuery.data ?? [], citySearch);
+  const homeAirportReadFailure = homeAirportQuery.isError
+    ? describeProductionReadFailure(homeAirportQuery.error, 'selected airport details')
+    : null;
+  const cities = filterClerkRegistrationCities(
+    citiesQuery.data ?? [],
+    citySearch,
+    draft.favoriteCityKeys,
+  );
+  const resolvedHomeAirport = homeAirportQuery.data?.find(
+    (airport) => airport.code === draft.homeAirportCode,
+  );
   const catalogKeys = (citiesQuery.data ?? []).map((city) => city.key);
 
   const chooseHomeAirport = (airport: AirportRecord) => {
     setClerkHomeAirportDraft(clerkUserId, airport.code);
-    setDraft(getClerkProfileRegistrationDraft(clerkUserId));
-    setSelectionError(null);
-  };
-
-  const toggleAdditionalAirport = (airport: AirportRecord) => {
-    if (airport.code === draft.homeAirportCode) return;
-    toggleClerkAdditionalAirportDraft(clerkUserId, airport.code);
     setDraft(getClerkProfileRegistrationDraft(clerkUserId));
     setSelectionError(null);
   };
@@ -235,7 +257,7 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
           <Text style={[styles.registrationEyebrow, { color: colors.primary }]}>STEP 2 OF 3</Text>
           <Text style={[styles.title, { color: colors.textOnSurface }]}>Locations</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
-            Choose your home airport, additional airports, and cities.
+            Choose your home airport and favorite cities.
           </Text>
         </View>
       </View>
@@ -263,9 +285,7 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
                 { color: selected ? colors.textOnSurface : colors.mutedForegroundLight },
               ]}>{label}</Text>
               {tab === 'airports' && draft.homeAirportCode ? (
-                <Text style={[styles.tabCount, { color: colors.primary }]}>
-                  {1 + draft.additionalAirportCodes.length}
-                </Text>
+                <Text style={[styles.tabCount, { color: colors.primary }]}>1</Text>
               ) : null}
               {tab === 'cities' && draft.favoriteCityKeys.length ? (
                 <Text style={[styles.tabCount, { color: colors.primary }]}>
@@ -302,8 +322,47 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
         {activeTab === 'airports' ? (
           <>
             <Text style={[styles.selectionHint, { color: colors.mutedForegroundLight }]}>
-              Choose one home airport and any additional airports you use.
+              Choose one home airport. Search by airport name, city, or code.
             </Text>
+            {!normalizedAirportSearch && draft.homeAirportCode ? (
+              <>
+                {resolvedHomeAirport ? (
+                  <RegistrationAirportRow
+                    airport={resolvedHomeAirport}
+                    selected
+                    onSelect={chooseHomeAirport}
+                  />
+                ) : (
+                  <View
+                    accessible
+                    accessibilityRole="radio"
+                    accessibilityLabel={`Home airport ${draft.homeAirportCode}`}
+                    accessibilityState={{ selected: true }}
+                    style={[styles.catalogRow, { backgroundColor: colors.card, borderColor: colors.primary }]}
+                    testID={`registration-home-airport-${draft.homeAirportCode}`}
+                  >
+                    <View style={[styles.radioMark, { borderColor: colors.primary }]}>
+                      <View style={[styles.radioSelected, { backgroundColor: colors.primary }]} />
+                    </View>
+                    <View style={styles.catalogRowText}>
+                      <Text style={[styles.catalogTitle, { color: colors.textOnSurface }]}>Home airport</Text>
+                      <Text style={[styles.catalogMeta, { color: colors.mutedForegroundLight }]}>
+                        {draft.homeAirportCode}
+                      </Text>
+                    </View>
+                    <Text style={[styles.selectedLabel, { color: colors.primary }]}>Selected</Text>
+                  </View>
+                )}
+                {homeAirportReadFailure ? (
+                  <CatalogError
+                    label={homeAirportReadFailure.message}
+                    retryable={homeAirportReadFailure.retryable}
+                    onRetry={() => void homeAirportQuery.refetch()}
+                    testID="registration-home-airport-details-error"
+                  />
+                ) : null}
+              </>
+            ) : null}
             {airportSearchState.kind === 'configuration-unavailable' ? (
               <Text style={[styles.emptyText, { color: colors.destructive }]} testID="registration-airport-configuration-error">
                 Airport search is unavailable because the Main Bluebird API is not configured.
@@ -311,7 +370,7 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
             ) : null}
             {airportSearchState.kind === 'unsupported-empty-query' ? (
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]} testID="registration-airport-search-prompt">
-                Search by airport name, city, or code to find airports. Browsing the full airport list isn’t available.
+                Search by airport name, city, or code to find airports. The full airport list isn’t available to browse.
               </Text>
             ) : null}
             {airportSearchState.kind === 'loading' ? <CatalogLoading label="Searching airports…" /> : null}
@@ -328,54 +387,14 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
                 No airports matched “{airportSearch.trim()}”.
               </Text>
             ) : null}
-            {airportSearchState.kind === 'results' ? airports.map((airport) => {
-              const isHome = draft.homeAirportCode === airport.code;
-              const isAdditional = draft.additionalAirportCodes.includes(airport.code);
-              return (
-                <View key={airport.code} style={[styles.catalogRow, { backgroundColor: colors.card, borderColor: isHome || isAdditional ? colors.primary : colors.border }]} testID={`registration-airport-${airport.code}`}>
-                  <Pressable
-                    accessibilityRole="radio"
-                    accessibilityLabel={`Set ${airport.name} as home airport`}
-                    accessibilityState={{ selected: isHome }}
-                    onPress={() => chooseHomeAirport(airport)}
-                    style={styles.airportIdentity}
-                    testID={`registration-home-airport-${airport.code}`}
-                  >
-                    <View style={[styles.radioMark, { borderColor: isHome ? colors.primary : colors.border }]}>
-                      {isHome ? <View style={[styles.radioSelected, { backgroundColor: colors.primary }]} /> : null}
-                    </View>
-                    <View style={styles.catalogRowText}>
-                      <Text style={[styles.catalogTitle, { color: colors.textOnSurface }]}>{airport.name}</Text>
-                      <Text style={[styles.catalogMeta, { color: colors.mutedForegroundLight }]}>
-                        {[airport.code, airport.city, airport.state, airport.country].filter(Boolean).join(' · ')}
-                      </Text>
-                    </View>
-                    {isHome ? <Text style={[styles.selectedLabel, { color: colors.primary }]}>Home</Text> : null}
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="checkbox"
-                    accessibilityLabel={`Add ${airport.name} as an additional airport`}
-                    accessibilityState={{ checked: isAdditional }}
-                    disabled={isHome}
-                    onPress={() => toggleAdditionalAirport(airport)}
-                    style={styles.additionalToggle}
-                    testID={`registration-additional-airport-${airport.code}`}
-                  >
-                    <View style={[
-                      styles.checkboxMark,
-                      {
-                        backgroundColor: isAdditional ? colors.primary : colors.card,
-                        borderColor: isAdditional ? colors.primary : colors.border,
-                        opacity: isHome ? 0.4 : 1,
-                      },
-                    ]}>
-                      {isAdditional ? <Text style={{ color: colors.primaryForeground }}>✓</Text> : null}
-                    </View>
-                    <Text style={[styles.additionalLabel, { color: colors.mutedForegroundLight }]}>Additional</Text>
-                  </Pressable>
-                </View>
-              );
-            }) : null}
+            {airportSearchState.kind === 'results' ? airports.map((airport) => (
+              <RegistrationAirportRow
+                key={airport.code}
+                airport={airport}
+                selected={draft.homeAirportCode === airport.code}
+                onSelect={chooseHomeAirport}
+              />
+            )) : null}
           </>
         ) : (
           <>
@@ -454,6 +473,45 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
   );
 }
 
+function RegistrationAirportRow({
+  airport,
+  selected,
+  onSelect,
+}: {
+  airport: AirportRecord;
+  selected: boolean;
+  onSelect: (airport: AirportRecord) => void;
+}) {
+  const colors = useColors();
+  const location = [airport.code, airport.city, airport.state, airport.country]
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityLabel={`Set ${airport.name} as home airport`}
+      accessibilityState={{ selected }}
+      onPress={() => onSelect(airport)}
+      style={[
+        styles.catalogRow,
+        { backgroundColor: colors.card, borderColor: selected ? colors.primary : colors.border },
+      ]}
+      testID={selected
+        ? `registration-home-airport-${airport.code}`
+        : `registration-airport-${airport.code}`}
+    >
+      <View style={[styles.radioMark, { borderColor: selected ? colors.primary : colors.border }]}>
+        {selected ? <View style={[styles.radioSelected, { backgroundColor: colors.primary }]} /> : null}
+      </View>
+      <View style={styles.catalogRowText}>
+        <Text style={[styles.catalogTitle, { color: colors.textOnSurface }]}>{airport.name}</Text>
+        <Text style={[styles.catalogMeta, { color: colors.mutedForegroundLight }]}>{location}</Text>
+      </View>
+      {selected ? <Text style={[styles.selectedLabel, { color: colors.primary }]}>Home</Text> : null}
+    </Pressable>
+  );
+}
+
 function CatalogLoading({ label }: { label: string }) {
   const colors = useColors();
   return (
@@ -517,8 +575,6 @@ const styles = StyleSheet.create({
   loadingState: { minHeight: 100, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16 },
   catalogRow: { minHeight: 64, borderRadius: 14, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 9, flexDirection: 'row', alignItems: 'center', gap: 12 },
   airportIdentity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
-  additionalToggle: { alignItems: 'center', justifyContent: 'center', gap: 4, minWidth: 62, minHeight: 48 },
-  additionalLabel: { fontSize: 9, fontFamily: 'Inter_500Medium' },
   catalogRowText: { flex: 1, gap: 3 },
   catalogTitle: { fontSize: 14, lineHeight: 19, fontFamily: 'Inter_600SemiBold' },
   catalogMeta: { fontSize: 12, lineHeight: 17, fontFamily: 'Inter_400Regular' },

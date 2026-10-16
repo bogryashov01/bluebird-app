@@ -286,13 +286,28 @@ export function filterClerkRegistrationAirports<T extends {
   city: string | null;
   state: string | null;
   country: string | null;
-}>(airports: readonly T[], query: string): T[] {
+}>(
+  airports: readonly T[],
+  query: string,
+  selectedCodes: readonly string[] = [],
+): T[] {
   const normalized = query.trim().toLocaleLowerCase();
-  if (!normalized) return [...airports];
-  return airports.filter((airport) =>
-    [airport.code, airport.name, airport.city, airport.state, airport.country]
-      .filter(Boolean)
-      .some((value) => value!.toLocaleLowerCase().includes(normalized)),
+  const selected = new Set(selectedCodes.map((code) => code.trim().toUpperCase()));
+  const uniqueMatches = new Map<string, T>();
+  for (const airport of airports) {
+    const code = airport.code.trim().toUpperCase();
+    if (!code || uniqueMatches.has(code)) continue;
+    if (
+      normalized &&
+      ![airport.code, airport.name, airport.city, airport.state, airport.country]
+        .filter(Boolean)
+        .some((value) => value!.toLocaleLowerCase().includes(normalized))
+    ) continue;
+    uniqueMatches.set(code, airport);
+  }
+  return [...uniqueMatches.values()].sort((left, right) =>
+    Number(selected.has(right.code.trim().toUpperCase())) -
+    Number(selected.has(left.code.trim().toUpperCase())),
   );
 }
 
@@ -300,11 +315,20 @@ export function filterClerkRegistrationCities<T extends {
   key: string;
   displayName: string;
   country: string;
-}>(cities: readonly T[], query: string): T[] {
+}>(cities: readonly T[], query: string, selectedKeys: readonly string[] = []): T[] {
   const normalized = query.trim().toLocaleLowerCase();
-  if (!normalized) return [...cities];
-  return cities.filter((city) =>
-    `${city.displayName} ${city.country} ${city.key}`.toLocaleLowerCase().includes(normalized),
+  const selected = new Set(selectedKeys);
+  const uniqueMatches = new Map<string, T>();
+  for (const city of cities) {
+    if (!city.key || uniqueMatches.has(city.key)) continue;
+    if (
+      normalized &&
+      !`${city.displayName} ${city.country} ${city.key}`.toLocaleLowerCase().includes(normalized)
+    ) continue;
+    uniqueMatches.set(city.key, city);
+  }
+  return [...uniqueMatches.values()].sort((left, right) =>
+    Number(selected.has(right.key)) - Number(selected.has(left.key)),
   );
 }
 
