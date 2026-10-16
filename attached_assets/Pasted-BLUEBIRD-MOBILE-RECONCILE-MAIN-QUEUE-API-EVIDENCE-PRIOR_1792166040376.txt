@@ -1,0 +1,106 @@
+BLUEBIRD MOBILE — RECONCILE MAIN QUEUE API EVIDENCE
+
+PRIORITY: CRITICAL
+MODE: INVESTIGATE AND IMPLEMENT SAFE MOBILE CHANGES
+
+IMPORTANT:
+
+Task #535 relied on the older Task #521 audit.
+
+However, a newer read-only audit was performed
+directly in the separate Main Bluebird Website Replit.
+
+That audit confirmed the following endpoints
+exist in the Main Bluebird source:
+
+GET /api/empty-legs/:id/queue
+POST /api/empty-legs/:id/queue
+DELETE /api/empty-legs/:id/queue
+POST /api/empty-legs/:id/skip-line
+
+Main source references:
+
+artifacts/api-server/src/routes/queue.ts
+artifacts/api-server/src/lib/queueService.ts
+artifacts/api-server/src/lib/clerkAuth.ts
+
+Authentication:
+
+Authorization: Bearer <Clerk session token>
+
+Identity mapping:
+
+Clerk userId -> members.clerk_user_id
+
+These findings supersede the earlier assumption
+that the per-flight queue endpoints do not exist.
+
+IMPORTANT DISTINCTION:
+
+Source-code support is verified.
+Production deployment is NOT verified.
+
+TASK 1:
+
+Review the existing verification gates from #535.
+
+Identify which gates can be satisfied using
+the Main Bluebird source audit.
+
+Do not treat the older local legacy API
+as authoritative for the separate Main backend.
+
+TASK 2:
+
+Inspect the existing Mobile API environment
+and Clerk configuration.
+
+Determine whether the selected Mobile environment
+targets the correct Main Bluebird backend
+and matching Clerk instance.
+
+Do not modify configuration.
+
+TASK 3:
+
+Prepare the existing Clerk queue panel for
+integration into Flight Details.
+
+Reuse Task #507 components.
+
+Do not duplicate Queue functionality.
+
+TASK 4:
+
+Preserve safety requirements.
+
+Do not enable production mutations until
+deployment, authentication, identity mapping,
+and credit-source compatibility are verified.
+
+Do not perform real production queue mutations.
+
+Do not use legacy JWT fallback.
+
+Do not invent API endpoints.
+
+TASK 5:
+
+Report the exact remaining blockers.
+
+Separate:
+
+- Verified from Main source
+- Verified from Mobile source
+- Requires authorized runtime verification
+
+DELIVERABLE:
+
+Provide the smallest remaining steps required
+to enable real Join Queue, Leave Queue,
+Queue Position, and credit-based Skip the Line.
+
+MOBILE PROJECT ONLY.
+
+Do not modify Main Bluebird, Main API,
+database, Clerk, or production configuration.
