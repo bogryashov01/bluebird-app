@@ -15,6 +15,13 @@ import {
   updateClerkBluebirdProfileExplicitly,
 } from "../scripts/.clerk-bluebird-profile.test.mjs";
 import {
+  buildClerkPersonalInfoUpdateRequest,
+  getChangedClerkPersonalInfoFields,
+  getClerkPersonalInfoValues,
+  loadClerkPersonalInfo,
+  updateClerkPersonalInfoExplicitly,
+} from "../scripts/.clerk-personal-info.test.mjs";
+import {
   CLERK_PROFILE_SAVE_LIMITATION,
   buildClerkProfileUpdateRequest,
   canAccessClerkProfileOnboardingRoute,
@@ -137,6 +144,163 @@ function fakeApi({
     },
   };
 }
+
+const completePersonalInfoProfile = {
+  ...profile,
+  firstName: "Avery",
+  lastName: "Passenger",
+  dob: "1985-04-03",
+  gender: "female",
+  homeAirportCode: "SFO",
+  homeAirportLabel: "San Francisco International",
+  favoriteCityKeys: ["san-francisco"],
+  favoriteCityLabels: ["San Francisco"],
+};
+
+test("Personal Information confirms /me before profile GET and performs no write while loading", async () => {
+  const calls = [];
+  const api = {
+    getMe: async () => {
+      calls.push("GET /me");
+      return currentUser({ isAuthenticated: true });
+    },
+    getProfile: async () => {
+      calls.push("GET /me/profile");
+      return completePersonalInfoProfile;
+    },
+    updateProfile: async () => {
+      calls.push("PUT /me/profile");
+      throw new Error("A profile write must require an explicit action.");
+    },
+  };
+
+  const loaded = await loadClerkPersonalInfo(api);
+  assert.equal(loaded.kind, "authenticated");
+  assert.deepEqual(calls, ["GET /me", "GET /me/profile"]);
+
+  const anonymousCalls = [];
+  const anonymous = await loadClerkPersonalInfo({
+    getMe: async () => {
+      anonymousCalls.push("GET /me");
+      return currentUser({ isAuthenticated: false });
+    },
+    getProfile: async () => {
+      anonymousCalls.push("GET /me/profile");
+      return completePersonalInfoProfile;
+    },
+  });
+  assert.equal(anonymous.kind, "api_not_authenticated");
+  assert.deepEqual(anonymousCalls, ["GET /me"]);
+});
+
+test("Personal Information represents absent optional values as empty and requires safe PUT fields", () => {
+  const optionalProfile = {
+    ...completePersonalInfoProfile,
+    email: null,
+    phoneE164: null,
+    phoneVerifiedAt: null,
+    weightLbs: null,
+    homeAirportCode: null,
+    favoriteCityKeys: [],
+  };
+  const values = getClerkPersonalInfoValues(optionalProfile);
+  assert.deepEqual(values, {
+    firstName: "Avery",
+    lastName: "Passenger",
+    dob: "1985-04-03",
+    gender: "female",
+    weightLbs: "",
+  });
+  assert.throws(
+    () => buildClerkPersonalInfoUpdateRequest(
+      optionalProfile,
+      { ...values, firstName: "Avery Updated" },
+      values,
+    ),
+    /valid home airport/i,
+  );
+  assert.deepEqual(
+    getChangedClerkPersonalInfoFields(values, values),
+    [],
+    "the initial read creates no dirty fields and cannot show Save",
+  );
+});
+
+test("Personal Information PUT contains only required profile fields and a changed optional weight", () => {
+  const baseline = getClerkPersonalInfoValues(completePersonalInfoProfile);
+  const values = { ...baseline, firstName: " Avery Updated ", weightLbs: "142" };
+  const request = buildClerkPersonalInfoUpdateRequest(completePersonalInfoProfile, values, baseline);
+
+  assert.deepEqual(request, {
+    firstName: "Avery Updated",
+    lastName: "Passenger",
+    dob: "1985-04-03",
+    gender: "female",
+    homeAirportCode: "SFO",
+    favoriteCityKeys: ["san-francisco"],
+    weightLbs: 142,
+  });
+  for (const excluded of [
+    "email", "phoneE164", "phoneCountry", "notificationPrefs", "smsConsent",
+    "favoriteAirportCodes", "favoriteCityLabels", "homeAirportLabel",
+  ]) {
+    assert.equal(excluded in request, false, `${excluded} must not be included`);
+  }
+
+  const clearWeight = buildClerkPersonalInfoUpdateRequest(
+    { ...completePersonalInfoProfile, weightLbs: 142 },
+    { ...baseline, weightLbs: "" },
+    { ...baseline, weightLbs: "142" },
+  );
+  assert.equal(clearWeight.weightLbs, null);
+});
+
+test("Personal Information rejects invalid edits and only accepts an authenticated save response", async () => {
+  const baseline = getClerkPersonalInfoValues(completePersonalInfoProfile);
+  assert.throws(
+    () => buildClerkPersonalInfoUpdateRequest(
+      completePersonalInfoProfile,
+      { ...baseline, weightLbs: "142.5" },
+      baseline,
+    ),
+    /whole-number weight/i,
+  );
+  assert.throws(
+    () => buildClerkPersonalInfoUpdateRequest(
+      completePersonalInfoProfile,
+      { ...baseline, dob: "1985-02-30" },
+      baseline,
+    ),
+    /valid past date/i,
+  );
+
+  let writes = 0;
+  const request = buildClerkPersonalInfoUpdateRequest(
+    completePersonalInfoProfile,
+    { ...baseline, firstName: "Avery Updated" },
+    baseline,
+  );
+  await assert.rejects(
+    () => updateClerkPersonalInfoExplicitly({
+      updateProfile: async () => {
+        writes += 1;
+        throw new Error("request rejected");
+      },
+    }, request),
+    /request rejected/,
+  );
+  assert.equal(writes, 1, "a failed explicit save is not retried");
+  await assert.rejects(
+    () => updateClerkPersonalInfoExplicitly({
+      updateProfile: async () => currentUser({ isAuthenticated: false }),
+    }, request),
+    /did not confirm/i,
+  );
+  const accepted = await updateClerkPersonalInfoExplicitly({
+    updateProfile: async () => currentUser({ isAuthenticated: true }),
+  }, request);
+  assert.equal(accepted.isAuthenticated, true);
+});
 
 test("an API-authenticated nonmember can load their incomplete profile without member or write calls", async () => {
   const api = fakeApi();

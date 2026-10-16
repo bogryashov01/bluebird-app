@@ -206,8 +206,19 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(clerkProfile, /label: 'Sign Out'/);
   const personalInfoSource = readFileSync(resolve(projectRoot, "app/account/personal-info.tsx"), "utf8");
   assert.match(personalInfoSource, /authMode === 'clerk'/);
-  assert.match(personalInfoSource, /profile changes were requested/);
-  assert.match(personalInfoSource, /onAction=\{\(\) => router\.replace\('\/\(tabs\)\/profile'\)\}/);
+  assert.match(personalInfoSource, /<ClerkPersonalInfoScreen \/>/);
+  assert.match(personalInfoSource, /loadClerkPersonalInfo\(createApi\(\)\.authenticated, signal\)/);
+  assert.match(personalInfoSource, /currentIdentity\.current !== clerkUserId/);
+  assert.doesNotMatch(personalInfoSource, /clerk-personal-info-unavailable|profile changes were requested/);
+  const personalInfoContract = readFileSync(resolve(projectRoot, "lib/clerkPersonalInfo.ts"), "utf8");
+  assert.match(personalInfoContract, /const currentUser = await api\.getMe\(options\)/);
+  assert.match(personalInfoContract, /if \(currentUser\.isAuthenticated !== true\)/);
+  assert.match(personalInfoContract, /const profile = await api\.getProfile\(options\)/);
+  assert.doesNotMatch(personalInfoContract, /getMembership|useUpdateMe|localStorage/);
+  const rootLayout = readFileSync(resolve(projectRoot, "app/_layout.tsx"), "utf8");
+  assert.match(rootLayout, /name="account\/personal-info"[\s\S]*?headerShown: true[\s\S]*?\.\.\.headerOptions/);
+  const appHeader = readFileSync(resolve(projectRoot, "components/AppHeader.tsx"), "utf8");
+  assert.match(appHeader, /navigation\.goBack\(\)/);
   const notificationsSource = readFileSync(resolve(projectRoot, "app/notifications.tsx"), "utf8");
   const clerkNotifications = notificationsSource
     .split("function ClerkNotificationSettings() {")[1]

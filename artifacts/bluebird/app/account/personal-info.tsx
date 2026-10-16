@@ -15,13 +15,462 @@ import {
   useUpdateNetworkingProfile,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { uploadProfilePhoto } from '@/lib/profile-photo-upload';
 import { selectProfilePhoto } from '@/lib/profile-photo-selection';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
+import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
+import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
+import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
+import {
+  getClerkBluebirdProfileEffectDependencies,
+  isClerkBluebirdProfileResultCurrent,
+} from '@/lib/clerkBluebirdProfile';
+import {
+  buildClerkPersonalInfoUpdateRequest,
+  getChangedClerkPersonalInfoFields,
+  getClerkPersonalInfoValues,
+  loadClerkPersonalInfo,
+  updateClerkPersonalInfoExplicitly,
+} from '@/lib/clerkPersonalInfo';
+import type { ClerkPersonalInfoValues } from '@/lib/clerkPersonalInfo';
+import type { ProductionUserProfile } from '@/lib/productionAuthApi';
+
+type ClerkPersonalInfoLoadState =
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'not_authenticated' }
+  | { kind: 'loaded'; clerkUserId: string; profile: ProductionUserProfile };
+
+type MainApiClient = ReturnType<typeof createMainBluebirdApiIntegration>;
+
+function ClerkPersonalInfoScreen() {
+  const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const session = useClerkAuthSnapshot();
+  const configuration = getMainBluebirdApiConfigurationOrNull();
+  const [loadState, setLoadState] = React.useState<ClerkPersonalInfoLoadState>({ kind: 'loading' });
+  const [loadAttempt, setLoadAttempt] = React.useState(0);
+  const currentIdentity = React.useRef<string | null>(session?.userId ?? null);
+  currentIdentity.current = session?.userId ?? null;
+  const currentSession = React.useRef(session);
+  currentSession.current = session;
+  const saveController = React.useRef<AbortController | null>(null);
+  const requestDependencies = getClerkBluebirdProfileEffectDependencies({
+    configuration,
+    session,
+    loadAttempt,
+  });
+
+  const createApi = React.useCallback((): MainApiClient => {
+    if (!configuration || !session || session.isSignedIn !== true || !session.userId) {
+      throw new Error('Your signed-in Bluebird account is unavailable.');
+    }
+    const requestedClerkUserId = session.userId;
+    return createMainBluebirdApiIntegration({
+      configuration,
+      tokenProvider: {
+        environment: configuration.environment,
+        getVerifiedAccessToken: async () => {
+          const activeSession = currentSession.current;
+          if (
+            !activeSession ||
+            activeSession.isLoaded !== true ||
+            activeSession.isSignedIn !== true ||
+            activeSession.userId !== requestedClerkUserId
+          ) return null;
+          return activeSession.getToken();
+        },
+      },
+    });
+  }, [...requestDependencies]);
+
+  const loadProfile = React.useCallback(async (signal: AbortSignal) => {
+    if (!session?.isLoaded || session.isSignedIn !== true || !session.userId) return;
+    const requestedClerkUserId = session.userId;
+    setLoadState({ kind: 'loading' });
+    try {
+      const result = await loadClerkPersonalInfo(createApi().authenticated, signal);
+      if (!isClerkBluebirdProfileResultCurrent({
+        requestedClerkUserId,
+        currentClerkUserId: currentIdentity.current,
+        aborted: signal.aborted,
+      })) return;
+      if (result.kind === 'api_not_authenticated') {
+        setLoadState({ kind: 'not_authenticated' });
+        return;
+      }
+      setLoadState({ kind: 'loaded', clerkUserId: requestedClerkUserId, profile: result.profile });
+    } catch (error) {
+      if (signal.aborted || currentIdentity.current !== requestedClerkUserId) return;
+      setLoadState({ kind: 'error', message: getClerkPersonalInfoErrorMessage(error) });
+    }
+  }, [createApi, ...requestDependencies]);
+
+  React.useEffect(() => {
+    if (!session?.isLoaded || session.isSignedIn !== true || !session.userId) {
+      setLoadState({ kind: 'loading' });
+      return;
+    }
+    const controller = new AbortController();
+    void loadProfile(controller.signal);
+    return () => {
+      controller.abort();
+      saveController.current?.abort();
+      saveController.current = null;
+    };
+  }, [loadProfile, ...requestDependencies]);
+
+  if (!session) {
+    return <ClerkPersonalInfoState title="Profile unavailable" message="Sign in to view your Bluebird profile." />;
+  }
+  if (!session.isLoaded) return <ClerkPersonalInfoState loading title="Loading your profile" />;
+  if (session.isSignedIn !== true) return <Redirect href="/(clerk-auth)/sign-in" />;
+
+  const visibleState = loadState.kind === 'loaded' && loadState.clerkUserId !== session.userId
+    ? { kind: 'loading' as const }
+    : loadState;
+  const bottomPadding = (Platform.OS === 'web' ? 34 : insets.bottom) + 32;
+
+  return (
+    <View style={[styles.root, { backgroundColor: colors.offWhite }]} testID="clerk-personal-info">
+      <KeyboardAwareScrollViewCompat
+        contentContainerStyle={[styles.clerkInfoContent, { paddingBottom: bottomPadding }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={20}
+      >
+        {visibleState.kind === 'loading' ? (
+          <ClerkPersonalInfoState loading title="Loading your profile" />
+        ) : visibleState.kind === 'error' ? (
+          <View style={styles.clerkInfoCard}>
+            <Text style={[styles.title, { color: colors.textOnSurface }]}>Profile unavailable</Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>{visibleState.message}</Text>
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: colors.primary }]}
+              onPress={() => setLoadAttempt((attempt) => attempt + 1)}
+              accessibilityRole="button"
+              testID="clerk-personal-info-retry"
+            >
+              <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : visibleState.kind === 'not_authenticated' ? (
+          <View style={styles.clerkInfoCard}>
+            <Text style={[styles.title, { color: colors.textOnSurface }]}>Profile unavailable</Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
+              Bluebird did not confirm this signed-in session. No profile details were loaded.
+            </Text>
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: colors.primary }]}
+              onPress={() => setLoadAttempt((attempt) => attempt + 1)}
+              accessibilityRole="button"
+              testID="clerk-personal-info-retry"
+            >
+              <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : visibleState.kind === 'loaded' ? (
+          <ClerkPersonalInfoForm
+            key={visibleState.clerkUserId}
+            clerkUserId={visibleState.clerkUserId}
+            profile={visibleState.profile}
+            createApi={createApi}
+            currentIdentity={currentIdentity}
+            saveController={saveController}
+          />
+        ) : null}
+      </KeyboardAwareScrollViewCompat>
+    </View>
+  );
+}
+
+function ClerkPersonalInfoForm({
+  clerkUserId,
+  profile,
+  createApi,
+  currentIdentity,
+  saveController,
+}: {
+  clerkUserId: string;
+  profile: ProductionUserProfile;
+  createApi: () => MainApiClient;
+  currentIdentity: React.MutableRefObject<string | null>;
+  saveController: React.MutableRefObject<AbortController | null>;
+}) {
+  const colors = useColors();
+  const [values, setValues] = React.useState<ClerkPersonalInfoValues>(
+    () => getClerkPersonalInfoValues(profile),
+  );
+  const [baseline, setBaseline] = React.useState<ClerkPersonalInfoValues>(
+    () => getClerkPersonalInfoValues(profile),
+  );
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = React.useState<string | null>(null);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const savingRef = React.useRef(false);
+  const changedFields = getChangedClerkPersonalInfoFields(values, baseline);
+  let requestData: ReturnType<typeof buildClerkPersonalInfoUpdateRequest> | null = null;
+  let saveIssue: string | null = null;
+  if (changedFields.length > 0) {
+    try {
+      requestData = buildClerkPersonalInfoUpdateRequest(profile, values, baseline);
+    } catch (error) {
+      saveIssue = error instanceof Error ? error.message : 'Review your details before saving.';
+    }
+  }
+
+  const setField = <K extends keyof ClerkPersonalInfoValues>(
+    field: K,
+    value: ClerkPersonalInfoValues[K],
+  ) => {
+    setValues((current) => ({ ...current, [field]: value }));
+    setSaveError(null);
+    setSaveNotice(null);
+  };
+
+  const saveChanges = async () => {
+    if (savingRef.current || !requestData || currentIdentity.current !== clerkUserId) return;
+    const controller = new AbortController();
+    saveController.current = controller;
+    savingRef.current = true;
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveNotice(null);
+    try {
+      await updateClerkPersonalInfoExplicitly(
+        createApi().authenticated,
+        requestData,
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted || currentIdentity.current !== clerkUserId) return;
+      setBaseline(values);
+      setSaveNotice('Bluebird accepted your changes.');
+    } catch (error) {
+      if (!controller.signal.aborted && currentIdentity.current === clerkUserId) {
+        setSaveError(getClerkPersonalInfoErrorMessage(error));
+      }
+    } finally {
+      if (saveController.current === controller) saveController.current = null;
+      savingRef.current = false;
+      if (!controller.signal.aborted && currentIdentity.current === clerkUserId) setIsSaving(false);
+    }
+  };
+
+  const fieldStyle = [
+    styles.input,
+    { backgroundColor: colors.surface, color: colors.textOnSurface, borderColor: colors.border },
+  ];
+
+  return (
+    <View style={styles.clerkInfoCard} testID="clerk-personal-info-form">
+      <Text style={[styles.title, { color: colors.textOnSurface }]}>Your details</Text>
+      <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
+        These details come from your authenticated Bluebird profile. Phone and email are read-only here.
+      </Text>
+
+      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>First name</Text>
+      <TextInput
+        style={fieldStyle}
+        value={values.firstName}
+        onChangeText={(value) => setField('firstName', value)}
+        placeholder="Not provided"
+        placeholderTextColor={colors.mutedForegroundLight}
+        autoCapitalize="words"
+        maxLength={80}
+        accessibilityLabel="First name"
+        testID="clerk-personal-info-first-name"
+      />
+
+      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Last name</Text>
+      <TextInput
+        style={fieldStyle}
+        value={values.lastName}
+        onChangeText={(value) => setField('lastName', value)}
+        placeholder="Not provided"
+        placeholderTextColor={colors.mutedForegroundLight}
+        autoCapitalize="words"
+        maxLength={80}
+        accessibilityLabel="Last name"
+        testID="clerk-personal-info-last-name"
+      />
+
+      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Email</Text>
+      <ReadOnlyProfileValue
+        value={profile.email?.trim() || 'Not provided'}
+        accessibilityLabel="Email, read only"
+      />
+
+      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Phone</Text>
+      <ReadOnlyProfileValue
+        value={profile.phoneE164?.trim() || 'Not provided'}
+        accessibilityLabel="Phone, read only"
+      />
+      {profile.phoneE164 ? (
+        <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]}>
+          {profile.phoneVerifiedAt ? 'Verified phone number. ' : 'Phone verification is not confirmed. '}
+          Phone changes aren’t available here.
+        </Text>
+      ) : null}
+
+      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Date of birth</Text>
+      <TextInput
+        style={fieldStyle}
+        value={values.dob}
+        onChangeText={(value) => setField('dob', value)}
+        placeholder="Not provided"
+        placeholderTextColor={colors.mutedForegroundLight}
+        autoCapitalize="none"
+        autoCorrect={false}
+        maxLength={10}
+        accessibilityLabel="Date of birth, year month day"
+        testID="clerk-personal-info-dob"
+      />
+      <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]}>Use YYYY-MM-DD.</Text>
+
+      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Gender</Text>
+      <View style={styles.choiceRow}>
+        {(['female', 'male'] as const).map((gender) => {
+          const selected = values.gender === gender;
+          return (
+            <TouchableOpacity
+              key={gender}
+              style={[
+                styles.choice,
+                { borderColor: selected ? colors.primary : colors.border },
+                selected && { backgroundColor: colors.primary + '12' },
+              ]}
+              onPress={() => setField('gender', gender)}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              testID={`clerk-personal-info-gender-${gender}`}
+            >
+              <Text style={[styles.choiceText, { color: selected ? colors.primary : colors.textOnSurface }]}>
+                {gender === 'female' ? 'Female' : 'Male'}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Weight (lbs)</Text>
+      <TextInput
+        style={fieldStyle}
+        value={values.weightLbs}
+        onChangeText={(value) => setField('weightLbs', value)}
+        placeholder="Not provided"
+        placeholderTextColor={colors.mutedForegroundLight}
+        keyboardType="number-pad"
+        maxLength={4}
+        accessibilityLabel="Weight in pounds, optional"
+        testID="clerk-personal-info-weight"
+      />
+
+      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Home airport</Text>
+      <ReadOnlyProfileValue
+        value={profile.homeAirportLabel?.trim() || profile.homeAirportCode?.trim() || 'Not provided'}
+        accessibilityLabel="Home airport, read only"
+      />
+      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Favorite airports</Text>
+      <ReadOnlyProfileValue
+        value={profile.favoriteAirportLabels.length
+          ? profile.favoriteAirportLabels.join(', ')
+          : profile.favoriteAirportCodes.length
+            ? profile.favoriteAirportCodes.join(', ')
+            : 'Not provided'}
+        accessibilityLabel="Favorite airports, read only"
+      />
+      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Favorite cities</Text>
+      <ReadOnlyProfileValue
+        value={profile.favoriteCityLabels.length
+          ? profile.favoriteCityLabels.join(', ')
+          : profile.favoriteCityKeys.length
+            ? profile.favoriteCityKeys.join(', ')
+            : 'Not provided'}
+        accessibilityLabel="Favorite cities, read only"
+      />
+      <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]}>
+        Phone, email, airport, and city preferences can’t be changed on this screen.
+      </Text>
+
+      {saveError ? <Text style={[styles.errorText, { color: colors.destructive }]} testID="clerk-personal-info-save-error">{saveError}</Text> : null}
+      {saveNotice ? <Text style={[styles.savedText, { color: colors.success }]} testID="clerk-personal-info-save-success">{saveNotice}</Text> : null}
+      {saveIssue && changedFields.length > 0 ? (
+        <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]} testID="clerk-personal-info-save-guidance">
+          {saveIssue}
+        </Text>
+      ) : null}
+      {requestData ? (
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: colors.primary, opacity: isSaving ? 0.6 : 1 }]}
+          activeOpacity={0.85}
+          disabled={isSaving}
+          onPress={() => { void saveChanges(); }}
+          accessibilityRole="button"
+          testID="clerk-personal-info-save"
+        >
+          {isSaving
+            ? <ActivityIndicator color={colors.primaryForeground} />
+            : <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Save changes</Text>}
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
+function ReadOnlyProfileValue({
+  value,
+  accessibilityLabel,
+}: {
+  value: string;
+  accessibilityLabel: string;
+}) {
+  const colors = useColors();
+  return (
+    <Text
+      style={[
+        styles.readOnlyValue,
+        { backgroundColor: colors.muted, color: colors.textOnSurface, borderColor: colors.border },
+      ]}
+      accessibilityLabel={accessibilityLabel}
+    >
+      {value}
+    </Text>
+  );
+}
+
+function ClerkPersonalInfoState({
+  title,
+  message,
+  loading = false,
+}: {
+  title: string;
+  message?: string;
+  loading?: boolean;
+}) {
+  const colors = useColors();
+  return (
+    <View style={styles.center}>
+      {loading ? <ActivityIndicator color={colors.primary} /> : null}
+      <Text style={[styles.title, { color: colors.textOnSurface }]}>{title}</Text>
+      {message ? <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>{message}</Text> : null}
+    </View>
+  );
+}
+
+function getClerkPersonalInfoErrorMessage(error: unknown): string {
+  const typed = error as { code?: string; status?: number };
+  if (typed?.code === 'session_expired' || typed?.status === 401) {
+    return 'Your sign-in has expired. Sign in again, then reopen your profile.';
+  }
+  if (typed?.code === 'network' || typed?.code === 'timeout') {
+    return 'Bluebird could not be reached. Check your connection and try again.';
+  }
+  return 'Bluebird could not load or save your profile. Please try again.';
+}
 
 function toPhotoUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
@@ -314,15 +763,7 @@ export default function PersonalInfoScreen() {
   const bottomPadding = (Platform.OS === 'web' ? 34 : insets.bottom) + 40;
 
   if (authMode === 'clerk') {
-    return (
-      <ProductionAuthenticatedUnavailableNotice
-        title="Personal Information unavailable"
-        description="Your authenticated account details can’t be read or edited in this preview. The supported Clerk profile update flow is not available on this screen, so no profile changes were requested."
-        testID="clerk-personal-info-unavailable"
-        actionLabel="Back to Profile"
-        onAction={() => router.replace('/(tabs)/profile')}
-      />
-    );
+    return <ClerkPersonalInfoScreen />;
   }
 
   if (!localDemoFlow) {
@@ -526,11 +967,36 @@ export default function PersonalInfoScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { paddingHorizontal: 16, paddingTop: 20 },
+  clerkInfoContent: { paddingHorizontal: 20, paddingTop: 20, flexGrow: 1 },
+  clerkInfoCard: { padding: 18, borderRadius: 18, gap: 12 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 12 },
+  title: { fontSize: 24, lineHeight: 30, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
+  subtitle: { fontSize: 14, lineHeight: 21, fontFamily: 'Inter_400Regular' },
+  readOnlyValue: {
+    minHeight: 50,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 15,
+  },
   fieldLabel: {
     fontFamily: 'Inter_600SemiBold', fontSize: 12,
     textTransform: 'uppercase', letterSpacing: 0.6,
     marginBottom: 8, marginTop: 6,
   },
+  choiceRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  choice: {
+    minHeight: 44,
+    minWidth: 116,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  choiceText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
   input: {
     borderRadius: 14, borderWidth: 1,
     paddingHorizontal: 16, paddingVertical: 14,

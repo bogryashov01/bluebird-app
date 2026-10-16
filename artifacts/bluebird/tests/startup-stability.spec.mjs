@@ -165,6 +165,12 @@ test("Clerk-enabled Welcome routes the phone journey into Clerk without starting
 });
 
 test("valid local demo session reaches Discover on startup, direct navigation, and refresh", async ({ page }) => {
+  const retainedFocusWarnings = [];
+  page.on("console", (message) => {
+    if (/aria-hidden/i.test(message.text()) && /focus/i.test(message.text())) {
+      retainedFocusWarnings.push(message.text());
+    }
+  });
   await seedLocalSession(page);
   await stubLocalApi(page);
 
@@ -194,8 +200,12 @@ test("valid local demo session reaches Discover on startup, direct navigation, a
   await personalInformation.click();
   await expect(page).toHaveURL(/\/account\/personal-info$/);
   await expect(page.getByText("Personal Information", { exact: true }).last()).toBeVisible();
-  await page.goBack();
+  await page.getByTestId("header-back").click();
   await expect(page).toHaveURL(/\/profile$/);
+  for (const label of ["Discover", "Trips", "Membership", "Profile"]) {
+    await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+  }
+  expect(retainedFocusWarnings).toEqual([]);
 
   await page.getByText("Notification Settings", { exact: true }).click();
   await expect(page).toHaveURL(/\/notifications$/);
