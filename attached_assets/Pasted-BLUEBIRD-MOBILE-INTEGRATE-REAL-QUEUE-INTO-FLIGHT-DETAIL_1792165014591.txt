@@ -1,0 +1,169 @@
+BLUEBIRD MOBILE — INTEGRATE REAL QUEUE INTO FLIGHT DETAILS
+
+PRIORITY: CRITICAL
+MODE: BUILD / EXECUTE
+
+GOAL:
+Connect the existing Queue components from Task #507
+to Flight Details using the verified Main Bluebird
+source-code API contracts.
+
+We need functional Queue operations, not demo UI.
+
+CONTEXT:
+- Expo SDK 57
+- Clerk authentication
+- Existing Main Bluebird backend
+- Task #507 created isolated Queue components
+- Task #532 implemented Clerk Trips
+- Main Bluebird source audit confirmed Queue routes
+
+EXISTING API:
+
+GET /api/empty-legs/:id/queue
+POST /api/empty-legs/:id/queue
+DELETE /api/empty-legs/:id/queue
+POST /api/empty-legs/:id/skip-line
+
+All authenticated requests must use the existing
+fresh Clerk session token provider.
+
+STRICT RULES:
+
+MOBILE PROJECT ONLY.
+
+Do not modify:
+- Main Bluebird Website
+- Main API
+- Database
+- Clerk configuration
+- Shared authentication infrastructure
+- Production configuration
+- EAS configuration
+- Trips, Membership, Profile or Discover
+
+Do not invent endpoints.
+Do not use legacy JWT.
+Do not use mock success responses.
+Do not bypass membership or eligibility checks.
+
+TASK 1 — INSPECT
+
+Inspect:
+- Existing Flight Details screen
+- Queue components from Task #507
+- Existing authenticated Main API client
+
+Reuse existing components and infrastructure.
+
+TASK 2 — QUEUE POSITION
+
+Connect GET /api/empty-legs/:id/queue.
+
+The API returns an array:
+[
+  {
+    position,
+    initials,
+    tier,
+    hasLineSkip,
+    isViewer
+  }
+]
+
+Use isViewer to identify the current member.
+
+Do not calculate queue ranking locally.
+
+TASK 3 — JOIN QUEUE
+
+Connect POST /api/empty-legs/:id/queue.
+
+Default request body:
+{}
+
+Handle:
+- Successful join
+- Incomplete profile
+- Inactive membership
+- Closed queue
+- Same-day queue conflict
+- International pass requirement
+- Insufficient credits
+
+Display actual server errors.
+
+TASK 4 — LEAVE QUEUE
+
+Connect DELETE /api/empty-legs/:id/queue.
+
+Handle:
+- Successful leave
+- Missing participation
+- Closed queue
+
+Do not promise credit refunds.
+
+TASK 5 — SKIP THE LINE
+
+Support only the existing credit-based flow:
+
+POST /api/empty-legs/:id/skip-line
+
+Body:
+{"useCredit":true}
+
+IMPORTANT:
+- Credit redemption is irreversible.
+- Require explicit user confirmation.
+- Never automatically retry after network ambiguity.
+- Do not enable the cash-labelled branch.
+- Respect queue closure and server eligibility.
+- Refresh queue state after success.
+
+TASK 6 — AUTH AND SAFETY
+
+Before enabling authenticated mutations,
+verify that the selected Mobile API environment
+and Clerk issuer match the intended Main API.
+
+If this cannot be established:
+- Keep mutation buttons disabled.
+- Report the exact missing verification.
+- Do not send mutation requests.
+
+Do not run real production mutations as tests.
+
+TASK 7 — UI
+
+Integrate into the existing Flight Details design.
+
+Show:
+- Queue position
+- Join Queue
+- Leave Queue
+- Skip the Line when eligible
+- Loading states
+- Server errors
+- Confirmation dialogs for irreversible actions
+
+Never display fake success.
+
+TASK 8 — TESTING
+
+Run focused Queue tests and Clerk isolation tests.
+
+Rebuild shared libraries before the full
+Mobile TypeScript check.
+
+Report:
+- Files changed
+- Actual endpoints used
+- Implemented actions
+- Test results
+- Runtime verification limitations
+- Remaining blockers
+
+IMPORTANT:
+Do not claim production Queue functionality
+until authorized end-to-end verification succeeds.
