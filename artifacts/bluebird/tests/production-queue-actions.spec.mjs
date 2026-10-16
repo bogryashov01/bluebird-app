@@ -106,7 +106,7 @@ test("join and leave return success only when the API confirms the requested tra
   await assert.rejects(rejectedJoin.leave(81001), { code: "invalid_transition" });
 });
 
-test("Skip the Line uses an existing credit only and needs a confirmed winner response", async () => {
+test("Skip the Line requires explicit confirmation, uses an existing credit only, and needs a confirmed winner response", async () => {
   const calls = [];
   const actions = createProductionQueueActions({
     getEmptyLegQueue: async () => [],
@@ -118,10 +118,11 @@ test("Skip the Line uses an existing credit only and needs a confirmed winner re
     },
   });
 
-  await assert.rejects(actions.skipLine(81001, 0), { code: "credit_required" });
-  await assert.rejects(actions.skipLine(81001, -1), { code: "credit_required" });
+  await assert.rejects(actions.skipLine(81001, 1, false), { code: "confirmation_required" });
+  await assert.rejects(actions.skipLine(81001, 0, true), { code: "credit_required" });
+  await assert.rejects(actions.skipLine(81001, -1, true), { code: "credit_required" });
   assert.deepEqual(calls, []);
-  assert.equal((await actions.skipLine(81001, 1)).viewerIsEffectiveWinner, true);
+  assert.equal((await actions.skipLine(81001, 1, true)).viewerIsEffectiveWinner, true);
   assert.deepEqual(calls, [[81001, { useCredit: true }]]);
 
   const notConfirmed = createProductionQueueActions({
@@ -130,5 +131,5 @@ test("Skip the Line uses an existing credit only and needs a confirmed winner re
     leaveEmptyLegQueue: async () => ({ emptyLegId: 81001, queueCount: 1, memberQueueCount: 1, userInQueue: false, lockedForFreeUsers: false }),
     skipLine: async () => ({ id: 81001, viewerIsEffectiveWinner: false }),
   });
-  await assert.rejects(notConfirmed.skipLine(81001, 1), { code: "invalid_transition" });
+  await assert.rejects(notConfirmed.skipLine(81001, 1, true), { code: "invalid_transition" });
 });

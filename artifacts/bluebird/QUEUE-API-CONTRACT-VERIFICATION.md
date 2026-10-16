@@ -1,7 +1,7 @@
 # Bluebird queue API contract verification
 
 **Reviewed:** 2026-10-16  
-**Decision:** Do not enable the prepared Clerk queue panel in Flight Details.
+**Decision:** Keep the prepared Clerk queue panel out of Flight Details until the API-owner and credit-source evidence below is verified.
 
 ## Decision summary
 
@@ -115,6 +115,6 @@ Clerk acceptance remain **unverified**.
 
 This report is based on checked-in source, OpenAPI, and supplied documentation
 only. No network request, queue read or mutation, token or user-data access,
-database operation, Main API/Clerk configuration change, or Flight Details
-change was performed. The report contains no token, user identifier, or queue
-contents.
+database operation, or Main API/Clerk configuration change was performed.
+Flight Details remains read-only and reports the missing verification. The
+report contains no token, user identifier, or queue contents.

@@ -20,7 +20,7 @@ export interface ProductionQueueRead {
 export class ProductionQueueContractError extends Error {
   constructor(
     message: string,
-    readonly code: 'ambiguous_viewer' | 'invalid_transition' | 'credit_required',
+    readonly code: 'ambiguous_viewer' | 'invalid_transition' | 'credit_required' | 'confirmation_required',
   ) {
     super(message);
     this.name = 'ProductionQueueContractError';
@@ -130,7 +130,14 @@ export function createProductionQueueActions(api: AuthenticatedQueueApi) {
     async skipLine(
       emptyLegId: number,
       existingCreditCount: number,
+      confirmed: boolean,
     ): Promise<ProductionEmptyLeg> {
+      if (confirmed !== true) {
+        throw new ProductionQueueContractError(
+          'Explicit confirmation is required before using a Skip the Line credit.',
+          'confirmation_required',
+        );
+      }
       if (!Number.isSafeInteger(existingCreditCount) || existingCreditCount < 1) {
         throw new ProductionQueueContractError(
           'An existing Skip the Line credit is required. No purchase was made.',

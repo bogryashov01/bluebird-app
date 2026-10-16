@@ -48,7 +48,15 @@ establish that the deployed Main API accepts the selected Clerk token. A 401,
 404, or other API rejection is displayed as a failure; it is not treated as
 queue success and never triggers a demo fallback.
 
-The Main API authentication readiness state also remains unavailable until
-Clerk-token acceptance and stable member identity mapping have been verified.
-This work prepares isolated components for later integration; it does not
-activate that readiness gate or claim live queue requests succeed.
+The queue hooks now have an explicit fail-closed evidence gate. It remains
+disabled until all five requirements are verified: deployed per-flight
+endpoint contract, selected Main API/Clerk pairing, server-side Clerk-token
+validation, stable Clerk-to-member mapping, and the trusted Skip the Line
+credit-balance source. Environment configuration and a signed-in Clerk session
+alone do not activate queue reads or actions. Flight Details keeps the panel
+unmounted and reports these blockers until then.
+
+Skip the Line additionally requires an explicit confirmation, and all queue
+mutations disable automatic retries so an ambiguous request is not resent.
+These safeguards do not establish deployed endpoint support or live
+functionality.

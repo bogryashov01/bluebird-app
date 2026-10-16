@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { parseProductionFlightId } from '@/lib/productionFlights';
+import { getProductionQueueReadOnlyMessage } from '@/lib/productionQueueReadiness';
 
 interface ProductionReadOnlyNoticeProps {
   flightId?: string | number | null;
@@ -14,7 +15,7 @@ interface ProductionReadOnlyNoticeProps {
 export function ProductionReadOnlyNotice({
   flightId,
   title = 'Queue unavailable in this preview',
-  description = 'Authenticated production access is unavailable here, so queue status and actions are not loaded. The checked-in queue engine confirms eligible members automatically; it defines no winner confirm/decline action. You can view the flight, but cannot join or leave a queue or use a pass.',
+  description = getProductionQueueReadOnlyMessage(),
 }: ProductionReadOnlyNoticeProps) {
   const colors = useColors();
   const validatedFlightId = parseProductionFlightId(flightId);

@@ -184,6 +184,13 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   expect(flightId).toBeGreaterThan(0);
   await firstCard.click();
   await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
+  const queueBlockers = page.getByTestId("production-queue-read-only-message");
+  await expect(queueBlockers).toContainText("deployed per-flight queue endpoints and exact request/response contract");
+  await expect(queueBlockers).toContainText("selected Main API and Clerk issuer pairing");
+  await expect(queueBlockers).toContainText("server-side Clerk token validation");
+  await expect(queueBlockers).toContainText("stable Clerk-to-Bluebird-member identity mapping");
+  await expect(queueBlockers).toContainText("trusted source of an existing Skip the Line credit balance");
+  await expect(page.getByText("Flight queue", { exact: true })).toHaveCount(0);
   expect(new URL(page.url()).pathname).toMatch(new RegExp(`/flight/${flightId}$`));
   await page.goBack();
   await expect(page.locator(`[data-testid="production-flight-card-${flightId}"]`)).toBeVisible();
@@ -201,6 +208,8 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   await page.getByTestId("production-queue-read-only-cta").click();
   await expect(page.getByTestId("production-read-only-notice")).toBeVisible();
   await expect(page.getByTestId("production-flight-id")).toHaveText(`Production flight ID: ${flightId}`);
+  await expect(page.getByTestId("production-read-only-notice")).toContainText("deployed per-flight queue endpoints and exact request/response contract");
+  await expect(page.getByTestId("production-read-only-notice")).toContainText("legacy app-JWT queue routes; no fallback is used");
 
   await page.goto(appUrl(baseURL, `flight/${flightId}`));
   await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();

@@ -18,6 +18,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { shouldUseLocalFlightReadMode } from '@/lib/clerkAuthSession';
+import { getProductionQueueReadOnlyMessage } from '@/lib/productionQueueReadiness';
 import {
   fetchProductionAirports,
   fetchProductionFlights,
@@ -478,8 +479,11 @@ export default function FlightDetailScreen() {
               Flight details
             </Text>
           </View>
-          <Text style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}>
-            Queue actions require production sign-in, which is not connected to this read-only preview.
+          <Text
+            testID="production-queue-read-only-message"
+            style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}
+          >
+            {getProductionQueueReadOnlyMessage()}
           </Text>
           <TouchableOpacity
             testID="production-queue-read-only-cta"

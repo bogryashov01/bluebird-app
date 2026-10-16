@@ -15,6 +15,8 @@ import {
   type ClerkQueueAvailability,
 } from '@/lib/useClerkQueue';
 import type { ProductionAuthRequestError } from '@/lib/productionAuthApi';
+import { confirmDialog } from '@/lib/confirmDialog';
+import { getProductionQueueReadOnlyMessage } from '@/lib/productionQueueReadiness';
 
 export interface ClerkQueuePanelProps {
   emptyLegId: number;
@@ -28,6 +30,7 @@ function availabilityMessage(availability: ClerkQueueAvailability): string | nul
   if (availability === 'authentication-required') {
     return 'Sign in with Clerk to load this flight’s queue.';
   }
+  if (availability === 'verification-required') return getProductionQueueReadOnlyMessage();
   if (availability === 'invalid-flight-id') return 'This flight does not have a valid Main API ID.';
   return null;
 }
@@ -54,7 +57,8 @@ export function ClerkQueuePanel({
   const leave = useLeaveClerkFlightQueue(emptyLegId);
   const skip = useSkipClerkFlightLine(emptyLegId, existingSkipLineCredits);
   const [actionError, setActionError] = useState<string | null>(null);
-  const busy = join.isPending || leave.isPending || skip.isPending;
+  const [skipConfirmationPending, setSkipConfirmationPending] = useState(false);
+  const busy = join.isPending || leave.isPending || skip.isPending || skipConfirmationPending;
   const unavailable = availabilityMessage(queue.availability);
 
   const runAction = async (action: () => Promise<unknown>) => {
@@ -66,6 +70,21 @@ export function ClerkQueuePanel({
       await action();
     } catch (error) {
       setActionError(errorMessage(error));
+    }
+  };
+
+  const confirmAndSkip = async () => {
+    if (busy) return;
+    setSkipConfirmationPending(true);
+    try {
+      const confirmed = await confirmDialog(
+        'Use a Skip the Line credit?',
+        'This will use one existing credit for this flight. This action cannot be undone.',
+        'Use Credit',
+      );
+      if (confirmed) await runAction(() => skip.mutateAsync(true));
+    } finally {
+      setSkipConfirmationPending(false);
     }
   };
 
@@ -115,8 +134,8 @@ export function ClerkQueuePanel({
           {Number.isSafeInteger(existingSkipLineCredits) && existingSkipLineCredits > 0 && (
             <PrimaryButton
               label={`Skip the Line — Use Credit (${existingSkipLineCredits})`}
-              onPress={() => void runAction(() => skip.mutateAsync())}
-              loading={skip.isPending}
+              onPress={() => void confirmAndSkip()}
+              loading={skip.isPending || skipConfirmationPending}
               disabled={busy}
               testID="clerk-queue-skip-line"
             />

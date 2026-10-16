@@ -6,6 +6,10 @@ import {
   mainBluebirdAuthenticatedQueryKey,
 } from '@/lib/mainBluebirdApi';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
+import {
+  getProductionQueueVerificationBlockers,
+  isProductionQueueVerified,
+} from '@/lib/productionQueueReadiness';
 import type {
   JoinProductionQueueRequest,
 } from '@/lib/productionAuthApi';
@@ -19,14 +23,21 @@ function useClerkQueueApi() {
   const sessionRef = React.useRef(session);
   sessionRef.current = session;
   const configuration = getMainBluebirdApiConfigurationOrNull();
-  const ready = !!configuration &&
-    session?.isLoaded === true &&
+  const authenticated = session?.isLoaded === true &&
     session.isSignedIn === true &&
     typeof session.userId === 'string' &&
     !!session.userId.trim();
+  const queueVerified = isProductionQueueVerified();
+  const ready = !!configuration &&
+    queueVerified &&
+    authenticated;
 
   const createActions = () => {
-    if (!configuration || !ready || !session?.userId) {
+    if (!configuration || !queueVerified || !authenticated || !session?.userId) {
+      const blockers = getProductionQueueVerificationBlockers();
+      if (blockers.length > 0) {
+        throw new Error(`Production queue is disabled: ${blockers.join('; ')}.`);
+      }
       throw new Error('A signed-in Clerk session and matching Main API configuration are required.');
     }
     const requestedClerkUserId = session.userId;
@@ -53,6 +64,8 @@ function useClerkQueueApi() {
     actions: createActions,
     environment: configuration?.environment ?? null,
     ready,
+    authenticated,
+    queueVerified,
     userId: session?.userId ?? null,
   };
 }
@@ -65,16 +78,19 @@ export type ClerkQueueAvailability =
   | 'ready'
   | 'configuration-required'
   | 'authentication-required'
+  | 'verification-required'
   | 'invalid-flight-id';
 
 function getAvailability(
-  ready: boolean,
   environment: 'development' | 'production' | null,
+  authenticated: boolean,
+  queueVerified: boolean,
   emptyLegId: number | null | undefined,
 ): ClerkQueueAvailability {
   if (!validFlightId(emptyLegId)) return 'invalid-flight-id';
   if (!environment) return 'configuration-required';
-  if (!ready) return 'authentication-required';
+  if (!queueVerified) return 'verification-required';
+  if (!authenticated) return 'authentication-required';
   return 'ready';
 }
 
@@ -83,7 +99,12 @@ export function useClerkFlightQueue(
   options: { enabled?: boolean; pollIntervalMs?: number } = {},
 ) {
   const context = useClerkQueueApi();
-  const availability = getAvailability(context.ready, context.environment, emptyLegId);
+  const availability = getAvailability(
+    context.environment,
+    context.authenticated,
+    context.queueVerified,
+    emptyLegId,
+  );
   const query = useQuery({
     queryKey: context.environment && context.userId && validFlightId(emptyLegId)
       ? queueKey(context.environment, context.userId, emptyLegId)
@@ -108,6 +129,7 @@ export function useJoinClerkFlightQueue(
   const context = useClerkQueueApi();
   const queryClient = useQueryClient();
   return useMutation({
+    retry: false,
     mutationFn: async () => {
       if (!validFlightId(emptyLegId)) throw new Error('A valid flight ID is required to join its queue.');
       return context.actions().join(emptyLegId, request);
@@ -124,6 +146,7 @@ export function useLeaveClerkFlightQueue(emptyLegId: number | null | undefined) 
   const context = useClerkQueueApi();
   const queryClient = useQueryClient();
   return useMutation({
+    retry: false,
     mutationFn: async () => {
       if (!validFlightId(emptyLegId)) throw new Error('A valid flight ID is required to leave its queue.');
       return context.actions().leave(emptyLegId);
@@ -143,9 +166,10 @@ export function useSkipClerkFlightLine(
   const context = useClerkQueueApi();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
+    retry: false,
+    mutationFn: async (confirmed: boolean) => {
       if (!validFlightId(emptyLegId)) throw new Error('A valid flight ID is required to skip this flight’s queue.');
-      return context.actions().skipLine(emptyLegId, existingCreditCount);
+      return context.actions().skipLine(emptyLegId, existingCreditCount, confirmed);
     },
     onSuccess: async () => {
       if (context.environment && context.userId && validFlightId(emptyLegId)) {
