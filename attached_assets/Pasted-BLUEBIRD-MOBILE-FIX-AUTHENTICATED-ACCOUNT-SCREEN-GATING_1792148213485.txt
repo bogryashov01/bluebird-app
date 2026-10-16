@@ -1,0 +1,213 @@
+BLUEBIRD MOBILE — FIX AUTHENTICATED ACCOUNT SCREEN GATING
+
+PROJECT: Bluebird Mobile ONLY
+PRIORITY: HIGH
+
+CURRENT STATUS:
+
+Real Clerk authentication works.
+
+Main API has confirmed:
+
+isAuthenticated === true
+isProfileComplete === true
+
+The user successfully completed registration
+and reached the authenticated Home screen.
+
+However:
+
+TRIPS displays:
+
+"Trips unavailable"
+
+"You're signed in with Clerk, but trip data
+is unavailable until the Main API can verify
+the matching Bluebird member account.
+No trip or queue data was requested."
+
+NOTIFICATION SETTINGS displays:
+
+"Notification settings unavailable"
+
+"Notification preferences and history are
+not supported for this authenticated Clerk
+account in this preview."
+
+GOAL:
+
+Investigate and fix incorrect access gating
+for authenticated account screens.
+
+IMPORTANT:
+
+Do not assume the user must have an active
+membership to view basic account screens.
+
+STRICT RESTRICTIONS:
+
+DO NOT MODIFY:
+- Main Bluebird Website
+- Main Bluebird API
+- Database
+- Clerk configuration
+- Production configuration
+- Working registration
+- Working onboarding
+- Working Discover / Flights
+
+DO NOT:
+- Bypass backend authorization
+- Invent trip data
+- Invent notification history
+- Create bookings
+- Modify membership status
+- Change payment functionality
+- Introduce mock account data
+
+STEP 1 — TRACE ACCESS GUARDS
+
+Inspect the existing Mobile routing and
+API-access checks for:
+
+- Trips
+- Notification Settings
+- Profile
+- Membership
+
+Determine exactly which condition causes
+each unavailable screen.
+
+Check whether access incorrectly depends on:
+
+isMember === true
+
+instead of:
+
+isAuthenticated === true
+isProfileComplete === true
+
+Also inspect whether a legacy JWT-based
+member-account requirement is being applied
+to Clerk-authenticated users.
+
+Do not assume this is the cause.
+
+STEP 2 — VERIFY EXISTING API CONTRACTS
+
+Inspect the Main API contracts READ-ONLY.
+
+Determine which authenticated endpoints
+support:
+
+- Current user's trips
+- Upcoming trips
+- Past trips
+- Queue entries
+- Notification preferences
+- Notification history
+
+Determine whether each endpoint accepts
+the existing Clerk-authenticated session.
+
+Do not invent endpoints.
+
+Do not modify backend authorization.
+
+STEP 3 — TRIPS
+
+Restore the existing Your Trips screen
+if a supported authenticated endpoint exists.
+
+Use real API data only.
+
+If the backend returns an empty trips list,
+show:
+
+"No trips yet"
+
+If the backend explicitly denies access,
+show an accurate authorization message.
+
+If the API cannot support Clerk-authenticated
+trip retrieval, preserve the restriction
+and report the exact blocker.
+
+Do not show fake trips.
+
+Do not initiate booking or queue actions.
+
+STEP 4 — NOTIFICATION SETTINGS
+
+The existing authenticated profile contains
+notificationPrefs.
+
+Inspect and use supported fields from:
+
+GET /api/me/profile
+
+Restore the Notification Settings screen
+where read access is supported.
+
+Use the provided design reference.
+
+Unsupported settings must not block the
+entire screen.
+
+Do not treat email notification preferences
+as push notification preferences.
+
+Do not perform preference writes during testing.
+
+STEP 5 — MEMBERSHIP INDEPENDENCE
+
+A completed authenticated account with:
+
+isMember === false
+
+must still access the four main navigation
+tabs:
+
+Discover
+Trips
+Membership
+Profile
+
+Backend-protected actions must remain
+protected.
+
+Do not fabricate membership privileges.
+
+STEP 6 — TESTING
+
+Run TypeScript and focused tests.
+
+Test:
+
+- Authenticated complete non-member
+- Authenticated complete member
+- Incomplete account
+- Signed-out user
+- Trips API success
+- Trips API empty response
+- Trips API authorization failure
+- Notification preferences available
+- Notification preferences unavailable
+- No unauthorized writes
+
+FINAL REPORT:
+
+For BOTH Trips and Notification Settings:
+
+1. Exact blocking condition
+2. Existing API endpoint
+3. Whether Clerk authentication is supported
+4. Whether active membership is required
+5. What was fixed
+6. What remains blocked
+7. Files changed
+8. Tests passed
+
+IMPLEMENT ONLY CONFIRMED MOBILE-SIDE FIXES.
+
+Do not change backend authorization.
