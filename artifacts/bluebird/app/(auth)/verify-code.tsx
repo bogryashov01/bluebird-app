@@ -32,7 +32,7 @@ export default function VerifyCodeScreen() {
   const inputRef = useRef<TextInput>(null);
   const submittedRef = useRef<string | null>(null);
 
-  if (CLERK_AUTH_CONFIGURATION.enabled) {
+  if (CLERK_AUTH_CONFIGURATION.authExpected) {
     return <Redirect href="/(clerk-auth)/sign-in" />;
   }
 

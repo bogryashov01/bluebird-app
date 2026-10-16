@@ -1,6 +1,9 @@
 export interface ClerkAuthConfiguration {
+  /** The Development flag requests Clerk, even if configuration is incomplete. */
+  authExpected: boolean;
   enabled: boolean;
   publishableKey: string | null;
+  configurationError: string | null;
 }
 
 export function shouldMountClerkProvider(configuration: ClerkAuthConfiguration): boolean {
@@ -9,6 +12,12 @@ export function shouldMountClerkProvider(configuration: ClerkAuthConfiguration):
 
 export function canAccessClerkAuthRoutes(configuration: ClerkAuthConfiguration): boolean {
   return shouldMountClerkProvider(configuration);
+}
+
+export function shouldShowClerkConfigurationError(
+  configuration: ClerkAuthConfiguration,
+): boolean {
+  return configuration.authExpected && !configuration.enabled;
 }
 
 export type ClerkAuthViewState =
@@ -29,14 +38,19 @@ export function resolveClerkAuthConfiguration(
   isDevelopment = false,
 ): ClerkAuthConfiguration {
   const key = typeof publishableKey === 'string' ? publishableKey.trim() : '';
-  const enabled =
-    isDevelopment &&
-    enabledFlag === 'true' &&
-    isValidClerkPublishableKey(key) &&
-    key.startsWith('pk_test_');
+  const authExpected = isDevelopment && enabledFlag === 'true';
+  const keyIsDevelopmentTestKey = isValidClerkPublishableKey(key) && key.startsWith('pk_test_');
+  const enabled = authExpected && keyIsDevelopmentTestKey;
+  const configurationError = !authExpected || enabled
+    ? null
+    : !key
+      ? 'Development Clerk sign-in is enabled, but EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY is missing. Set it to the verified Development pk_test_ publishable key.'
+      : 'Development Clerk sign-in is enabled, but EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY is invalid. Set it to the verified Development pk_test_ publishable key.';
   return {
+    authExpected,
     enabled,
     publishableKey: enabled ? key : null,
+    configurationError,
   };
 }
 

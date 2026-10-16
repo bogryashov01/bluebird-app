@@ -93,7 +93,7 @@ function RootLayoutNav() {
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      {CLERK_AUTH_CONFIGURATION.enabled && (
+      {CLERK_AUTH_CONFIGURATION.authExpected && (
         <Stack.Screen name="(clerk-auth)" options={{ headerShown: false }} />
       )}
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

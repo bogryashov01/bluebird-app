@@ -60,7 +60,7 @@ export default function PhoneScreen() {
   // US-style entry needs 10 digits; international "+" entry needs 11–15.
   const valid = phone.startsWith('+') ? digits.length >= 11 && digits.length <= 15 : digits.length >= 10;
 
-  if (CLERK_AUTH_CONFIGURATION.enabled) {
+  if (CLERK_AUTH_CONFIGURATION.authExpected) {
     return <Redirect href="/(clerk-auth)/sign-in" />;
   }
 

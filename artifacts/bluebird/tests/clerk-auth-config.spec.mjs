@@ -7,6 +7,7 @@ import {
   performClerkSignOut,
   resolveClerkAuthConfiguration,
   resolveClerkAuthConfigurationFromEnvironment,
+  shouldShowClerkConfigurationError,
   shouldMountClerkProvider,
 } from "../scripts/.clerk-auth-config.test.mjs";
 
@@ -30,9 +31,37 @@ test("Clerk stays disabled unless the flag is exactly true and the public key is
   }
 
   const enabled = resolveClerkAuthConfiguration("true", ` ${validTestKey} `, true);
-  assert.deepEqual(enabled, { enabled: true, publishableKey: validTestKey });
+  assert.deepEqual(enabled, {
+    authExpected: true,
+    enabled: true,
+    publishableKey: validTestKey,
+    configurationError: null,
+  });
   assert.equal(shouldMountClerkProvider(enabled), true);
   assert.equal(canAccessClerkAuthRoutes(enabled), true);
+  assert.equal(shouldShowClerkConfigurationError(enabled), false);
+});
+
+test("requested Development Clerk auth fails explicitly without accepting the legacy key", () => {
+  for (const publishableKey of [undefined, "", "pk_live_Y2xlcmsuZXhhbXBsZS5jb20k", "invalid"]) {
+    const config = resolveClerkAuthConfiguration("true", publishableKey, true);
+    assert.equal(config.authExpected, true);
+    assert.equal(config.enabled, false);
+    assert.equal(config.publishableKey, null);
+    assert.match(config.configurationError, /EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY/);
+    assert.equal(shouldShowClerkConfigurationError(config), true);
+    assert.equal(shouldMountClerkProvider(config), false);
+    assert.equal(canAccessClerkAuthRoutes(config), false);
+  }
+
+  const legacyOnly = resolveClerkAuthConfigurationFromEnvironment({
+    EXPO_PUBLIC_ENABLE_CLERK_AUTH: "true",
+    EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: validTestKey,
+  }, true);
+  assert.equal(legacyOnly.authExpected, true);
+  assert.equal(legacyOnly.enabled, false);
+  assert.equal(legacyOnly.publishableKey, null);
+  assert.equal(shouldShowClerkConfigurationError(legacyOnly), true);
 });
 
 test("Development Clerk auth is independent of Main API issuer readiness", () => {
@@ -43,12 +72,19 @@ test("Development Clerk auth is independent of Main API issuer readiness", () =>
     EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL: "",
     EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER: "https://unverified.example.test",
   }, true);
-  assert.deepEqual(config, { enabled: true, publishableKey: validTestKey });
+  assert.deepEqual(config, {
+    authExpected: true,
+    enabled: true,
+    publishableKey: validTestKey,
+    configurationError: null,
+  });
   assert.equal(shouldMountClerkProvider(config), true);
   assert.equal(canAccessClerkAuthRoutes(config), true);
 
   const configWithoutFlag = resolveClerkAuthConfiguration(undefined, validTestKey, true);
+  assert.equal(configWithoutFlag.authExpected, false);
   assert.equal(configWithoutFlag.enabled, false);
+  assert.equal(configWithoutFlag.configurationError, null);
   assert.equal(shouldMountClerkProvider(configWithoutFlag), false);
 });
 

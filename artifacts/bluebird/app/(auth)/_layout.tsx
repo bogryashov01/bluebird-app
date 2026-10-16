@@ -19,7 +19,7 @@ export default function AuthLayout() {
       clerkSession.userId,
     );
   if (
-    CLERK_AUTH_CONFIGURATION.enabled &&
+    CLERK_AUTH_CONFIGURATION.authExpected &&
     authScreen !== 'splash' &&
     authScreen !== 'welcome' &&
     !(authScreen === 'welcome-tour' && canOpenWelcomeTour)

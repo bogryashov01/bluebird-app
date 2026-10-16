@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-const clerkAuthEnabled = process.env.EXPO_PUBLIC_ENABLE_CLERK_AUTH === "true";
+const clerkAuthExpected = process.env.EXPO_PUBLIC_ENABLE_CLERK_AUTH === "true";
+const clerkAuthEnabled = clerkAuthExpected &&
+  /^pk_test_[A-Za-z0-9_-]{12,}$/.test(process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY ?? "");
 
 const localUser = {
   id: "startup-preview-member",
@@ -121,7 +123,7 @@ test("empty browser storage keeps root reloads and direct Flights routes signed 
 });
 
 test("disabled Clerk routes redirect to the unchanged demo sign-in flow without API calls", async ({ page }) => {
-  test.skip(clerkAuthEnabled, "This case runs against the Clerk-disabled Preview bundle.");
+  test.skip(clerkAuthExpected, "This case runs against the Clerk-disabled Preview bundle.");
   const memberApiCalls = [];
   await page.route("**/api/**", async (route) => {
     memberApiCalls.push(route.request().url());
@@ -156,6 +158,18 @@ test("Clerk-enabled Welcome routes the phone journey into Clerk without starting
 
   await page.getByTestId("welcome-phone-entry").click();
   await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByText("Sign in with Clerk", { exact: true })).toBeVisible();
+  expect(authApiCalls).toEqual([]);
+
+  await page.getByTestId("clerk-go-to-sign-up").click();
+  await expect(page).toHaveURL(/\/sign-up$/);
+  await expect(page.getByText("Create a Clerk account", { exact: true })).toBeVisible();
+  await page.getByTestId("clerk-go-to-sign-in").click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  expect(authApiCalls).toEqual([]);
+
+  await page.goto("/sign-up");
+  await expect(page.getByText("Create a Clerk account", { exact: true })).toBeVisible();
   expect(authApiCalls).toEqual([]);
 
   await page.goto("/discover");
@@ -165,6 +179,29 @@ test("Clerk-enabled Welcome routes the phone journey into Clerk without starting
   await expect(page).toHaveURL(/\/sign-in$/);
   await expect(page.getByText("Flight Details", { exact: false })).toHaveCount(0);
   expect(authApiCalls).toEqual([]);
+});
+
+test("requested Clerk with a missing key shows configuration errors instead of demo phone auth", async ({ page }) => {
+  test.skip(!clerkAuthExpected || clerkAuthEnabled, "This case runs with Clerk explicitly requested and no valid Development key.");
+  const apiCalls = [];
+  await page.route("**/api/**", async (route) => {
+    apiCalls.push(new URL(route.request().url()).pathname);
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  await page.goto("/welcome");
+  await page.getByTestId("welcome-phone-entry").click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByTestId("clerk-configuration-error")).toContainText(
+    "EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY",
+  );
+  await expect(page.getByTestId("phone-input")).toHaveCount(0);
+  await expect(page.getByTestId("verification-code-input")).toHaveCount(0);
+
+  await page.goto("/sign-up");
+  await expect(page.getByTestId("clerk-configuration-error")).toBeVisible();
+  await expect(page.getByTestId("phone-input")).toHaveCount(0);
+  expect(apiCalls).toEqual([]);
 });
 
 test("valid local demo session reaches Discover on startup, direct navigation, and refresh", async ({ page }) => {

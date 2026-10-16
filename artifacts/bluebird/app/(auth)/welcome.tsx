@@ -32,7 +32,7 @@ export default function WelcomeScreen() {
         <TouchableOpacity
           style={[styles.pill, { backgroundColor: colors.primary }]}
           onPress={() => router.push(
-            CLERK_AUTH_CONFIGURATION.enabled ? '/(clerk-auth)/sign-in' as never : '/(auth)/phone',
+            CLERK_AUTH_CONFIGURATION.authExpected ? '/(clerk-auth)/sign-in' as never : '/(auth)/phone',
           )}
           testID="welcome-phone-entry"
           activeOpacity={0.85}
