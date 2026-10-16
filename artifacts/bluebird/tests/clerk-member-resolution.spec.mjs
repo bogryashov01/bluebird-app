@@ -11,6 +11,7 @@ import {
   isClerkMemberResolutionCurrent,
   mapAuthoritativeMemberDecision,
   resolveClerkMember as resolveClerkMemberInternal,
+  resolveProjection,
   shouldAutomaticallyResolveClerkMember,
 } from "../scripts/.clerk-member-resolution.test.mjs";
 
@@ -429,4 +430,40 @@ test("Clerk token provider failures never fall back to legacy tokens", async () 
     },
   });
   assert.deepEqual(result, { status: "error", reason: "token" });
+});
+
+test("a missing Clerk token prevents the API request and keeps the route unverified", async () => {
+  let requests = 0;
+  const result = await resolveClerkMember({
+    session: makeSession({ getToken: async () => null }),
+    fetcher: async () => {
+      requests += 1;
+      return jsonResponse(projection);
+    },
+  });
+
+  assert.deepEqual(result, { status: "error", reason: "token" });
+  assert.equal(requests, 0);
+  assert.equal(getClerkAuthRootDestination({
+    clerkSignedIn: true,
+    resolution: result,
+    readiness: { registeredHome: true, linkedMember: true },
+  }), "/(clerk-auth)/signed-in");
+});
+
+test("routing booleans are strict even when a caller bypasses the API parser", async () => {
+  for (const invalidProjection of [
+    { ...projection, isAuthenticated: "true" },
+    { ...projection, isProfileComplete: 1 },
+    { ...projection, isMember: "false" },
+    (({ isMember, ...rest }) => rest)(projection),
+  ]) {
+    const result = resolveProjection(invalidProjection, "clerk-user-a");
+    assert.deepEqual(result, { status: "error", reason: "invalid_response" });
+    assert.equal(getClerkAuthRootDestination({
+      clerkSignedIn: true,
+      resolution: result,
+      readiness: { registeredHome: true, linkedMember: true },
+    }), "/(clerk-auth)/signed-in");
+  }
 });

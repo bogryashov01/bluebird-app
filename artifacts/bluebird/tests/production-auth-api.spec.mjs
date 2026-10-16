@@ -353,6 +353,21 @@ test("/api/me returns projections without inferring linked or registration state
   assert.equal(memberResult.isAuthenticated, true);
   assert.equal(memberResult.isMember, true);
   assert.equal("memberId" in memberResult, false);
+  assert.equal("upgradeCreditBalances" in memberResult, false);
+});
+
+test("/api/me rejects non-boolean or missing contract routing flags", async () => {
+  for (const invalidProjection of [
+    { ...currentUser, isAuthenticated: "true" },
+    { ...currentUser, isProfileComplete: 1 },
+    { ...currentUser, isMember: "false" },
+    (({ isAuthenticated, ...rest }) => rest)(currentUser),
+    (({ isProfileComplete, ...rest }) => rest)(currentUser),
+    (({ isMember, ...rest }) => rest)(currentUser),
+  ]) {
+    const client = makeClient(async () => jsonResponse(invalidProjection));
+    await assert.rejects(client.getMe(), { code: "invalid_schema" });
+  }
 });
 
 test("base URL safety and bearer-only request headers are preserved", async () => {

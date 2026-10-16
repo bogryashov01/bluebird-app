@@ -106,6 +106,10 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   );
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], false), true);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], false, true), false);
+  // Both post-login destinations are exempt from the root route guard once
+  // the verified profile projection has selected them.
+  assert.equal(shouldRedirectClerkRoute(["account", "bluebird-profile"], false, false), false);
+  assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "trips"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["queue", "join"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "profile"], false), true);

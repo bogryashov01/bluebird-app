@@ -95,6 +95,13 @@ export function resolveProjection(
   currentUser: ProductionCurrentUser,
   clerkUserId?: string | null,
 ): ClerkMemberResolution {
+  if (
+    typeof currentUser.isAuthenticated !== 'boolean' ||
+    typeof currentUser.isProfileComplete !== 'boolean' ||
+    typeof currentUser.isMember !== 'boolean'
+  ) {
+    return { status: 'error', reason: 'invalid_response' };
+  }
   if (currentUser.isAuthenticated !== true) {
     return { status: 'unresolved', reason: 'unauthenticated' };
   }
