@@ -53,7 +53,7 @@ export interface ClerkBluebirdProfileApi {
   updateProfile: (
     data: UpdateProductionUserProfileRequest,
     options?: ProductionRequestOptions,
-  ) => Promise<ProductionUserProfile>;
+  ) => Promise<ProductionCurrentUser>;
 }
 
 export type ClerkRegistrationProfileDiagnostic =
@@ -215,7 +215,7 @@ export async function updateClerkBluebirdProfileExplicitly(
   data: UpdateProductionUserProfileRequest,
   signal?: AbortSignal,
   onResponseStatus?: (status: number) => void,
-): Promise<ProductionUserProfile> {
+): Promise<ProductionCurrentUser> {
   if (!canEditClerkBluebirdProfile(result)) {
     throw new Error('The API has not verified that this profile can be edited.');
   }
@@ -235,6 +235,7 @@ export interface ClerkRegistrationSaveDiagnostic {
   verificationReadFailed: boolean;
   isAuthenticated: boolean | null;
   isProfileComplete: boolean | null;
+  emailPresent: boolean | null;
 }
 
 export class ClerkRegistrationCompletionError extends Error {
@@ -245,8 +246,8 @@ export class ClerkRegistrationCompletionError extends Error {
 }
 
 export interface ClerkRegistrationSaveResult {
-  /** Null only when the profile response was malformed but /api/me confirmed completion. */
-  profile: ProductionUserProfile | null;
+  /** Null only when the CurrentUser response was malformed. */
+  updatedCurrentUser: ProductionCurrentUser | null;
   currentUser: ProductionCurrentUser;
   weightSaved: boolean;
   diagnostic: ClerkRegistrationSaveDiagnostic;
@@ -260,7 +261,12 @@ export type ClerkRegistrationWriteOutcome =
 
 export type ClerkRegistrationCompletionCheck =
   | { kind: 'confirmed_complete'; currentUser?: ProductionCurrentUser; httpStatus: number | null }
-  | { kind: 'incomplete'; currentUser?: ProductionCurrentUser; httpStatus: number | null }
+  | {
+      kind: 'incomplete';
+      currentUser?: ProductionCurrentUser;
+      emailMissing?: true;
+      httpStatus: number | null;
+    }
   | { kind: 'unauthenticated'; currentUser?: ProductionCurrentUser; httpStatus: number | null }
   | { kind: 'unavailable'; httpStatus: number | null };
 
@@ -301,7 +307,11 @@ export function getClerkRegistrationCompletionCheck(
   }
   return diagnostic.isProfileComplete
     ? { kind: 'confirmed_complete', httpStatus: diagnostic.verificationHttpStatus }
-    : { kind: 'incomplete', httpStatus: diagnostic.verificationHttpStatus };
+    : {
+        kind: 'incomplete',
+        ...(diagnostic.emailPresent === false ? { emailMissing: true as const } : {}),
+        httpStatus: diagnostic.verificationHttpStatus,
+      };
 }
 
 /** A separate read-only recovery check; it never calls updateProfile. */
@@ -324,7 +334,15 @@ export async function checkClerkBluebirdRegistrationStatus(
   }
   return currentUser.isProfileComplete === true
     ? { kind: 'confirmed_complete', currentUser, httpStatus }
-    : { kind: 'incomplete', currentUser, httpStatus };
+    : {
+        kind: 'incomplete',
+        currentUser,
+        ...(currentUser.email === null ||
+          (typeof currentUser.email === 'string' && !currentUser.email.trim())
+          ? { emailMissing: true as const }
+          : {}),
+        httpStatus,
+      };
 }
 
 /** Save only from an API-confirmed incomplete profile, then verify the refreshed projection. */
@@ -347,10 +365,11 @@ export async function saveClerkBluebirdRegistration(
     verificationReadFailed: false,
     isAuthenticated: null,
     isProfileComplete: null,
+    emailPresent: null,
   };
-  let profile: ProductionUserProfile | null = null;
+  let updatedCurrentUser: ProductionCurrentUser | null = null;
   try {
-    profile = await updateClerkBluebirdProfileExplicitly(
+    updatedCurrentUser = await updateClerkBluebirdProfileExplicitly(
       api,
       result,
       data,
@@ -380,22 +399,25 @@ export async function saveClerkBluebirdRegistration(
     });
     diagnostic.isAuthenticated = currentUser.isAuthenticated;
     diagnostic.isProfileComplete = currentUser.isProfileComplete;
+    diagnostic.emailPresent = currentUser.email === undefined
+      ? null
+      : typeof currentUser.email === 'string' && currentUser.email.trim().length > 0;
   } catch (error) {
     diagnostic.verificationReadFailed = true;
   }
 
   const confirmed = currentUser?.isAuthenticated === true &&
-    currentUser.isProfileComplete === true &&
-    (profile === null || profile.isComplete === true);
+    currentUser.isProfileComplete === true;
   if (!confirmed || !currentUser) {
     throw new ClerkRegistrationCompletionError(diagnostic);
   }
 
   return {
-    profile,
+    updatedCurrentUser,
     currentUser,
-    weightSaved: data.weightLbs === undefined ||
-      (profile !== null && profile.weightLbs === data.weightLbs),
+    // CurrentUser intentionally omits profile details such as weight. Do not
+    // claim the optional weight was saved without a profile response confirming it.
+    weightSaved: data.weightLbs === undefined,
     diagnostic,
   };
 }

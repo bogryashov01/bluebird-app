@@ -705,7 +705,8 @@ function parseProfile(value: unknown): ProductionUserProfile {
 /**
  * Diagnostic-only projection for the explicit Development recovery action.
  * This never returns profile values and does not make a malformed profile a
- * valid ProductionUserProfile. The normal GET/PUT parser remains strict.
+ * valid ProductionUserProfile. GET /api/me/profile remains strict; profile PUT
+ * responses are parsed as the CurrentUser projection.
  */
 export function parseProfileDiagnosticSummary(value: unknown): ProductionProfileDiagnosticSummary {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -1386,7 +1387,7 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
       return request(
         PRODUCTION_AUTH_PATHS.profile,
         'PUT',
-        parseProfile,
+        parseCurrentUser,
         requestOptions,
         projectRequestBody(data, [
           'firstName', 'lastName', 'dob', 'gender', 'homeAirportCode', 'favoriteCityKeys',

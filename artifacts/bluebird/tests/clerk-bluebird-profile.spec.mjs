@@ -23,6 +23,9 @@ import {
   getClerkAirportSelectionDraft,
   getClerkOnboardingAfterTourDestination,
   prefillClerkProfileForm,
+  canEditClerkRegistrationEmail,
+  getClerkRegistrationEmailValue,
+  isValidClerkRegistrationEmail,
   consumeClerkVerifiedRegistrationCompletion,
   setClerkHomeAirportDraft,
   setClerkProfileFormDraft,
@@ -108,7 +111,7 @@ function fakeApi({
   loadedProfile = profile,
   loadedMembership = nonmemberMembership,
   membershipError = null,
-  updateResult = profile,
+  updateResult = currentUser(),
 } = {}) {
   const calls = [];
   return {
@@ -177,6 +180,7 @@ test("profile form prefills only the requested fields and uses Clerk's verified 
     ...profile,
     firstName: "Avery",
     lastName: "Passenger",
+    email: "avery@example.test",
     dob: "1985-04-03",
     gender: "female",
     phoneE164: "+15555550111",
@@ -185,6 +189,7 @@ test("profile form prefills only the requested fields and uses Clerk's verified 
   assert.deepEqual(prefillClerkProfileForm(saved, "+15555550123"), {
     firstName: "Avery",
     lastName: "Passenger",
+    email: "avery@example.test",
     phoneE164: "+15555550123",
     dob: "1985-04-03",
     gender: "female",
@@ -193,11 +198,69 @@ test("profile form prefills only the requested fields and uses Clerk's verified 
   assert.deepEqual(prefillClerkProfileForm(profile, null), {
     firstName: "",
     lastName: "",
+    email: "",
     phoneE164: "",
     dob: "",
     gender: null,
     weightLbs: "",
   });
+});
+
+test("email validation accepts a valid address and rejects missing or malformed values", () => {
+  assert.equal(isValidClerkRegistrationEmail("member@example.test"), true);
+  assert.equal(isValidClerkRegistrationEmail("  member@example.test  "), true);
+  assert.equal(isValidClerkRegistrationEmail(""), false);
+  assert.equal(isValidClerkRegistrationEmail("not-an-email"), false);
+  assert.equal(isValidClerkRegistrationEmail("member@localhost"), false);
+
+  const values = {
+    firstName: "Avery",
+    lastName: "Passenger",
+    email: "member@example.test",
+    phoneE164: "+15555550123",
+    dob: "1985-04-03",
+    gender: "female",
+    weightLbs: "",
+  };
+  assert.equal(validateClerkProfileForm(values), null);
+  assert.match(validateClerkProfileForm({ ...values, email: "" }), /valid email/i);
+  assert.match(validateClerkProfileForm({ ...values, email: "bad-email" }), /valid email/i);
+});
+
+test("locked provider email is displayed from the profile, read-only, and excluded from writes", () => {
+  const lockedProfile = {
+    ...profile,
+    email: "provider@example.test",
+    emailLocked: true,
+  };
+  assert.equal(canEditClerkRegistrationEmail(lockedProfile), false);
+  assert.equal(canEditClerkRegistrationEmail(profile), true);
+  assert.equal(
+    getClerkRegistrationEmailValue(lockedProfile, "stale-draft@example.test"),
+    "provider@example.test",
+  );
+  assert.equal(getClerkRegistrationEmailValue(profile, "draft@example.test"), "draft@example.test");
+
+  const request = buildClerkProfileUpdateRequest({
+    values: {
+      firstName: "Avery",
+      lastName: "Passenger",
+      email: "stale-draft@example.test",
+      phoneE164: "+15555550123",
+      dob: "1985-04-03",
+      gender: "female",
+      weightLbs: "",
+    },
+    homeAirportCode: "SFO",
+    favoriteCityKeys: ["san-francisco"],
+    catalogKeys: ["san-francisco"],
+    profile: lockedProfile,
+  });
+  assert.equal("email" in request, false);
+
+  const source = readFileSync(resolve(projectRoot, "app/account/bluebird-profile.tsx"), "utf8");
+  assert.ok(source.includes('editable={canEditClerkRegistrationEmail(profile)}'));
+  assert.ok(source.includes('value={getClerkRegistrationEmailValue(profile, values.email)}'));
 });
 
 test("phone prefill requires a verified phone on the same active Clerk identity", () => {
@@ -217,6 +280,7 @@ test("profile form validates names, verified phone, date-only DOB, gender and op
   const values = {
     firstName: " Avery ",
     lastName: " Passenger ",
+    email: "  member@example.test ",
     phoneE164: "+15555550123",
     dob: "1985-04-03",
     gender: "female",
@@ -239,14 +303,14 @@ test("registration has three explicit steps and keeps personal information draft
   assert.equal(CLERK_PROFILE_SAVE_LIMITATION.includes("Preferred City"), false);
   assert.match(CLERK_PROFILE_SAVE_LIMITATION, /weight is optional/i);
   const source = readFileSync(resolve(projectRoot, "app/account/bluebird-profile.tsx"), "utf8");
-  for (const label of ["First Name", "Last Name", "Phone", "Date of Birth", "Gender", "Weight (lbs)"]) {
+  for (const label of ["First Name", "Last Name", "Email", "Phone", "Date of Birth", "Gender", "Weight (lbs)"]) {
     assert.ok(source.includes(label), `profile is missing ${label}`);
   }
   assert.ok(source.includes("Step 1 of 3 · Personal Information"));
   assert.ok(source.includes("Continue to Select Airports"));
   assert.ok(source.includes('keyboardType="number-pad"'), "weight should use the numeric keyboard");
   assert.ok(source.includes("accessibilityState={{ selected: values.gender === gender }}"));
-  assert.ok(source.includes("validateClerkProfileForm(values)"));
+  assert.ok(source.includes("validateClerkProfileForm({ ...values, email })"));
   for (const diagnostic of [
     "profile-api-auth-state",
     "profile-membership-state",
@@ -303,6 +367,8 @@ test("registration has three explicit steps and keeps personal information draft
   assert.ok(reviewSource.includes("selectedAirportCodes.length > 0"));
   assert.ok(reviewSource.includes("registration-airport-details-error"));
   assert.ok(reviewSource.includes("setClerkVerifiedRegistrationCompletion"));
+  assert.ok(reviewSource.includes("check.emailMissing"));
+  assert.ok(reviewSource.includes("still reports that your email is missing"));
   assert.ok(reviewSource.includes("__DEV__"));
   assert.ok(reviewSource.includes("configuration?.environment === 'development'"));
   assert.ok(reviewSource.includes('testID="diagnose-saved-profile"'));
@@ -313,14 +379,16 @@ test("registration has three explicit steps and keeps personal information draft
 });
 
 test("registration draft keeps selections by Clerk identity and supports only one home airport", () => {
-  const saved = { ...profile, firstName: "Avery", dob: "1985-04-03" };
+  const saved = { ...profile, firstName: "Avery", email: "saved@example.test", dob: "1985-04-03" };
   const initial = getClerkProfileRegistrationDraft("registration-user-a", saved, "+15555550123");
   assert.equal(initial.values.firstName, "Avery");
+  assert.equal(initial.values.email, "saved@example.test");
   assert.equal(initial.values.dob, "1985-04-03");
   assert.deepEqual(initial.favoriteCityKeys, []);
   setClerkProfileFormDraft("registration-user-a", {
     ...initial.values,
     firstName: "Draft name",
+    email: "draft@example.test",
     dob: "1986-02-01",
   });
   setClerkHomeAirportDraft("registration-user-a", "SFO");
@@ -328,6 +396,7 @@ test("registration draft keeps selections by Clerk identity and supports only on
   assert.deepEqual(toggleClerkAdditionalAirportDraft("registration-user-a", "LAX"), ["JFK", "LAX"]);
   setClerkHomeAirportDraft("registration-user-a", "JFK");
   assert.equal(getClerkProfileRegistrationDraft("registration-user-a").values.firstName, "Draft name");
+  assert.equal(getClerkProfileRegistrationDraft("registration-user-a").values.email, "draft@example.test");
   assert.deepEqual(getClerkAirportSelectionDraft("registration-user-a"), ["JFK"]);
   assert.deepEqual(getClerkProfileRegistrationDraft("registration-user-a").additionalAirportCodes, ["LAX"]);
   assert.equal(getClerkProfileRegistrationDraft("registration-user-b").values.firstName, "");
@@ -365,6 +434,7 @@ test("request composition uses date-only DOB, one airport, exact city keys and o
   const values = {
     firstName: " Avery ",
     lastName: " Passenger ",
+    email: "  member@example.test ",
     phoneE164: "+15555550123",
     dob: "1985-04-03",
     gender: "female",
@@ -375,7 +445,7 @@ test("request composition uses date-only DOB, one airport, exact city keys and o
     homeAirportCode: "sfo",
     favoriteCityKeys: ["san-francisco", "new-york-city"],
     catalogKeys: ["san-francisco", "new-york-city"],
-    profile: { ...profile, phoneCountry: null },
+    profile: { ...profile, phoneCountry: "US", smsConsent: true },
   });
   assert.deepEqual(request, {
     firstName: "Avery",
@@ -384,11 +454,21 @@ test("request composition uses date-only DOB, one airport, exact city keys and o
     gender: "female",
     homeAirportCode: "SFO",
     favoriteCityKeys: ["san-francisco", "new-york-city"],
+    email: "member@example.test",
+    phoneE164: "+15555550123",
+    phoneCountry: "US",
     weightLbs: 142,
   });
-  assert.equal("email" in request, false);
-  assert.equal("phoneE164" in request, false);
+  assert.equal("notificationPrefs" in request, false);
+  assert.equal("smsConsent" in request, false);
   assert.equal("additionalAirportCodes" in request, false);
+  assert.throws(() => buildClerkProfileUpdateRequest({
+    values: { ...values, email: "" },
+    homeAirportCode: "SFO",
+    favoriteCityKeys: ["san-francisco"],
+    catalogKeys: ["san-francisco"],
+    profile,
+  }), /valid email/i);
   assert.throws(() => buildClerkProfileUpdateRequest({
     values,
     homeAirportCode: "SFO",
@@ -481,6 +561,7 @@ test("airport and city tabs filter results, scroll, and preserve independent sel
   assert.ok(airportSource.includes("fetchProductionAirportCities"));
   const reviewSource = readFileSync(resolve(projectRoot, "app/registration-review.tsx"), "utf8");
   assert.ok(reviewSource.includes("ReviewCard title=\"Personal Information\""));
+  assert.ok(reviewSource.includes('label="Email"'));
   assert.ok(reviewSource.includes("ReviewCard title=\"Locations\""));
   assert.ok(reviewSource.includes("Confirm & Save"));
   assert.ok(reviewSource.includes("back-from-registration-review"));
@@ -711,10 +792,9 @@ test("membership errors and contradictory fields do not change profile completio
 test("only an explicit editable-profile update calls PUT and returns API values", async () => {
   const api = fakeApi({
     updateResult: {
-      ...profile,
+      ...currentUser(),
       firstName: "Updated",
       lastName: "Name",
-      isComplete: true,
     },
   });
   const result = await loadClerkBluebirdProfile(api);
@@ -740,9 +820,8 @@ test("only an explicit editable-profile update calls PUT and returns API values"
   assert.deepEqual(api.calls[3].data, update);
 });
 
-test("registration sends one explicit update, refreshes /me and only completes when both API projections agree", async () => {
-  const savedProfile = { ...profile, isComplete: true, weightLbs: 142 };
-  const api = fakeApi({ updateResult: savedProfile });
+test("registration sends one explicit update and continues only when authenticated /me confirms completion", async () => {
+  const api = fakeApi({ updateResult: currentUser({ firstName: "Avery" }) });
   api.getMe = async (options) => {
     api.calls.push({ method: "GET", path: "/me", options });
     options?.onResponseStatus?.(200);
@@ -762,8 +841,8 @@ test("registration sends one explicit update, refreshes /me and only completes w
   const saved = await saveClerkBluebirdRegistration(api, result, request);
   assert.equal(saved.currentUser.isAuthenticated, true);
   assert.equal(saved.currentUser.isProfileComplete, true);
-  assert.equal(saved.profile.isComplete, true);
-  assert.equal(saved.weightSaved, true);
+  assert.equal(saved.updatedCurrentUser.firstName, "Avery");
+  assert.equal(saved.weightSaved, false, "CurrentUser does not confirm profile weight");
   assert.deepEqual(saved.diagnostic, {
     writeEndpoint: "/api/me/profile",
     writeHttpStatus: 200,
@@ -774,6 +853,7 @@ test("registration sends one explicit update, refreshes /me and only completes w
     verificationReadFailed: false,
     isAuthenticated: true,
     isProfileComplete: true,
+    emailPresent: false,
   });
   assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), [
     "PUT /me/profile",
@@ -782,15 +862,15 @@ test("registration sends one explicit update, refreshes /me and only completes w
   assert.deepEqual(api.calls[0].data, request);
 });
 
-test("malformed successful profile responses stay malformed and are checked once through authenticated /me", async () => {
+test("malformed successful CurrentUser responses stay malformed and are checked once through authenticated /me", async () => {
   const calls = [];
   const api = fakeApi();
   api.updateProfile = async (data, options) => {
     calls.push({ method: "PUT", data });
     options?.onResponseStatus?.(200);
-    const error = new Error("profile.upgradeCreditBalances");
+    const error = new Error("currentUser.isAdmin");
     error.code = "invalid_schema";
-    error.field = "profile.upgradeCreditBalances";
+    error.field = "currentUser.isAdmin";
     throw error;
   };
   api.getMe = async (options) => {
@@ -808,11 +888,11 @@ test("malformed successful profile responses stay malformed and are checked once
     favoriteCityKeys: ["san-francisco"],
   });
 
-  assert.equal(saved.profile, null, "a malformed profile projection is never replaced with a fabricated default");
+  assert.equal(saved.updatedCurrentUser, null, "a malformed CurrentUser projection is never replaced with a fabricated default");
   assert.equal(saved.diagnostic.writeEndpoint, "/api/me/profile");
   assert.equal(saved.diagnostic.writeHttpStatus, 200);
   assert.equal(saved.diagnostic.writeResponse, "malformed");
-  assert.equal(saved.diagnostic.writeResponseIssue, "profile.upgradeCreditBalances");
+  assert.equal(saved.diagnostic.writeResponseIssue, "currentUser.isAdmin");
   assert.equal(saved.diagnostic.verificationEndpoint, "/api/me");
   assert.equal(saved.diagnostic.verificationHttpStatus, 200);
   assert.equal(saved.diagnostic.verificationReadFailed, false);
@@ -820,7 +900,7 @@ test("malformed successful profile responses stay malformed and are checked once
   assert.deepEqual(getClerkRegistrationWriteOutcome(saved.diagnostic), {
     kind: "malformed_response",
     httpStatus: 200,
-    issue: "profile.upgradeCreditBalances",
+    issue: "currentUser.isAdmin",
   });
   assert.equal(getClerkRegistrationCompletionCheck(saved.diagnostic).kind, "confirmed_complete");
   assert.deepEqual(calls.map(({ method }) => method), ["PUT", "GET"]);
@@ -833,9 +913,9 @@ test("a malformed successful write is not accepted when /api/me does not confirm
   api.updateProfile = async (_data, options) => {
     calls.push("PUT");
     options?.onResponseStatus?.(200);
-    const error = new Error("profile.upgradeCreditBalances");
+    const error = new Error("currentUser.isAdmin");
     error.code = "invalid_schema";
-    error.field = "profile.upgradeCreditBalances";
+    error.field = "currentUser.isAdmin";
     throw error;
   };
   api.getMe = async (options) => {
@@ -855,13 +935,15 @@ test("a malformed successful write is not accepted when /api/me does not confirm
     }),
     (error) => error instanceof ClerkRegistrationCompletionError &&
       error.diagnostic.writeResponse === "malformed" &&
-      error.diagnostic.writeResponseIssue === "profile.upgradeCreditBalances" &&
-      error.diagnostic.isProfileComplete === false,
+      error.diagnostic.writeResponseIssue === "currentUser.isAdmin" &&
+      error.diagnostic.isProfileComplete === false &&
+      error.diagnostic.emailPresent === false &&
+      getClerkRegistrationCompletionCheck(error.diagnostic).emailMissing === true,
   );
   assert.deepEqual(calls, ["PUT", "GET"]);
 });
 
-test("registration does not enter the tour for unauthenticated, incomplete or contradictory post-save state", async () => {
+test("registration trusts only authenticated complete /me and retains the form for incomplete or uncertain state", async () => {
   const initialApi = fakeApi();
   const result = await loadClerkBluebirdProfile(initialApi);
   const request = {
@@ -874,16 +956,14 @@ test("registration does not enter the tour for unauthenticated, incomplete or co
   };
 
   const incompleteProfileApi = fakeApi({
-    updateResult: { ...profile, isComplete: false },
+    updateResult: currentUser({ isProfileComplete: false }),
   });
   incompleteProfileApi.getMe = async () => currentUser({ isProfileComplete: true });
-  await assert.rejects(
-    saveClerkBluebirdRegistration(incompleteProfileApi, result, request),
-    ClerkRegistrationCompletionError,
-  );
+  const completionFromMe = await saveClerkBluebirdRegistration(incompleteProfileApi, result, request);
+  assert.equal(completionFromMe.currentUser.isProfileComplete, true);
 
   const incompleteProjectionApi = fakeApi({
-    updateResult: { ...profile, isComplete: true },
+    updateResult: currentUser({ isProfileComplete: true }),
   });
   incompleteProjectionApi.getMe = async () => currentUser({ isProfileComplete: false });
   await assert.rejects(
@@ -892,7 +972,7 @@ test("registration does not enter the tour for unauthenticated, incomplete or co
   );
 
   const unauthenticatedApi = fakeApi({
-    updateResult: { ...profile, isComplete: true },
+    updateResult: currentUser({ isProfileComplete: true }),
   });
   unauthenticatedApi.getMe = async () => currentUser({
     isAuthenticated: false,
@@ -904,7 +984,7 @@ test("registration does not enter the tour for unauthenticated, incomplete or co
   );
 
   const failedRefreshApi = fakeApi({
-    updateResult: { ...profile, isComplete: true },
+    updateResult: currentUser({ isProfileComplete: true }),
   });
   failedRefreshApi.getMe = async (options) => {
     failedRefreshApi.calls.push({ method: "GET", path: "/me", options });
@@ -922,7 +1002,7 @@ test("registration does not enter the tour for unauthenticated, incomplete or co
   ]);
 
   const rejectedWeightApi = fakeApi({
-    updateResult: { ...profile, isComplete: true, weightLbs: null },
+    updateResult: currentUser({ isProfileComplete: true }),
   });
   rejectedWeightApi.getMe = async () => currentUser({ isProfileComplete: true });
   const weightResult = await saveClerkBluebirdRegistration(
@@ -940,6 +1020,7 @@ test("a failed registration save leaves all identity-scoped selections and form 
     values: {
       firstName: "Avery",
       lastName: "Passenger",
+      email: "avery@example.test",
       phoneE164: "+15555550123",
       dob: "1985-04-03",
       gender: "female",
@@ -1047,6 +1128,9 @@ test("registration recovery status is read-only and only authenticated complete 
     const api = fakeApi({ me: projection });
     const status = await checkClerkBluebirdRegistrationStatus(api);
     assert.equal(status.kind, expected);
+    if (expected === "incomplete") {
+      assert.equal(status.emailMissing, true, "the /me projection identifies a missing email blocker");
+    }
     assert.equal(status.httpStatus, 200);
     assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), ["GET /me"]);
     assert.equal(api.calls.filter(({ method }) => method === "PUT").length, 0);

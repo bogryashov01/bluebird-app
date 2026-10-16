@@ -1,5 +1,31 @@
 # Bluebird authenticated production API readiness
 
+## Registration email and profile-save response shape (2026-10-16)
+
+The incomplete-profile form now collects and validates email. It prefills the
+identity-scoped draft, preserves edits between steps, displays provider-owned
+email read-only when `emailLocked` is true, and excludes email from the PUT in
+that locked state. The supplied profile contract says editable email is
+accepted on `PUT /api/me/profile`, is required for phone-only signups, and is
+ignored when an OAuth provider owns a verified email. It does not require a
+separate email-verification round trip.
+
+The supplied authenticated Development diagnostic established that the
+incomplete account has no email and that email editing is unlocked; its signup
+type was unknown. Since the API requires email for profile completion, the
+mobile registration validator requires a valid email before continuing or
+saving, without changing phone authentication or adding a verification flow.
+
+The supplied observed PUT response was a `CurrentUser` projection, which does
+not include `upgradeCreditBalances`. The accompanying source-snapshot document
+describes a `UserProfile` PUT response instead; these sources conflict. The
+mobile PUT parser follows the supplied authenticated Development observation
+and validates the response as `CurrentUser`. `GET /api/me/profile` still uses
+the strict `UserProfile` parser, including required nonnegative-integer
+`upgradeCreditBalances`. Registration only continues after a separate
+authenticated `GET /api/me` confirms `isProfileComplete: true`; no PUT retry
+or live write was used for this change.
+
 ## Incomplete profile diagnostic (2026-10-16)
 
 The Registration Review recovery screen includes a manually invoked diagnostic
@@ -45,11 +71,10 @@ profile. Continuing to the existing welcome tour is enabled only after the
 authenticated `/api/me` projection confirms both `isAuthenticated: true` and
 `isProfileComplete: true`. The identity-scoped form draft is preserved.
 
-`upgradeCreditBalances` remains required for the full `UserProfile` response.
-The supplied source-derived contract lists it as required and the mobile parser
-validates it strictly. The earlier reported `profile.upgradeCreditBalances`
-error therefore indicates a possible response-contract mismatch, but no runtime
-response body was available to establish that the selected API omitted it.
+`upgradeCreditBalances` remains required for the full `UserProfile` response
+from `GET /api/me/profile`. See the registration email section above for the
+observed `CurrentUser` shape used for `PUT /api/me/profile` and the discrepancy
+with the source-snapshot response declaration.
 
 No authenticated session or historical request diagnostics were available for
 this recovery work. The prior `PUT /api/me/profile` result remains unknown, and

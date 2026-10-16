@@ -30,6 +30,7 @@ import {
 } from '@/lib/clerkBluebirdProfile';
 import {
   buildClerkProfileUpdateRequest,
+  getClerkRegistrationEmailValue,
   getClerkProfileRegistrationDraft,
   getClerkRegistrationProfileResult,
   setClerkProfileRegistrationDraft,
@@ -163,6 +164,8 @@ export default function RegistrationReviewScreen() {
     return <Redirect href="/(clerk-auth)/signed-in" />;
   }
   if (!draft) return <CenteredState title="Your registration draft is unavailable." />;
+  const registrationProfileResult = getClerkRegistrationProfileResult(clerkUserId);
+  const registrationProfile = registrationProfileResult?.profile ?? null;
 
   const createAuthenticatedApi = () => {
     if (!configuration) throw new Error('Main Bluebird API configuration is unavailable.');
@@ -189,7 +192,11 @@ export default function RegistrationReviewScreen() {
       setSaveError('Your signed-in account changed. Reopen registration to continue.');
       return;
     }
-    const profileError = validateClerkProfileForm(draft.values);
+    const profileResult = getClerkRegistrationProfileResult(clerkUserId);
+    const email = profileResult?.kind === 'authenticated'
+      ? getClerkRegistrationEmailValue(profileResult.profile, draft.values.email)
+      : draft.values.email;
+    const profileError = validateClerkProfileForm({ ...draft.values, email });
     if (profileError) {
       setSaveError(profileError);
       return;
@@ -215,7 +222,6 @@ export default function RegistrationReviewScreen() {
       setSaveError(selectionError);
       return;
     }
-    const profileResult = getClerkRegistrationProfileResult(clerkUserId);
     if (
       !profileResult ||
       profileResult.completion !== 'completion_required' ||
@@ -351,6 +357,12 @@ export default function RegistrationReviewScreen() {
       >
         <ReviewCard title="Personal Information">
           <SummaryLine label="Name" value={`${draft.values.firstName.trim()} ${draft.values.lastName.trim()}`} />
+          <SummaryLine
+            label="Email"
+            value={registrationProfile
+              ? getClerkRegistrationEmailValue(registrationProfile, draft.values.email) || 'Not provided'
+              : draft.values.email || 'Not provided'}
+          />
           <SummaryLine label="Verified phone" value={draft.values.phoneE164 || 'Not available'} />
           <SummaryLine label="Date of birth" value={draft.values.dob} />
           <SummaryLine label="Gender" value={draft.values.gender === 'female' ? 'Female' : 'Male'} />
@@ -677,9 +689,9 @@ function describeRegistrationWriteOutcome(outcome: ClerkRegistrationWriteOutcome
     case 'unknown':
       return 'The save outcome is unknown. The request may have reached Bluebird, so this check will not resend it.';
     case 'malformed_response':
-      return `Bluebird returned HTTP ${outcome.httpStatus}, but the response did not match the profile contract${outcome.issue ? ` (${outcome.issue})` : ''}.`;
+      return `Bluebird returned HTTP ${outcome.httpStatus}, but the response did not match the CurrentUser contract${outcome.issue ? ` (${outcome.issue})` : ''}.`;
     case 'valid_response':
-      return 'Bluebird returned a valid profile response.';
+      return 'Bluebird returned a valid CurrentUser response.';
   }
 }
 
@@ -689,6 +701,9 @@ function describeRegistrationCompletionCheck(check: ClerkRegistrationCompletionC
     case 'confirmed_complete':
       return `Authenticated GET /api/me confirms that your profile is complete${status}.`;
     case 'incomplete':
+      if (check.emailMissing) {
+        return `Authenticated GET /api/me responded${status}, but Bluebird still reports that your email is missing. Go back to Personal Information, update your email, and save again.`;
+      }
       return `Authenticated GET /api/me responded${status}, but your profile is still incomplete.`;
     case 'unauthenticated':
       return `GET /api/me responded${status} without confirming an authenticated profile.`;

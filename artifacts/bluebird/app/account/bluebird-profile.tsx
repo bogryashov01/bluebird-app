@@ -17,6 +17,8 @@ import {
 import {
   CLERK_PROFILE_SAVE_LIMITATION,
   getVerifiedClerkPhoneNumber,
+  canEditClerkRegistrationEmail,
+  getClerkRegistrationEmailValue,
   getClerkProfileRegistrationDraft,
   setClerkProfileFormDraft,
   setClerkRegistrationProfileResult,
@@ -231,7 +233,8 @@ function ClerkProfileForm({
   }, [clerkUserId, verifiedPhoneNumber]);
 
   const continueToAirports = () => {
-    const error = validateClerkProfileForm(values);
+    const email = getClerkRegistrationEmailValue(profile, values.email);
+    const error = validateClerkProfileForm({ ...values, email });
     if (error) {
       setFormError(error);
       return;
@@ -240,7 +243,8 @@ function ClerkProfileForm({
     router.push({ pathname: '/airport-picker', params: { clerkFlow: '1' } });
   };
 
-  const update = (field: 'firstName' | 'lastName' | 'dob' | 'weightLbs', value: string) => {
+  const update = (field: 'firstName' | 'lastName' | 'email' | 'dob' | 'weightLbs', value: string) => {
+    if (field === 'email' && !canEditClerkRegistrationEmail(profile)) return;
     setValues((current) => {
       const next = { ...current, [field]: value };
       setClerkProfileFormDraft(clerkUserId, next);
@@ -280,6 +284,26 @@ function ClerkProfileForm({
           returnKeyType="next"
           testID="profile-last-name"
         />
+      </FormField>
+
+      <FormField label="Email">
+        <ProfileInput
+          value={getClerkRegistrationEmailValue(profile, values.email)}
+          onChangeText={(value) => update('email', value)}
+          editable={canEditClerkRegistrationEmail(profile)}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+          textContentType="emailAddress"
+          autoCorrect={false}
+          returnKeyType="next"
+          testID="profile-email"
+        />
+        {profile.emailLocked ? (
+          <Text style={[styles.helper, { color: colors.mutedForegroundLight }]}>
+            This email is verified by your sign-in provider and can’t be changed here.
+          </Text>
+        ) : null}
       </FormField>
 
       <FormField label="Phone">

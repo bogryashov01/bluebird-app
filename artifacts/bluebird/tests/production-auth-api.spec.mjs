@@ -443,7 +443,7 @@ test("documented member methods use the production paths, verbs, and bodies", as
     requests.push({ path, method: init.method, body: init.body });
     if (path === "/me") return jsonResponse(currentUser);
     if (path === "/me/profile" && init.method === "GET") return jsonResponse(profile);
-    if (path === "/me/profile" && init.method === "PUT") return jsonResponse(profile);
+    if (path === "/me/profile" && init.method === "PUT") return jsonResponse(currentUser);
     if (path === "/membership") return jsonResponse(membership);
     if (path === "/trips") return jsonResponse(trips);
     if (path === "/empty-legs/81001/queue" && init.method === "GET") return jsonResponse(publicQueue);
@@ -468,7 +468,10 @@ test("documented member methods use the production paths, verbs, and bodies", as
 
   assert.equal((await client.getMe()).isAuthenticated, true);
   assert.equal((await client.getProfile()).weightLbs, 170);
-  await client.updateProfile({ ...profileUpdate, localOnlyField: "must not escape" });
+  assert.deepEqual(
+    await client.updateProfile({ ...profileUpdate, localOnlyField: "must not escape" }),
+    currentUser,
+  );
   assert.equal((await client.getMembership()).paymentMethod.last4, "4242");
   const tripResponse = await client.listTrips();
   assert.deepEqual(Object.keys(tripResponse), ["current", "past"]);
@@ -751,25 +754,46 @@ test("invalid JSON and malformed source contracts produce typed errors", async (
   await assert.rejects(malformedWinner.confirmEmptyLegWinner(81001), ProductionAuthSchemaError);
 });
 
-test("profile GET and PUT keep upgradeCreditBalances strict and capture status before rejecting malformed bodies", async () => {
+test("profile GET remains strict while profile PUT parses CurrentUser without upgradeCreditBalances", async () => {
   const { upgradeCreditBalances, ...profileWithoutCredits } = profile;
-  for (const method of ["GET", "PUT"]) {
-    let capturedStatus = null;
-    const client = makeClient(async (_url, init) => {
-      assert.equal(init.method, method);
-      return jsonResponse(profileWithoutCredits, 200);
-    });
-    const requestOptions = { onResponseStatus: (status) => { capturedStatus = status; } };
-    const request = method === "GET"
-      ? client.getProfile(requestOptions)
-      : client.updateProfile(profileUpdate, requestOptions);
-    await assert.rejects(
-      request,
-      (error) => error instanceof ProductionAuthSchemaError &&
-        error.field === "profile.upgradeCreditBalances",
-    );
-    assert.equal(capturedStatus, 200);
-  }
+  let capturedStatus = null;
+  const strictGet = makeClient(async (_url, init) => {
+    assert.equal(init.method, "GET");
+    return jsonResponse(profileWithoutCredits, 200);
+  });
+  await assert.rejects(
+    strictGet.getProfile({ onResponseStatus: (status) => { capturedStatus = status; } }),
+    (error) => error instanceof ProductionAuthSchemaError &&
+      error.field === "profile.upgradeCreditBalances",
+  );
+  assert.equal(capturedStatus, 200);
+
+  capturedStatus = null;
+  const currentUserPut = makeClient(async (_url, init) => {
+    assert.equal(init.method, "PUT");
+    return jsonResponse(currentUser, 200);
+  });
+  assert.deepEqual(
+    await currentUserPut.updateProfile(profileUpdate, {
+      onResponseStatus: (status) => { capturedStatus = status; },
+    }),
+    currentUser,
+  );
+  assert.equal(capturedStatus, 200);
+
+  capturedStatus = null;
+  const malformedPut = makeClient(async () => jsonResponse({
+    ...currentUser,
+    isAdmin: undefined,
+  }, 200));
+  await assert.rejects(
+    malformedPut.updateProfile(profileUpdate, {
+      onResponseStatus: (status) => { capturedStatus = status; },
+    }),
+    (error) => error instanceof ProductionAuthSchemaError &&
+      error.field === "currentUser.isAdmin",
+  );
+  assert.equal(capturedStatus, 200);
 
   let failedStatus = null;
   const failedWrite = makeClient(async () => jsonResponse({ error: "unavailable" }, 503));

@@ -19,3 +19,9 @@ Rule: the mobile profile contract accepts `weightLbs`, but server-side weight pe
 **Why:** A mobile request type only proves client-side acceptance; it does not establish durable server persistence.
 
 **How to apply:** When profile saving is in scope, inspect the server implementation before promising persistence or enabling an explicit save action.
+
+Rule: Keep mobile `GET /api/me/profile` validation strict for the full `UserProfile`. If authenticated runtime evidence shows `PUT /api/me/profile` returns a `CurrentUser` projection instead, use a separate PUT parser and retain `/api/me` as the authoritative completion check.
+
+**Why:** The supplied Development observation showed a `CurrentUser` body without `upgradeCreditBalances`, while the source-snapshot document describes a full `UserProfile` PUT response.
+
+**How to apply:** Keep this response-shape discrepancy visible in `AUTHENTICATED-API-READINESS.md`; do not weaken GET validation, infer completion from the PUT body, or retry an ambiguous write.

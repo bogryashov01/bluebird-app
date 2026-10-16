@@ -12,6 +12,7 @@ import type {
 export interface ClerkProfileFormValues {
   firstName: string;
   lastName: string;
+  email: string;
   phoneE164: string;
   dob: string;
   gender: UserGender | null;
@@ -46,6 +47,7 @@ export function prefillClerkProfileForm(
   return {
     firstName: profile.firstName ?? '',
     lastName: profile.lastName ?? '',
+    email: profile.email ?? '',
     phoneE164: verifiedPhoneNumber ?? '',
     dob: profile.dob ?? '',
     gender: profile.gender,
@@ -59,6 +61,9 @@ export function validateClerkProfileForm(values: ClerkProfileFormValues): string
   }
   if (!values.lastName.trim() || values.lastName.trim().length > 80) {
     return 'Enter your last name (up to 80 characters).';
+  }
+  if (!isValidClerkRegistrationEmail(values.email)) {
+    return 'Enter a valid email address to continue.';
   }
   if (!/^\+[1-9]\d{7,14}$/.test(values.phoneE164)) {
     return 'A verified phone number is required to continue.';
@@ -74,6 +79,26 @@ export function validateClerkProfileForm(values: ClerkProfileFormValues): string
     }
   }
   return null;
+}
+
+export function isValidClerkRegistrationEmail(value: string | null | undefined): boolean {
+  const email = value?.trim() ?? '';
+  return email.length >= 3 &&
+    email.length <= 254 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+export function canEditClerkRegistrationEmail(
+  profile: Pick<ProductionUserProfile, 'emailLocked'>,
+): boolean {
+  return !profile.emailLocked;
+}
+
+export function getClerkRegistrationEmailValue(
+  profile: Pick<ProductionUserProfile, 'email' | 'emailLocked'>,
+  draftEmail: string,
+): string {
+  return profile.emailLocked ? profile.email ?? '' : draftEmail;
 }
 
 export function isValidClerkDateOfBirth(value: string, now = new Date()): boolean {
@@ -114,13 +139,20 @@ export function getClerkProfileRegistrationDraft(
   verifiedPhoneNumber: string | null = null,
 ): ClerkProfileRegistrationDraft {
   const existing = registrationDraftsByUser.get(clerkUserId);
-  if (existing) return copyRegistrationDraft(existing);
+  if (existing) {
+    const copy = copyRegistrationDraft(existing);
+    if (typeof copy.values.email !== 'string') {
+      copy.values.email = profile?.email ?? '';
+    }
+    return copy;
+  }
   const draft = {
     values: profile
       ? prefillClerkProfileForm(profile, verifiedPhoneNumber)
       : {
           firstName: '',
           lastName: '',
+          email: '',
           phoneE164: verifiedPhoneNumber ?? '',
           dob: '',
           gender: null,
@@ -255,7 +287,8 @@ export function buildClerkProfileUpdateRequest(input: {
   catalogKeys: readonly string[];
   profile: ProductionUserProfile;
 }): UpdateProductionUserProfileRequest {
-  const profileError = validateClerkProfileForm(input.values);
+  const email = getClerkRegistrationEmailValue(input.profile, input.values.email);
+  const profileError = validateClerkProfileForm({ ...input.values, email });
   if (profileError) throw new TypeError(profileError);
   const selectionError = validateClerkAirportCitySelection(input);
   if (selectionError) throw new TypeError(selectionError);
@@ -268,6 +301,9 @@ export function buildClerkProfileUpdateRequest(input: {
     homeAirportCode: normalizeAirportCode(input.homeAirportCode),
     favoriteCityKeys: [...input.favoriteCityKeys],
   };
+  if (canEditClerkRegistrationEmail(input.profile)) {
+    data.email = input.values.email.trim();
+  }
   if (input.values.phoneE164 && input.profile.phoneCountry) {
     data.phoneE164 = input.values.phoneE164;
     data.phoneCountry = input.profile.phoneCountry;

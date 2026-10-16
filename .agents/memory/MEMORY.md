@@ -2,7 +2,7 @@
 - [Identifier migrations](identifier-migrations.md) — drop legacy unique constraints by catalog lookup, normalize/dedupe before enforcing a new unique identifier; prove with a scratch-schema fixture.
 - [Demo auth controls](demo-auth-controls.md) — verification/reset flows need real single-use hashed tokens + routing gates even in demo; only email *delivery* may be simulated.
 - [Bluebird local session restoration](bluebird-local-session-restoration.md) — validate cached identity before auth state; bound restore checks and keep offline fallback local-only.
-- [API contract & schema sync](api-contract-sync.md) — new endpoints/fields go through openapi.yaml + codegen; new columns need ensureSchema() too, not just a live-DB ALTER.
+- [API contract & schema sync](api-contract-sync.md) — sync new contract fields; keep mobile profile GET strict and parse the observed profile PUT projection separately.
 - [Main API environment isolation](main-api-environment-isolation.md) — select a matching API/Clerk pair explicitly; never let Main API clients inherit local or legacy defaults.
 - [Bluebird stack headers](bluebird-app-header.md) — default native-stack header hides behind the notch over NativeTabs; use the shared custom AppHeader.
 - [Bluebird theming](bluebird-theming.md) — all colors via useColors() tokens (no literals); semantic tokens & native-tabs caveat inside.
