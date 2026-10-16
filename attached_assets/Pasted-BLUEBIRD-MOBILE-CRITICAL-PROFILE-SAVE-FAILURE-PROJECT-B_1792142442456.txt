@@ -1,0 +1,189 @@
+BLUEBIRD MOBILE — CRITICAL PROFILE SAVE FAILURE
+
+PROJECT: Bluebird Mobile ONLY
+PRIORITY: BLOCKER
+
+CURRENT ISSUE:
+
+The user successfully completed:
+
+Step 1 — Personal Information
+Step 2 — Locations
+Step 3 — Review & Save
+
+After pressing "Confirm & Save", the app displays:
+
+"Bluebird could not confirm your registration.
+Your details are still here; contact support
+before trying again."
+
+A previous attempt also produced:
+
+"Authenticated production response did not
+match the API contract
+(profile.upgradeCreditBalances)."
+
+CRITICAL SAFETY RULES:
+
+DO NOT MODIFY:
+- Main Bluebird Website
+- Main Bluebird API
+- Database
+- Clerk configuration
+- Production configuration
+
+DO NOT:
+- Automatically retry PUT /api/me/profile
+- Submit the profile again during testing
+- Clear the existing registration form
+- Sign out the user
+- Bypass authentication
+- Assume the profile was not saved
+- Weaken unrelated API validation
+
+GOAL:
+
+Determine whether the existing profile save
+actually succeeded and fix the Mobile-side
+confirmation problem.
+
+STEP 1 — TRACE THE EXISTING SAVE ATTEMPT
+
+Inspect:
+
+- Actual API origin/environment
+- PUT /api/me/profile request
+- HTTP status, if available
+- Response body structure
+- Response validation
+- Error handling
+- Post-save GET /api/me
+- Registration completion routing
+
+Determine whether the failure happened:
+
+A. Before sending the request
+B. During the request
+C. After a successful HTTP response
+D. During response validation
+E. During post-save verification
+F. During navigation
+
+Do not invent results if runtime logs
+are unavailable.
+
+STEP 2 — SAFE READ-ONLY VERIFICATION
+
+Using the existing authenticated session,
+if available, perform read-only checks:
+
+GET /api/me
+
+GET /api/me/profile
+
+Inspect whether the backend already has
+the submitted profile data.
+
+Be aware that GET /api/me/profile may
+synchronize verified Clerk phone information.
+
+Do not perform any profile writes.
+
+Do not expose personal data or tokens in logs.
+
+STEP 3 — INVESTIGATE RESPONSE CONTRACT
+
+Specifically inspect the earlier error:
+
+profile.upgradeCreditBalances
+
+Determine whether the Mobile validator
+incorrectly requires this field for
+a successful profile response.
+
+Compare the validator with the actual
+Main API response contract.
+
+If a field is genuinely optional according
+to the contract, handle its absence correctly.
+
+Do not blindly disable response validation.
+
+STEP 4 — MINIMAL MOBILE-ONLY FIX
+
+Fix the confirmed Mobile-side issue.
+
+After a save attempt:
+
+- Never assume HTTP 200 alone means
+  registration is complete.
+
+- Verify the backend's authoritative
+  profile completion state.
+
+- Require authenticated GET /api/me with:
+
+  isAuthenticated === true
+  isProfileComplete === true
+
+  before treating registration as complete.
+
+- Preserve the existing onboarding sequence.
+
+- If the save outcome is uncertain,
+  preserve form data and show an accurate
+  status without automatically retrying.
+
+STEP 5 — USER EXPERIENCE
+
+Replace generic "contact support" messaging
+with clear, user-friendly states.
+
+Distinguish:
+
+- Save rejected
+- Save outcome unknown
+- Save succeeded but confirmation failed
+- Profile confirmed complete
+
+If the server already confirms completion,
+allow the user to continue without
+submitting the profile again.
+
+STEP 6 — TESTING
+
+Use mocked responses and read-only checks.
+
+DO NOT send another real profile PUT
+as part of automated testing.
+
+Test:
+
+- Successful save and confirmation
+- Successful save with unexpected response
+- Save response contract mismatch
+- Network timeout after request
+- Profile already completed on backend
+- Incomplete backend profile
+- Authentication failure
+- No duplicate save attempts
+
+Run TypeScript and focused tests.
+
+FINAL REPORT:
+
+1. Exact failure stage
+2. Actual API environment
+3. Whether the previous PUT succeeded,
+   failed, or remains unknown
+4. Whether the profile is already complete
+5. Root cause of response validation failure
+6. Files changed
+7. Tests passed
+8. Whether live authenticated verification
+   was possible
+9. Remaining blocker
+
+IMPLEMENT THE SMALLEST SAFE MOBILE-ONLY FIX.
+
+Do not perform another real profile save.
