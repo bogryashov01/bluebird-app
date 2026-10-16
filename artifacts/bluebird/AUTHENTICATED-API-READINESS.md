@@ -1,5 +1,36 @@
 # Bluebird authenticated production API readiness
 
+## Registration save recovery (2026-10-16)
+
+The mobile review screen now reports the profile-write outcome separately from
+the authenticated completion check. It distinguishes an HTTP rejection, an
+unknown write outcome, a successful HTTP response with an invalid profile body,
+an unavailable or unauthenticated completion check, an authenticated incomplete
+profile, and an authenticated complete profile. A separate **Check registration
+status** action performs only `GET /api/me`; it does not submit or retry the
+profile. Continuing to the existing welcome tour is enabled only after the
+authenticated `/api/me` projection confirms both `isAuthenticated: true` and
+`isProfileComplete: true`. The identity-scoped form draft is preserved.
+
+`upgradeCreditBalances` remains required for the full `UserProfile` response.
+The supplied source-derived contract lists it as required and the mobile parser
+validates it strictly. The earlier reported `profile.upgradeCreditBalances`
+error therefore indicates a possible response-contract mismatch, but no runtime
+response body was available to establish that the selected API omitted it.
+
+No authenticated session or historical request diagnostics were available for
+this recovery work. The prior `PUT /api/me/profile` result remains unknown, and
+the runtime-selected API environment/origin remains unknown. Checked-in code
+continues to require an explicit matching Main API/Clerk environment pair; that
+configuration rule does not prove which pair was active during the reported
+attempt. No live profile read or write was made. A future status check uses
+`GET /api/me` only and avoids `GET /api/me/profile`, which may synchronize
+verified Clerk phone data. `pnpm run typecheck:libs`,
+`pnpm --filter @workspace/bluebird run typecheck`,
+`test:clerk-bluebird-profile`, and `test:production-auth-api` passed with
+mocked requests. The signed-in recovery UI could not be previewed because no
+authenticated session was available.
+
 ## Explicit API-backed profile access (2026-10-15)
 
 **Current status: a signed-in Clerk user can intentionally open the user's own

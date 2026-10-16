@@ -173,6 +173,81 @@ export interface ClerkRegistrationSaveResult {
   diagnostic: ClerkRegistrationSaveDiagnostic;
 }
 
+export type ClerkRegistrationWriteOutcome =
+  | { kind: 'rejected'; httpStatus: number }
+  | { kind: 'unknown' }
+  | { kind: 'malformed_response'; httpStatus: number; issue: string | null }
+  | { kind: 'valid_response' };
+
+export type ClerkRegistrationCompletionCheck =
+  | { kind: 'confirmed_complete'; currentUser?: ProductionCurrentUser; httpStatus: number | null }
+  | { kind: 'incomplete'; currentUser?: ProductionCurrentUser; httpStatus: number | null }
+  | { kind: 'unauthenticated'; currentUser?: ProductionCurrentUser; httpStatus: number | null }
+  | { kind: 'unavailable'; httpStatus: number | null };
+
+/** Describe the write response without inferring whether the server persisted it. */
+export function getClerkRegistrationWriteOutcome(
+  diagnostic: ClerkRegistrationSaveDiagnostic,
+): ClerkRegistrationWriteOutcome {
+  if (diagnostic.writeResponse === 'malformed' && diagnostic.writeHttpStatus !== null) {
+    return {
+      kind: 'malformed_response',
+      httpStatus: diagnostic.writeHttpStatus,
+      issue: diagnostic.writeResponseIssue,
+    };
+  }
+  if (diagnostic.writeResponse === 'failed') {
+    const status = diagnostic.writeHttpStatus;
+    if (status !== null && (status < 200 || status >= 300)) {
+      return { kind: 'rejected', httpStatus: status };
+    }
+    return { kind: 'unknown' };
+  }
+  return { kind: 'valid_response' };
+}
+
+/** Convert the save attempt's single /me read into a safe, renderable state. */
+export function getClerkRegistrationCompletionCheck(
+  diagnostic: ClerkRegistrationSaveDiagnostic,
+): ClerkRegistrationCompletionCheck {
+  if (
+    diagnostic.verificationReadFailed ||
+    diagnostic.isAuthenticated === null ||
+    diagnostic.isProfileComplete === null
+  ) {
+    return { kind: 'unavailable', httpStatus: diagnostic.verificationHttpStatus };
+  }
+  if (!diagnostic.isAuthenticated) {
+    return { kind: 'unauthenticated', httpStatus: diagnostic.verificationHttpStatus };
+  }
+  return diagnostic.isProfileComplete
+    ? { kind: 'confirmed_complete', httpStatus: diagnostic.verificationHttpStatus }
+    : { kind: 'incomplete', httpStatus: diagnostic.verificationHttpStatus };
+}
+
+/** A separate read-only recovery check; it never calls updateProfile. */
+export async function checkClerkBluebirdRegistrationStatus(
+  api: ClerkBluebirdProfileApi,
+  signal?: AbortSignal,
+): Promise<ClerkRegistrationCompletionCheck> {
+  let httpStatus: number | null = null;
+  let currentUser: ProductionCurrentUser;
+  try {
+    currentUser = await api.getMe({
+      ...(signal ? { signal } : {}),
+      onResponseStatus: (status) => { httpStatus = status; },
+    });
+  } catch {
+    return { kind: 'unavailable', httpStatus };
+  }
+  if (currentUser.isAuthenticated !== true) {
+    return { kind: 'unauthenticated', currentUser, httpStatus };
+  }
+  return currentUser.isProfileComplete === true
+    ? { kind: 'confirmed_complete', currentUser, httpStatus }
+    : { kind: 'incomplete', currentUser, httpStatus };
+}
+
 /** Save only from an API-confirmed incomplete profile, then verify the refreshed projection. */
 export async function saveClerkBluebirdRegistration(
   api: ClerkBluebirdProfileApi,
@@ -206,9 +281,13 @@ export async function saveClerkBluebirdRegistration(
     diagnostic.writeResponse = 'valid';
   } catch (error) {
     const typed = error as { code?: string; field?: string };
-    diagnostic.writeResponse = typed?.code === 'invalid_schema' ? 'malformed' : 'failed';
+    diagnostic.writeResponse = typed?.code === 'invalid_schema' || typed?.code === 'invalid_json'
+      ? 'malformed'
+      : 'failed';
     diagnostic.writeResponseIssue = typed?.code === 'invalid_schema'
       ? typed.field ?? 'response schema mismatch'
+      : typed?.code === 'invalid_json'
+        ? 'invalid JSON response body'
       : null;
   }
 

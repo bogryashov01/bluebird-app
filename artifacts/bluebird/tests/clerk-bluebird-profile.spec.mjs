@@ -8,6 +8,9 @@ import {
   loadClerkBluebirdProfile,
   saveClerkBluebirdRegistration,
   ClerkRegistrationCompletionError,
+  checkClerkBluebirdRegistrationStatus,
+  getClerkRegistrationCompletionCheck,
+  getClerkRegistrationWriteOutcome,
   updateClerkBluebirdProfileExplicitly,
 } from "../scripts/.clerk-bluebird-profile.test.mjs";
 import {
@@ -286,6 +289,11 @@ test("registration has three explicit steps and keeps personal information draft
   assert.ok(reviewSource.includes("STEP 3 OF 3"));
   assert.ok(reviewSource.includes("Review &amp; Save"));
   assert.ok(reviewSource.includes("saveClerkBluebirdRegistration"));
+  assert.ok(reviewSource.includes("checkClerkBluebirdRegistrationStatus"));
+  assert.ok(reviewSource.includes('testID="check-registration-status"'));
+  assert.ok(reviewSource.includes('testID="continue-after-registration-confirmed"'));
+  assert.ok(reviewSource.includes("describeRegistrationWriteOutcome"));
+  assert.ok(reviewSource.includes("describeRegistrationCompletionCheck"));
   assert.ok(reviewSource.includes("savingRef.current"));
   assert.ok(reviewSource.includes("back-from-registration-review"));
   assert.ok(reviewSource.includes("Confirm & Save"));
@@ -742,6 +750,12 @@ test("malformed successful profile responses stay malformed and are checked once
   assert.equal(saved.diagnostic.verificationHttpStatus, 200);
   assert.equal(saved.diagnostic.verificationReadFailed, false);
   assert.equal(saved.diagnostic.isProfileComplete, true);
+  assert.deepEqual(getClerkRegistrationWriteOutcome(saved.diagnostic), {
+    kind: "malformed_response",
+    httpStatus: 200,
+    issue: "profile.upgradeCreditBalances",
+  });
+  assert.equal(getClerkRegistrationCompletionCheck(saved.diagnostic).kind, "confirmed_complete");
   assert.deepEqual(calls.map(({ method }) => method), ["PUT", "GET"]);
   assert.equal(calls.filter(({ method }) => method === "PUT").length, 1);
 });
@@ -890,7 +904,97 @@ test("a failed registration save leaves all identity-scoped selections and form 
       error.diagnostic.isProfileComplete === false,
   );
   assert.deepEqual(getClerkProfileRegistrationDraft(userId), before);
-  assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), ["PUT /me/profile", "GET /me"]);
+  const status = await checkClerkBluebirdRegistrationStatus(api);
+  assert.equal(status.kind, "incomplete");
+  assert.deepEqual(getClerkProfileRegistrationDraft(userId), before, "read-only recovery keeps the identity-scoped form and selections");
+  assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), [
+    "PUT /me/profile",
+    "GET /me",
+    "GET /me",
+  ]);
+  assert.equal(api.calls.filter(({ method }) => method === "PUT").length, 1, "a status check never resends the profile");
+});
+
+test("registration diagnostics separate an HTTP rejection from an unknown timeout outcome", async () => {
+  const initial = await loadClerkBluebirdProfile(fakeApi());
+  const request = {
+    firstName: "Avery",
+    lastName: "Passenger",
+    dob: "1985-04-03",
+    gender: "female",
+    homeAirportCode: "SFO",
+    favoriteCityKeys: ["san-francisco"],
+  };
+
+  const rejectedApi = fakeApi();
+  rejectedApi.updateProfile = async (_data, options) => {
+    rejectedApi.calls.push({ method: "PUT", path: "/me/profile", options });
+    options?.onResponseStatus?.(422);
+    const error = new Error("request rejected");
+    error.code = "http";
+    error.status = 422;
+    throw error;
+  };
+  await assert.rejects(
+    saveClerkBluebirdRegistration(rejectedApi, initial, request),
+    (error) => error instanceof ClerkRegistrationCompletionError &&
+      getClerkRegistrationWriteOutcome(error.diagnostic).kind === "rejected" &&
+      getClerkRegistrationCompletionCheck(error.diagnostic).kind === "incomplete",
+  );
+  assert.deepEqual(rejectedApi.calls.map(({ method, path }) => `${method} ${path}`), [
+    "PUT /me/profile",
+    "GET /me",
+  ]);
+  assert.equal(rejectedApi.calls.filter(({ method }) => method === "PUT").length, 1);
+
+  const unknownApi = fakeApi();
+  unknownApi.updateProfile = async (_data, options) => {
+    unknownApi.calls.push({ method: "PUT", path: "/me/profile", options });
+    const error = new Error("request timed out");
+    error.code = "timeout";
+    throw error;
+  };
+  unknownApi.getMe = async (options) => {
+    unknownApi.calls.push({ method: "GET", path: "/me", options });
+    throw new Error("verification unavailable");
+  };
+  await assert.rejects(
+    saveClerkBluebirdRegistration(unknownApi, initial, request),
+    (error) => error instanceof ClerkRegistrationCompletionError &&
+      getClerkRegistrationWriteOutcome(error.diagnostic).kind === "unknown" &&
+      getClerkRegistrationCompletionCheck(error.diagnostic).kind === "unavailable",
+  );
+  assert.deepEqual(unknownApi.calls.map(({ method, path }) => `${method} ${path}`), [
+    "PUT /me/profile",
+    "GET /me",
+  ]);
+  assert.equal(unknownApi.calls.filter(({ method }) => method === "PUT").length, 1);
+});
+
+test("registration recovery status is read-only and only authenticated complete /me permits continuation", async () => {
+  for (const [projection, expected] of [
+    [currentUser({ isProfileComplete: true }), "confirmed_complete"],
+    [currentUser({ isProfileComplete: false }), "incomplete"],
+    [currentUser({ isAuthenticated: false, isProfileComplete: true }), "unauthenticated"],
+  ]) {
+    const api = fakeApi({ me: projection });
+    const status = await checkClerkBluebirdRegistrationStatus(api);
+    assert.equal(status.kind, expected);
+    assert.equal(status.httpStatus, 200);
+    assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), ["GET /me"]);
+    assert.equal(api.calls.filter(({ method }) => method === "PUT").length, 0);
+    assert.equal(api.calls.some(({ path }) => path === "/me/profile"), false);
+  }
+
+  const failedApi = fakeApi();
+  failedApi.getMe = async (options) => {
+    failedApi.calls.push({ method: "GET", path: "/me", options });
+    throw new Error("read unavailable");
+  };
+  const failed = await checkClerkBluebirdRegistrationStatus(failedApi);
+  assert.deepEqual(failed, { kind: "unavailable", httpStatus: null });
+  assert.deepEqual(failedApi.calls.map(({ method, path }) => `${method} ${path}`), ["GET /me"]);
+  assert.equal(failedApi.calls.filter(({ method }) => method === "PUT").length, 0);
 });
 
 test("only matching API-confirmed registration completion is available to the tour", () => {

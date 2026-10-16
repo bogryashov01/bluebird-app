@@ -17,8 +17,14 @@ import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import {
+  checkClerkBluebirdRegistrationStatus,
   ClerkRegistrationCompletionError,
+  getClerkRegistrationCompletionCheck,
+  getClerkRegistrationWriteOutcome,
   saveClerkBluebirdRegistration,
+  type ClerkRegistrationCompletionCheck,
+  type ClerkRegistrationSaveDiagnostic,
+  type ClerkRegistrationWriteOutcome,
 } from '@/lib/clerkBluebirdProfile';
 import {
   buildClerkProfileUpdateRequest,
@@ -70,7 +76,10 @@ export default function RegistrationReviewScreen() {
     : [];
   const selectedAirportCodesKey = selectedAirportCodes.join(',');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveDiagnostic, setSaveDiagnostic] = useState<ClerkRegistrationSaveDiagnostic | null>(null);
+  const [completionCheck, setCompletionCheck] = useState<ClerkRegistrationCompletionCheck | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [weightNotConfirmed, setWeightNotConfirmed] = useState(false);
   const savingRef = useRef(false);
   const currentIdentity = useRef<string | null>(clerkUserId);
@@ -86,6 +95,9 @@ export default function RegistrationReviewScreen() {
       draft: clerkUserId ? getClerkProfileRegistrationDraft(clerkUserId) : null,
     });
     setSaveError(null);
+    setSaveDiagnostic(null);
+    setCompletionCheck(null);
+    setIsCheckingStatus(false);
     setWeightNotConfirmed(false);
     savingRef.current = false;
   }, [clerkUserId]);
@@ -143,6 +155,25 @@ export default function RegistrationReviewScreen() {
     return <Redirect href="/(clerk-auth)/signed-in" />;
   }
   if (!draft) return <CenteredState title="Your registration draft is unavailable." />;
+
+  const createAuthenticatedApi = () => {
+    if (!configuration) throw new Error('Main Bluebird API configuration is unavailable.');
+    return createMainBluebirdApiIntegration({
+      configuration,
+      tokenProvider: {
+        environment: configuration.environment,
+        getVerifiedAccessToken: async () => {
+          const activeSession = currentSession.current as ClerkSessionSnapshot | null;
+          if (
+            !activeSession ||
+            activeSession.isSignedIn !== true ||
+            currentIdentity.current !== clerkUserId
+          ) return null;
+          return activeSession.getToken();
+        },
+      },
+    });
+  };
 
   const saveRegistration = async () => {
     if (savingRef.current) return;
@@ -204,44 +235,62 @@ export default function RegistrationReviewScreen() {
     savingRef.current = true;
     setIsSaving(true);
     setSaveError(null);
+    setSaveDiagnostic(null);
+    setCompletionCheck(null);
     try {
-      const api = createMainBluebirdApiIntegration({
-        configuration,
-        tokenProvider: {
-          environment: configuration.environment,
-          getVerifiedAccessToken: async () => {
-            const activeSession = currentSession.current as ClerkSessionSnapshot | null;
-            if (
-              !activeSession ||
-              activeSession.isSignedIn !== true ||
-              currentIdentity.current !== clerkUserId
-            ) return null;
-            return activeSession.getToken();
-          },
-        },
-      });
+      const api = createAuthenticatedApi();
       const result = await saveClerkBluebirdRegistration(api.authenticated, profileResult, data);
       if (currentIdentity.current !== clerkUserId) return;
       if (!setClerkVerifiedRegistrationCompletion(clerkUserId, result.currentUser)) {
         throw new ClerkRegistrationCompletionError(result.diagnostic);
       }
-      if (result.weightSaved) {
-        router.replace({ pathname: '/(auth)/welcome-tour', params: { clerkFlow: '1' } });
-      } else {
-        setWeightNotConfirmed(true);
-      }
+      setSaveDiagnostic(result.diagnostic);
+      setCompletionCheck(getClerkRegistrationCompletionCheck(result.diagnostic));
+      setWeightNotConfirmed(!result.weightSaved);
     } catch (error) {
       if (currentIdentity.current !== clerkUserId) return;
-      setSaveError(getRegistrationSaveErrorMessage(error));
+      if (error instanceof ClerkRegistrationCompletionError) {
+        setSaveDiagnostic(error.diagnostic);
+        setCompletionCheck(getClerkRegistrationCompletionCheck(error.diagnostic));
+        setSaveError(null);
+      } else {
+        setSaveError(getRegistrationSaveErrorMessage(error));
+      }
     } finally {
       savingRef.current = false;
       if (currentIdentity.current === clerkUserId) setIsSaving(false);
     }
   };
 
-  const continueAfterWeightNotice = () => {
+  const checkRegistrationStatus = async () => {
+    if (isCheckingStatus || isSaving || currentIdentity.current !== clerkUserId) return;
+    setIsCheckingStatus(true);
+    setSaveError(null);
+    try {
+      const api = createAuthenticatedApi();
+      const result = await checkClerkBluebirdRegistrationStatus(api.authenticated);
+      if (currentIdentity.current !== clerkUserId) return;
+      setCompletionCheck(result);
+      if (
+        result.kind === 'confirmed_complete' &&
+        result.currentUser &&
+        !setClerkVerifiedRegistrationCompletion(clerkUserId, result.currentUser)
+      ) {
+        setCompletionCheck({ kind: 'unavailable', httpStatus: result.httpStatus });
+      }
+    } catch {
+      if (currentIdentity.current === clerkUserId) {
+        setCompletionCheck({ kind: 'unavailable', httpStatus: null });
+      }
+    } finally {
+      if (currentIdentity.current === clerkUserId) setIsCheckingStatus(false);
+    }
+  };
+
+  const continueAfterConfirmation = () => {
     router.replace({ pathname: '/(auth)/welcome-tour', params: { clerkFlow: '1' } });
   };
+  const completionConfirmed = completionCheck?.kind === 'confirmed_complete';
 
   return (
     <View style={[styles.root, { backgroundColor: colors.offWhite, paddingTop: topPad }]}>
@@ -330,18 +379,42 @@ export default function RegistrationReviewScreen() {
           </Text>
         ) : null}
 
-        {weightNotConfirmed ? (
-          <View style={[styles.warningCard, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-            <Text style={[styles.optionTitle, { color: colors.textOnSurface }]}>Weight not confirmed</Text>
-            <Text style={[styles.bodyText, { color: colors.mutedForegroundLight }]}>
-              Your registration is complete. Bluebird did not confirm the weight, so it is not marked as saved.
+        {saveDiagnostic && completionCheck ? (
+          <View style={[styles.warningCard, { backgroundColor: colors.muted, borderColor: colors.border }]} testID="registration-recovery-status">
+            <Text style={[styles.optionTitle, { color: colors.textOnSurface }]}>
+              {completionConfirmed ? 'Registration confirmed' : 'Registration needs confirmation'}
             </Text>
-            <ActionButton label="Continue" onPress={continueAfterWeightNotice} testID="continue-after-weight-not-confirmed" />
+            <Text accessibilityLiveRegion="polite" style={[styles.bodyText, { color: colors.mutedForegroundLight }]} testID="registration-write-outcome">
+              {describeRegistrationWriteOutcome(getClerkRegistrationWriteOutcome(saveDiagnostic))}
+            </Text>
+            <Text accessibilityLiveRegion="polite" style={[styles.bodyText, { color: colors.mutedForegroundLight }]} testID="registration-completion-outcome">
+              {describeRegistrationCompletionCheck(completionCheck)}
+            </Text>
+            {completionConfirmed && weightNotConfirmed ? (
+              <Text style={[styles.bodyText, { color: colors.mutedForegroundLight }]}>
+                Your profile is complete. Bluebird did not confirm the optional weight, so it is not marked as saved.
+              </Text>
+            ) : null}
+            {completionConfirmed ? (
+              <ActionButton
+                label="Continue"
+                onPress={continueAfterConfirmation}
+                testID="continue-after-registration-confirmed"
+              />
+            ) : (
+              <ActionButton
+                label={isCheckingStatus ? 'Checking status…' : 'Check registration status'}
+                onPress={() => void checkRegistrationStatus()}
+                disabled={isCheckingStatus || isSaving || !configuration}
+                loading={isCheckingStatus}
+                testID="check-registration-status"
+              />
+            )}
           </View>
         ) : null}
       </KeyboardAwareScrollViewCompat>
 
-      {!weightNotConfirmed ? (
+      {!completionConfirmed ? (
         <View style={[styles.footer, { borderTopColor: colors.border, paddingBottom: bottomPad + 12 }]}>
           <Pressable
             accessibilityRole="button"
@@ -354,7 +427,7 @@ export default function RegistrationReviewScreen() {
           <ActionButton
             label={isSaving ? 'Saving…' : 'Confirm & Save'}
             onPress={() => void saveRegistration()}
-            disabled={isSaving || !configuration || airportsQuery.isLoading || citiesQuery.isLoading || airportsQuery.isError || citiesQuery.isError}
+            disabled={isSaving || isCheckingStatus || !configuration || airportsQuery.isLoading || citiesQuery.isLoading || airportsQuery.isError || citiesQuery.isError}
             loading={isSaving}
             testID="confirm-save-profile"
           />
@@ -458,10 +531,34 @@ function getRegistrationSaveErrorMessage(error: unknown): string {
   if (typed?.code === 'network' || typed?.code === 'timeout') {
     return 'Bluebird could not be reached. Your details are still here; check your connection before continuing.';
   }
-  if (error instanceof ClerkRegistrationCompletionError) {
-    return 'Bluebird could not confirm your registration. Your details are still here; contact support before trying again.';
-  }
   return 'Bluebird could not save your registration. Your details are still here; review them and try again.';
+}
+
+function describeRegistrationWriteOutcome(outcome: ClerkRegistrationWriteOutcome): string {
+  switch (outcome.kind) {
+    case 'rejected':
+      return `Bluebird rejected the save request (HTTP ${outcome.httpStatus}).`;
+    case 'unknown':
+      return 'The save outcome is unknown. The request may have reached Bluebird, so this check will not resend it.';
+    case 'malformed_response':
+      return `Bluebird returned HTTP ${outcome.httpStatus}, but the response did not match the profile contract${outcome.issue ? ` (${outcome.issue})` : ''}.`;
+    case 'valid_response':
+      return 'Bluebird returned a valid profile response.';
+  }
+}
+
+function describeRegistrationCompletionCheck(check: ClerkRegistrationCompletionCheck): string {
+  const status = check.httpStatus === null ? '' : ` (HTTP ${check.httpStatus})`;
+  switch (check.kind) {
+    case 'confirmed_complete':
+      return `Authenticated GET /api/me confirms that your profile is complete${status}.`;
+    case 'incomplete':
+      return `Authenticated GET /api/me responded${status}, but your profile is still incomplete.`;
+    case 'unauthenticated':
+      return `GET /api/me responded${status} without confirming an authenticated profile.`;
+    case 'unavailable':
+      return `Bluebird’s completion check is unavailable${status ? ` after${status}` : ''}. Your draft is still here; check again when connected.`;
+  }
 }
 
 const styles = StyleSheet.create({
