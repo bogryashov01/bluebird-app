@@ -78,6 +78,26 @@ const flights = [
     departureTime: "2026-11-02T10:00:00.000Z",
     aircraftType: "Citation Latitude",
   },
+  {
+    id: 81003,
+    status: "published",
+    originAirport: "SAT",
+    originCity: "San Antonio",
+    destinationAirport: "CXO",
+    destinationCity: "Conroe",
+    departureTime: "2026-11-03T10:00:00.000Z",
+    aircraftType: "Citation Latitude",
+  },
+  {
+    id: 81004,
+    status: "published",
+    originAirport: "HEF",
+    originCity: "Manassas",
+    destinationAirport: "HUF",
+    destinationCity: "Terre Haute",
+    departureTime: "2026-11-04T10:00:00.000Z",
+    aircraftType: "Citation Latitude",
+  },
 ];
 
 const plansCatalog = {
@@ -383,6 +403,44 @@ test("Discover cards open their selected flights and preserve search when return
   await expect(miamiFlight).toBeVisible();
   await expect(search).toHaveValue("MIA");
   expect(mutationRequests).toEqual([]);
+});
+
+test("Discover opens the correct SAT and HEF flights from both ends of each card", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await setupPreview(page, async (route, url) => {
+    if (url.pathname === "/api/empty-legs") return json(route, 200, flights);
+    if (url.pathname === "/api/empty-legs/81003") return json(route, 200, flightDetail(81003));
+    if (url.pathname === "/api/empty-legs/81004") return json(route, 200, flightDetail(81004));
+    return json(route, 503, { error: "Unexpected intercepted production request." });
+  });
+
+  await page.goto("/discover");
+  const search = page.getByPlaceholder("Search routes, airports, aircraft");
+  await search.fill("SAT");
+  const satCard = page.getByTestId("production-flight-card-81003");
+  await expect(satCard).toBeVisible();
+  const satBox = await satCard.boundingBox();
+  expect(satBox).not.toBeNull();
+  await satCard.click({ position: { x: 8, y: 8 } });
+  await expect(page).toHaveURL(/\/flight\/81003$/);
+  await expect(page.getByTestId("flight-detail-route")).toHaveText("SAT → CXO");
+  await page.goBack();
+  await expect(satCard).toBeVisible();
+  await expect(search).toHaveValue("SAT");
+
+  await search.fill("HEF");
+  const hefCard = page.getByTestId("production-flight-card-81004");
+  await expect(hefCard).toBeVisible();
+  const hefBox = await hefCard.boundingBox();
+  expect(hefBox).not.toBeNull();
+  await hefCard.click({ position: { x: hefBox.width - 8, y: hefBox.height - 8 } });
+  await expect(page).toHaveURL(/\/flight\/81004$/);
+  await expect(page.getByTestId("flight-detail-route")).toHaveText("HEF → HUF");
+  await expect(page.getByTestId("flight-detail-route")).not.toHaveText("SAT → CXO");
+
+  expect(pageErrors).toEqual([]);
 });
 
 test("Flight Details keeps the selected flight after navigating while an older read is pending", async ({ page }) => {
