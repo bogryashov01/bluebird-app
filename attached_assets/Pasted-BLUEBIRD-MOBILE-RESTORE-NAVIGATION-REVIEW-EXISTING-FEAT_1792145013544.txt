@@ -1,0 +1,277 @@
+BLUEBIRD MOBILE — RESTORE NAVIGATION & REVIEW EXISTING FEATURES
+
+PROJECT: Bluebird Mobile ONLY
+PRIORITY: HIGH
+
+CURRENT STATUS:
+
+The real authenticated registration flow
+is now working:
+
+Welcome
+→ Clerk SMS Authentication
+→ Personal Information
+→ Locations
+→ Review & Save
+→ Onboarding
+→ Home
+
+The Home screen now displays:
+
+"Good afternoon"
+"30 published flights"
+
+Flights currently supports:
+- List view
+- Map view
+- Route search
+
+CURRENT PROBLEM:
+
+The previous Bluebird Mobile navigation
+is no longer visible.
+
+Only Flights navigation is available.
+
+Previously, the Mobile app had additional
+sections such as:
+
+- Profile
+- Membership
+- Settings
+- Other existing account-related screens
+
+GOAL:
+
+Restore the existing Mobile navigation
+and determine which features currently work.
+
+CRITICAL RESTRICTIONS:
+
+DO NOT MODIFY:
+
+- Main Bluebird Website
+- Main Bluebird API
+- Database
+- Clerk configuration
+- Production configuration
+
+DO NOT:
+
+- Rewrite authentication
+- Modify working registration
+- Modify onboarding
+- Replace the working Flights screen
+- Redesign the entire application
+- Create duplicate screens
+- Invent backend functionality
+- Automatically change memberships
+- Make real booking requests
+
+STEP 1 — INSPECT EXISTING MOBILE SCREENS
+
+Inspect the Bluebird Mobile project.
+
+Find all existing screens and navigation
+components.
+
+Identify:
+
+- Flights
+- Membership
+- Profile
+- Settings
+- Account
+- Any other existing screens
+
+Determine which screens:
+
+1. Still exist and work
+2. Exist but are disconnected from navigation
+3. Exist but use mock data
+4. Exist but require Main API integration
+5. Are genuinely missing
+
+Do not recreate screens that already exist.
+
+STEP 2 — RESTORE NAVIGATION
+
+Restore the previous Mobile navigation
+where possible.
+
+Expected main sections:
+
+Flights
+Membership
+Profile
+
+Settings should be accessible through
+Profile or its previous navigation location.
+
+Preserve the existing Bluebird design.
+
+Use the existing navigation components,
+icons, spacing, and styling.
+
+Do not introduce a completely new design.
+
+Navigation must work after authenticated
+profile completion.
+
+Do not make navigation depend on membership.
+
+A registered user without membership
+must still be able to access:
+
+- Flights
+- Profile
+- Settings
+- Membership information
+
+Protected actions must continue to respect
+backend membership authorization.
+
+STEP 3 — PROFILE
+
+Inspect the existing Profile screen.
+
+Determine whether it correctly displays:
+
+- Name
+- Email
+- Phone
+- Date of birth
+- Gender
+- Home airport
+- Favorite cities
+
+Use existing Main API data where supported.
+
+Do not silently replace real data with mocks.
+
+Do not automatically write profile changes.
+
+STEP 4 — MEMBERSHIP
+
+Inspect the existing Membership screen.
+
+Determine:
+
+- Whether membership information loads
+- Whether the user has an active membership
+- Whether membership plans are displayed
+- Whether any actions are functional
+- Whether any content is mocked
+
+IMPORTANT:
+
+isMember === false must not block access
+to the Membership screen itself.
+
+Do not invent active membership status.
+
+Do not implement payment or membership
+activation without explicit authorization.
+
+STEP 5 — SETTINGS
+
+Inspect existing Settings functionality.
+
+Check:
+
+- Account information
+- Notification preferences
+- Profile editing
+- Logout
+- Other existing settings
+
+Determine what works and what does not.
+
+Preserve the working Clerk session.
+
+Logout must use the existing Clerk
+sign-out mechanism.
+
+Do not trigger logout during testing.
+
+STEP 6 — FLIGHTS
+
+Preserve the currently working Home screen.
+
+Inspect:
+
+- Flight list
+- Flight map
+- Route search
+- Flight details
+- API data source
+- Loading and empty states
+
+Determine whether the displayed
+30 published flights are from the real
+Main Development API or mock data.
+
+Do not modify booking logic.
+
+STEP 7 — IMPLEMENTATION
+
+First identify the existing navigation
+and screen components.
+
+Then restore disconnected navigation
+using the smallest possible Mobile-only
+changes.
+
+Do not replace working screens.
+
+If a screen depends on an unavailable
+backend feature, keep its state honest.
+
+Do not show fake account information.
+
+STEP 8 — VERIFICATION
+
+Run TypeScript and focused tests.
+
+Check navigation for:
+
+- Authenticated complete user
+- Authenticated incomplete user
+- Non-member
+- Member
+- Signed-out user
+
+Ensure incomplete users cannot bypass
+registration.
+
+Ensure complete non-members can access
+the main application.
+
+FINAL REPORT:
+
+Provide a table with:
+
+SCREEN | EXISTS | NAVIGATION | DATA SOURCE |
+WORKING | BLOCKERS
+
+Include:
+
+1. Navigation restored
+2. Existing screens found
+3. Screens still missing
+4. Real API integrations
+5. Mocked functionality
+6. Files changed
+7. Tests passed
+8. Remaining issues
+
+IMPORTANT:
+
+Prioritize restoring the previous
+navigation over building new features.
+
+Keep changes minimal and isolated
+to Bluebird Mobile.
+
+Implement the navigation restoration
+and report the feature inventory.
