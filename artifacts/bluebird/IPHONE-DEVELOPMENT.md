@@ -2,7 +2,7 @@
 
 ## Runtime decision
 
-Bluebird is locked to Expo SDK `57.0.27` and React Native `0.86.3`. The
+Bluebird is locked to Expo SDK `57.0.30` and React Native `0.86.3`. The
 SDK 57 documentation lists the installed `react-native-maps` `1.27.2` release
 as available in Expo Go. Most other installed Expo modules used by Bluebird,
 including image picker, location, SecureStore, and local notifications, are
@@ -92,12 +92,11 @@ prerequisites and separate approval are in place.
 
 ## SDK alignment note
 
-The local `expo install --check` reports SDK 57 patch-version recommendations
-for Expo, Auth Session, Crypto, Notifications, Constants, Linking, Location,
-Router, and Splash Screen. The newly added `expo-dev-client` is SDK-aligned.
-The other versions were not changed here because the requested scope excludes
-Clerk/auth behavior changes; get approval for a separate package-alignment
-change before producing a native build.
+The SDK 57 patch recommendations for Expo, Auth Session, Crypto, Notifications,
+Constants, Linking, Location, Router, and Splash Screen are aligned in the
+package manifest and lockfile. Auth Session and Crypto were updated with
+separate approval. This changes Expo package versions only; Clerk configuration,
+application auth flows, and production auth settings were not changed.
 
 ## Safe scope
 
