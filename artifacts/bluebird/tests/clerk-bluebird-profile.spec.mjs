@@ -5,6 +5,7 @@ import {
   getClerkOnboardingStep,
   getClerkBluebirdProfileEffectDependencies,
   isClerkBluebirdProfileResultCurrent,
+  loadClerkBluebirdMembership,
   loadClerkBluebirdProfile,
   saveClerkBluebirdRegistration,
   ClerkRegistrationCompletionError,
@@ -193,6 +194,28 @@ test("Personal Information confirms /me before profile GET and performs no write
   assert.deepEqual(anonymousCalls, ["GET /me"]);
 });
 
+test("profile GET errors remain unavailable after authenticated /me and never write", async () => {
+  const calls = [];
+  await assert.rejects(
+    () => loadClerkPersonalInfo({
+      getMe: async () => {
+        calls.push("GET /me");
+        return currentUser({ isAuthenticated: true });
+      },
+      getProfile: async () => {
+        calls.push("GET /me/profile");
+        throw new Error("profile endpoint unavailable");
+      },
+      updateProfile: async () => {
+        calls.push("PUT /me/profile");
+        throw new Error("Profile reads must not trigger writes.");
+      },
+    }),
+    /profile endpoint unavailable/,
+  );
+  assert.deepEqual(calls, ["GET /me", "GET /me/profile"]);
+});
+
 test("Personal Information represents absent optional values as empty and requires safe PUT fields", () => {
   const optionalProfile = {
     ...completePersonalInfoProfile,
@@ -337,6 +360,95 @@ test("profile screen reuses the already-verified post-login /me response", async
     "GET /me/profile",
     "GET /membership",
   ]);
+});
+
+test("membership read confirms /me first and shows only a matching member projection", async () => {
+  const member = currentUser({ isMember: true, memberTier: "base" });
+  const membership = {
+    isMember: true,
+    tier: "base",
+    status: "active",
+    cancelAtPeriodEnd: false,
+    startedAt: "2024-02-12T00:00:00.000Z",
+    currentPeriodEnd: null,
+    paymentStatus: null,
+    recentEvents: [],
+  };
+  const api = fakeApi({ me: member, loadedMembership: membership });
+
+  const result = await loadClerkBluebirdMembership(api);
+
+  assert.equal(result.kind, "authenticated");
+  assert.equal(result.membershipState, "available");
+  assert.equal(result.currentUser, member);
+  assert.equal(result.membership, membership);
+  assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), [
+    "GET /me",
+    "GET /membership",
+  ]);
+  assert.equal(api.calls.some(({ method }) => method === "PUT"), false);
+});
+
+test("membership read confirms non-members and does not infer missing optional details", async () => {
+  const api = fakeApi({
+    me: currentUser({ isMember: false, memberTier: null }),
+    loadedMembership: {
+      isMember: false,
+      tier: null,
+      cancelAtPeriodEnd: false,
+      recentEvents: [],
+    },
+  });
+  const result = await loadClerkBluebirdMembership(api);
+
+  assert.equal(result.kind, "authenticated");
+  assert.equal(result.membershipState, "available");
+  assert.equal(result.membership?.isMember, false);
+  assert.equal(result.membership?.tier, null);
+  assert.equal("startedAt" in result.membership, false);
+  assert.equal(api.calls.some(({ method, path }) => path === "/me/profile"), false);
+});
+
+test("membership endpoint errors preserve only the /me projection and mark details unavailable", async () => {
+  const member = currentUser({ isMember: true, memberTier: "plus" });
+  const api = fakeApi({
+    me: member,
+    membershipError: new Error("membership endpoint unavailable"),
+  });
+  const result = await loadClerkBluebirdMembership(api);
+
+  assert.equal(result.kind, "authenticated");
+  assert.equal(result.currentUser, member);
+  assert.equal(result.membership, null);
+  assert.equal(result.membershipState, "unavailable");
+  assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), [
+    "GET /me",
+    "GET /membership",
+  ]);
+});
+
+test("membership is not requested when /me does not authenticate the Clerk session", async () => {
+  const api = fakeApi({ me: currentUser({ isAuthenticated: false }) });
+  const result = await loadClerkBluebirdMembership(api);
+
+  assert.equal(result.kind, "api_not_authenticated");
+  assert.deepEqual(api.calls.map(({ method, path }) => `${method} ${path}`), ["GET /me"]);
+});
+
+test("membership projection conflicts stay unavailable instead of mixing account values", async () => {
+  const api = fakeApi({
+    me: currentUser({ isMember: true, memberTier: "plus" }),
+    loadedMembership: {
+      isMember: true,
+      tier: "base",
+      cancelAtPeriodEnd: false,
+      recentEvents: [],
+    },
+  });
+  const result = await loadClerkBluebirdMembership(api);
+
+  assert.equal(result.kind, "authenticated");
+  assert.equal(result.membershipState, "conflict");
 });
 
 test("profile form prefills only the requested fields and uses Clerk's verified phone", () => {

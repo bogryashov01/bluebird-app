@@ -232,9 +232,15 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
     .split("if (authMode === 'clerk') {")[1]
     ?.split("const currentTier")[0] ?? "";
 
-  assert.match(clerkProfile, /currentUser\.firstName/);
-  assert.match(clerkProfile, /currentUser\.email/);
-  assert.match(clerkProfile, /Additional profile details.*Unavailable in this preview/);
+  assert.match(profileSource, /loadClerkPersonalInfo\(createClerkApi\(\)\.authenticated, signal\)/);
+  assert.match(clerkProfile, /profile\?\.firstName/);
+  assert.match(clerkProfile, /profile\?\.email/);
+  assert.match(clerkProfile, /Date of birth/);
+  assert.match(clerkProfile, /Travel preferences/);
+  assert.match(clerkProfile, /Favorite airports/);
+  assert.match(clerkProfile, /clerk-profile-retry/);
+  assert.match(clerkProfile, /Loading this profile may sync phone information/);
+  assert.doesNotMatch(clerkProfile, /updateProfile|PUT \/me\/profile|useUpdateMe/);
   assert.match(clerkProfile, /title="Settings"/);
   assert.match(clerkProfile, /label: 'Appearance'/);
   assert.match(clerkProfile, /label: 'Personal Information'/);
@@ -274,10 +280,14 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
    assert.match(clerkNotifications, /saveClerkNotificationPreferences/);
    assert.doesNotMatch(clerkNotifications, /useUpdateMe|useMarkNotificationRead|useListNotifications/);
   assert.match(notificationsSource, /authMode === 'clerk'/);
-  assert.match(clerkMembership, /currentUser\?\.isAuthenticated/);
-  assert.match(clerkMembership, /currentUser\.memberTier/);
-  assert.match(clerkMembership, /Pass balances, family details, and usage are unavailable here/);
+  assert.match(membershipSource, /loadClerkBluebirdMembership\(createClerkApi\(\)\.authenticated, signal\)/);
+  assert.match(clerkMembership, /membershipState === 'available'/);
+  assert.match(clerkMembership, /membershipState === 'conflict'/);
+  assert.match(clerkMembership, /membershipState === 'unavailable'/);
+  assert.match(clerkMembership, /clerk-membership-details/);
+  assert.match(clerkMembership, /clerk-membership-retry/);
   assert.doesNotMatch(clerkMembership, /user\?\.membershipTier|linePassCount|annualFlightAllowance/);
+  assert.doesNotMatch(clerkMembership, /useBuy|useChange|useUpgrade|updateProfile/);
 });
 
 test("Clerk Trips stay unavailable without requesting member-only trips or queue data", () => {

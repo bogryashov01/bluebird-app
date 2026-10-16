@@ -142,6 +142,47 @@ export type BluebirdProfileLoadResult =
       membershipState: 'available' | 'unavailable' | 'conflict';
     };
 
+export type ClerkBluebirdMembershipLoadResult =
+  | { kind: 'api_not_authenticated'; currentUser: ProductionCurrentUser }
+  | {
+      kind: 'authenticated';
+      currentUser: ProductionCurrentUser;
+      membership: ProductionMembership | null;
+      membershipState: 'available' | 'unavailable' | 'conflict';
+    };
+
+/**
+ * Read membership only after /api/me confirms the current Clerk-backed request.
+ * Unlike profile GET, this endpoint is a read-only membership projection.
+ */
+export async function loadClerkBluebirdMembership(
+  api: Pick<ClerkBluebirdProfileApi, 'getMe' | 'getMembership'>,
+  signal?: AbortSignal,
+): Promise<ClerkBluebirdMembershipLoadResult> {
+  const options = signal ? { signal } : undefined;
+  const currentUser = await api.getMe(options);
+  if (currentUser.isAuthenticated !== true) {
+    return { kind: 'api_not_authenticated', currentUser };
+  }
+  let membership: ProductionMembership;
+  try {
+    membership = await api.getMembership(options);
+  } catch {
+    return {
+      kind: 'authenticated',
+      currentUser,
+      membership: null,
+      membershipState: 'unavailable',
+    };
+  }
+  return {
+    kind: 'authenticated',
+    currentUser,
+    membership,
+    membershipState: membershipMatchesProjection(currentUser, membership) ? 'available' : 'conflict',
+  };
+}
+
 /**
  * Called only after the user opens their profile. /me is the auth projection;
  * profile GET may synchronize Clerk-verified phone data, so it must not be

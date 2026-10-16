@@ -16,6 +16,12 @@ import { confirmDialog } from '@/lib/confirmDialog';
 import { useTheme, type ThemePreference } from '@/context/ThemeContext';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
+import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
+import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
+import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
+import { getClerkBluebirdProfileEffectDependencies, isClerkBluebirdProfileResultCurrent } from '@/lib/clerkBluebirdProfile';
+import { loadClerkPersonalInfo } from '@/lib/clerkPersonalInfo';
+import type { ProductionUserProfile } from '@/lib/productionAuthApi';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; hint: string }[] = [
   { value: 'light',  label: 'Light',  hint: 'Always use the light theme' },
@@ -73,11 +79,20 @@ function resolvePhotoUrl(path: string | null | undefined): string | null {
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : '';
   return `${baseUrl}${path.startsWith('/api/') ? path : `/api/storage${path}`}`;
 }
+
+type ClerkProfileLoadState =
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'not_authenticated' }
+  | { kind: 'loaded'; clerkUserId: string; profile: ProductionUserProfile };
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { user, signOut, authMode, clerkMemberResolution } = useAuth();
+  const { user, signOut, authMode } = useAuth();
   const { preference } = useTheme();
+  const clerkSession = useClerkAuthSnapshot();
+  const mainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
   const localDemoFlow = isLocalFlightReadMode();
   const memberQueryEnabled = isLegacyMemberQueryEnabled({
     authMode,
@@ -85,6 +100,86 @@ export default function ProfileScreen() {
     hasLegacyUser: !!user,
   });
   const [appearanceOpen, setAppearanceOpen] = React.useState(false);
+  const [profileLoadState, setProfileLoadState] = React.useState<ClerkProfileLoadState>({ kind: 'loading' });
+  const [profileLoadAttempt, setProfileLoadAttempt] = React.useState(0);
+  const currentClerkIdentity = React.useRef<string | null>(clerkSession?.userId ?? null);
+  currentClerkIdentity.current = clerkSession?.userId ?? null;
+  const currentClerkSession = React.useRef(clerkSession);
+  currentClerkSession.current = clerkSession;
+  const profileRequestDependencies = getClerkBluebirdProfileEffectDependencies({
+    configuration: mainApiConfiguration,
+    session: clerkSession,
+    loadAttempt: profileLoadAttempt,
+  });
+  const createClerkApi = React.useCallback(() => {
+    if (!mainApiConfiguration || !clerkSession || clerkSession.isSignedIn !== true || !clerkSession.userId) {
+      throw new Error('Your signed-in Bluebird account is unavailable.');
+    }
+    const requestedClerkUserId = clerkSession.userId;
+    return createMainBluebirdApiIntegration({
+      configuration: mainApiConfiguration,
+      tokenProvider: {
+        environment: mainApiConfiguration.environment,
+        getVerifiedAccessToken: async () => {
+          const activeSession = currentClerkSession.current;
+          if (
+            !activeSession ||
+            activeSession.isLoaded !== true ||
+            activeSession.isSignedIn !== true ||
+            activeSession.userId !== requestedClerkUserId
+          ) return null;
+          return activeSession.getToken();
+        },
+      },
+    });
+  }, [...profileRequestDependencies]);
+  const loadClerkProfile = React.useCallback(async (signal: AbortSignal) => {
+    if (
+      authMode !== 'clerk' ||
+      !clerkSession?.isLoaded ||
+      clerkSession.isSignedIn !== true ||
+      !clerkSession.userId
+    ) return;
+    const requestedClerkUserId = clerkSession.userId;
+    setProfileLoadState({ kind: 'loading' });
+    try {
+      const result = await loadClerkPersonalInfo(createClerkApi().authenticated, signal);
+      if (!isClerkBluebirdProfileResultCurrent({
+        requestedClerkUserId,
+        currentClerkUserId: currentClerkIdentity.current,
+        aborted: signal.aborted,
+      })) return;
+      if (result.kind === 'api_not_authenticated') {
+        setProfileLoadState({ kind: 'not_authenticated' });
+        return;
+      }
+      setProfileLoadState({
+        kind: 'loaded',
+        clerkUserId: requestedClerkUserId,
+        profile: result.profile,
+      });
+    } catch (error) {
+      if (signal.aborted || currentClerkIdentity.current !== requestedClerkUserId) return;
+      const typed = error as { code?: string; status?: number };
+      const message = typed?.code === 'network' || typed?.code === 'timeout'
+        ? 'Bluebird could not be reached. Check your connection and try again.'
+        : typed?.code === 'session_expired' || typed?.status === 401
+          ? 'Your sign-in has expired. Sign in again, then reopen your profile.'
+          : 'Bluebird could not load your profile details.';
+      setProfileLoadState({ kind: 'error', message });
+    }
+  }, [authMode, createClerkApi, ...profileRequestDependencies]);
+
+  React.useEffect(() => {
+    if (authMode !== 'clerk') return;
+    if (!clerkSession?.isLoaded || clerkSession.isSignedIn !== true || !clerkSession.userId) {
+      setProfileLoadState({ kind: 'not_authenticated' });
+      return;
+    }
+    const controller = new AbortController();
+    void loadClerkProfile(controller.signal);
+    return () => controller.abort();
+  }, [authMode, loadClerkProfile, ...profileRequestDependencies]);
   const { data: membership } = useGetMembership({
     query: { enabled: memberQueryEnabled },
   });
@@ -104,24 +199,46 @@ export default function ProfileScreen() {
   const unreadCount = notifList.filter((n) => !n.read).length;
 
   if (authMode === 'clerk') {
-    const currentUser = clerkMemberResolution.status === 'profile_complete'
-      ? clerkMemberResolution.currentUser
-      : null;
-    if (!currentUser?.isAuthenticated) {
+    const visibleProfileState = profileLoadState.kind === 'loaded' &&
+      profileLoadState.clerkUserId !== clerkSession?.userId
+      ? { kind: 'loading' as const }
+      : profileLoadState;
+    if (!clerkSession?.isLoaded || visibleProfileState.kind === 'loading') {
       return (
         <ProductionAuthenticatedUnavailableNotice
-          title="Profile unavailable"
-          description="A complete authenticated Main API profile is required. No profile values were loaded."
-          testID="clerk-profile-unavailable"
+          title="Loading your profile"
+          description="Bluebird is confirming your signed-in account before loading profile details."
+          testID="clerk-profile-loading"
         />
       );
     }
-    const firstName = currentUser.firstName?.trim() || null;
-    const lastName = currentUser.lastName?.trim() || null;
-    const email = currentUser.email?.trim() || null;
+    if (visibleProfileState.kind === 'not_authenticated') {
+      return (
+        <ProductionAuthenticatedUnavailableNotice
+          title="Profile unavailable"
+          description="The Main API did not confirm this signed-in session. No profile details were loaded."
+          testID="clerk-profile-unavailable"
+          actionLabel="Try again"
+          onAction={() => setProfileLoadAttempt((attempt) => attempt + 1)}
+        />
+      );
+    }
+    const profile = visibleProfileState.kind === 'loaded' ? visibleProfileState.profile : null;
+    const firstName = profile?.firstName?.trim() || null;
+    const lastName = profile?.lastName?.trim() || null;
+    const email = profile?.email?.trim() || null;
     const fullName = [firstName, lastName]
       .filter((value): value is string => value !== null)
       .join(' ');
+    const favoriteAirports = profile
+      ? (profile.favoriteAirportLabels.length > 0
+        ? profile.favoriteAirportLabels
+        : profile.favoriteAirportCodes).filter(Boolean).join(', ')
+      : '';
+    const favoriteCities = profile?.favoriteCityLabels.filter(Boolean).join(', ') ?? '';
+    const homeAirport = profile
+      ? [profile.homeAirportLabel, profile.homeAirportCode].filter(Boolean).join(' · ')
+      : '';
     return (
       <View style={[styles.container, { backgroundColor: colors.offWhite }]} testID="clerk-profile">
         <ScrollView
@@ -148,15 +265,54 @@ export default function ProfileScreen() {
               </Text>
             </View>
           </View>
+          <Text style={[styles.profileReadNote, { color: colors.mutedForegroundLight }]}>
+            Saved details come from Bluebird. Loading this profile may sync phone information already verified by your signed-in account.
+          </Text>
           <SettingsGroup
             title="Account"
             rows={[
               { label: 'First name', hint: firstName || 'Unavailable' },
               { label: 'Last name', hint: lastName || 'Unavailable' },
               { label: 'Email', hint: email || 'Unavailable' },
-              { label: 'Additional profile details', hint: 'Unavailable in this preview' },
+              { label: 'Date of birth', hint: profile?.dob || 'Unavailable' },
+              {
+                label: 'Gender',
+                hint: profile?.gender ? profile.gender[0].toUpperCase() + profile.gender.slice(1) : 'Unavailable',
+              },
+              {
+                label: 'Weight',
+                hint: profile?.weightLbs != null ? `${profile.weightLbs} lb` : 'Unavailable',
+              },
+              { label: 'Phone', hint: profile?.phoneE164 || 'Unavailable' },
+              {
+                label: 'Phone verification',
+                hint: profile?.phoneVerifiedAt ? `Verified ${profile.phoneVerifiedAt.slice(0, 10)}` : 'Unavailable',
+              },
             ]}
           />
+          <SettingsGroup
+            title="Travel preferences"
+            rows={[
+              { label: 'Home airport', hint: homeAirport || 'Unavailable' },
+              { label: 'Favorite airports', hint: favoriteAirports || 'Unavailable' },
+              { label: 'Favorite cities', hint: favoriteCities || 'Unavailable' },
+              { label: 'SMS consent', hint: profile ? (profile.smsConsent ? 'Yes' : 'No') : 'Unavailable' },
+            ]}
+          />
+          {visibleProfileState.kind === 'error' && (
+            <View style={[styles.profileError, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="clerk-profile-error">
+              <Text style={[styles.profileErrorText, { color: colors.mutedForegroundLight }]}>
+                {visibleProfileState.message}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setProfileLoadAttempt((attempt) => attempt + 1)}
+                accessibilityRole="button"
+                testID="clerk-profile-retry"
+              >
+                <Text style={[styles.profileRetryText, { color: colors.primary }]}>Try again</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           <SettingsGroup
             title="Settings"
             rows={[
@@ -477,4 +633,8 @@ const styles = StyleSheet.create({
   activityContent: { flex: 1 },
   activityLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   activityDate:  { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 1 },
+  profileError: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 10 },
+  profileErrorText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18 },
+  profileRetryText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  profileReadNote: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17 },
 });

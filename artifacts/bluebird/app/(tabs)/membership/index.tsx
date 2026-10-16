@@ -23,6 +23,15 @@ import {
 } from '@/lib/productionMembershipPlans';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
+import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
+import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
+import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
+import {
+  getClerkBluebirdProfileEffectDependencies,
+  isClerkBluebirdProfileResultCurrent,
+  loadClerkBluebirdMembership,
+} from '@/lib/clerkBluebirdProfile';
+import type { ClerkBluebirdMembershipLoadResult } from '@/lib/clerkBluebirdProfile';
 
 // ── Tier config ───────────────────────────────────────────────────────────────
 const TIER_META: Record<string, { label: string }> = {
@@ -35,11 +44,29 @@ function fmtUsd(n: number) {
   return `$${Math.round(n).toLocaleString('en-US')}`;
 }
 
+type ClerkMembershipLoadState =
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'not_authenticated' }
+  | { kind: 'loaded'; clerkUserId: string; result: ClerkBluebirdMembershipLoadResult };
+
+function formatMembershipDate(value: string | null | undefined): string {
+  if (!value) return 'Unavailable';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.valueOf()) ? value : parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 export default function MembershipScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { user, authMode, clerkMemberResolution } = useAuth();
+  const { user, authMode } = useAuth();
+  const clerkSession = useClerkAuthSnapshot();
+  const mainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
   const localDemoFlow = isLocalFlightReadMode();
   const memberQueryEnabled = isLegacyMemberQueryEnabled({
     authMode,
@@ -53,24 +80,134 @@ export default function MembershipScreen() {
   const { data: membership, isLoading, isError, refetch } = useGetMembership({
     query: { enabled: memberQueryEnabled },
   });
+  const [clerkMembershipState, setClerkMembershipState] = React.useState<ClerkMembershipLoadState>({ kind: 'loading' });
+  const [clerkMembershipAttempt, setClerkMembershipAttempt] = React.useState(0);
+  const currentClerkIdentity = React.useRef<string | null>(clerkSession?.userId ?? null);
+  currentClerkIdentity.current = clerkSession?.userId ?? null;
+  const currentClerkSession = React.useRef(clerkSession);
+  currentClerkSession.current = clerkSession;
+  const membershipRequestDependencies = getClerkBluebirdProfileEffectDependencies({
+    configuration: mainApiConfiguration,
+    session: clerkSession,
+    loadAttempt: clerkMembershipAttempt,
+  });
+  const createClerkApi = React.useCallback(() => {
+    if (!mainApiConfiguration || !clerkSession || clerkSession.isSignedIn !== true || !clerkSession.userId) {
+      throw new Error('Your signed-in Bluebird account is unavailable.');
+    }
+    const requestedClerkUserId = clerkSession.userId;
+    return createMainBluebirdApiIntegration({
+      configuration: mainApiConfiguration,
+      tokenProvider: {
+        environment: mainApiConfiguration.environment,
+        getVerifiedAccessToken: async () => {
+          const activeSession = currentClerkSession.current;
+          if (
+            !activeSession ||
+            activeSession.isLoaded !== true ||
+            activeSession.isSignedIn !== true ||
+            activeSession.userId !== requestedClerkUserId
+          ) return null;
+          return activeSession.getToken();
+        },
+      },
+    });
+  }, [...membershipRequestDependencies]);
+  const loadClerkMembership = React.useCallback(async (signal: AbortSignal) => {
+    if (
+      authMode !== 'clerk' ||
+      !clerkSession?.isLoaded ||
+      clerkSession.isSignedIn !== true ||
+      !clerkSession.userId
+    ) return;
+    const requestedClerkUserId = clerkSession.userId;
+    setClerkMembershipState({ kind: 'loading' });
+    try {
+      const result = await loadClerkBluebirdMembership(createClerkApi().authenticated, signal);
+      if (!isClerkBluebirdProfileResultCurrent({
+        requestedClerkUserId,
+        currentClerkUserId: currentClerkIdentity.current,
+        aborted: signal.aborted,
+      })) return;
+      if (result.kind === 'api_not_authenticated') {
+        setClerkMembershipState({ kind: 'not_authenticated' });
+        return;
+      }
+      setClerkMembershipState({ kind: 'loaded', clerkUserId: requestedClerkUserId, result });
+    } catch (error) {
+      if (signal.aborted || currentClerkIdentity.current !== requestedClerkUserId) return;
+      const typed = error as { code?: string; status?: number };
+      const message = typed?.code === 'network' || typed?.code === 'timeout'
+        ? 'Bluebird could not be reached. Check your connection and try again.'
+        : typed?.code === 'session_expired' || typed?.status === 401
+          ? 'Your sign-in has expired. Sign in again, then reopen Membership.'
+          : 'Bluebird could not load your membership details.';
+      setClerkMembershipState({ kind: 'error', message });
+    }
+  }, [authMode, createClerkApi, ...membershipRequestDependencies]);
+  React.useEffect(() => {
+    if (authMode !== 'clerk') return;
+    if (!clerkSession?.isLoaded || clerkSession.isSignedIn !== true || !clerkSession.userId) {
+      setClerkMembershipState({ kind: 'not_authenticated' });
+      return;
+    }
+    const controller = new AbortController();
+    void loadClerkMembership(controller.signal);
+    return () => controller.abort();
+  }, [authMode, loadClerkMembership, ...membershipRequestDependencies]);
   const plansQuery = useProductionMembershipPlans({
     enabled: authMode !== 'clerk' && localDemoFlow,
   });
   const mem = membership;
 
   if (authMode === 'clerk') {
-    const currentUser = clerkMemberResolution.status === 'profile_complete'
-      ? clerkMemberResolution.currentUser
+    const visibleState = clerkMembershipState.kind === 'loaded' &&
+      clerkMembershipState.clerkUserId !== clerkSession?.userId
+      ? { kind: 'loading' as const }
+      : clerkMembershipState;
+    const result = visibleState.kind === 'loaded' ? visibleState.result : null;
+    const currentUser = result?.kind === 'authenticated' ? result.currentUser : null;
+    const membershipIsVerified = result?.kind === 'authenticated' &&
+      result.membershipState === 'available' &&
+      result.membership !== null;
+    const confirmedMembership = result?.kind === 'authenticated' &&
+      result.membershipState === 'available'
+      ? result.membership
       : null;
-    const tierLabel = currentUser?.isMember
-      ? currentUser.memberTier === 'base'
-        ? 'Base'
-        : currentUser.memberTier === 'plus'
-          ? 'Plus'
-          : 'Tier unavailable'
+    const tierLabel = confirmedMembership?.isMember && confirmedMembership.tier
+      ? TIER_META[confirmedMembership.tier]?.label ?? 'Unavailable'
       : currentUser?.isMember === false && currentUser.memberTier === null
         ? 'Not a member yet'
-        : 'Membership status unavailable';
+        : currentUser?.isMember === true && currentUser.memberTier
+          ? TIER_META[currentUser.memberTier]?.label ?? 'Unavailable'
+          : 'Unavailable';
+    const confirmedNonMember = membershipIsVerified &&
+      confirmedMembership?.isMember === false &&
+      confirmedMembership.tier === null;
+    const membershipStatus = confirmedMembership
+      ? confirmedMembership.status ?? (confirmedMembership.isMember ? 'Unavailable' : 'Not a member')
+      : currentUser?.isMember === false && currentUser.memberTier === null
+        ? 'Not a member'
+        : currentUser?.isMember === true
+          ? 'Member'
+          : 'Unavailable';
+    const detailRows = confirmedMembership ? [
+      { label: 'Tier', value: confirmedMembership.tier ? TIER_META[confirmedMembership.tier]?.label ?? 'Unavailable' : confirmedNonMember ? 'Not a member' : 'Unavailable' },
+      { label: 'Membership status', value: confirmedMembership.status ?? 'Unavailable' },
+      { label: 'Started', value: formatMembershipDate(confirmedMembership.startedAt) },
+      { label: 'Current period ends', value: formatMembershipDate(confirmedMembership.currentPeriodEnd) },
+      { label: 'Payment status', value: confirmedMembership.paymentStatus ?? 'Unavailable' },
+      {
+        label: 'Cancellation',
+        value: confirmedMembership.cancelAtPeriodEnd ? 'Scheduled at period end' : 'Not scheduled',
+      },
+      {
+        label: 'Scheduled tier change',
+        value: confirmedMembership.scheduledTierChange
+          ? `${TIER_META[confirmedMembership.scheduledTierChange.to]?.label ?? confirmedMembership.scheduledTierChange.to} · ${formatMembershipDate(confirmedMembership.scheduledTierChange.at)}`
+          : 'Unavailable',
+      },
+    ] : [];
     return (
       <View style={[styles.root, { backgroundColor: colors.offWhite }]} testID="clerk-membership">
         <ScrollView
@@ -86,13 +223,71 @@ export default function MembershipScreen() {
               style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 8 }]}
               testID="clerk-membership-status"
             >
-              {currentUser?.isAuthenticated ? tierLabel : 'Unavailable in this preview'}
+              {visibleState.kind === 'loading'
+                ? 'Loading membership details'
+                : visibleState.kind === 'not_authenticated' || !currentUser
+                  ? 'Unavailable'
+                  : membershipIsVerified || currentUser.isMember === true ||
+                      (currentUser.isMember === false && currentUser.memberTier === null)
+                    ? `${tierLabel} · ${membershipStatus}`
+                    : 'Membership status unavailable'}
             </Text>
-            <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 12 }]}>
-              {currentUser?.isAuthenticated
-                ? 'Only the status and tier in your verified account projection are shown. Pass balances, family details, and usage are unavailable here.'
-                : 'No authenticated membership data is available.'}
-            </Text>
+            {visibleState.kind === 'error' ? (
+              <>
+                <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 12 }]} testID="clerk-membership-error">
+                  {visibleState.message}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setClerkMembershipAttempt((attempt) => attempt + 1)}
+                  accessibilityRole="button"
+                  testID="clerk-membership-retry"
+                  style={styles.plansLink}
+                >
+                  <Text style={[styles.plansLinkText, { color: colors.primary }]}>Try again</Text>
+                </TouchableOpacity>
+              </>
+            ) : null}
+            {visibleState.kind === 'not_authenticated' ? (
+              <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 12 }]}>
+                The Main API did not confirm this signed-in session. No membership details were loaded.
+              </Text>
+            ) : null}
+            {result?.kind === 'authenticated' && result.membershipState === 'conflict' ? (
+              <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 12 }]} testID="clerk-membership-conflict">
+                Membership details did not agree with the authenticated account projection, so they are hidden.
+              </Text>
+            ) : null}
+            {result?.kind === 'authenticated' && result.membershipState === 'unavailable' ? (
+              <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 12 }]} testID="clerk-membership-details-unavailable">
+                The account status above is confirmed by the Main API. Other membership details are unavailable.
+              </Text>
+            ) : null}
+            {detailRows.length > 0 ? (
+              <View
+                style={[styles.clerkMembershipDetails, { borderTopColor: colors.separator }]}
+                testID="clerk-membership-details"
+              >
+                {detailRows.map((row) => (
+                  <View
+                    key={row.label}
+                    style={[styles.clerkMembershipDetailRow, { borderBottomColor: colors.separator }]}
+                  >
+                    <Text style={[styles.clerkMembershipDetailLabel, { color: colors.mutedForegroundLight }]}>{row.label}</Text>
+                    <Text style={[styles.clerkMembershipDetailValue, { color: colors.textOnSurface }]}>{row.value}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {confirmedMembership?.recentEvents.length ? (
+              <View style={styles.clerkMembershipEvents} testID="clerk-membership-events">
+                <Text style={[styles.usageTitle, { color: colors.textOnSurface }]}>Recent membership activity</Text>
+                {confirmedMembership.recentEvents.slice(0, 3).map((event) => (
+                  <Text key={event.id} style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
+                    {event.eventType.split('_').join(' ')} · {formatMembershipDate(event.occurredAt)}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
           </View>
           <TouchableOpacity
             activeOpacity={0.7}
@@ -530,6 +725,14 @@ const styles = StyleSheet.create({
   catalogStatusCard: { borderRadius: 18, borderWidth: 1, padding: 16, marginTop: 18 },
   catalogStatusText: { fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 19 },
   memberPlanLoading: { alignItems: 'center', paddingVertical: 24 },
+  clerkMembershipDetails: { marginTop: 14, borderTopWidth: 1 },
+  clerkMembershipDetailRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+    gap: 14, paddingVertical: 10, borderBottomWidth: 1,
+  },
+  clerkMembershipDetailLabel: { fontFamily: 'Inter_400Regular', fontSize: 12.5, flex: 1 },
+  clerkMembershipDetailValue: { fontFamily: 'Inter_500Medium', fontSize: 13, flex: 1, textAlign: 'right' },
+  clerkMembershipEvents: { marginTop: 16, gap: 7 },
 
   linkCard: {
     borderRadius: 18, overflow: 'hidden', marginTop: 4,
