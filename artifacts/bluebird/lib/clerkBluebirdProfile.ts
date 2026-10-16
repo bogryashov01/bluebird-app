@@ -135,24 +135,42 @@ export async function updateClerkBluebirdProfileExplicitly(
   result: BluebirdProfileLoadResult,
   data: UpdateProductionUserProfileRequest,
   signal?: AbortSignal,
+  onResponseStatus?: (status: number) => void,
 ): Promise<ProductionUserProfile> {
   if (!canEditClerkBluebirdProfile(result)) {
     throw new Error('The API has not verified that this profile can be edited.');
   }
-  return api.updateProfile(data, signal ? { signal } : undefined);
+  return api.updateProfile(data, {
+    ...(signal ? { signal } : {}),
+    ...(onResponseStatus ? { onResponseStatus } : {}),
+  });
+}
+
+export interface ClerkRegistrationSaveDiagnostic {
+  writeEndpoint: '/api/me/profile';
+  writeHttpStatus: number | null;
+  writeResponse: 'valid' | 'malformed' | 'failed';
+  writeResponseIssue: string | null;
+  verificationEndpoint: '/api/me';
+  verificationHttpStatus: number | null;
+  verificationReadFailed: boolean;
+  isAuthenticated: boolean | null;
+  isProfileComplete: boolean | null;
 }
 
 export class ClerkRegistrationCompletionError extends Error {
-  constructor() {
+  constructor(readonly diagnostic: ClerkRegistrationSaveDiagnostic) {
     super('The API did not confirm an authenticated, complete profile after saving.');
     this.name = 'ClerkRegistrationCompletionError';
   }
 }
 
 export interface ClerkRegistrationSaveResult {
-  profile: ProductionUserProfile;
+  /** Null only when the profile response was malformed but /api/me confirmed completion. */
+  profile: ProductionUserProfile | null;
   currentUser: ProductionCurrentUser;
   weightSaved: boolean;
+  diagnostic: ClerkRegistrationSaveDiagnostic;
 }
 
 /** Save only from an API-confirmed incomplete profile, then verify the refreshed projection. */
@@ -165,19 +183,61 @@ export async function saveClerkBluebirdRegistration(
   if (result.kind !== 'authenticated' || result.completion !== 'completion_required') {
     throw new Error('The API has not verified that this profile requires registration.');
   }
-  const options = signal ? { signal } : undefined;
-  const profile = await updateClerkBluebirdProfileExplicitly(api, result, data, signal);
-  const currentUser = await api.getMe(options);
-  if (
-    currentUser.isAuthenticated !== true ||
-    currentUser.isProfileComplete !== true ||
-    profile.isComplete !== true
-  ) {
-    throw new ClerkRegistrationCompletionError();
+  const diagnostic: ClerkRegistrationSaveDiagnostic = {
+    writeEndpoint: '/api/me/profile',
+    writeHttpStatus: null,
+    writeResponse: 'failed',
+    writeResponseIssue: null,
+    verificationEndpoint: '/api/me',
+    verificationHttpStatus: null,
+    verificationReadFailed: false,
+    isAuthenticated: null,
+    isProfileComplete: null,
+  };
+  let profile: ProductionUserProfile | null = null;
+  try {
+    profile = await updateClerkBluebirdProfileExplicitly(
+      api,
+      result,
+      data,
+      signal,
+      (status) => { diagnostic.writeHttpStatus = status; },
+    );
+    diagnostic.writeResponse = 'valid';
+  } catch (error) {
+    const typed = error as { code?: string; field?: string };
+    diagnostic.writeResponse = typed?.code === 'invalid_schema' ? 'malformed' : 'failed';
+    diagnostic.writeResponseIssue = typed?.code === 'invalid_schema'
+      ? typed.field ?? 'response schema mismatch'
+      : null;
   }
+
+  // Never retry a profile write. A single authenticated /me read distinguishes
+  // an unconfirmed response from a write that completed despite a bad response.
+  let currentUser: ProductionCurrentUser | null = null;
+  try {
+    currentUser = await api.getMe({
+      ...(signal ? { signal } : {}),
+      onResponseStatus: (status) => { diagnostic.verificationHttpStatus = status; },
+    });
+    diagnostic.isAuthenticated = currentUser.isAuthenticated;
+    diagnostic.isProfileComplete = currentUser.isProfileComplete;
+  } catch (error) {
+    diagnostic.verificationReadFailed = true;
+  }
+
+  const confirmed = currentUser?.isAuthenticated === true &&
+    currentUser.isProfileComplete === true &&
+    (profile === null || profile.isComplete === true);
+  if (!confirmed || !currentUser) {
+    throw new ClerkRegistrationCompletionError(diagnostic);
+  }
+
   return {
     profile,
     currentUser,
-    weightSaved: data.weightLbs === undefined || profile.weightLbs === data.weightLbs,
+    weightSaved: data.weightLbs === undefined ||
+      (profile !== null && profile.weightLbs === data.weightLbs),
+    diagnostic,
   };
 }

@@ -358,6 +358,19 @@ assert.equal(fetchedAirports.length, 1);
 assert.equal(new URL(requests[0].url).pathname, "/api/airports");
 assert.equal(requests[0].init.method, "GET");
 assert.equal(requests[0].init.headers.Authorization, undefined);
-assert.deepEqual(await fetchProductionAirports([], { fetcher: mockFetcher }), []);
+requests.length = 0;
+const fullAirportCatalog = await fetchProductionAirports([], {
+  fetcher: async (url, init) => {
+    requests.push({ url: String(url), init });
+    assert.equal(new URL(String(url)).pathname, "/api/airports");
+    assert.equal(new URL(String(url)).search, "");
+    return new Response(JSON.stringify([airport]), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  },
+});
+assert.deepEqual(fullAirportCatalog, [airport]);
+assert.equal(requests.length, 1, "an empty code list reads the airport catalog");
 
 console.log("Production flight and airport read tests passed.");

@@ -22,6 +22,15 @@ not proof of a stable Bluebird member link or active membership.
   user submits the form. Phone verification sends a text only after an explicit
   request, and the SMS controls are unavailable outside Development. There is
   no automatic registration, profile write, SMS, or membership enrollment.
+- The registration save records the `PUT /api/me/profile` HTTP status and whether
+  its response matches the documented `UserProfile`. That response requires
+  `upgradeCreditBalances`; if it is missing, the client keeps strict validation
+  and reports the field mismatch without inventing a default. It performs one
+  authenticated `GET /api/me` read to verify completion, never retries the PUT,
+  and only routes after `/api/me` confirms an authenticated complete profile.
+- Additional airports are shown as registration-only selections and are not
+  sent to the API. Optional weight is described as saved only when the returned
+  profile confirms the submitted value.
 - Profile data is held only for the current Clerk identity; loading and
   save-response handling reject stale identity results. Existing Clerk identity
   changes and sign-out still clear the member query cache.
@@ -1101,7 +1110,7 @@ IDs. Passenger and pet weights are whole pounds.
 | Feature | Supported method and response |
 | --- | --- |
 | Signed-in state | `GET /me` returns the documented `CurrentUser`; a valid HTTP 200 response with `isAuthenticated: false` is an anonymous/signed-out result. No `userId` is added. |
-| Profile | `GET /me/profile` and complete `PUT /me/profile`. The PUT requires first/last name, date-only DOB, gender, home airport, and at least one favorite city; optional phone, notification, consent, email, and `weightLbs` fields use source limits. Phone country is required when a phone is supplied. |
+| Profile | `GET /me/profile` and complete `PUT /me/profile`. The full `UserProfile` response requires `upgradeCreditBalances`. The PUT requires first/last name, date-only DOB, gender, home airport, and at least one favorite city; optional phone, notification, consent, email, and `weightLbs` fields use source limits. Phone country is required when a phone is supplied. |
 | Membership | `GET /membership` models the effective membership state, payment status, documented saved-payment projection, tier changes, and recent events. It is not the public plan catalog or a checkout API. |
 | Trips | `GET /trips` returns `{ current, past }` of `{ leg, checklist }`. Leg IDs are numeric Empty Leg IDs; no trip UUID or booking-status field is modeled. |
 | Queue | `GET /empty-legs/{id}/queue` returns the public queue array; `POST` joins and returns `QueueEntry`; `DELETE` leaves and returns `QueueStatus`. Join body only permits the documented international-pass authorization/credit options. |

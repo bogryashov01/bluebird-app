@@ -703,6 +703,37 @@ test("invalid JSON and malformed source contracts produce typed errors", async (
   await assert.rejects(malformedWinner.confirmEmptyLegWinner(81001), ProductionAuthSchemaError);
 });
 
+test("profile GET and PUT keep upgradeCreditBalances strict and capture status before rejecting malformed bodies", async () => {
+  const { upgradeCreditBalances, ...profileWithoutCredits } = profile;
+  for (const method of ["GET", "PUT"]) {
+    let capturedStatus = null;
+    const client = makeClient(async (_url, init) => {
+      assert.equal(init.method, method);
+      return jsonResponse(profileWithoutCredits, 200);
+    });
+    const requestOptions = { onResponseStatus: (status) => { capturedStatus = status; } };
+    const request = method === "GET"
+      ? client.getProfile(requestOptions)
+      : client.updateProfile(profileUpdate, requestOptions);
+    await assert.rejects(
+      request,
+      (error) => error instanceof ProductionAuthSchemaError &&
+        error.field === "profile.upgradeCreditBalances",
+    );
+    assert.equal(capturedStatus, 200);
+  }
+
+  let failedStatus = null;
+  const failedWrite = makeClient(async () => jsonResponse({ error: "unavailable" }, 503));
+  await assert.rejects(
+    failedWrite.updateProfile(profileUpdate, {
+      onResponseStatus: (status) => { failedStatus = status; },
+    }),
+    (error) => error instanceof ProductionAuthHttpError && error.status === 503,
+  );
+  assert.equal(failedStatus, 503);
+});
+
 test("side-effecting GETs are never invoked during setup or used as probes", async () => {
   const requests = [];
   const client = makeClient(async (url, init) => {

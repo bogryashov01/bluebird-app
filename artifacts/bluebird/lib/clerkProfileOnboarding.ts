@@ -23,7 +23,6 @@ export interface ClerkProfileRegistrationDraft {
   homeAirportCode: string;
   additionalAirportCodes: string[];
   favoriteCityKeys: string[];
-  preferredCityConfirmed: boolean;
 }
 
 export function getVerifiedClerkPhoneNumber(input: {
@@ -86,7 +85,7 @@ export function isValidClerkDateOfBirth(value: string, now = new Date()): boolea
 }
 
 export const CLERK_PROFILE_SAVE_LIMITATION =
-  'The Main API requires date of birth, one home airport, and one Preferred City. Weight is optional; we’ll tell you if the API does not return it as saved.';
+  'Your date of birth, home airport, and at least one city are required. Weight is optional.';
 
 const registrationDraftsByUser = new Map<string, ClerkProfileRegistrationDraft>();
 const registrationProfileResultsByUser = new Map<
@@ -105,7 +104,6 @@ function copyRegistrationDraft(draft: ClerkProfileRegistrationDraft): ClerkProfi
     homeAirportCode: draft.homeAirportCode,
     additionalAirportCodes: [...draft.additionalAirportCodes],
     favoriteCityKeys: [...draft.favoriteCityKeys],
-    preferredCityConfirmed: draft.preferredCityConfirmed,
   };
 }
 
@@ -131,7 +129,6 @@ export function getClerkProfileRegistrationDraft(
     homeAirportCode: normalizeAirportCode(profile?.homeAirportCode),
     additionalAirportCodes: [],
     favoriteCityKeys: [...(profile?.favoriteCityKeys ?? [])],
-    preferredCityConfirmed: false,
   };
   registrationDraftsByUser.set(clerkUserId, draft);
   return copyRegistrationDraft(draft);
@@ -151,7 +148,6 @@ export function setClerkProfileRegistrationDraft(
         .filter((code) => code && code !== normalizeAirportCode(draft.homeAirportCode)),
     )],
     favoriteCityKeys: [...new Set(draft.favoriteCityKeys.filter((key) => key.trim()))],
-    preferredCityConfirmed: draft.preferredCityConfirmed,
   });
 }
 
@@ -224,45 +220,6 @@ export function toggleClerkAdditionalAirportDraft(
   return additionalAirportCodes;
 }
 
-export function setClerkPreferredCityDraft(
-  clerkUserId: string,
-  cityKey: string,
-  catalogKeys: readonly string[],
-): boolean {
-  if (!catalogKeys.includes(cityKey)) return false;
-  const draft = getClerkProfileRegistrationDraft(clerkUserId);
-  setClerkProfileRegistrationDraft(clerkUserId, {
-    ...draft,
-    favoriteCityKeys: [cityKey],
-    preferredCityConfirmed: false,
-  });
-  return true;
-}
-
-export function setClerkPreferredCityConfirmed(
-  clerkUserId: string,
-  confirmed: boolean,
-): void {
-  const draft = getClerkProfileRegistrationDraft(clerkUserId);
-  setClerkProfileRegistrationDraft(clerkUserId, {
-    ...draft,
-    preferredCityConfirmed: confirmed,
-  });
-}
-
-/** Return a suggestion only when exactly one catalog group contains the airport. */
-export function suggestClerkPreferredCity(
-  homeAirportCode: string,
-  cities: readonly { key: string; airportCodes: readonly string[] }[],
-): string | null {
-  const airportCode = normalizeAirportCode(homeAirportCode);
-  if (!airportCode) return null;
-  const matches = cities.filter((city) =>
-    city.airportCodes.some((code) => normalizeAirportCode(code) === airportCode),
-  );
-  return matches.length === 1 ? matches[0].key : null;
-}
-
 export function toggleClerkFavoriteCityDraft(
   clerkUserId: string,
   cityKey: string,
@@ -281,14 +238,12 @@ export function validateClerkAirportCitySelection(input: {
   homeAirportCode: string;
   favoriteCityKeys: readonly string[];
   catalogKeys: readonly string[];
-  preferredCityConfirmed?: boolean;
 }): string | null {
   if (!normalizeAirportCode(input.homeAirportCode)) return 'Choose one home airport to continue.';
-  if (input.favoriteCityKeys.length !== 1) return 'Choose one Preferred City to continue.';
-  if (input.preferredCityConfirmed === false) return 'Confirm your Preferred City before saving.';
+  if (input.favoriteCityKeys.length < 1) return 'Choose at least one city to continue.';
   const canonicalKeys = new Set(input.catalogKeys);
   if (input.favoriteCityKeys.some((key) => !canonicalKeys.has(key))) {
-    return 'Your Preferred City is no longer available. Choose it again from the city catalog.';
+    return 'A selected city is no longer available. Choose cities again from the catalog.';
   }
   return null;
 }
@@ -298,15 +253,11 @@ export function buildClerkProfileUpdateRequest(input: {
   homeAirportCode: string;
   favoriteCityKeys: readonly string[];
   catalogKeys: readonly string[];
-  preferredCityConfirmed: boolean;
   profile: ProductionUserProfile;
 }): UpdateProductionUserProfileRequest {
   const profileError = validateClerkProfileForm(input.values);
   if (profileError) throw new TypeError(profileError);
-  const selectionError = validateClerkAirportCitySelection({
-    ...input,
-    preferredCityConfirmed: input.preferredCityConfirmed,
-  });
+  const selectionError = validateClerkAirportCitySelection(input);
   if (selectionError) throw new TypeError(selectionError);
 
   const data: UpdateProductionUserProfileRequest = {
@@ -327,6 +278,34 @@ export function buildClerkProfileUpdateRequest(input: {
     data.weightLbs = null;
   }
   return data;
+}
+
+export function filterClerkRegistrationAirports<T extends {
+  code: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+}>(airports: readonly T[], query: string): T[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) return [...airports];
+  return airports.filter((airport) =>
+    [airport.code, airport.name, airport.city, airport.state, airport.country]
+      .filter(Boolean)
+      .some((value) => value!.toLocaleLowerCase().includes(normalized)),
+  );
+}
+
+export function filterClerkRegistrationCities<T extends {
+  key: string;
+  displayName: string;
+  country: string;
+}>(cities: readonly T[], query: string): T[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) return [...cities];
+  return cities.filter((city) =>
+    `${city.displayName} ${city.country} ${city.key}`.toLocaleLowerCase().includes(normalized),
+  );
 }
 
 /** Compatibility helpers for the legacy Home Airports settings flow. */

@@ -24,12 +24,18 @@ import {
   setClerkHomeAirportDraft,
   setClerkProfileRegistrationDraft,
   toggleClerkAdditionalAirportDraft,
+  toggleClerkFavoriteCityDraft,
+  validateClerkAirportCitySelection,
+  filterClerkRegistrationAirports,
+  filterClerkRegistrationCities,
 } from '@/lib/clerkProfileOnboarding';
 import {
-  fetchProductionAirportSearch,
+  fetchProductionAirports,
+  fetchProductionAirportCities,
   productionReadRetryDelay,
   shouldRetryProductionRead,
   type AirportRecord,
+  type ProductionAirportCityGroupResponse,
 } from '@/lib/productionFlights';
 
 export default function AirportPickerScreen() {
@@ -119,9 +125,46 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const [draft, setDraft] = useState(() => getClerkProfileRegistrationDraft(clerkUserId));
+  const [activeTab, setActiveTab] = useState<'airports' | 'cities'>('airports');
+  const [airportSearch, setAirportSearch] = useState('');
+  const [citySearch, setCitySearch] = useState('');
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const configuration = getMainBluebirdApiConfigurationOrNull();
+  const airportsQuery = useQuery({
+    queryKey: ['clerk-registration-airport-catalog', configuration?.environment],
+    queryFn: ({ signal }) => {
+      if (!configuration) throw new Error('Main Bluebird API configuration is unavailable.');
+      return fetchProductionAirports([], {
+        signal,
+        environment: configuration.environment,
+        baseUrl: configuration.apiBaseUrl,
+      });
+    },
+    enabled: !!configuration,
+    retry: shouldRetryProductionRead,
+    retryDelay: productionReadRetryDelay,
+    staleTime: 24 * 60 * 60 * 1000,
+  });
+  const citiesQuery = useQuery({
+    queryKey: ['clerk-registration-city-catalog', configuration?.environment],
+    queryFn: ({ signal }) => {
+      if (!configuration) throw new Error('Main Bluebird API configuration is unavailable.');
+      return fetchProductionAirportCities({
+        signal,
+        environment: configuration.environment,
+        baseUrl: configuration.apiBaseUrl,
+      });
+    },
+    enabled: !!configuration,
+    retry: shouldRetryProductionRead,
+    retryDelay: productionReadRetryDelay,
+    staleTime: 24 * 60 * 60 * 1000,
+  });
+  const airports = filterClerkRegistrationAirports(airportsQuery.data ?? [], airportSearch);
+  const cities = filterClerkRegistrationCities(citiesQuery.data ?? [], citySearch);
+  const catalogKeys = (citiesQuery.data ?? []).map((city) => city.key);
 
   const chooseHomeAirport = (airport: AirportRecord) => {
     setClerkHomeAirportDraft(clerkUserId, airport.code);
@@ -136,9 +179,20 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
     setSelectionError(null);
   };
 
+  const toggleCity = (city: ProductionAirportCityGroupResponse) => {
+    toggleClerkFavoriteCityDraft(clerkUserId, city.key, catalogKeys);
+    setDraft(getClerkProfileRegistrationDraft(clerkUserId));
+    setSelectionError(null);
+  };
+
   const continueToReview = () => {
-    if (!draft.homeAirportCode) {
-      setSelectionError('Choose one home airport to continue.');
+    const error = validateClerkAirportCitySelection({
+      homeAirportCode: draft.homeAirportCode,
+      favoriteCityKeys: draft.favoriteCityKeys,
+      catalogKeys,
+    });
+    if (error) {
+      setSelectionError(error);
       return;
     }
     setClerkProfileRegistrationDraft(clerkUserId, draft);
@@ -158,43 +212,180 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
         </TouchableOpacity>
         <View style={styles.headerText}>
           <Text style={[styles.registrationEyebrow, { color: colors.primary }]}>STEP 2 OF 3</Text>
-          <Text style={[styles.title, { color: colors.textOnSurface }]}>Select Airports</Text>
+          <Text style={[styles.title, { color: colors.textOnSurface }]}>Locations</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
-            Choose a home airport and any additional airports you use.
+            Choose your home airport, additional airports, and cities.
           </Text>
         </View>
       </View>
 
+      <View style={[styles.locationTabs, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+        {([
+          ['airports', 'Airports'],
+          ['cities', 'Cities'],
+        ] as const).map(([tab, label]) => {
+          const selected = activeTab === tab;
+          return (
+            <Pressable
+              key={tab}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              onPress={() => setActiveTab(tab)}
+              style={[
+                styles.locationTab,
+                { backgroundColor: selected ? colors.card : 'transparent' },
+              ]}
+              testID={`registration-${tab}-tab`}
+            >
+              <Text style={[
+                styles.locationTabText,
+                { color: selected ? colors.textOnSurface : colors.mutedForegroundLight },
+              ]}>{label}</Text>
+              {tab === 'airports' && draft.homeAirportCode ? (
+                <Text style={[styles.tabCount, { color: colors.primary }]}>
+                  {1 + draft.additionalAirportCodes.length}
+                </Text>
+              ) : null}
+              {tab === 'cities' && draft.favoriteCityKeys.length ? (
+                <Text style={[styles.tabCount, { color: colors.primary }]}>
+                  {draft.favoriteCityKeys.length}
+                </Text>
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </View>
+
       <KeyboardAwareScrollViewCompat
         style={styles.registrationScroll}
-        contentContainerStyle={[styles.registrationScrollContent, { paddingBottom: bottomPad + 24 }]}
+        contentContainerStyle={[styles.locationListContent, { paddingBottom: bottomPad + 24 }]}
         keyboardShouldPersistTaps="handled"
         bottomOffset={24}
         showsVerticalScrollIndicator={false}
       >
-        <AirportSearchSection
-          title="Home Airport"
-          description="Required · choose one airport"
-          accessibilityLabel="Search home airports"
-          placeholder="Search by airport name or code"
-          selectedCodes={draft.homeAirportCode ? [draft.homeAirportCode] : []}
-          mode="single"
-          onSelect={chooseHomeAirport}
-        />
-        <AirportSearchSection
-          title="Additional Airports"
-          description="Optional · these selections are for this registration only"
-          accessibilityLabel="Search additional airports"
-          placeholder="Search additional airports"
-          selectedCodes={draft.additionalAirportCodes}
-          mode="multiple"
-          onSelect={toggleAdditionalAirport}
-        />
-        {draft.additionalAirportCodes.length ? (
-          <Text style={[styles.note, { color: colors.mutedForegroundLight }]} testID="additional-airports-unsaved">
-            Additional airports are not saved to your profile by the current Bluebird API.
-          </Text>
-        ) : null}
+        <View style={[styles.searchWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.searchGlyph, { color: colors.mutedForeground }]}>⌕</Text>
+          <TextInput
+            style={[styles.searchInput, { color: colors.foreground }]}
+            placeholder={activeTab === 'airports' ? 'Search airports by name, city, or code' : 'Search cities or country'}
+            placeholderTextColor={colors.mutedForeground}
+            value={activeTab === 'airports' ? airportSearch : citySearch}
+            onChangeText={activeTab === 'airports' ? setAirportSearch : setCitySearch}
+            autoCorrect={false}
+            autoCapitalize="none"
+            accessibilityLabel={activeTab === 'airports' ? 'Search airports' : 'Search cities'}
+            testID={activeTab === 'airports' ? 'registration-airport-search' : 'registration-city-search'}
+          />
+        </View>
+
+        {activeTab === 'airports' ? (
+          <>
+            <Text style={[styles.selectionHint, { color: colors.mutedForegroundLight }]}>
+              Choose one home airport and any additional airports you use.
+            </Text>
+            {airportsQuery.isLoading ? <CatalogLoading label="Loading airports…" /> : null}
+            {airportsQuery.isError ? (
+              <CatalogError label="Couldn’t load airports. Check your connection and retry." onRetry={() => void airportsQuery.refetch()} />
+            ) : null}
+            {!airportsQuery.isLoading && !airportsQuery.isError && !airports.length ? (
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No airports matched “{airportSearch.trim()}”.</Text>
+            ) : null}
+            {!airportsQuery.isLoading && !airportsQuery.isError ? airports.map((airport) => {
+              const isHome = draft.homeAirportCode === airport.code;
+              const isAdditional = draft.additionalAirportCodes.includes(airport.code);
+              return (
+                <View key={airport.code} style={[styles.catalogRow, { backgroundColor: colors.card, borderColor: isHome || isAdditional ? colors.primary : colors.border }]} testID={`registration-airport-${airport.code}`}>
+                  <Pressable
+                    accessibilityRole="radio"
+                    accessibilityLabel={`Set ${airport.name} as home airport`}
+                    accessibilityState={{ selected: isHome }}
+                    onPress={() => chooseHomeAirport(airport)}
+                    style={styles.airportIdentity}
+                    testID={`registration-home-airport-${airport.code}`}
+                  >
+                    <View style={[styles.radioMark, { borderColor: isHome ? colors.primary : colors.border }]}>
+                      {isHome ? <View style={[styles.radioSelected, { backgroundColor: colors.primary }]} /> : null}
+                    </View>
+                    <View style={styles.catalogRowText}>
+                      <Text style={[styles.catalogTitle, { color: colors.textOnSurface }]}>{airport.name}</Text>
+                      <Text style={[styles.catalogMeta, { color: colors.mutedForegroundLight }]}>
+                        {[airport.code, airport.city, airport.state, airport.country].filter(Boolean).join(' · ')}
+                      </Text>
+                    </View>
+                    {isHome ? <Text style={[styles.selectedLabel, { color: colors.primary }]}>Home</Text> : null}
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="checkbox"
+                    accessibilityLabel={`Add ${airport.name} as an additional airport`}
+                    accessibilityState={{ checked: isAdditional }}
+                    disabled={isHome}
+                    onPress={() => toggleAdditionalAirport(airport)}
+                    style={styles.additionalToggle}
+                    testID={`registration-additional-airport-${airport.code}`}
+                  >
+                    <View style={[
+                      styles.checkboxMark,
+                      {
+                        backgroundColor: isAdditional ? colors.primary : colors.card,
+                        borderColor: isAdditional ? colors.primary : colors.border,
+                        opacity: isHome ? 0.4 : 1,
+                      },
+                    ]}>
+                      {isAdditional ? <Text style={{ color: colors.primaryForeground }}>✓</Text> : null}
+                    </View>
+                    <Text style={[styles.additionalLabel, { color: colors.mutedForegroundLight }]}>Additional</Text>
+                  </Pressable>
+                </View>
+              );
+            }) : null}
+          </>
+        ) : (
+          <>
+            <Text style={[styles.selectionHint, { color: colors.mutedForegroundLight }]}>
+              Select one or more cities. At least one is required.
+            </Text>
+            {citiesQuery.isLoading ? <CatalogLoading label="Loading cities…" /> : null}
+            {citiesQuery.isError ? (
+              <CatalogError label="Couldn’t load cities. Check your connection and retry." onRetry={() => void citiesQuery.refetch()} />
+            ) : null}
+            {!citiesQuery.isLoading && !citiesQuery.isError && !cities.length ? (
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No cities matched “{citySearch.trim()}”.</Text>
+            ) : null}
+            {!citiesQuery.isLoading && !citiesQuery.isError ? cities.map((city) => {
+              const selected = draft.favoriteCityKeys.includes(city.key);
+              return (
+                <Pressable
+                  key={city.key}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: selected }}
+                  onPress={() => toggleCity(city)}
+                  style={[
+                    styles.catalogRow,
+                    { backgroundColor: colors.card, borderColor: selected ? colors.primary : colors.border },
+                  ]}
+                  testID={`registration-city-${city.key}`}
+                >
+                  <View style={[
+                    styles.checkboxMark,
+                    {
+                      backgroundColor: selected ? colors.primary : colors.card,
+                      borderColor: selected ? colors.primary : colors.border,
+                    },
+                  ]}>
+                    {selected ? <Text style={{ color: colors.primaryForeground }}>✓</Text> : null}
+                  </View>
+                  <View style={styles.catalogRowText}>
+                    <Text style={[styles.catalogTitle, { color: colors.textOnSurface }]}>{city.displayName}</Text>
+                    <Text style={[styles.catalogMeta, { color: colors.mutedForegroundLight }]}>
+                      {city.country} · {city.airportLabels.join(', ')}
+                    </Text>
+                  </View>
+                  {selected ? <Text style={[styles.selectedLabel, { color: colors.primary }]}>Selected</Text> : null}
+                </Pressable>
+              );
+            }) : null}
+          </>
+        )}
         {selectionError ? (
           <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.destructive }]} testID="airport-selection-error">
             {selectionError}
@@ -206,6 +397,7 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
         <Pressable
           accessibilityRole="button"
           onPress={continueToReview}
+          disabled={airportsQuery.isLoading || citiesQuery.isLoading || airportsQuery.isError || citiesQuery.isError}
           style={[styles.actionButton, { backgroundColor: colors.primary }]}
           testID="continue-to-registration-review"
         >
@@ -216,139 +408,24 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
   );
 }
 
-function AirportSearchSection({
-  title,
-  description,
-  accessibilityLabel,
-  placeholder,
-  selectedCodes,
-  mode,
-  onSelect,
-}: {
-  title: string;
-  description: string;
-  accessibilityLabel: string;
-  placeholder: string;
-  selectedCodes: string[];
-  mode: 'single' | 'multiple';
-  onSelect: (airport: AirportRecord) => void;
-}) {
+function CatalogLoading({ label }: { label: string }) {
   const colors = useColors();
-  const configuration = getMainBluebirdApiConfigurationOrNull();
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const query = useQuery({
-    queryKey: ['clerk-registration-airport-search', configuration?.environment, debouncedSearch],
-    queryFn: ({ signal }) => {
-      if (!configuration) throw new Error('Main Bluebird API configuration is unavailable.');
-      return fetchProductionAirportSearch(debouncedSearch, {
-        signal,
-        environment: configuration.environment,
-        baseUrl: configuration.apiBaseUrl,
-      });
-    },
-    enabled: !!configuration && debouncedSearch.length >= 2,
-    retry: shouldRetryProductionRead,
-    retryDelay: productionReadRetryDelay,
-    staleTime: 30_000,
-  });
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
-    return () => clearTimeout(timer);
-  }, [search]);
-
   return (
-    <View style={styles.registrationSection}>
-      <View style={styles.sectionHeading}>
-        <Text style={[styles.sectionTitle, { color: colors.textOnSurface }]}>{title}</Text>
-        <Text style={[styles.selectionHint, { color: colors.mutedForegroundLight }]}>{description}</Text>
-      </View>
-      <View style={[styles.searchWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.searchGlyph, { color: colors.mutedForeground }]}>⌕</Text>
-        <TextInput
-          style={[styles.searchInput, { color: colors.foreground }]}
-          placeholder={placeholder}
-          placeholderTextColor={colors.mutedForeground}
-          value={search}
-          onChangeText={setSearch}
-          autoCorrect={false}
-          autoCapitalize="characters"
-          accessibilityLabel={accessibilityLabel}
-          testID={mode === 'single' ? 'registration-home-airport-search' : 'registration-additional-airport-search'}
-        />
-      </View>
-      {selectedCodes.length ? (
-        <Text style={[styles.selectionHint, { color: colors.mutedForegroundLight }]}>
-          Selected: {selectedCodes.join(', ')}
-        </Text>
-      ) : null}
-      {debouncedSearch.length < 2 ? (
-        <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-          Enter at least two characters to search Bluebird airports.
-        </Text>
-      ) : !configuration ? (
-        <Text style={[styles.emptyText, { color: colors.destructive }]}>
-          Bluebird airport search is unavailable because the profile connection is not configured.
-        </Text>
-      ) : query.isLoading ? (
-        <View style={styles.loadingState}>
-          <ActivityIndicator color={colors.primary} />
-          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Searching airports…</Text>
-        </View>
-      ) : query.isError ? (
-        <View style={styles.loadingState}>
-          <Text style={[styles.emptyText, { color: colors.destructive }]}>
-            Couldn’t search airports. Check your connection and retry.
-          </Text>
-          <Pressable accessibilityRole="button" onPress={() => void query.refetch()}>
-            <Text style={[styles.retryText, { color: colors.primary }]}>Try again</Text>
-          </Pressable>
-        </View>
-      ) : query.data?.length ? (
-        query.data.map((airport) => {
-          const selected = selectedCodes.includes(airport.code);
-          return (
-            <Pressable
-              key={airport.code}
-              accessibilityRole={mode === 'single' ? 'radio' : 'checkbox'}
-              accessibilityState={mode === 'single' ? { selected } : { checked: selected }}
-              onPress={() => onSelect(airport)}
-              style={[
-                styles.catalogRow,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: selected ? colors.primary : colors.border,
-                },
-              ]}
-              testID={`${mode === 'single' ? 'registration-home-airport' : 'registration-additional-airport'}-${airport.code}`}
-            >
-              <View style={[
-                mode === 'single' ? styles.radioMark : styles.checkboxMark,
-                {
-                  backgroundColor: selected && mode === 'multiple' ? colors.primary : colors.card,
-                  borderColor: selected ? colors.primary : colors.border,
-                },
-              ]}>
-                {mode === 'single'
-                  ? selected ? <View style={[styles.radioSelected, { backgroundColor: colors.primary }]} /> : null
-                  : selected ? <Text style={{ color: colors.primaryForeground }}>✓</Text> : null}
-              </View>
-              <View style={styles.catalogRowText}>
-                <Text style={[styles.catalogTitle, { color: colors.textOnSurface }]}>{airport.name}</Text>
-                <Text style={[styles.catalogMeta, { color: colors.mutedForegroundLight }]}>
-                  {[airport.code, airport.city, airport.state, airport.country].filter(Boolean).join(' · ')}
-                </Text>
-              </View>
-              {selected ? <Text style={[styles.selectedLabel, { color: colors.primary }]}>Selected</Text> : null}
-            </Pressable>
-          );
-        })
-      ) : (
-        <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-          No Bluebird airports matched “{debouncedSearch}”.
-        </Text>
-      )}
+    <View style={styles.loadingState}>
+      <ActivityIndicator color={colors.primary} />
+      <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>{label}</Text>
+    </View>
+  );
+}
+
+function CatalogError({ label, onRetry }: { label: string; onRetry: () => void }) {
+  const colors = useColors();
+  return (
+    <View style={styles.loadingState}>
+      <Text style={[styles.emptyText, { color: colors.destructive }]}>{label}</Text>
+      <Pressable accessibilityRole="button" onPress={onRetry}>
+        <Text style={[styles.retryText, { color: colors.primary }]}>Try again</Text>
+      </Pressable>
     </View>
   );
 }
@@ -366,6 +443,11 @@ const styles = StyleSheet.create({
   registrationEyebrow: { fontFamily: 'Inter_600SemiBold', fontSize: 11, letterSpacing: 1 },
   registrationScroll: { flex: 1 },
   registrationScrollContent: { paddingHorizontal: 16, paddingTop: 12, gap: 20 },
+  locationListContent: { paddingHorizontal: 16, paddingTop: 12, gap: 9 },
+  locationTabs: { flexDirection: 'row', borderRadius: 14, borderWidth: 1, marginHorizontal: 16, padding: 4, gap: 4 },
+  locationTab: { flex: 1, minHeight: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
+  locationTabText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  tabCount: { fontFamily: 'Inter_700Bold', fontSize: 12 },
   registrationSection: { gap: 9 },
   sectionHeading: { gap: 3, paddingHorizontal: 2 },
   sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 16 },
@@ -375,7 +457,10 @@ const styles = StyleSheet.create({
   selectionHint: { paddingHorizontal: 2, fontSize: 12, lineHeight: 18, fontFamily: 'Inter_400Regular' },
   emptyText: { padding: 12, fontSize: 13, lineHeight: 19, fontFamily: 'Inter_400Regular' },
   loadingState: { minHeight: 100, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16 },
-  catalogRow: { minHeight: 64, borderRadius: 14, borderWidth: 1, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  catalogRow: { minHeight: 64, borderRadius: 14, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 9, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  airportIdentity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
+  additionalToggle: { alignItems: 'center', justifyContent: 'center', gap: 4, minWidth: 62, minHeight: 48 },
+  additionalLabel: { fontSize: 9, fontFamily: 'Inter_500Medium' },
   catalogRowText: { flex: 1, gap: 3 },
   catalogTitle: { fontSize: 14, lineHeight: 19, fontFamily: 'Inter_600SemiBold' },
   catalogMeta: { fontSize: 12, lineHeight: 17, fontFamily: 'Inter_400Regular' },
@@ -383,7 +468,6 @@ const styles = StyleSheet.create({
   radioSelected: { width: 10, height: 10, borderRadius: 5 },
   checkboxMark: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   selectedLabel: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
-  note: { fontSize: 12, lineHeight: 18, paddingHorizontal: 2 },
   error: { fontSize: 13, lineHeight: 19, fontFamily: 'Inter_500Medium' },
   retryText: { fontFamily: 'Inter_600SemiBold', padding: 8 },
   registrationFooter: { borderTopWidth: 1, paddingHorizontal: 18, paddingTop: 12 },

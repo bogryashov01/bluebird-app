@@ -741,10 +741,11 @@ export async function fetchProductionAirports(
   options: ReadRequestOptions = {},
 ): Promise<AirportRecord[]> {
   const unique = normalizeAirportCodes(codes);
-  if (unique.length === 0) return [];
-  const query = new URLSearchParams({ codes: unique.join(',') });
+  const query = unique.length
+    ? `?${new URLSearchParams({ codes: unique.join(',') }).toString()}`
+    : '';
   return mapReadSchema(
-    await fetchProductionJson(`/airports?${query.toString()}`, options),
+    await fetchProductionJson(`/airports${query}`, options),
     mapProductionAirports,
   );
 }
