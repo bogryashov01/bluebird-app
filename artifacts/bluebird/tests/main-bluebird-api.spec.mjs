@@ -238,6 +238,27 @@ test("construction is inert, uses the selected API, and sends only a fresh Clerk
   assert.equal(tokenReads, 2);
 });
 
+test("Clerk trip list uses only the selected environment's bearer-authenticated GET /trips", async () => {
+  const requests = [];
+  const api = createMainBluebirdApiIntegration({
+    configuration: development,
+    tokenProvider: tokenProvider("development", async () => "fresh-trip-list-token"),
+    fetcher: async (url, init) => {
+      requests.push({ url, init });
+      return jsonResponse({ current: [], past: [] });
+    },
+  });
+
+  assert.deepEqual(await api.authenticated.listTrips(), { current: [], past: [] });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, `${development.apiBaseUrl}/trips`);
+  assert.equal(requests[0].init.method, "GET");
+  assert.deepEqual(Object.keys(requests[0].init.headers).sort(), ["Accept", "Authorization"]);
+  assert.equal(requests[0].init.headers.Authorization, "Bearer fresh-trip-list-token");
+  assert.equal(requests[0].init.credentials, "omit");
+  assert.equal(requests[0].init.body, undefined);
+});
+
 test("unverified or mismatched Development issuer blocks API clients before token reads or requests", async () => {
   const originalIssuer = process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER;
   let tokenReads = 0;

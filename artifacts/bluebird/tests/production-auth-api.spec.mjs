@@ -631,6 +631,33 @@ test("trips use numeric Empty Leg identifiers and reject invented trip/status/UU
   assert.equal("status" in response.current[0], false);
 });
 
+test("trip list handles successful empty arrays and keeps request, authorization, and schema failures unavailable", async () => {
+  let request;
+  const emptyClient = makeClient(async (url, init) => {
+    request = { url, init };
+    return jsonResponse({ current: [], past: [] });
+  });
+  assert.deepEqual(await emptyClient.listTrips(), { current: [], past: [] });
+  assert.equal(request.url, "https://bluebirdjets.com/api/trips");
+  assert.equal(request.init.method, "GET");
+  assert.equal(request.init.headers.Authorization, `Bearer ${mockOnlyToken}`);
+  assert.equal(request.init.headers.Accept, "application/json");
+  assert.equal(request.init.credentials, "omit");
+  assert.equal(request.init.body, undefined);
+
+  const unauthorized = makeClient(async () => jsonResponse({ error: "unauthorized" }, 401));
+  await assert.rejects(unauthorized.listTrips(), { code: "session_expired", status: 401 });
+
+  const unavailable = makeClient(async () => jsonResponse({ error: "unavailable" }, 503));
+  await assert.rejects(unavailable.listTrips(), { code: "http", status: 503 });
+
+  const malformed = makeClient(async () => jsonResponse({ current: [], past: null }));
+  await assert.rejects(malformed.listTrips(), { code: "invalid_schema" });
+
+  const networkFailure = makeClient(async () => { throw new Error("network unavailable"); });
+  await assert.rejects(networkFailure.listTrips(), { code: "network" });
+});
+
 test("membership and profile parsers reject fields with the wrong documented shape", async () => {
   const badMembership = makeClient(async () => jsonResponse({ ...membership, tier: "concierge" }));
   await assert.rejects(badMembership.getMembership(), ProductionAuthSchemaError);

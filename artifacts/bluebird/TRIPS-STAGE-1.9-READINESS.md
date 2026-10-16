@@ -46,10 +46,10 @@ This audit records the trip flow and contracts before the Stage 1.9 UI changes.
 - A complete authenticated Clerk profile can open Discover, Trips, Membership,
   and Profile regardless of `isMember`. Incomplete and signed-out users remain
   guarded, and member-only actions retain their existing server checks.
-- Clerk Trips intentionally makes no trip or queue request. The API contract
-  documents `GET /trips`, but acceptance of the current Clerk token for that
-  endpoint and a stable Clerk-to-Bluebird member mapping have not been verified.
-  The existing typed method alone is not evidence of deployed authorization.
+- At the time of this earlier readiness review, Clerk Trips intentionally made
+  no trip or queue request. The API contract documented `GET /trips`, but
+  acceptance of the Clerk token and a stable Clerk-to-Bluebird member mapping
+  had not been verified.
 - Notification preferences are read only after the user explicitly selects
   **Load saved preferences**. The authenticated profile contract includes
   `notificationPrefs`; the UI discloses that `GET /me/profile` may synchronize
@@ -68,10 +68,9 @@ This audit records the trip flow and contracts before the Stage 1.9 UI changes.
 
 ### Read-only source inspection and exact verification blockers (2026-10-16)
 
-The API owner has not verified Clerk authentication or member mapping for
-`GET /trips`. Trips therefore remains unavailable in Clerk mode. No live API
-request or token probe was made, and no Trips or Main API implementation was
-changed during this inspection.
+At the time of this read-only inspection, the API owner had not verified Clerk
+authentication or member mapping for `GET /trips`. No live API request or token
+probe was made during that inspection.
 
 #### What this workspace proves
 
@@ -143,13 +142,41 @@ server as a substitute.
    authentication denial versus authorization denial so Bluebird can display
    those separately from network, server, and invalid-response errors.
 
-**Activation remains blocked** until the API owner supplies non-secret evidence
-for items 1–6 in the selected environment. If the deployed contract differs
-from the mobile parser, resolve and document that contract before connecting
-the screen. After verification, a separate mobile change can wire only the
-authenticated `listTrips()` read, bind/cache it to the authoritative account,
-and add explicit empty, denied, and service-error states. It must not load queue
-data or expose trip mutations.
+**Production runtime activation remains unverified** until the API owner
+supplies non-secret evidence for items 1–6 in the selected environment. If the
+deployed contract differs from the mobile parser, resolve and document that
+contract before relying on its responses. The mobile screen is now wired to the
+checked-in source contract only; it does not establish deployed authorization,
+authoritative ownership, or account mapping.
+
+### Clerk Trips source-contract implementation (2026-10-16)
+
+- The Clerk Trips screen now requests only authenticated `GET /api/trips`
+  through the explicitly selected, environment-matched Main API integration.
+  Its response is validated as `{ current, past }` arrays of `{ leg,
+  checklist }` records by the checked-in parser.
+- Current and past lists are rendered separately. Successful empty arrays show
+  their corresponding empty states; configuration, authorization, request, and
+  schema failures remain error states. Rows do not navigate to trip details or
+  expose manifests, queue data, or mutations.
+- React Query state is scoped by selected API environment and Clerk user ID.
+  The token provider checks the current signed-in identity before each token
+  read, and the query cancellation signal is forwarded to the request. The
+  existing identity-change cache clearing remains in effect.
+- Mocked-client and source checks cover the GET path, bearer authorization,
+  empty and populated responses, request/HTTP/schema failures, account-key
+  isolation, and the absence of queue or mutation calls. The legacy local-demo
+  Trips flow remains separate.
+- This verifies implementation against the checked-in Main API source contract
+  and mocks only. Production runtime authorization, authoritative account
+  mapping, and deployed response compatibility remain unverified; no live
+  endpoint request was made.
+- The focused authenticated API, Main API integration, Clerk session-isolation,
+  and token-provider suites pass. In the local-demo browser suite, the Trips
+  empty, past, error, and details paths pass; five unrelated flight-detail UI
+  assertions in the broader 14-test file still fail. The existing mobile
+  typecheck also remains blocked by workspace-wide generated-client/type
+  mismatches; the new Clerk Trips component has no TypeScript diagnostic.
 
 ### Backend-contract uncertainties
 

@@ -13,6 +13,7 @@ import { confirmDialog } from '@/lib/confirmDialog';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { TripAvailabilityState } from '@/components/TripAvailabilityState';
 import { PRODUCTION_AUTH_UNAVAILABLE_MESSAGE } from '@/lib/productionAuthState';
+import { ClerkTrips } from '@/components/ClerkTrips';
 
 // ─── Aircraft images (same matching logic as Discover) ────────────────────────
 import { useAuth } from '@/context/AuthContext';
@@ -210,18 +211,7 @@ export default function TripsScreen() {
   ];
 
   if (authMode === 'clerk') {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { paddingTop: topPad + 24 }]}>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Trips</Text>
-        </View>
-        <TripAvailabilityState
-          title="Trips unavailable"
-          description="The documented Main API GET /trips contract has not been verified for this Clerk session, and no stable Bluebird member mapping is established. Clerk token acceptance for this endpoint is unverified. No trip or queue data was requested."
-          testID="clerk-trips-unavailable"
-        />
-      </View>
-    );
+    return <ClerkTrips />;
   }
   if (!localDemoFlow) {
     return (

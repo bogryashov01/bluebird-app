@@ -299,14 +299,21 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.doesNotMatch(clerkMembership, /useBuy|useChange|useUpgrade|updateProfile/);
 });
 
-test("Clerk Trips stay unavailable without requesting member-only trips or queue data", () => {
+test("Clerk Trips uses the selected account-scoped read-only Main API contract while legacy demo stays isolated", () => {
   const tripsSource = readFileSync(resolve(projectRoot, "app/(tabs)/trips/index.tsx"), "utf8");
+  const clerkTripsSource = readFileSync(resolve(projectRoot, "components/ClerkTrips.tsx"), "utf8");
   assert.match(tripsSource, /authMode === 'clerk'/);
-  assert.match(tripsSource, /title="Trips unavailable"/);
-  assert.match(tripsSource, /documented Main API GET \/trips contract has not been verified for this Clerk session/);
-  assert.match(tripsSource, /no stable Bluebird member mapping is established/);
-  assert.match(tripsSource, /Clerk token acceptance for this endpoint is unverified/);
-  assert.match(tripsSource, /No trip or queue data was requested/);
+  assert.match(tripsSource, /return <ClerkTrips \/>/);
+  assert.match(clerkTripsSource, /createMainBluebirdApiIntegration/);
+  assert.match(clerkTripsSource, /mainBluebirdAuthenticatedQueryKey\(configuration\.environment, clerkUserId, 'trips'\)/);
+  assert.match(clerkTripsSource, /return api\.authenticated\.listTrips\(\{ signal \}\)/);
+  assert.match(clerkTripsSource, /current\.userId !== requestedUserId/);
+  assert.match(clerkTripsSource, /query\.data\?\.\[activeList\]/);
+  assert.match(clerkTripsSource, /query\.isError/);
+  assert.match(clerkTripsSource, /items\?\.length === 0/);
+  assert.match(clerkTripsSource, /Live authorization and account mapping have not been verified/);
+  assert.doesNotMatch(clerkTripsSource, /useListTrips|useGetQueueStatus|useCancelTrip|useMutation|router\.push|router\.replace/);
+  assert.doesNotMatch(clerkTripsSource, /getEmptyLegQueue|joinEmptyLegQueue|leaveEmptyLegQueue|updateProfile|getMembership|passengers|manifest|boardingPass/);
   assert.match(tripsSource, /authMode === 'legacy' && isLocalFlightReadMode\(\)/);
   assert.match(tripsSource, /enabled: memberQueryEnabled/);
 });
