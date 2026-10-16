@@ -14,21 +14,17 @@ import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotifications';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
 
-function NativeTabLayout({ unreadCount, restricted }: { unreadCount: number; restricted: boolean }) {
+function NativeTabLayout({ unreadCount }: { unreadCount: number }) {
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index" hidden />
       <NativeTabs.Trigger name="discover/index">
         <NativeTabs.Trigger.Icon sf={{ default: 'paperplane', selected: 'paperplane.fill' }} />
-        <NativeTabs.Trigger.Label>Flights</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Discover</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="trips/index" hidden={restricted}>
+      <NativeTabs.Trigger name="trips/index">
         <NativeTabs.Trigger.Icon sf={{ default: 'briefcase', selected: 'briefcase.fill' }} />
         <NativeTabs.Trigger.Label>Trips</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="connections" hidden={restricted}>
-        <NativeTabs.Trigger.Icon sf={{ default: 'person.2', selected: 'person.2.fill' }} />
-        <NativeTabs.Trigger.Label>Connections</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="membership/index">
         <NativeTabs.Trigger.Icon sf={{ default: 'star', selected: 'star.fill' }} />
@@ -43,7 +39,7 @@ function NativeTabLayout({ unreadCount, restricted }: { unreadCount: number; res
   );
 }
 
-function ClassicTabLayout({ unreadCount, restricted }: { unreadCount: number; restricted: boolean }) {
+function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
   const colors = useColors();
   const isIOS = Platform.OS === 'ios';
   const isWeb = Platform.OS === 'web';
@@ -84,7 +80,7 @@ function ClassicTabLayout({ unreadCount, restricted }: { unreadCount: number; re
       <Tabs.Screen
         name="discover/index"
         options={{
-          title: 'Flights',
+          title: 'Discover',
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="airplane" tintColor={color} size={22} />
@@ -96,26 +92,12 @@ function ClassicTabLayout({ unreadCount, restricted }: { unreadCount: number; re
       <Tabs.Screen
         name="trips/index"
         options={{
-          href: restricted ? null : undefined,
           title: 'Trips',
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="briefcase" tintColor={color} size={22} />
             ) : (
               <Feather name="briefcase" size={20} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="connections"
-        options={{
-          href: restricted ? null : undefined,
-          title: 'Connections',
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="person.2" tintColor={color} size={22} />
-            ) : (
-              <Feather name="users" size={20} color={color} />
             ),
         }}
       />
@@ -180,9 +162,9 @@ export default function TabLayout() {
         : <Redirect href="/(clerk-auth)/sign-in" />;
     }
     if (isLiquidGlassAvailable() && preference === 'system') {
-      return <NativeTabLayout unreadCount={0} restricted />;
+      return <NativeTabLayout unreadCount={0} />;
     }
-    return <ClassicTabLayout unreadCount={0} restricted />;
+    return <ClassicTabLayout unreadCount={0} />;
   }
   // Centralized guard: no session → auth flow. Prevents deep links from
   // bypassing sign-in.
@@ -190,7 +172,7 @@ export default function TabLayout() {
   // Native tabs follow the OS appearance only — use them just when the user's
   // theme preference is "System"; a forced Light/Dark needs the themed classic tabs.
   if (isLiquidGlassAvailable() && preference === 'system') {
-    return <NativeTabLayout unreadCount={unreadCount} restricted={false} />;
+    return <NativeTabLayout unreadCount={unreadCount} />;
   }
-  return <ClassicTabLayout unreadCount={unreadCount} restricted={false} />;
+  return <ClassicTabLayout unreadCount={unreadCount} />;
 }

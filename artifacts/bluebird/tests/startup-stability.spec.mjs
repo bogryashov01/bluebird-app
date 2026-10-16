@@ -171,6 +171,10 @@ test("valid local demo session reaches Discover on startup, direct navigation, a
   await page.goto("/");
   await expect(page.getByText(/Good (morning|afternoon|evening), Preview/)).toBeVisible();
   await expect(page).toHaveURL(/\/discover$/);
+  for (const label of ["Discover", "Trips", "Membership", "Profile"]) {
+    await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+  }
+  await expect(page.getByText("Connections", { exact: true })).toHaveCount(0);
 
   await page.goto("/discover");
   await expect(page.getByText("Browse available empty legs", { exact: true })).toBeVisible();
@@ -190,6 +194,11 @@ test("valid local demo session reaches Discover on startup, direct navigation, a
   await personalInformation.click();
   await expect(page).toHaveURL(/\/account\/personal-info$/);
   await expect(page.getByText("Personal Information", { exact: true }).last()).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/profile$/);
+
+  await page.getByText("Notification Settings", { exact: true }).click();
+  await expect(page).toHaveURL(/\/notifications$/);
   await page.goBack();
   await expect(page).toHaveURL(/\/profile$/);
 

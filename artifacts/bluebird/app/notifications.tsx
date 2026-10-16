@@ -15,6 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 import { SettingsGroup } from '@/components/SettingsGroup';
 import { NETWORKING_INBOX_ROUTE, notificationRoute } from '@/lib/notificationRoute';
 import { usePersistedState } from '@/hooks/usePersistedState';
+import { TripAvailabilityState } from '@/components/TripAvailabilityState';
 
 // ── Toggle pill ───────────────────────────────────────────────────────────────
 function Toggle({ value, onToggle, activeColor, trackOff, knobColor, disabled = false }: { value: boolean; onToggle: () => void; activeColor: string; trackOff: string; knobColor: string; disabled?: boolean }) {
@@ -53,7 +54,19 @@ const DELIVERY_CHANNELS = [
 ] as const;
 type DeliveryChannel = NonNullable<User['notificationChannel']>;
 
-export default function NotificationsScreen() {
+function ClerkNotificationSettingsUnavailable() {
+  return (
+    <TripAvailabilityState
+      title="Notification settings unavailable"
+      description="Notification preferences and history are not supported for this authenticated Clerk account in this preview. No notification data was requested and no preferences were changed."
+      testID="clerk-notifications-unavailable"
+      actionLabel="Back to Profile"
+      onAction={() => router.replace('/(tabs)/profile')}
+    />
+  );
+}
+
+function LegacyNotificationsScreen() {
   const colors      = useColors();
   const insets      = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -333,6 +346,13 @@ export default function NotificationsScreen() {
       </ScrollView>
     </View>
   );
+}
+
+export default function NotificationsScreen() {
+  const { authMode } = useAuth();
+  return authMode === 'clerk'
+    ? <ClerkNotificationSettingsUnavailable />
+    : <LegacyNotificationsScreen />;
 }
 
 const styles = StyleSheet.create({

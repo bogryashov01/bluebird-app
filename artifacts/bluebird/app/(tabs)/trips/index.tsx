@@ -132,7 +132,7 @@ export default function TripsScreen() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('upcoming');
   const { user, updateUser, authMode } = useAuth();
   const queryClient = useQueryClient();
-  const localDemoFlow = isLocalFlightReadMode();
+  const localDemoFlow = authMode === 'legacy' && isLocalFlightReadMode();
   const memberQueryEnabled = isLegacyMemberQueryEnabled({
     authMode,
     localDemoFlow,
@@ -209,6 +209,20 @@ export default function TripsScreen() {
     { id: 'past', label: 'Past' },
   ];
 
+  if (authMode === 'clerk') {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { paddingTop: topPad + 24 }]}>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Trips</Text>
+        </View>
+        <TripAvailabilityState
+          title="Trips unavailable"
+          description="You’re signed in with Clerk, but trip data is unavailable until the Main API can verify the matching Bluebird member account. No trip or queue data was requested."
+          testID="clerk-trips-unavailable"
+        />
+      </View>
+    );
+  }
   if (!localDemoFlow) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -216,7 +230,7 @@ export default function TripsScreen() {
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>Trips</Text>
         </View>
         <TripAvailabilityState
-          title="Sign in to view your trips"
+          title="Trips unavailable"
           description={`${PRODUCTION_AUTH_UNAVAILABLE_MESSAGE} No member trip or queue data is loaded here.`}
           testID="production-trips-unavailable"
         />

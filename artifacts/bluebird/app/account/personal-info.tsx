@@ -36,9 +36,9 @@ function resolveAccountPhotoUrl(path: string | null | undefined): string | null 
 export default function PersonalInfoScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, authMode } = useAuth();
   const queryClient = useQueryClient();
-  const localDemoFlow = isLocalFlightReadMode();
+  const localDemoFlow = authMode === 'legacy' && isLocalFlightReadMode();
   const [cameraPermission, requestCameraPermission] = ImagePicker.useCameraPermissions();
   const [libraryPermission, requestLibraryPermission] = ImagePicker.useMediaLibraryPermissions();
 
@@ -58,7 +58,7 @@ export default function PersonalInfoScreen() {
   // Saving a photo is a standalone account update, not part of the editable
   // name/email/weight form or the networking profile.
   const updatePhotoMutation = useUpdateMe();
-  const networkingEnabled = !!user && user.membershipTier !== 'none';
+  const networkingEnabled = localDemoFlow && !!user && user.membershipTier !== 'none';
   const {
     data: networkingData,
     isLoading: networkingLoading,
@@ -312,6 +312,18 @@ export default function PersonalInfoScreen() {
     </React.Fragment>
   );
   const bottomPadding = (Platform.OS === 'web' ? 34 : insets.bottom) + 40;
+
+  if (authMode === 'clerk') {
+    return (
+      <ProductionAuthenticatedUnavailableNotice
+        title="Personal Information unavailable"
+        description="Your authenticated account details can’t be read or edited in this preview. The supported Clerk profile update flow is not available on this screen, so no profile changes were requested."
+        testID="clerk-personal-info-unavailable"
+        actionLabel="Back to Profile"
+        onAction={() => router.replace('/(tabs)/profile')}
+      />
+    );
+  }
 
   if (!localDemoFlow) {
     return (

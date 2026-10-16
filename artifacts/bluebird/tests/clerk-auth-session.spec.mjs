@@ -100,14 +100,14 @@ test("central Clerk resolution states gate member screens and distinguish outcom
     memberResolution: { status: "profile_incomplete", clerkUserId: "clerk-user-a" },
   }), "profile-required");
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], false, true), false);
-  for (const route of ["discover", "membership", "profile"]) {
+  for (const route of ["discover", "trips", "membership", "profile"]) {
     assert.equal(shouldRedirectClerkRoute(["(tabs)", route], false, true), false);
     assert.equal(shouldRedirectClerkRoute(["(tabs)", route, "index"], false, true), false);
     assert.equal(shouldRedirectClerkRoute(["(tabs)", route], false, false), true);
   }
-  assert.equal(isClerkCoreTabRoute(["(tabs)", "trips"]), false);
+  assert.equal(isClerkCoreTabRoute(["(tabs)", "trips"]), true);
   assert.equal(isClerkCoreTabRoute(["(tabs)", "connections"]), false);
-  assert.equal(shouldRedirectClerkRoute(["(tabs)", "trips"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["(tabs)", "trips"], false, true), false);
   assert.equal(canAccessClerkMemberScreens({
     isLoaded: true,
     isSignedIn: true,
@@ -123,7 +123,7 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   // the verified profile projection has selected them.
   assert.equal(shouldRedirectClerkRoute(["account", "bluebird-profile"], false, false), false);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], false, true), false);
-  assert.equal(shouldRedirectClerkRoute(["(tabs)", "trips"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["(tabs)", "trips"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["queue", "join"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "profile"], false), true);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "membership"], false), true);
@@ -134,28 +134,56 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["membership", "plans"], false), false);
   assert.equal(shouldRedirectClerkRoute(["membership", "join"], false), true);
   assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false), true);
+  assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["notifications"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["notifications"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["(tabs)", "connections"], false, true), true);
+  for (const path of [
+    ["(tabs)", "discover"],
+    ["(tabs)", "trips"],
+    ["(tabs)", "membership"],
+    ["(tabs)", "profile"],
+    ["account", "personal-info"],
+    ["notifications"],
+  ]) {
+    assert.equal(shouldRedirectClerkRoute(path, false, false), true, `${path.join("/")} must deny an incomplete Clerk profile`);
+  }
   assert.equal(shouldRedirectClerkRoute(["(auth)", "welcome"], false), false);
   assert.equal(shouldRedirectClerkRoute(["(clerk-auth)", "sign-in"], false), false);
   assert.equal(shouldRedirectClerkRoute(["(clerk-auth)", "signed-in"], false), false);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], true), false);
 });
 
-test("restricted tab bars expose Flights, Membership, and Profile only", () => {
+test("both tab bars expose exactly Discover, Trips, Membership, and Profile", () => {
   const source = readFileSync(resolve(projectRoot, "app/(tabs)/_layout.tsx"), "utf8");
-  assert.match(source, /name="trips\/index" hidden=\{restricted\}/);
-  assert.match(source, /name="connections" hidden=\{restricted\}/);
-  assert.match(source, /name="membership\/index">/);
-  assert.match(source, /name="profile\/index">/);
-  const classicScreens = source.slice(source.indexOf('<Tabs\n')).split('<Tabs.Screen');
-  const classicMembership = classicScreens.find((screen) => screen.includes('name="membership/index"'));
-  const classicProfile = classicScreens.find((screen) => screen.includes('name="profile/index"'));
-  assert.ok(classicMembership);
-  assert.ok(classicProfile);
-  assert.doesNotMatch(classicMembership, /href:/);
-  assert.doesNotMatch(classicProfile, /href:/);
+  const nativeTriggers = [...source.matchAll(/<NativeTabs\.Trigger name="([^"]+)"([^>]*)>/g)]
+    .filter(([, , attributes]) => !attributes.includes("hidden"))
+    .map(([, name]) => name);
+  assert.deepEqual(nativeTriggers, [
+    "discover/index",
+    "trips/index",
+    "membership/index",
+    "profile/index",
+  ]);
+  const classicScreens = source.slice(source.indexOf("<Tabs\n")).split("<Tabs.Screen");
+  const visibleClassicScreens = classicScreens
+    .map((screen) => screen.match(/name="([^"]+)"/)?.[1])
+    .filter((name) => name && name !== "index");
+  assert.deepEqual(visibleClassicScreens, [
+    "discover/index",
+    "trips/index",
+    "membership/index",
+    "profile/index",
+  ]);
+  assert.match(source, /NativeTabs\.Trigger\.Label>Discover/);
+  assert.match(source, /title: 'Discover'/);
+  assert.doesNotMatch(source, /name="connections"/);
+  const unreadHookSource = readFileSync(resolve(projectRoot, "hooks/useUnreadNotifications.ts"), "utf8");
+  assert.match(unreadHookSource, /authMode === 'legacy' && isLocalFlightReadMode\(\)/);
 });
 
-test("Clerk account tabs show only confirmed values and keep Profile settings available", () => {
+test("Clerk Profile restores account destinations and sign-out without claiming unsupported saves", () => {
   const profileSource = readFileSync(resolve(projectRoot, "app/(tabs)/profile/index.tsx"), "utf8");
   const membershipSource = readFileSync(resolve(projectRoot, "app/(tabs)/membership/index.tsx"), "utf8");
   const clerkProfile = profileSource
@@ -170,10 +198,35 @@ test("Clerk account tabs show only confirmed values and keep Profile settings av
   assert.match(clerkProfile, /Additional profile details.*Unavailable in this preview/);
   assert.match(clerkProfile, /title="Settings"/);
   assert.match(clerkProfile, /label: 'Appearance'/);
+  assert.match(clerkProfile, /label: 'Personal Information'/);
+  assert.match(clerkProfile, /router\.push\('\/account\/personal-info'/);
+  assert.match(clerkProfile, /label: 'Notification Settings'/);
+  assert.match(clerkProfile, /router\.push\('\/notifications'/);
+  assert.match(clerkProfile, /label: 'Connections'/);
+  assert.match(clerkProfile, /label: 'Sign Out'/);
+  const personalInfoSource = readFileSync(resolve(projectRoot, "app/account/personal-info.tsx"), "utf8");
+  assert.match(personalInfoSource, /authMode === 'clerk'/);
+  assert.match(personalInfoSource, /profile changes were requested/);
+  assert.match(personalInfoSource, /onAction=\{\(\) => router\.replace\('\/\(tabs\)\/profile'\)\}/);
+  const notificationsSource = readFileSync(resolve(projectRoot, "app/notifications.tsx"), "utf8");
+  assert.match(notificationsSource, /ClerkNotificationSettingsUnavailable/);
+  assert.match(notificationsSource, /No notification data was requested and no preferences were changed/);
+  assert.match(notificationsSource, /router\.replace\('\/\(tabs\)\/profile'\)/);
+  assert.match(notificationsSource, /authMode === 'clerk'/);
   assert.match(clerkMembership, /currentUser\?\.isAuthenticated/);
   assert.match(clerkMembership, /currentUser\.memberTier/);
   assert.match(clerkMembership, /Pass balances, family details, and usage are unavailable here/);
   assert.doesNotMatch(clerkMembership, /user\?\.membershipTier|linePassCount|annualFlightAllowance/);
+});
+
+test("Clerk Trips stay unavailable without requesting member-only trips or queue data", () => {
+  const tripsSource = readFileSync(resolve(projectRoot, "app/(tabs)/trips/index.tsx"), "utf8");
+  assert.match(tripsSource, /authMode === 'clerk'/);
+  assert.match(tripsSource, /title="Trips unavailable"/);
+  assert.match(tripsSource, /You’re signed in with Clerk/);
+  assert.match(tripsSource, /No trip or queue data was requested/);
+  assert.match(tripsSource, /authMode === 'legacy' && isLocalFlightReadMode\(\)/);
+  assert.match(tripsSource, /enabled: memberQueryEnabled/);
 });
 
 test("member-data query gates require local demo mode and a legacy-auth member", () => {

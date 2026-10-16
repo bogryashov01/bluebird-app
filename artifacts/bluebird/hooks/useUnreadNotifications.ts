@@ -11,7 +11,7 @@ import { isLegacyMemberQueryEnabled } from '@/lib/clerkAuthSession';
  */
 export function useUnreadNotificationsCount(): number {
   const { user, authMode } = useAuth();
-  const localDemoFlow = isLocalFlightReadMode();
+  const localDemoFlow = authMode === 'legacy' && isLocalFlightReadMode();
   const memberQueryEnabled = isLegacyMemberQueryEnabled({
     authMode,
     localDemoFlow,

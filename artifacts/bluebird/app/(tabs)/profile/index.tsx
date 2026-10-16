@@ -161,9 +161,46 @@ export default function ProfileScreen() {
             title="Settings"
             rows={[
               {
+                label: 'Personal Information',
+                hint: 'View account details',
+                onPress: () => router.push('/account/personal-info' as any),
+              },
+              {
+                label: 'Notification Settings',
+                hint: 'Unavailable in this preview',
+                onPress: () => router.push('/notifications'),
+              },
+              {
                 label: 'Appearance',
                 hint: THEME_OPTIONS.find((option) => option.value === preference)?.label,
                 onPress: () => setAppearanceOpen(true),
+              },
+            ]}
+          />
+          <SettingsGroup
+            title="Community"
+            rows={[
+              {
+                label: 'Connections',
+                hint: 'Member access required',
+                onPress: () => router.push('/(tabs)/connections' as any),
+              },
+            ]}
+          />
+          <SettingsGroup
+            rows={[
+              {
+                label: 'Sign Out',
+                onPress: async () => {
+                  const ok = await confirmDialog(
+                    'Sign out?',
+                    'Are you sure you want to sign out?',
+                    'Sign out',
+                    true,
+                  );
+                  if (ok) signOut();
+                },
+                right: <Text style={[styles.signOutChevron, { color: colors.mutedForegroundLight }]}>›</Text>,
               },
             ]}
           />

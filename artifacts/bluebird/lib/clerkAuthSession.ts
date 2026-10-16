@@ -70,6 +70,14 @@ export function shouldRedirectClerkRoute(
     group === '(tabs)' &&
     isClerkCoreTabRoute(segments)
   ) return false;
+  // These destinations are read-only unavailable states for completed Clerk
+  // profiles until Main API account edits and notification preferences are
+  // supported. They do not enable legacy API calls or writes.
+  if (
+    registeredHomeReady &&
+    ((group === 'account' && route === 'personal-info' && segments.length === 2) ||
+      (group === 'notifications' && segments.length === 1))
+  ) return false;
   if (group === '(auth)' && (route === 'splash' || route === 'welcome')) return false;
   // This one account route is explicitly user-opened and reads only the
   // authenticated user's API profile; it does not grant member capabilities.
@@ -80,11 +88,11 @@ export function shouldRedirectClerkRoute(
   return true;
 }
 
-/** Only the public Flights, Membership status, and Profile tabs are core app routes. */
+/** Safe navigation tabs available to a complete Clerk profile, not member capabilities. */
 export function isClerkCoreTabRoute(segments: readonly string[]): boolean {
   if (segments[0] !== '(tabs)') return false;
   const route = segments[1];
-  if (route !== 'discover' && route !== 'membership' && route !== 'profile') return false;
+  if (route !== 'discover' && route !== 'trips' && route !== 'membership' && route !== 'profile') return false;
   return segments.length === 2 || (segments.length === 3 && segments[2] === 'index');
 }
 
