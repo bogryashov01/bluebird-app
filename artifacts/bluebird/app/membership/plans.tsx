@@ -8,6 +8,16 @@ import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { useProductionMembershipPlans } from '@/hooks/useProductionMembershipPlans';
 import { getTierLabel, TIER_COLORS, TIER_ORDER } from '@/lib/membershipPlans';
+import { isLegacyMemberQueryEnabled } from '@/lib/clerkAuthSession';
+import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
+import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
+import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
+import {
+  getClerkBluebirdProfileEffectDependencies,
+  isClerkBluebirdProfileResultCurrent,
+  loadClerkBluebirdMembership,
+} from '@/lib/clerkBluebirdProfile';
+import type { ClerkBluebirdMembershipLoadResult } from '@/lib/clerkBluebirdProfile';
 import {
   formatProductionPlanPrice,
   productionPlanFeatureLabel,
@@ -15,20 +25,168 @@ import {
 } from '@/lib/productionMembershipPlans';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 
+type ClerkMembershipState =
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'not_authenticated' }
+  | { kind: 'loaded'; clerkUserId: string; result: ClerkBluebirdMembershipLoadResult };
+
 export default function AllPlansScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { user } = useAuth();
+  const { user, authMode } = useAuth();
+  const clerkSession = useClerkAuthSnapshot();
+  const mainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
   const localDemoFlow = isLocalFlightReadMode();
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
-  const { data: membership } = useGetMembership({
-    query: { enabled: localDemoFlow && !!user },
+  const legacyMembershipEnabled = isLegacyMemberQueryEnabled({
+    authMode,
+    localDemoFlow,
+    hasLegacyUser: !!user,
   });
+  const {
+    data: membership,
+    isLoading: legacyMembershipLoading,
+    isError: legacyMembershipError,
+    refetch: refetchLegacyMembership,
+  } = useGetMembership({
+    query: { enabled: legacyMembershipEnabled, queryKey: ['/api/membership'] },
+  });
+  const [clerkMembershipState, setClerkMembershipState] =
+    React.useState<ClerkMembershipState>({ kind: 'loading' });
+  const [clerkMembershipAttempt, setClerkMembershipAttempt] = React.useState(0);
+  const currentClerkIdentity = React.useRef<string | null>(clerkSession?.userId ?? null);
+  currentClerkIdentity.current = clerkSession?.userId ?? null;
+  const currentClerkSession = React.useRef(clerkSession);
+  currentClerkSession.current = clerkSession;
+  const membershipRequestDependencies = getClerkBluebirdProfileEffectDependencies({
+    configuration: mainApiConfiguration,
+    session: clerkSession,
+    loadAttempt: clerkMembershipAttempt,
+  });
+  const createClerkApi = React.useCallback(() => {
+    if (!mainApiConfiguration || !clerkSession || clerkSession.isSignedIn !== true || !clerkSession.userId) {
+      throw new Error('Your signed-in Bluebird account is unavailable.');
+    }
+    const requestedClerkUserId = clerkSession.userId;
+    return createMainBluebirdApiIntegration({
+      configuration: mainApiConfiguration,
+      tokenProvider: {
+        environment: mainApiConfiguration.environment,
+        getVerifiedAccessToken: async () => {
+          const activeSession = currentClerkSession.current;
+          if (
+            !activeSession ||
+            activeSession.isLoaded !== true ||
+            activeSession.isSignedIn !== true ||
+            activeSession.userId !== requestedClerkUserId
+          ) return null;
+          return activeSession.getToken();
+        },
+      },
+    });
+  }, [...membershipRequestDependencies]);
+  const loadClerkMembership = React.useCallback(async (signal: AbortSignal) => {
+    if (
+      authMode !== 'clerk' ||
+      !clerkSession?.isLoaded ||
+      clerkSession.isSignedIn !== true ||
+      !clerkSession.userId
+    ) return;
+    const requestedClerkUserId = clerkSession.userId;
+    setClerkMembershipState({ kind: 'loading' });
+    try {
+      const result = await loadClerkBluebirdMembership(createClerkApi().authenticated, signal);
+      if (!isClerkBluebirdProfileResultCurrent({
+        requestedClerkUserId,
+        currentClerkUserId: currentClerkIdentity.current,
+        aborted: signal.aborted,
+      })) return;
+      if (result.kind === 'api_not_authenticated') {
+        setClerkMembershipState({ kind: 'not_authenticated' });
+        return;
+      }
+      setClerkMembershipState({ kind: 'loaded', clerkUserId: requestedClerkUserId, result });
+    } catch (error) {
+      if (signal.aborted || currentClerkIdentity.current !== requestedClerkUserId) return;
+      const typed = error as { code?: string; status?: number };
+      const message = typed?.code === 'network' || typed?.code === 'timeout'
+        ? 'Bluebird could not be reached. Check your connection and try again.'
+        : typed?.code === 'session_expired' || typed?.status === 401
+          ? 'Your sign-in has expired. Sign in again, then reopen Plans.'
+          : 'Bluebird could not load your membership details.';
+      setClerkMembershipState({ kind: 'error', message });
+    }
+  }, [authMode, createClerkApi, ...membershipRequestDependencies]);
+  React.useEffect(() => {
+    if (authMode !== 'clerk') return;
+    if (!clerkSession?.isLoaded || clerkSession.isSignedIn !== true || !clerkSession.userId) {
+      setClerkMembershipState({ kind: 'not_authenticated' });
+      return;
+    }
+    const controller = new AbortController();
+    void loadClerkMembership(controller.signal);
+    return () => controller.abort();
+  }, [authMode, loadClerkMembership, ...membershipRequestDependencies]);
   const plansQuery = useProductionMembershipPlans();
-  const currentTier: string | null = localDemoFlow
-    ? membership?.tier ?? user?.membershipTier ?? null
-    : null;
+  const visibleClerkState = clerkMembershipState.kind === 'loaded' &&
+    clerkMembershipState.clerkUserId !== clerkSession?.userId
+    ? { kind: 'loading' as const }
+    : clerkMembershipState;
+  const clerkResult = visibleClerkState.kind === 'loaded' ? visibleClerkState.result : null;
+  const clerkCurrentUser = clerkResult?.kind === 'authenticated' ? clerkResult.currentUser : null;
+  const legacyTier = membership ? membership.tier : user?.membershipTier;
+  const currentTier: string | null = authMode === 'clerk'
+    ? clerkCurrentUser?.isMember === true ? clerkCurrentUser.memberTier : null
+    : legacyMembershipEnabled && !legacyMembershipError && legacyTier && TIER_ORDER[legacyTier] >= 0
+      ? legacyTier
+      : null;
   const currentIdx = currentTier ? (TIER_ORDER[currentTier] ?? -1) : -1;
+  const currentTierLabel = currentTier
+    ? plansQuery.data?.plans.find((plan) => plan.tier === currentTier)?.name ?? getTierLabel(currentTier)
+    : null;
+  const currentMembershipLabel = authMode === 'clerk'
+    ? visibleClerkState.kind === 'loading'
+      ? 'Loading membership details'
+      : visibleClerkState.kind === 'not_authenticated'
+        ? 'Sign in to see your current membership.'
+        : visibleClerkState.kind === 'error'
+          ? 'Membership status unavailable'
+          : clerkCurrentUser?.isMember === false && clerkCurrentUser.memberTier === null
+            ? 'Not a member yet'
+            : currentTier
+              ? currentTierLabel
+              : 'Membership status unavailable'
+    : !legacyMembershipEnabled
+      ? 'Sign in to see your current membership.'
+      : legacyMembershipLoading
+        ? 'Loading membership details'
+        : legacyMembershipError
+          ? 'Membership status unavailable'
+          : currentTier
+            ? currentTierLabel
+            : 'Not a member yet';
+  const currentMembershipDetail = authMode === 'clerk'
+    ? visibleClerkState.kind === 'error'
+      ? visibleClerkState.message
+      : visibleClerkState.kind === 'not_authenticated'
+        ? 'No authenticated membership details were loaded.'
+        : clerkResult?.kind === 'authenticated'
+          ? clerkResult.membershipState === 'available'
+            ? clerkResult.membership?.status ?? (clerkResult.membership?.isMember ? 'Active' : 'Not a member')
+            : clerkResult.membershipState === 'conflict'
+              ? 'Membership details did not match the authenticated account and are hidden.'
+              : currentTier
+                ? 'Your tier is confirmed, but other membership details are unavailable.'
+                : 'Membership details are unavailable.'
+          : null
+    : legacyMembershipError
+      ? 'Your membership details could not be loaded. Public plan pricing remains available.'
+    : legacyMembershipEnabled && !legacyMembershipLoading
+      ? currentTier ? 'Member' : 'Not a member'
+      : null;
+  const clerkMembershipNeedsRetry = visibleClerkState.kind === 'error' ||
+    (clerkResult?.kind === 'authenticated' && clerkResult.membershipState === 'unavailable');
 
   if (plansQuery.isLoading) {
     return (
@@ -64,11 +222,45 @@ export default function AllPlansScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: botPad + 40 }]}
         showsVerticalScrollIndicator={false}
       >
-        {currentTier && (
-          <Text style={[styles.currentMembership, { color: colors.mutedForegroundLight }]}>
-            Current membership: {getTierLabel(currentTier, membership?.plans ?? [])}
+        <View
+          style={[styles.membershipStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          testID="current-membership"
+        >
+          <Text style={[styles.membershipStatusTitle, { color: colors.textOnSurface }]}>Your membership</Text>
+          <Text
+            style={[styles.currentMembership, { color: colors.mutedForegroundLight }]}
+            testID="current-membership-status"
+          >
+            {currentTier
+              ? `Current membership: ${currentMembershipLabel}`
+              : currentMembershipLabel}
           </Text>
-        )}
+          {currentMembershipDetail ? (
+            <Text style={[styles.membershipStatusDetail, { color: colors.mutedForegroundLight }]}>
+              {currentMembershipDetail}
+            </Text>
+          ) : null}
+          {authMode === 'clerk' && clerkMembershipNeedsRetry ? (
+            <TouchableOpacity
+              onPress={() => setClerkMembershipAttempt((attempt) => attempt + 1)}
+              accessibilityRole="button"
+              testID="clerk-membership-retry"
+              style={styles.membershipRetry}
+            >
+              <Text style={[styles.membershipRetryText, { color: colors.primary }]}>Try again</Text>
+            </TouchableOpacity>
+          ) : null}
+          {authMode !== 'clerk' && legacyMembershipEnabled && legacyMembershipError ? (
+            <TouchableOpacity
+              onPress={() => void refetchLegacyMembership()}
+              accessibilityRole="button"
+              testID="legacy-membership-retry"
+              style={styles.membershipRetry}
+            >
+              <Text style={[styles.membershipRetryText, { color: colors.primary }]}>Try again</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
         {catalog.plans.map((plan) => {
           const planColor = TIER_COLORS[plan.tier as keyof typeof TIER_COLORS] ?? colors.primary;
           const isCurrent = plan.tier === currentTier;
@@ -85,10 +277,17 @@ export default function AllPlansScreen() {
               <View style={styles.tierCardHeader}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={styles.tierNameRow}>
-                    <Text style={[styles.tierName, { color: planColor }]}>{plan.name}</Text>
+                    <Text
+                      style={[styles.tierName, { color: planColor }]}
+                      testID={`membership-plan-${plan.tier}`}
+                    >
+                      {plan.name}
+                    </Text>
                     {isCurrent && (
                       <View style={[styles.currentBadge, { backgroundColor: planColor + '20' }]}>
-                        <Text style={[styles.currentBadgeText, { color: planColor }]}>Current</Text>
+                        <Text style={[styles.currentBadgeText, { color: planColor }]} testID="current-plan-badge">
+                          Current
+                        </Text>
                       </View>
                     )}
                     {plan.highlight && (
@@ -158,7 +357,12 @@ const styles = StyleSheet.create({
   retryBtn: { borderRadius: 999, paddingHorizontal: 22, paddingVertical: 11, marginTop: 16 },
   retryText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   scroll: { paddingHorizontal: 16, paddingTop: 16 },
-  currentMembership: { fontFamily: 'Inter_500Medium', fontSize: 13, marginBottom: 12 },
+  membershipStatusCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12 },
+  membershipStatusTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14, marginBottom: 6 },
+  currentMembership: { fontFamily: 'Inter_500Medium', fontSize: 13 },
+  membershipStatusDetail: { fontFamily: 'Inter_400Regular', fontSize: 12.5, lineHeight: 18, marginTop: 5 },
+  membershipRetry: { alignSelf: 'flex-start', paddingVertical: 10 },
+  membershipRetryText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   tierCard: {
     borderRadius: 18, borderWidth: 1, marginBottom: 12, overflow: 'hidden',
     paddingBottom: 12,

@@ -66,7 +66,11 @@ const legacyDemoPlans = [
   { id: "concierge", label: "Family/Corporate demo fallback", priceAnnualUsd: 3, features: ["Demo family benefit"] },
 ];
 
-async function setupMemberPage(page, { productionPlansHandler } = {}) {
+async function setupMemberPage(page, {
+  productionPlansHandler,
+  membershipHandler,
+  membershipTier = "none",
+} = {}) {
   await page.addInitScript(({ signedInUser }) => {
     localStorage.setItem("bluebird_token", "membership-plans-test-token");
     localStorage.setItem("bluebird_user", JSON.stringify(signedInUser));
@@ -86,9 +90,12 @@ async function setupMemberPage(page, { productionPlansHandler } = {}) {
     }
     if (url.pathname === "/api/auth/me") return route.fulfill({ json: user });
     if (url.pathname === "/api/membership") {
+      if (membershipHandler) return membershipHandler(route);
       return route.fulfill({
         json: {
-          tier: "none",
+          tier: membershipTier,
+          isMember: membershipTier !== "none",
+          status: "active",
           plans: legacyDemoPlans,
           family: null,
           linePassCount: 0,
@@ -109,9 +116,12 @@ async function setupMemberPage(page, { productionPlansHandler } = {}) {
 
 test("membership plan surfaces render the live public catalog without purchase mutations", async ({ page }) => {
   const plansRequests = [];
+  const membershipRequests = [];
   const mutations = [];
   page.on("request", (request) => {
-    if (new URL(request.url()).pathname === "/api/plans") plansRequests.push(request);
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/api/plans") plansRequests.push(request);
+    if (pathname === "/api/membership") membershipRequests.push(request);
     if (request.method() !== "GET" && new URL(request.url()).pathname.startsWith("/api/")) {
       mutations.push(`${request.method()} ${request.url()}`);
     }
@@ -120,6 +130,8 @@ test("membership plan surfaces render the live public catalog without purchase m
 
   await page.goto("/membership/plans");
   await expect(page.getByText("$3,995 / year", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("current-membership-status")).toHaveText("Not a member yet");
+  await expect(page.getByTestId("current-plan-badge")).toHaveCount(0);
   await expect(page.getByText("$9,995 / year", { exact: true })).toBeVisible();
   await expect(page.getByText("The basics to start flying.", { exact: true })).toBeVisible();
   await expect(page.getByText("Move up the queue with priority access.", { exact: true })).toBeVisible();
@@ -155,6 +167,55 @@ test("membership plan surfaces render the live public catalog without purchase m
     const headers = await request.allHeaders();
     expect(headers.authorization).toBeUndefined();
     expect(headers.cookie).toBeUndefined();
+  }
+  expect(membershipRequests.length).toBeGreaterThan(0);
+  for (const request of membershipRequests) {
+    expect(request.method()).toBe("GET");
+    const headers = await request.allHeaders();
+    expect(headers.authorization).toBe("Bearer membership-plans-test-token");
+  }
+});
+
+test("membership request failures leave the live public plan catalog usable", async ({ page }) => {
+  await setupMemberPage(page, {
+    membershipHandler: (route) => route.fulfill({
+      status: 401,
+      json: { error: "membership authentication required" },
+    }),
+  });
+
+  await page.goto("/membership/plans");
+  await expect(page.getByText("$3,995 / year", { exact: true })).toBeVisible();
+  await expect(page.getByText("$9,995 / year", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("current-membership-status")).toHaveText("Membership status unavailable");
+  await expect(page.getByTestId("legacy-membership-retry")).toBeVisible();
+  await expect(page.getByTestId("current-plan-badge")).toHaveCount(0);
+  await expect(page.getByText("Base demo fallback", { exact: true })).toHaveCount(0);
+});
+
+test("signed-in members see the authenticated tier alongside public plan prices", async ({ page }) => {
+  const plansRequests = [];
+  const membershipRequests = [];
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/api/plans") plansRequests.push(request);
+    if (pathname === "/api/membership") membershipRequests.push(request);
+  });
+  await setupMemberPage(page, { membershipTier: "plus" });
+
+  await page.goto("/membership/plans");
+  await expect(page.getByTestId("current-membership-status")).toHaveText("Current membership: Plus");
+  await expect(page.getByTestId("current-plan-badge")).toBeVisible();
+  await expect(page.getByText("$9,995 / year", { exact: true })).toBeVisible();
+  await expect(page.getByText("5 Skip the Line Passes included", { exact: true })).toBeVisible();
+
+  expect(plansRequests.length).toBeGreaterThan(0);
+  for (const request of plansRequests) {
+    expect((await request.allHeaders()).authorization).toBeUndefined();
+  }
+  expect(membershipRequests.length).toBeGreaterThan(0);
+  for (const request of membershipRequests) {
+    expect((await request.allHeaders()).authorization).toBe("Bearer membership-plans-test-token");
   }
 });
 

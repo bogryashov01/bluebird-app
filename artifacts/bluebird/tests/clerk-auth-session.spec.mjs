@@ -225,12 +225,21 @@ test("both tab bars expose exactly Discover, Trips, Membership, and Profile", ()
 test("Clerk Profile restores account destinations and sign-out without claiming unsupported saves", () => {
   const profileSource = readFileSync(resolve(projectRoot, "app/(tabs)/profile/index.tsx"), "utf8");
   const membershipSource = readFileSync(resolve(projectRoot, "app/(tabs)/membership/index.tsx"), "utf8");
+  const plansSource = readFileSync(resolve(projectRoot, "app/membership/plans.tsx"), "utf8");
   const clerkProfile = profileSource
     .split("if (authMode === 'clerk') {")[1]
     ?.split("const initials")[0] ?? "";
   const clerkMembership = membershipSource
     .split("if (authMode === 'clerk') {")[1]
     ?.split("const currentTier")[0] ?? "";
+
+  assert.match(plansSource, /loadClerkBluebirdMembership\(createClerkApi\(\)\.authenticated, signal\)/);
+  assert.match(plansSource, /getVerifiedAccessToken: async \(\) =>/);
+  assert.match(plansSource, /useProductionMembershipPlans\(\)/);
+  assert.match(plansSource, /membershipState === 'available'/);
+  assert.match(plansSource, /membershipState === 'conflict'/);
+  assert.match(plansSource, /membershipState === 'unavailable'/);
+  assert.match(plansSource, /current-plan-badge/);
 
   assert.match(profileSource, /loadClerkPersonalInfo\(createClerkApi\(\)\.authenticated, signal\)/);
   assert.match(clerkProfile, /profile\?\.firstName/);
