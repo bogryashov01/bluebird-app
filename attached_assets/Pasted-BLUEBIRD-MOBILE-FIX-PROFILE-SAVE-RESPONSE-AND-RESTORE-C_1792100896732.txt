@@ -1,0 +1,214 @@
+BLUEBIRD MOBILE — FIX PROFILE SAVE RESPONSE
+AND RESTORE CLEAN LOCATION SELECTION UI
+
+PROJECT: Bluebird Mobile ONLY.
+
+CRITICAL:
+
+Main Bluebird Website, Main API, database,
+Clerk configuration and Production are READ-ONLY.
+
+Do not modify backend code.
+
+Do not change authentication or membership logic.
+
+Do not rewrite the existing registration flow.
+
+CURRENT BLOCKER:
+
+The user completes registration and submits:
+
+{
+  "firstName": "Volodymyr",
+  "lastName": "Bogryashov TEst",
+  "dob": "2001-11-22",
+  "gender": "male",
+  "homeAirportCode": "TBN",
+  "favoriteCityKeys": [
+    "city:united states|mo|fort leonard wood"
+  ],
+  "phoneCountry": "US",
+  "phoneE164": "+14168944998",
+  "weightLbs": 90
+}
+
+The app displays:
+
+"Authenticated production response did not match
+the API contract (profile.upgradeCreditBalances)."
+
+PART 1 — INVESTIGATE AND FIX PROFILE SAVE
+
+Inspect the existing Mobile API client.
+
+Find the exact code validating
+profile.upgradeCreditBalances.
+
+Determine:
+
+1. Which endpoint returns this response?
+2. Is the error raised before or after
+   PUT /api/me/profile?
+3. What is the actual HTTP response status?
+4. Does the server return a successful profile save?
+5. Is upgradeCreditBalances required by the
+   actual documented API response contract?
+6. Is the Mobile response validator incorrectly
+   requiring a field that the backend does not
+   guarantee?
+
+IMPORTANT:
+
+Do not modify Main API.
+
+Do not blindly remove response validation.
+
+Do not assume the save failed.
+
+Do not assume the save succeeded.
+
+If the API response contract confirms that
+upgradeCreditBalances is optional, update only
+the Mobile validator accordingly.
+
+If the contract requires the field but the server
+omits it, report the mismatch instead of
+inventing a default value.
+
+After saving, verify the user's profile through
+the existing authenticated API.
+
+Only navigate to onboarding after the backend
+confirms isProfileComplete=true.
+
+Do not automatically retry PUT requests because
+the profile save may already have succeeded.
+
+PART 2 — IMPROVE LOCATION SELECTION UI
+
+Keep the existing registration structure:
+
+Step 1 — Personal Information
+Step 2 — Locations
+Step 3 — Review & Save
+
+On Step 2, create TWO TABS:
+
+TAB 1 — AIRPORTS
+
+Display an immediately visible,
+scrollable airport list.
+
+Do not require searching before results appear.
+
+Include a search input above the list.
+
+Support:
+
+- One Home Airport
+- Optional additional airports
+- Checkbox multi-selection for additional airports
+- Clear selected-state styling
+- Scrolling through available airports
+- Preserving selections when switching tabs
+
+TAB 2 — CITIES
+
+Display an immediately visible,
+scrollable city list.
+
+Do not require searching before results appear.
+
+Include a search input above the list.
+
+Support:
+
+- City name and location
+- Checkbox multi-selection
+- Scrolling through available cities
+- Searching within available cities
+- Preserving selections when switching tabs
+
+Use the existing Main API city keys.
+
+Do not hardcode fake cities.
+
+Do not silently infer city preferences.
+
+IMPORTANT:
+
+The current Main API requires at least one
+favoriteCityKey for profile completion.
+
+Preserve this backend requirement.
+
+Do not introduce a fake Skip action.
+
+Do not automatically select cities without
+user confirmation.
+
+PART 3 — SIMPLIFY REVIEW SCREEN
+
+Keep Review & Save as a dedicated full screen.
+
+Display only:
+
+- Personal Information
+- Home Airport
+- Selected Cities
+- Additional Airports if selected
+- Confirm & Save button
+- Back button
+
+Remove unnecessary technical explanations
+about API contracts and persistence.
+
+However, do not falsely claim that unsupported
+fields such as additional airports or weight
+have been saved.
+
+Use concise user-friendly messaging where needed.
+
+PART 4 — SAFETY
+
+Preserve:
+- Clerk SMS authentication
+- Main API integration
+- Verified post-login routing
+- Session isolation
+- Existing onboarding
+- Membership restrictions
+
+No backend changes.
+No database changes.
+No production configuration changes.
+
+PART 5 — TESTS
+
+Run TypeScript checks and focused tests.
+
+Verify:
+
+- Profile save response validation
+- No false success on malformed API responses
+- No duplicate PUT submissions
+- Airport list loads without search
+- City list loads without search
+- Both lists support scrolling
+- Search filters results
+- Multi-select works
+- Tab switching preserves selections
+- Review screen displays correct values
+- Existing complete users still reach Home
+
+FINAL REPORT:
+
+1. Exact cause of upgradeCreditBalances error
+2. Whether the profile was actually saved
+3. Mobile files changed
+4. Airport/city UI changes
+5. Tests passed
+6. Remaining blockers
+
+Do not mark this task complete without
+explaining the API response mismatch.
