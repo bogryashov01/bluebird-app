@@ -3,6 +3,7 @@ import {
   fetchProductionAirports,
   fetchProductionFlight,
   fetchProductionFlights,
+  findProductionFlightById,
   getFlightImagePresentation,
   getFlightAirportCodes,
   mapProductionAirport,
@@ -12,6 +13,7 @@ import {
   parseProductionFlightId,
   productionReadRetryDelay,
   PRODUCTION_API_BASE_URL,
+  PRODUCTION_FLIGHTS_QUERY_KEY,
   ProductionReadHttpError,
   ProductionReadInvalidJsonError,
   ProductionReadNetworkError,
@@ -140,6 +142,13 @@ assert.equal(mappedFlight.pricePerHour, null);
 assert.equal(mappedFlight.rangeNm, null);
 assert.equal(mappedFlight.seatsAvailable, null);
 assert.equal(mappedFlight.featured, null);
+const publicFlightWithFboFields = mapProductionFlight({
+  ...rawFlight,
+  originFboName: "Private FBO",
+  originFboAddress: "Private address",
+});
+assert.equal(publicFlightWithFboFields.departureFbo, undefined);
+assert.equal(publicFlightWithFboFields.departureFboAddress, undefined);
 assert.equal(getFlightImagePresentation(mappedFlight), "provided");
 assert.equal(
   getFlightImagePresentation(mapProductionFlight({ ...rawFlight, aircraftGalleryUrls: null })),
@@ -163,6 +172,11 @@ assert.throws(() => mapProductionFlight({ ...rawFlight, id: "98765" }), /numeric
 assert.equal(parseProductionFlightId("98765"), 98765);
 assert.equal(parseProductionFlightId("flight-98765"), null);
 assert.equal(parseProductionFlightId("0"), null);
+assert.deepEqual(PRODUCTION_FLIGHTS_QUERY_KEY, ["production-empty-legs"]);
+assert.equal(findProductionFlightById([mappedFlight], 98765), mappedFlight);
+assert.equal(findProductionFlightById([mappedFlight], 98766), undefined);
+assert.equal(findProductionFlightById(undefined, 98765), undefined);
+assert.equal(findProductionFlightById([mappedFlight], null), undefined);
 
 const airport = mapProductionAirport({
   code: "TST",

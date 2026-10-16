@@ -11,6 +11,8 @@ export const PRODUCTION_API_ORIGIN = 'https://bluebirdjets.com';
 
 export type FlightReadMode = 'production' | 'local';
 
+export const PRODUCTION_FLIGHTS_QUERY_KEY = ['production-empty-legs'] as const;
+
 export interface FlightReadConfiguration {
   mode: FlightReadMode;
   baseUrl: string;
@@ -823,6 +825,15 @@ export function parseProductionFlightId(id: string | number | null | undefined):
   if (!/^[1-9]\d*$/.test(text)) return null;
   const numericId = Number(text);
   return Number.isSafeInteger(numericId) ? numericId : null;
+}
+
+export function findProductionFlightById(
+  flights: readonly FlightView[] | undefined,
+  id: number | null,
+): FlightView | undefined {
+  if (id === null) return undefined;
+  const stableId = String(id);
+  return flights?.find((flight) => flight.source === 'production' && flight.id === stableId);
 }
 
 export async function fetchProductionFlight(

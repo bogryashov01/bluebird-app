@@ -24,6 +24,7 @@ import {
   mapLocalFlight,
   parseProductionFlightId,
   productionReadRetryDelay,
+  PRODUCTION_FLIGHTS_QUERY_KEY,
   shouldRetryProductionRead,
   type AirportRecord,
   type FlightView,
@@ -308,7 +309,7 @@ export default function DiscoverScreen() {
   });
   const localFlightsQuery = useListFlights({}, { query: { enabled: localReadMode } });
   const productionFlightsQuery = useQuery({
-    queryKey: ['production-empty-legs'],
+    queryKey: PRODUCTION_FLIGHTS_QUERY_KEY,
     queryFn: ({ signal }) => fetchProductionFlights({ signal }),
     enabled: !localReadMode,
     retry: shouldRetryProductionRead,

@@ -17,12 +17,15 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
+import { shouldUseLocalFlightReadMode } from '@/lib/clerkAuthSession';
 import {
-  fetchProductionFlight,
+  fetchProductionFlights,
+  findProductionFlightById,
   getFlightImagePresentation,
   isLocalFlightReadMode,
   mapLocalFlight,
   parseProductionFlightId,
+  PRODUCTION_FLIGHTS_QUERY_KEY,
   productionReadRetryDelay,
   shouldRetryProductionRead,
   type FlightView,
@@ -92,9 +95,9 @@ export default function FlightDetailScreen() {
   // Scale hero with screen height so small iPhones keep content above the fold
   const heroHeight = Math.round(Math.min(300, Math.max(200, windowHeight * 0.32)));
   const compactLayout = windowWidth < 380;
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, authMode } = useAuth();
   const queryClient = useQueryClient();
-  const localReadMode = isLocalFlightReadMode();
+  const localReadMode = shouldUseLocalFlightReadMode(authMode, isLocalFlightReadMode());
   const numericFlightId = parseProductionFlightId(id);
   const [directionsOpen, setDirectionsOpen] = useState(false);
   const [networkMessage, setNetworkMessage] = useState('');
@@ -103,20 +106,20 @@ export default function FlightDetailScreen() {
   const localFlightQuery = useGetFlight(id ?? '', {
     query: { enabled: localReadMode && !!id },
   });
-  const productionFlightQuery = useQuery({
-    queryKey: ['production-empty-leg', numericFlightId],
-    queryFn: ({ signal }) => fetchProductionFlight(numericFlightId!, { signal }),
+  const productionFlightsQuery = useQuery({
+    queryKey: PRODUCTION_FLIGHTS_QUERY_KEY,
+    queryFn: ({ signal }) => fetchProductionFlights({ signal }),
     enabled: !localReadMode && numericFlightId !== null,
     retry: shouldRetryProductionRead,
     retryDelay: productionReadRetryDelay,
   });
   const flight: FlightView | undefined = localReadMode
     ? (localFlightQuery.data ? mapLocalFlight(localFlightQuery.data) : undefined)
-    : productionFlightQuery.data;
-  const isLoading = localReadMode ? localFlightQuery.isLoading : productionFlightQuery.isLoading;
-  const isError = localReadMode ? localFlightQuery.isError : productionFlightQuery.isError;
-  const isRetryingFlight = localReadMode ? localFlightQuery.isFetching : productionFlightQuery.isFetching;
-  const retryFlight = localReadMode ? localFlightQuery.refetch : productionFlightQuery.refetch;
+    : findProductionFlightById(productionFlightsQuery.data, numericFlightId);
+  const isLoading = localReadMode ? localFlightQuery.isLoading : productionFlightsQuery.isLoading;
+  const isError = localReadMode ? localFlightQuery.isError : productionFlightsQuery.isError;
+  const isRetryingFlight = localReadMode ? localFlightQuery.isFetching : productionFlightsQuery.isFetching;
+  const retryFlight = localReadMode ? localFlightQuery.refetch : productionFlightsQuery.refetch;
 
   // Fetch the user's relationship to this flight (requires auth)
   const {
@@ -213,23 +216,28 @@ export default function FlightDetailScreen() {
   };
 
   // ── Loading / Error — guards before any flight-property access ──
-  if (isLoading) {
+  if (isLoading && !flight) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.offWhite }]}>
         <ActivityIndicator color={colors.primary} size="large" />
       </View>
     );
   }
-  if (isError || !flight) {
+  if (!flight) {
     const canRetry = localReadMode ? !!id : numericFlightId !== null;
     return (
       <View style={[styles.centered, { backgroundColor: colors.offWhite }]}>
         <Text style={[styles.errText, { color: colors.mutedForegroundLight }]}>
-          {isError ? 'Could not load flight details' : 'Flight not found'}
+          {isError ? 'Could not load flight details' : 'Flight unavailable'}
         </Text>
         {isError && (
           <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
             Check your connection and try again.
+          </Text>
+        )}
+        {!isError && (
+          <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
+            This flight could not be found in the available flight list.
           </Text>
         )}
         {canRetry && (

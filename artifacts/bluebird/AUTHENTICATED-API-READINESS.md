@@ -1,5 +1,25 @@
 # Bluebird authenticated production API readiness
 
+## Public flight detail read resolution (2026-10-16)
+
+Discover and Flight Details now use the same auth-aware local-versus-Main-API
+read mode. Public details resolve the route ID from the shared
+`GET /api/empty-legs` query cache; direct navigation uses that same documented
+list read when no cache is available. The client does not call the legacy
+Mobile-origin `/api/flights/:id` route or assume a Main API per-flight detail
+endpoint exists. If the list does not contain the requested ID, Flight Details
+shows an unavailable state without filling in missing flight data.
+
+`pnpm run typecheck:libs`,
+`pnpm --filter @workspace/bluebird run typecheck`,
+`test:production-flight-api`, and `test:clerk-session-isolation` pass.
+`network-reliability.spec.mjs` passes all 14 tests using intercepted API
+responses and an explicitly disabled Clerk fixture; these tests verify the
+public list-backed flow, not a real authenticated Clerk session. No signed-in
+authenticated Expo Preview session was available, so flight `26644`, the
+selected Development Main API network path, and live authentication remain
+unverified.
+
 ## Registration email and profile-save response shape (2026-10-16)
 
 The incomplete-profile form now collects and validates email. It prefills the
