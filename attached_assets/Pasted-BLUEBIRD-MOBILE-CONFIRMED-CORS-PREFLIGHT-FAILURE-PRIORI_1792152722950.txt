@@ -1,0 +1,115 @@
+BLUEBIRD MOBILE — CONFIRMED CORS PREFLIGHT FAILURE
+
+PRIORITY: CRITICAL
+
+We have confirmed the browser error:
+
+"Response to preflight request doesn't pass
+access control check:
+
+No 'Access-Control-Allow-Origin' header
+is present on the requested resource."
+
+The request is:
+
+GET /api/me
+
+From the Bluebird Mobile Expo Preview
+to the Development Main Bluebird API.
+
+IMPORTANT:
+
+The Main API responds correctly when opened
+directly in the browser without authentication.
+
+The failure occurs during the browser's
+cross-origin authenticated request.
+
+STRICT RULES:
+
+DO NOT MODIFY:
+- Main Bluebird Website
+- Main Bluebird API
+- Database
+- Clerk configuration
+- Production configuration
+
+DO NOT:
+- Disable CORS
+- Use wildcard CORS with credentials
+- Remove Authorization headers
+- Bypass authentication
+- Replace Clerk
+- Rewrite registration
+- Change production API settings
+
+TASK 1 — INVESTIGATE
+
+Inspect the current Mobile Expo Preview origin
+and Development Main API origin.
+
+Inspect existing documented CORS behavior
+in the Main API source READ-ONLY.
+
+Determine why OPTIONS /api/me does not
+return the required CORS headers.
+
+Check whether the preflight is being handled by:
+
+- Main API CORS middleware
+- Authentication middleware
+- Reverse proxy
+- Replit infrastructure
+- Another upstream handler
+
+TASK 2 — VERIFY
+
+Use safe read-only diagnostics.
+
+Inspect:
+
+- OPTIONS response status
+- Access-Control-Allow-Origin
+- Access-Control-Allow-Methods
+- Access-Control-Allow-Headers
+- Origin request header
+- Access-Control-Request-Method
+- Access-Control-Request-Headers
+
+Do not expose tokens or secrets.
+
+TASK 3 — SOLUTION
+
+If a Mobile-only solution exists,
+describe and implement the smallest
+safe fix.
+
+If the problem is on the Main API
+or Replit proxy side:
+
+DO NOT modify it.
+
+Report the exact minimal change required
+for the Main Bluebird owner to apply.
+
+Do not use an insecure public proxy
+as a workaround.
+
+TASK 4 — VERIFICATION
+
+Run TypeScript and focused tests.
+
+Do not claim the CORS issue is fixed
+without a successful real browser request.
+
+FINAL REPORT:
+
+1. Exact CORS failure point
+2. Whether OPTIONS reaches Main API
+3. Actual OPTIONS status and headers
+4. Whether the Expo origin is allowed
+5. Minimal safe fix
+6. Whether Mobile-only changes are sufficient
+7. Whether real browser GET /api/me succeeds
+
+Do not modify Main Bluebird.
