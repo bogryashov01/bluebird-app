@@ -1,0 +1,321 @@
+BLUEBIRD MOBILE — RESTORE 4-TAB NAVIGATION
+AND EXISTING PROFILE / NOTIFICATIONS UI
+
+PROJECT: Bluebird Mobile ONLY
+PRIORITY: HIGH
+
+CURRENT STATUS:
+
+Authentication, registration, onboarding,
+and Home are working.
+
+The authenticated Home screen displays
+published flights with List and Map views.
+
+We need to restore the original Bluebird
+Mobile navigation and account screens.
+
+IMPORTANT:
+
+The user has provided reference screenshots
+for Profile and Notification Settings.
+
+Use those screenshots as the visual reference.
+
+Do not invent a new design.
+
+STRICT RESTRICTIONS:
+
+DO NOT MODIFY:
+- Main Bluebird Website
+- Main Bluebird API
+- Database
+- Clerk configuration
+- Production configuration
+- Working registration flow
+- Working onboarding flow
+
+Do not rewrite existing authentication.
+
+Do not replace the current working
+Flights / Home implementation.
+
+TASK 1 — RESTORE BOTTOM NAVIGATION
+
+The authenticated app must have exactly
+four main tabs:
+
+1. Discover
+2. Trips
+3. Membership
+4. Profile
+
+Discover opens the existing Home screen.
+
+Trips opens the existing Your Trips screen.
+
+Membership opens the existing Membership screen.
+
+Profile opens the existing Profile screen.
+
+Use the existing navigation components
+and original Bluebird styling where possible.
+
+Do not create duplicate screens.
+
+Keep the bottom navigation visible across
+the four main tabs.
+
+Nested screens such as Notification Settings
+may use a back button instead.
+
+IMPORTANT:
+
+A user with:
+
+isAuthenticated === true
+isProfileComplete === true
+isMember === false
+
+must still be able to access all four tabs.
+
+Membership restrictions apply to protected
+actions, not to basic navigation.
+
+TASK 2 — RESTORE YOUR TRIPS
+
+Find the existing Trips / Your Trips screen.
+
+Reuse it if available.
+
+Inspect its existing API integration.
+
+Show:
+- Upcoming trips
+- Past trips
+
+Only if supported by existing data/contracts.
+
+If the authenticated user has no trips,
+display a clean empty state:
+
+"No trips yet"
+
+Do not invent trips.
+
+Do not create bookings during testing.
+
+Do not modify booking authorization.
+
+TASK 3 — PROFILE SCREEN
+
+Match the provided Profile screenshot.
+
+HEADER:
+
+- User avatar or initials
+- Real user name
+- Real membership status
+
+ACCOUNT:
+
+- Personal Information
+- Connect Contacts
+- Payment Methods
+
+PREFERENCES:
+
+- Notification Settings
+- Community
+
+SUPPORT:
+
+- AI Concierge
+- Support
+- Legal
+
+ACTIVITY:
+
+- Recent activity, only when supported
+  by real backend data
+
+Reuse existing screens and navigation
+where possible.
+
+Do not display fake membership information,
+payments, or activity.
+
+If an existing feature is not implemented,
+do not pretend that it works.
+
+Keep the UI clean and consistent with
+the reference screenshot.
+
+TASK 4 — PERSONAL INFORMATION
+
+Connect the existing Profile section
+to the authenticated user's saved data.
+
+Display supported fields:
+
+- First name
+- Last name
+- Email
+- Verified phone
+- Date of birth
+- Gender
+- Home airport
+- Favorite cities
+
+Use the existing authenticated Main API.
+
+Do not modify profile data automatically.
+
+Preserve existing registration functionality.
+
+TASK 5 — NOTIFICATION SETTINGS
+
+Match the provided Notification Settings
+reference screenshot.
+
+SECTION: TRAVEL PREFERENCES
+
+Home Airport
+
+Display the user's actual saved
+home airport.
+
+SECTION: FLIGHTS
+
+- Flights from my Home Airport
+- All Flights
+- International Flights
+- Queue Updates
+- Flight Confirmations
+
+SECTION: RECENT PUSH NOTIFICATIONS
+
+Display real recent notifications
+only if an existing data source supports them.
+
+Otherwise show an honest empty state.
+
+SECTION: MEMBERSHIP & OFFERS
+
+- Membership Updates
+
+IMPORTANT:
+
+Inspect the existing notification preferences
+contract before implementing persistence.
+
+Reuse supported API fields.
+
+Do not invent notification settings endpoints.
+
+Do not display switches as functional
+unless their state can actually be saved.
+
+If a setting is unsupported, keep it
+disabled or clearly marked unavailable.
+
+Do not send push notifications during testing.
+
+TASK 6 — MEMBERSHIP
+
+Restore the existing Membership screen.
+
+Use the actual membership status.
+
+For non-members, show the existing
+non-member state.
+
+Do not activate memberships.
+
+Do not initiate payments.
+
+TASK 7 — NAVIGATION SAFETY
+
+Preserve:
+
+Welcome
+→ Clerk Authentication
+→ Registration if incomplete
+→ Onboarding for newly completed accounts
+→ Authenticated application
+
+Existing complete users should reach
+the authenticated application directly.
+
+The four main tabs must not bypass
+registration requirements.
+
+Keep Clerk logout accessible from
+the existing Profile / Settings flow.
+
+Do not sign out the current user
+during testing.
+
+TASK 8 — IMPLEMENTATION STRATEGY
+
+FIRST:
+
+Inspect existing screens and navigation.
+
+SECOND:
+
+Reconnect existing components.
+
+THIRD:
+
+Apply only minimal UI adjustments needed
+to match the provided reference screenshots.
+
+FOURTH:
+
+Connect supported real API data.
+
+Do not build large new features.
+
+Do not refactor unrelated code.
+
+TASK 9 — TESTING
+
+Run TypeScript and focused tests.
+
+Verify:
+
+- Discover navigation
+- Trips navigation
+- Membership navigation
+- Profile navigation
+- Profile → Personal Information
+- Profile → Notification Settings
+- Notification Settings → Back
+- Non-member navigation
+- Signed-out access restrictions
+- Incomplete profile restrictions
+- No navigation loops
+- No fake trips or notifications
+
+FINAL REPORT:
+
+Provide a table:
+
+SCREEN | STATUS | DATA SOURCE | WORKING | BLOCKERS
+
+Include:
+
+1. Bottom navigation restored
+2. Trips screen status
+3. Membership screen status
+4. Profile screen status
+5. Notification Settings status
+6. Existing screens reused
+7. Files changed
+8. Tests passed
+9. Remaining unsupported features
+
+IMPLEMENT NOW.
+
+Keep all changes isolated to Bluebird Mobile.
