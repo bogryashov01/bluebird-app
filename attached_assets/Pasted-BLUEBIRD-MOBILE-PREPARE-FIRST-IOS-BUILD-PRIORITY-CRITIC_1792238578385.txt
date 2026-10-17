@@ -1,0 +1,110 @@
+BLUEBIRD MOBILE — PREPARE FIRST IOS BUILD
+
+PRIORITY: CRITICAL
+MODE: BUILD / EXECUTE
+
+GOAL:
+Prepare Bluebird Mobile for its first real iOS build.
+
+The application is based on Expo SDK 57.
+
+Task #514 already prepared the EAS production
+configuration.
+
+Do not repeat completed setup work.
+
+SCOPE:
+artifacts/bluebird ONLY.
+
+TASK 1 — REVIEW RELEASE CONFIGURATION
+
+Inspect the existing:
+- app.json
+- eas.json
+- package.json
+- Expo configuration
+
+Verify that the current configuration is
+suitable for an iOS build.
+
+Preserve existing production profiles.
+
+TASK 2 — IOS IDENTIFIER
+
+Determine whether an iOS bundle identifier
+is already configured.
+
+If missing, report the exact required decision.
+
+Do not invent or silently assign a bundle ID.
+
+TASK 3 — EAS PROJECT
+
+Check whether the Mobile application is
+already linked to an Expo/EAS project.
+
+If linked, verify the linkage.
+
+If not linked, report what is needed.
+
+Do not create an Expo account or project
+without authorization.
+
+TASK 4 — ASSETS
+
+Check:
+- App icon
+- Splash screen
+- Display name
+- Permissions
+- Required iOS assets
+
+Fix missing or invalid local assets when safe.
+
+Preserve Bluebird branding.
+
+TASK 5 — BUILD READINESS
+
+Determine whether an iOS build can be
+started with the currently available credentials.
+
+If a simulator build is possible without
+Apple Developer credentials, prepare the
+necessary local configuration without
+altering the production EAS profile.
+
+Do not start paid builds or create credentials
+without explicit authorization.
+
+TASK 6 — VERIFICATION
+
+Run:
+- Expo config validation
+- EAS configuration validation
+- Mobile TypeScript check
+- Relevant build-readiness checks
+
+TASK 7 — FINAL REPORT
+
+Provide:
+
+- Bundle identifier: READY / MISSING
+- EAS project linkage: READY / MISSING
+- Expo account access: READY / MISSING
+- Apple Developer access: READY / MISSING
+- iOS assets: READY / BLOCKED
+- Production environment: READY / BLOCKED
+- First build: POSSIBLE / BLOCKED
+
+List exact next actions needed to produce
+an installable iOS build.
+
+IMPORTANT:
+
+Do not modify Main Bluebird.
+Do not modify API or database.
+Do not modify Clerk authentication.
+Do not modify production environment values.
+Do not fabricate readiness.
+
+Implement safe Mobile-only fixes directly.
