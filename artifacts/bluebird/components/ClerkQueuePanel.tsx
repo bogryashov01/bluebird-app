@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
@@ -9,6 +9,7 @@ import { useColors } from '@/hooks/useColors';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import {
   useClerkFlightQueue,
+  useClerkQueueEligibility,
   useJoinClerkFlightQueue,
   useLeaveClerkFlightQueue,
   useSkipClerkFlightLine,
@@ -17,10 +18,12 @@ import {
 import type { ProductionAuthRequestError } from '@/lib/productionAuthApi';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { getProductionQueueReadOnlyMessage } from '@/lib/productionQueueReadiness';
+import { canJoinProductionQueue, canStartQueueJoin } from '@/lib/queueJoinGuards';
 
 export interface ClerkQueuePanelProps {
   emptyLegId: number;
   existingSkipLineCredits: number;
+  flightStatus: string | null;
 }
 
 function availabilityMessage(availability: ClerkQueueAvailability): string | null {
@@ -50,16 +53,26 @@ function errorMessage(error: unknown): string {
 export function ClerkQueuePanel({
   emptyLegId,
   existingSkipLineCredits,
+  flightStatus,
 }: ClerkQueuePanelProps) {
   const colors = useColors();
   const queue = useClerkFlightQueue(emptyLegId);
+  const eligibility = useClerkQueueEligibility();
   const join = useJoinClerkFlightQueue(emptyLegId);
   const leave = useLeaveClerkFlightQueue(emptyLegId);
   const skip = useSkipClerkFlightLine(emptyLegId, existingSkipLineCredits);
   const [actionError, setActionError] = useState<string | null>(null);
   const [skipConfirmationPending, setSkipConfirmationPending] = useState(false);
+  const joinLock = useRef(false);
   const busy = join.isPending || leave.isPending || skip.isPending || skipConfirmationPending;
   const unavailable = availabilityMessage(queue.availability);
+  const flightPublished = flightStatus === 'published';
+  const mayJoin = canJoinProductionQueue({
+    isAlreadyInQueue: queue.data?.viewer.status === 'in-queue',
+    flightPublished,
+    profileComplete: eligibility.data?.profileComplete === true,
+    activeMember: eligibility.data?.activeMember === true,
+  });
 
   const runAction = async (action: () => Promise<unknown>) => {
     join.reset();
@@ -85,6 +98,15 @@ export function ClerkQueuePanel({
       if (confirmed) await runAction(() => skip.mutateAsync(true));
     } finally {
       setSkipConfirmationPending(false);
+    }
+  };
+  const joinQueue = async () => {
+    if (!canStartQueueJoin(joinLock.current, busy)) return;
+    joinLock.current = true;
+    try {
+      await runAction(() => join.mutateAsync());
+    } finally {
+      joinLock.current = false;
     }
   };
 
@@ -123,7 +145,11 @@ export function ClerkQueuePanel({
           <Text style={[styles.position, { color: colors.primary }]}>
             #{queue.data.viewer.position}
           </Text>
-          <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Your queue position</Text>
+          <Text testID="clerk-queue-position" style={[styles.body, { color: colors.mutedForegroundLight }]}>
+            {join.isSuccess
+              ? `Joined at position #${join.data.position}.`
+              : 'Your queue position'}
+          </Text>
           {!!actionError && <Text style={[styles.body, { color: colors.coral }]}>{actionError}</Text>}
           <SecondaryButton
             label="Leave Queue"
@@ -154,12 +180,37 @@ export function ClerkQueuePanel({
               : `${queue.data.entries.length} ${queue.data.entries.length === 1 ? 'person' : 'people'} waiting`}
           </Text>
           {!!actionError && <Text style={[styles.body, { color: colors.coral }]}>{actionError}</Text>}
+          {eligibility.isLoading ? (
+            <View style={styles.loading}>
+              <ActivityIndicator color={colors.primary} size="small" />
+              <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Checking membership and profile…</Text>
+            </View>
+          ) : eligibility.isError ? (
+            <View style={styles.content}>
+              <Text style={[styles.body, { color: colors.coral }]}>
+                We could not verify your membership and profile. No join request was sent.
+              </Text>
+              <SecondaryButton label="Try Again" onPress={() => void eligibility.refetch()} testID="clerk-queue-eligibility-retry" />
+            </View>
+          ) : !flightPublished ? (
+            <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>
+              This flight is not published for queue requests.
+            </Text>
+          ) : !eligibility.data?.profileComplete ? (
+            <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>
+              Complete your profile before joining a queue.
+            </Text>
+          ) : !eligibility.data?.activeMember ? (
+            <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>
+              An active Bluebird membership is required to join this queue.
+            </Text>
+          ) : null}
           {!join.isSuccess && (
             <PrimaryButton
               label="Join Queue"
-              onPress={() => void runAction(() => join.mutateAsync())}
+              onPress={() => void joinQueue()}
               loading={join.isPending}
-              disabled={busy}
+              disabled={busy || eligibility.isLoading || eligibility.isError || !mayJoin}
               testID="clerk-queue-join"
             />
           )}

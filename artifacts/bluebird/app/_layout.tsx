@@ -155,6 +155,10 @@ function RootLayoutNav() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="queue/dev-preview"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
         name="concierge"
         options={{
           headerShown: true,

@@ -32,7 +32,7 @@ function useClerkQueueApi() {
     queueVerified &&
     authenticated;
 
-  const createActions = () => {
+  const createApi = () => {
     if (!configuration || !queueVerified || !authenticated || !session?.userId) {
       const blockers = getProductionQueueVerificationBlockers();
       if (blockers.length > 0) {
@@ -57,11 +57,22 @@ function useClerkQueueApi() {
         },
       },
     });
-    return createProductionQueueActions(api.authenticated);
+    return api;
   };
 
   return {
-    actions: createActions,
+    actions: () => createProductionQueueActions(createApi().authenticated),
+    loadEligibility: async (signal?: AbortSignal) => {
+      const api = createApi().authenticated;
+      const [currentUser, membership] = await Promise.all([
+        api.getMe({ signal }),
+        api.getMembership({ signal }),
+      ]);
+      return {
+        profileComplete: currentUser.isProfileComplete,
+        activeMember: currentUser.isMember && membership.isMember && membership.status === 'active',
+      };
+    },
     environment: configuration?.environment ?? null,
     ready,
     authenticated,
@@ -120,6 +131,19 @@ export function useClerkFlightQueue(
   });
 
   return { ...query, availability };
+}
+
+export function useClerkQueueEligibility() {
+  const context = useClerkQueueApi();
+  const query = useQuery({
+    queryKey: context.environment && context.userId
+      ? ['main-bluebird-api', context.environment, context.userId, 'queue-eligibility']
+      : ['main-bluebird-api', context.environment ?? 'unconfigured', context.userId ?? 'signed-out', 'queue-eligibility'],
+    enabled: context.ready,
+    retry: false,
+    queryFn: ({ signal }) => context.loadEligibility(signal),
+  });
+  return query;
 }
 
 export function useJoinClerkFlightQueue(

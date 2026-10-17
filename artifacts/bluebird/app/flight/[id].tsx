@@ -18,7 +18,11 @@ import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { shouldUseLocalFlightReadMode } from '@/lib/clerkAuthSession';
-import { getProductionQueueReadOnlyMessage } from '@/lib/productionQueueReadiness';
+import {
+  getProductionQueueReadOnlyMessage,
+  isProductionQueueVerified,
+} from '@/lib/productionQueueReadiness';
+import { ClerkQueuePanel } from '@/components/ClerkQueuePanel';
 import {
   fetchProductionAirports,
   fetchProductionFlight,
@@ -468,9 +472,20 @@ export default function FlightDetailScreen() {
 
   // ── CTA footer rendering — branched on my-status ─────────────────────────
   function renderCTA() {
-    // Production flight detail reads are public-only in this app. Keep the
-    // notice explicit and do not expose a production mutation path.
+    // Keep production queue actions behind the runtime verification gate.
+    // Until it opens, this stays a public read-only details screen.
     if (readOnlyProduction) {
+      if (isProductionQueueVerified()) {
+        return productionFlightId === null ? (
+          renderUnavailableCTA('Queue unavailable', 'This flight does not have a valid queue identifier.')
+        ) : (
+          <ClerkQueuePanel
+            emptyLegId={productionFlightId}
+            existingSkipLineCredits={0}
+            flightStatus={f.status}
+          />
+        );
+      }
       return (
         <>
           <View style={[styles.unavailableBadge, { backgroundColor: colors.muted }]}>

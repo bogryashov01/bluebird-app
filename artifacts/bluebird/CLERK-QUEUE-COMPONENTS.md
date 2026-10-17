@@ -4,8 +4,7 @@ The reusable `ClerkQueuePanel` and hooks in `lib/useClerkQueue.ts` are an
 isolated Mobile path. They use the currently selected Main API environment,
 read the current Clerk session for each request, and pass requests through the
 existing authenticated Main API client. They do not change the existing
-`app/queue/*` routes, Flight Details, shared navigation, or the local/demo
-queue mutations.
+`app/queue/*` legacy routes or local/demo queue mutations.
 
 ## Prepared Mobile per-flight contract
 
@@ -53,12 +52,17 @@ Mobile; the selected Main API/Clerk pairing is API-owner-confirmed; the live
 server validates the selected Clerk token; the Clerk identity resolves to the
 intended member at runtime; and the trusted existing-credit source is
 established. Environment configuration, source evidence, and a signed-in Clerk
-session alone do not activate queue reads or actions. Flight Details keeps the
-panel unmounted and displays the remaining gates.
+session alone do not activate queue reads or actions. Flight Details only
+mounts the panel when the gate opens; while it is closed, it displays the
+remaining gates and sends no queue requests.
 
-`ClerkQueuePanel` and `useClerkQueue` remain the only planned Flight Details
-integration. They never use local/demo queue operations. No request is sent
-while the gate is closed, and Main API errors do not trigger a legacy fallback.
+`ClerkQueuePanel` and `useClerkQueue` are the only Main API Flight Details
+integration. They never use local/demo queue operations. The audited Main
+contract currently has only per-flight queue reads; it has no member-wide
+waiting-queue listing endpoint for Clerk Trips. Do not synthesize a Trips list
+by scanning public flights or substitute legacy member-wide queue data. No
+request is sent while the gate is closed, and Main API errors do not trigger a
+legacy fallback.
 
 Skip the Line additionally requires an explicit confirmation, and all queue
 mutations disable automatic retries so an ambiguous request is not resent.

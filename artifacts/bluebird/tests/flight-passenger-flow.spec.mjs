@@ -62,8 +62,11 @@ async function mockFlightApi(page, {
   },
   manifestErrorStatus,
   statusErrorStatus,
+  joinErrorStatus,
+  joinDelayMs = 0,
 } = {}) {
   let joinBody;
+  let joinRequestCount = 0;
 
   await page.addInitScript(({ cachedUser }) => {
     localStorage.setItem("bluebird_token", "mobile-flight-flow-test-token");
@@ -103,7 +106,15 @@ async function mockFlightApi(page, {
     }
     if (path === "/api/passengers") return route.fulfill({ json: [] });
     if (path === "/api/queue/join" && request.method() === "POST") {
+      joinRequestCount += 1;
       joinBody = request.postDataJSON();
+      if (joinDelayMs) await new Promise((resolve) => setTimeout(resolve, joinDelayMs));
+      if (joinErrorStatus) {
+        return route.fulfill({
+          status: joinErrorStatus,
+          json: { error: "Queue service is temporarily unavailable." },
+        });
+      }
       return route.fulfill({
         json: {
           id: "queue-entry-1",
@@ -117,7 +128,7 @@ async function mockFlightApi(page, {
     return route.continue();
   });
 
-  return { getJoinBody: () => joinBody };
+  return { getJoinBody: () => joinBody, getJoinRequestCount: () => joinRequestCount };
 }
 
 test("My Trips shows an honest empty state when the member has no trips", async ({ page }) => {
@@ -330,7 +341,7 @@ test("malformed direct passenger trip ID shows unavailable without loading trip 
   expect(requestedTripData).toEqual([]);
 });
 
-async function acknowledgeJoin(page, { pet = false } = {}) {
+async function acknowledgeJoin(page, { pet = false, submit = true } = {}) {
   await page.getByTestId("queue-ack-pet-policy").click();
   await page.getByTestId("queue-ack-cancellation-risk").click();
   await page.getByTestId("queue-ack-baggage-limit").click();
@@ -342,7 +353,7 @@ async function acknowledgeJoin(page, { pet = false } = {}) {
     await page.getByTestId("pet-fee-acknowledgement").click();
   }
 
-  await page.getByText("I Acknowledge — Continue", { exact: true }).click();
+  if (submit) await page.getByText("I Acknowledge — Continue", { exact: true }).click();
 }
 
 test("pet, cancellation, and baggage acknowledgements start unchecked and are individually required", async ({ page }) => {
@@ -382,4 +393,90 @@ test("international fee navigation does not carry a passenger count", async ({ p
   await acknowledgeJoin(page);
   await expect(page).toHaveURL(/\/queue\/intl-notice/);
   expect(new URL(page.url()).searchParams.has("passengers")).toBe(false);
+});
+
+test("an existing waiting queue entry opens its real status without submitting another join", async ({ page }) => {
+  const existingEntry = {
+    id: "queue-entry-existing",
+    flightId: "flight-1",
+    flight,
+    position: 2,
+    totalInQueue: 4,
+    status: "waiting",
+    usedLinePass: false,
+    usedFamilyPass: false,
+    createdAt: new Date().toISOString(),
+    bringingPet: false,
+    petFeeAcknowledged: false,
+    petWeightLbs: null,
+    petCrateLengthIn: null,
+    petCrateWidthIn: null,
+    petCrateHeightIn: null,
+  };
+  const api = await mockFlightApi(page, {
+    status: { status: "waiting", queueEntryId: existingEntry.id, queuePosition: 2, totalInQueue: 4 },
+    queueEntries: [existingEntry],
+  });
+  await page.goto("/queue/join?flightId=flight-1&fromCity=Seattle&toCity=San%20Francisco&from=BFI&to=SFO&international=0");
+
+  const continueButton = page.getByTestId("queue-continue-button");
+  await expect(continueButton).toHaveText("View Queue Status");
+  await expect(page.getByText(/already in this queue/i)).toBeVisible();
+  await continueButton.click();
+
+  await expect(page).toHaveURL(/\/queue\/status\?entryId=queue-entry-existing/);
+  await expect(page.getByText("Queue Movement", { exact: true })).toBeVisible();
+  await expect(page.getByText("2/4", { exact: true })).toBeVisible();
+  expect(api.getJoinRequestCount()).toBe(0);
+});
+
+test("a failed queue join stays on acknowledgements and shows an error", async ({ page }) => {
+  const api = await mockFlightApi(page, { joinErrorStatus: 503 });
+  await page.goto("/queue/join?flightId=flight-1&fromCity=Seattle&toCity=San%20Francisco&from=BFI&to=SFO&international=0");
+  await acknowledgeJoin(page);
+
+  await expect(page).toHaveURL(/\/queue\/join/);
+  await expect(page.getByText("Queue service is temporarily unavailable.", { exact: true })).toBeVisible();
+  expect(api.getJoinRequestCount()).toBe(1);
+});
+
+test("two rapid join taps submit one request and show confirmation only after the API responds", async ({ page }) => {
+  const api = await mockFlightApi(page, { joinDelayMs: 400 });
+  await page.goto("/queue/join?flightId=flight-1&fromCity=Seattle&toCity=San%20Francisco&from=BFI&to=SFO&international=0");
+  await acknowledgeJoin(page, { submit: false });
+
+  const button = page.getByTestId("queue-continue-button");
+  await button.click();
+  await expect(button).toBeDisabled();
+  expect(api.getJoinRequestCount()).toBe(1);
+  await expect(page).toHaveURL(/\/queue\/joined/);
+  expect(api.getJoinRequestCount()).toBe(1);
+});
+
+test("Trips opens the selected pending queue entry in Queue Status", async ({ page }) => {
+  const entry = {
+    id: "queue-entry-trip-link",
+    flightId: "flight-1",
+    flight,
+    position: 2,
+    totalInQueue: 4,
+    status: "waiting",
+    usedLinePass: false,
+    usedFamilyPass: false,
+    createdAt: new Date().toISOString(),
+    bringingPet: false,
+    petFeeAcknowledged: false,
+    petWeightLbs: null,
+    petCrateLengthIn: null,
+    petCrateWidthIn: null,
+    petCrateHeightIn: null,
+  };
+  await mockFlightApi(page, { queueEntries: [entry] });
+  await page.goto("/trips");
+  await page.getByText("Pending", { exact: true }).click();
+  await expect(page.getByText("IN QUEUE · #2", { exact: true })).toBeVisible();
+  await page.getByTestId("trip-card-open-details").click();
+
+  await expect(page).toHaveURL(/\/queue\/status\?entryId=queue-entry-trip-link/);
+  await expect(page.getByText("Queue Movement", { exact: true })).toBeVisible();
 });

@@ -55,6 +55,7 @@ export default function JoinQueueAcknowledgeScreen() {
   const [bringingPet, setBringingPet] = useState<boolean | null>(null);
   const [petFeeAcknowledged, setPetFeeAcknowledged] = useState(false);
   const [petWeightLbs, setPetWeightLbs] = useState('');
+  const joinLock = useRef(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   // Set when the server rejects the join because the flight is gone — drives
   // the full-screen "no longer available" state instead of an inline error.
@@ -140,9 +141,10 @@ export default function JoinQueueAcknowledgeScreen() {
       onError: (err: any) => {
         const code = err?.response?.data?.code || err?.data?.code;
         if (code === 'MEMBERSHIP_REQUIRED') {
-          // Server-side gate fallback: send the non-member to the paywall.
+          // Keep the member on this screen after a rejected request. A paywall
+          // redirect would hide the API failure and discard their acknowledgments.
           setOverlayPhase(null);
-          router.replace({ pathname: '/membership/join' as any, params: { flightId: flightId ?? '' } });
+          setJoinError('An active membership is required to join this queue. No queue entry was created.');
           return;
         }
         const msg = err?.response?.data?.error || err?.data?.error || err?.message || 'Failed to join queue';
@@ -154,6 +156,9 @@ export default function JoinQueueAcknowledgeScreen() {
         setOverlayPhase((p) => (p ? 'error' : p));
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       },
+      onSettled: () => {
+        joinLock.current = false;
+      },
     },
   });
 
@@ -163,7 +168,12 @@ export default function JoinQueueAcknowledgeScreen() {
   const needsIntlNotice = isInternational && user?.membershipTier === 'base';
 
   const handleContinue = () => {
-    if (!localDemoFlow || !allChecked || !flightId || isConfirmed || joinMutation.isPending) return;
+    if (!localDemoFlow || !flightId) return;
+    if (myStatus?.status === 'waiting' && myStatus.queueEntryId) {
+      router.replace({ pathname: '/queue/status', params: { entryId: myStatus.queueEntryId, flightId } });
+      return;
+    }
+    if (!allChecked || isConfirmed || joinMutation.isPending || joinLock.current) return;
     if (user?.membershipTier === 'none') {
       // Non-member reached the join flow (e.g. deep link) — route to the paywall.
       router.replace({ pathname: '/membership/join' as any, params: { flightId } });
@@ -183,6 +193,7 @@ export default function JoinQueueAcknowledgeScreen() {
       return;
     }
     if (useLinePass) setOverlayPhase('applying');
+    joinLock.current = true;
     joinMutation.mutate({
       data: {
         flightId, useLinePass, bringingPet: bringingPet === true,
@@ -204,6 +215,7 @@ export default function JoinQueueAcknowledgeScreen() {
   // Note: a failed status lookup (statusError) does NOT disable the CTA — the
   // server re-checks eligibility on join, so the member is never locked out.
   const ctaDisabled = !allChecked || joinMutation.isPending || (statusLoading && !statusError) || isConfirmed;
+  const alreadyWaiting = myStatus?.status === 'waiting';
 
   if (!localDemoFlow) {
     return <ProductionReadOnlyNotice flightId={flightId} />;
@@ -363,13 +375,18 @@ export default function JoinQueueAcknowledgeScreen() {
             Checking your booking status…
           </Text>
         )}
+        {alreadyWaiting && (
+          <Text style={[styles.hint, { color: colors.primary }]}>
+            You are already in this queue. Open your current status instead of joining again.
+          </Text>
+        )}
         <PrimaryButton
-          label="I Acknowledge — Continue"
+          label={alreadyWaiting ? 'View Queue Status' : 'I Acknowledge — Continue'}
           testID="queue-continue-button"
           accessibilityRole="button"
           onPress={handleContinue}
-          loading={joinMutation.isPending}
-          disabled={ctaDisabled}
+          loading={!alreadyWaiting && joinMutation.isPending}
+          disabled={alreadyWaiting ? false : ctaDisabled}
         />
       </View>
     </View>
