@@ -137,6 +137,14 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false), true);
   assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["notifications"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["account", "payment-methods"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["airport-picker"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["account", "payment-methods"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["airport-picker"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["account", "payment-methods"], false), true);
+  assert.equal(shouldRedirectClerkRoute(["airport-picker"], false), true);
+  assert.equal(shouldRedirectClerkRoute(["account", "payment-methods", "extra"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["airport-picker", "extra"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false, false), true);
   assert.equal(shouldRedirectClerkRoute(["notifications"], false, false), true);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "connections"], false, true), true);
@@ -289,7 +297,8 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
     assert.match(source, /ProductionAuthenticatedUnavailableNotice/);
   }
   const paymentMethodsSource = readFileSync(resolve(projectRoot, "app/account/payment-methods.tsx"), "utf8");
-  assert.match(paymentMethodsSource, /No payment methods available/);
+  assert.match(paymentMethodsSource, /Your payment methods/);
+  assert.match(paymentMethodsSource, /Payment method management is coming soon\./);
   assert.doesNotMatch(paymentMethodsSource, /authMode === 'clerk'/);
   const personalInfoSource = readFileSync(resolve(projectRoot, "app/account/personal-info.tsx"), "utf8");
   assert.match(personalInfoSource, /authMode === 'clerk'/);

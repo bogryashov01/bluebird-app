@@ -13,15 +13,17 @@ test("Payment Methods shows the honest empty state without card data or payment 
   for (const copy of [
     "Payment Methods",
     "Your payment methods",
-    "Manage payment methods for your Bluebird membership.",
-    "No payment methods available",
     "Payment method management is coming soon.",
   ]) {
     assert.ok(screen.includes(copy), `missing required copy: ${copy}`);
   }
+  assert.doesNotMatch(screen, /Unavailable for this account|No payment methods available/);
 
   assert.match(screen, /name="credit-card"/);
   assert.match(screen, /testID="payment-methods-empty-state"/);
+  assert.match(screen, /styles\.emptyCard[\s\S]*?styles\.iconCircle[\s\S]*?styles\.emptyTitle[\s\S]*?styles\.supportingText/);
+  assert.match(screen, /backgroundColor: colors\.surface/);
+  assert.match(profile, /label: 'Payment Methods',\s*onPress:/);
   assert.doesNotMatch(
     screen,
     /INITIAL_CARDS|MockCard|usePersistedState|paymentMethods\\.|TextInput|Modal|Add Card|Add payment method|card number|CVC|CVV|expiration|set default|remove-card/,

@@ -313,7 +313,6 @@ export default function ProfileScreen() {
               },
               {
                 label: 'Payment Methods',
-                hint: 'Unavailable for this account',
                 onPress: () => router.push('/account/payment-methods' as any),
               },
             ]}

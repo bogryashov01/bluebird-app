@@ -43,13 +43,6 @@ export default function PaymentMethodsScreen() {
         Payment Methods
       </Text>
 
-      <Text style={[styles.introTitle, { color: colors.textOnSurface }]}>
-        Your payment methods
-      </Text>
-      <Text style={[styles.description, { color: colors.mutedForegroundLight }]}>
-        Manage payment methods for your Bluebird membership.
-      </Text>
-
       <View
         style={[
           styles.emptyCard,
@@ -61,7 +54,7 @@ export default function PaymentMethodsScreen() {
           <Feather name="credit-card" size={23} color={colors.primary} />
         </View>
         <Text style={[styles.emptyTitle, { color: colors.textOnSurface }]}>
-          No payment methods available
+          Your payment methods
         </Text>
         <Text style={[styles.supportingText, { color: colors.mutedForegroundLight }]}>
           Payment method management is coming soon.
@@ -88,19 +81,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
     fontSize: 27,
     lineHeight: 33,
-    marginBottom: 24,
-  },
-  introTitle: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 17,
-    lineHeight: 23,
-  },
-  description: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 4,
-    marginBottom: 18,
+    marginBottom: 20,
   },
   emptyCard: {
     alignItems: 'center',

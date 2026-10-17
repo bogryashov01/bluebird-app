@@ -13,16 +13,18 @@ test.beforeAll(async () => {
   const mocks = {
     "expo-router": `
       import React from 'react';
+      export const Redirect = () => null;
       export const router = {
-        push: path => { window.lastRoute = path; },
-        back: () => { window.lastRoute = 'back'; },
-        replace: path => { window.lastRoute = path; },
-        canGoBack: () => window.canGoBack,
+        push: path => { window.lastRoute = path; window.navigateRoute?.(path, 'push'); },
+        back: () => { window.lastRoute = 'back'; window.navigateRoute?.('', 'back'); },
+        replace: path => { window.lastRoute = path; window.navigateRoute?.(path, 'replace'); },
+        canGoBack: () => window.canGoBack || (window.routeStack?.length ?? 0) > 1,
       };
       export const useFocusEffect = effect => React.useEffect(effect, [effect]);
     `,
     "@workspace/api-client-react": `
       export const useListNotifications = () => ({});
+      export const useListAirports = () => ({});
       export const useMarkNotificationRead = () => ({});
       export const getListNotificationsQueryKey = () => ['notifications'];
       export const useUpdateMe = () => ({ mutate: () => {}, isPending: false });
@@ -30,6 +32,7 @@ test.beforeAll(async () => {
     "@expo/vector-icons": `
       import React from 'react';
       export const Ionicons = ({ name }) => React.createElement('span', { 'data-icon': name }, '‹');
+      export const Feather = ({ name }) => React.createElement('span', { 'data-icon': name });
     `,
     "react-native-safe-area-context": `
       export const useSafeAreaInsets = () => ({ top: 59, bottom: 34, left: 0, right: 0 });
@@ -81,11 +84,48 @@ test.beforeAll(async () => {
             updateProfile: async data => {
               window.lastProfileUpdate = data;
               window.testProfile = { ...window.testProfile, ...data };
-              return {};
+              return window.testProfile;
             },
           },
         };
       }
+    `,
+    "@/lib/productionFlights": `
+      export const fetchProductionAirportSearch = async query => {
+        window.lastAirportSearch = query;
+        return [{
+          code: 'KSFO',
+          name: 'San Francisco International Airport',
+          city: 'San Francisco',
+          state: 'California',
+          country: 'United States',
+          latitude: 37.6213,
+          longitude: -122.379,
+          tz: 'America/Los_Angeles',
+          longestRunwayFt: null,
+        }];
+      };
+      export const getProductionAirportSearchViewState = input => {
+        if (!input.configurationAvailable) return { kind: 'unavailable' };
+        if (!input.query.trim()) return { kind: 'unsupported-empty-query' };
+        if (input.isLoading) return { kind: 'loading' };
+        if (input.error) return { kind: 'error', failure: { message: 'Search failed', retryable: true } };
+        return input.resultCount ? { kind: 'results' } : { kind: 'no-match' };
+      };
+      export const productionReadRetryDelay = 1000;
+      export const shouldRetryProductionRead = () => false;
+      export const describeProductionReadFailure = () => ({ message: 'Search failed', retryable: true });
+      export const fetchProductionAirports = async () => [];
+      export const fetchProductionAirportCities = async () => [];
+    `,
+    "@/components/KeyboardAwareScrollViewCompat": `
+      import React from 'react';
+      import { ScrollView } from 'react-native';
+      export const KeyboardAwareScrollViewCompat = props => React.createElement(ScrollView, props);
+    `,
+    "@/components/AirportMultiSelect": `
+      import React from 'react';
+      export const AirportMultiSelect = () => React.createElement('div');
     `,
     "@/lib/productionAuthApi": `
       export class ProductionAuthHttpError extends Error {
@@ -109,6 +149,8 @@ test.beforeAll(async () => {
         import { createRoot } from 'react-dom/client';
         import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
         import NotificationsScreen from './app/notifications';
+        import AirportPickerScreen from './app/airport-picker';
+        import PaymentMethodsScreen from './app/account/payment-methods';
         import { getClerkNotificationPreferencesQueryKey } from './lib/clerkNotificationPreferences';
         const baseProfile = {
           firstName: 'Test', lastName: 'Member', dob: '1990-02-12', gender: 'female',
@@ -127,6 +169,39 @@ test.beforeAll(async () => {
           },
         };
         const root = createRoot(document.getElementById('root'));
+        function TestProfile({ presentation }) {
+          return <main data-testid={'profile-' + presentation}>
+            <button onClick={() => window.navigateRoute('/account/payment-methods', 'push')}>
+              Open Payment Methods
+            </button>
+          </main>;
+        }
+        function TestApp() {
+          const [route, setRoute] = React.useState('/notifications');
+          window.navigateRoute = (path, action) => {
+            const stack = window.routeStack ?? ['/notifications'];
+            if (action === 'push') stack.push(path);
+            else if (action === 'back' && stack.length > 1) stack.pop();
+            else if (action === 'replace') {
+              if (stack.length) stack[stack.length - 1] = path;
+              else stack.push(path);
+            }
+            window.routeStack = stack;
+            setRoute(stack[stack.length - 1] ?? '/notifications');
+          };
+          if (route === '/airport-picker') return <AirportPickerScreen />;
+          if (route === '/account/payment-methods') return <PaymentMethodsScreen />;
+          if (route === '/(tabs)/profile') return <TestProfile presentation="clerk" />;
+          if (route.startsWith('/profile-')) return <TestProfile presentation={route.slice('/profile-'.length)} />;
+          return <NotificationsScreen />;
+        }
+        window.mountProfile = presentation => {
+          const path = '/profile-' + presentation;
+          window.routeStack = [path];
+          window.canGoBack = false;
+          window.lastRoute = null;
+          window.navigateRoute(path, 'replace');
+        };
         window.mountNotifications = (overrides = {}, failReads = false, canGoBack = false) => {
           window.testProfile = { ...baseProfile, ...overrides };
           window.profileGetCount = 0;
@@ -134,6 +209,9 @@ test.beforeAll(async () => {
           window.holdProfileReads = false;
           window.canGoBack = canGoBack;
           window.lastRoute = null;
+          window.lastAirportSearch = null;
+          window.lastProfileUpdate = null;
+          window.routeStack = ['/notifications'];
           const queryClient = new QueryClient({
             defaultOptions: { queries: { retry: false, gcTime: 0 } },
           });
@@ -145,7 +223,7 @@ test.beforeAll(async () => {
           );
           root.render(
             <QueryClientProvider client={queryClient}>
-              <NotificationsScreen />
+              <TestApp />
             </QueryClientProvider>
           );
         };
@@ -215,6 +293,68 @@ test("shows Choose airport for an unset home airport and opens the existing pick
   await expect(chooseAirport).toBeVisible();
   await chooseAirport.click();
   expect(await page.evaluate(() => window.lastRoute)).toBe("/airport-picker");
+});
+
+test("complete Clerk profile searches, saves a catalog airport, and returns to Notifications", async ({ page }) => {
+  await expect(page.getByText("TEB", { exact: true })).toBeVisible();
+  await page.getByText("TEB", { exact: true }).click();
+  await expect(page.getByTestId("clerk-home-airport-editor")).toBeVisible();
+  await expect(page.getByText("Teterboro Airport", { exact: true })).toBeVisible();
+
+  const search = page.getByTestId("clerk-home-airport-search");
+  await search.fill("San Francisco");
+  const result = page.getByRole("radio", {
+    name: "Set San Francisco International Airport as home airport",
+  });
+  await expect(result).toBeVisible();
+  expect(await page.evaluate(() => window.lastAirportSearch)).toBe("San Francisco");
+  await result.click();
+  await page.getByTestId("clerk-home-airport-save").click();
+
+  await expect(page.getByTestId("clerk-notifications")).toBeVisible();
+  await expect(page.getByText("KSFO", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.lastProfileUpdate.homeAirportCode)).toBe("KSFO");
+  expect(await page.evaluate(() => window.routeStack)).toEqual(["/notifications"]);
+});
+
+test("Payment Methods returns to either Profile presentation and uses the stack back action", async ({ page }) => {
+  for (const presentation of ["clerk", "legacy"]) {
+    await page.evaluate((mode) => window.mountProfile(mode), presentation);
+    await page.getByRole("button", { name: "Open Payment Methods" }).click();
+    await expect(page.getByTestId("payment-methods-screen")).toBeVisible();
+    await expect(page.getByText("Payment Methods", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("payment-methods-empty-state")).toBeVisible();
+    await expect(page.getByText("Your payment methods", { exact: true })).toBeVisible();
+    await expect(page.getByText("Payment method management is coming soon.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Unavailable for this account", { exact: true })).toHaveCount(0);
+
+    await page.getByTestId("payment-methods-back").click();
+    await expect(page.getByTestId(`profile-${presentation}`)).toBeVisible();
+    expect(await page.evaluate(() => window.routeStack)).toEqual([`/profile-${presentation}`]);
+  }
+});
+
+test("Payment Methods falls back to Profile when no app history exists", async ({ page }) => {
+  await page.evaluate(() => {
+    window.routeStack = [];
+    window.canGoBack = false;
+    window.navigateRoute('/account/payment-methods', 'replace');
+  });
+  await expect(page.getByTestId("payment-methods-screen")).toBeVisible();
+  await page.getByTestId("payment-methods-back").click();
+  await expect(page.getByTestId("profile-clerk")).toBeVisible();
+  expect(await page.evaluate(() => window.routeStack)).toEqual(["/(tabs)/profile"]);
+});
+
+test("explicit Home Airport back returns to Notifications without changing the saved airport", async ({ page }) => {
+  await expect(page.getByText("TEB", { exact: true })).toBeVisible();
+  await page.getByText("TEB", { exact: true }).click();
+  await expect(page.getByTestId("clerk-home-airport-editor")).toBeVisible();
+  await page.getByRole("button", { name: "Back to Notification Settings" }).click();
+  await expect(page.getByTestId("clerk-notifications")).toBeVisible();
+  await expect(page.getByText("TEB", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.routeStack)).toEqual(["/notifications"]);
+  expect(await page.evaluate(() => window.lastProfileUpdate)).toBeNull();
 });
 
 test("keeps cached profile values visible while refreshing them", async ({ page }) => {
