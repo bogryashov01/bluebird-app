@@ -1,0 +1,429 @@
+BLUEBIRD MOBILE — PROFILE & NOTIFICATION SETTINGS IMPLEMENTATION
+
+PRIORITY: HIGH
+MODE: BUILD / EXECUTE
+
+GOAL:
+
+Implement the approved Profile and Notification Settings
+design in Bluebird Mobile using the real Main Bluebird
+API contracts confirmed by Main Task #1684.
+
+VISUAL REFERENCE:
+https://bluebird-app-prototype.replit.app
+
+The user has also provided approved screenshots
+of Profile and Notification Settings.
+
+IMPORTANT:
+
+Preserve the existing Bluebird design.
+Do not create a new design system.
+Do not redesign unrelated screens.
+
+SCOPE:
+artifacts/bluebird ONLY.
+
+==================================================
+1. PROFILE DESIGN
+==================================================
+
+Match the approved Profile screen.
+
+Implement:
+
+- White background
+- Navy circular avatar
+- Real authenticated user name
+- Real membership status
+- ACCOUNT section
+- PREFERENCES section
+- SUPPORT section
+- ACTIVITY section when real data exists
+- Existing four-tab bottom navigation
+
+Use real account data only.
+
+Do not hardcode:
+- Alex Rivera
+- Plus Member
+- Membership start date
+- Activity events
+
+Preserve all existing working Profile functionality.
+
+==================================================
+2. PROFILE NAVIGATION
+==================================================
+
+Review the approved Profile menu.
+
+Preserve and correctly connect existing routes:
+
+- Personal Information
+- Connect Contacts
+- Payment Methods
+- Notification Settings
+- Community
+- AI Concierge
+- Support
+- Legal
+
+Do not invent backend functionality.
+
+If a destination is not implemented,
+show an honest unavailable state.
+
+Do not create fake successful actions.
+
+Preserve authentication and sign-out behavior.
+
+==================================================
+3. NOTIFICATION SETTINGS DESIGN
+==================================================
+
+Match the approved Notifications screen:
+
+- White background
+- Back navigation
+- Travel Preferences section
+- Home Airport selector
+- Flights section
+- Flight notification controls
+- Queue Updates
+- Flight Confirmations
+- Membership & Offers section
+
+Preserve the approved typography,
+spacing, cards, dividers and icon styling.
+
+IMPORTANT:
+
+The prototype uses push-style toggle switches,
+but Main Bluebird actually supports email/SMS
+channel preferences.
+
+Adapt the controls to the real API contract
+without falsely suggesting native push support.
+
+==================================================
+4. REAL NOTIFICATION PREFERENCES
+==================================================
+
+Main Bluebird stores preferences in:
+
+user_profiles.notification_prefs
+
+Read via:
+
+GET /api/me/profile
+
+Save via:
+
+PUT /api/me/profile
+
+There is no dedicated notification-preferences
+PATCH endpoint.
+
+Supported fields:
+
+notificationPrefs.mode:
+- off
+- all
+- specific
+
+notificationPrefs.allChannels:
+- email
+- sms
+- both
+- null
+
+notificationPrefs.emptyLegHomeAirport:
+- email
+- sms
+- both
+- null
+
+notificationPrefs.departingFavorite:
+- email
+- sms
+- both
+- null
+
+notificationPrefs.arrivingFavorite:
+- email
+- sms
+- both
+- null
+
+notificationPrefs.queueUpdates:
+- email
+- sms
+- both
+
+notificationPrefs.winningNotifications:
+- email
+- sms
+- both
+
+Do not send unsupported values.
+
+Do not invent additional preference fields.
+
+==================================================
+5. FLIGHT NOTIFICATION CONTROLS
+==================================================
+
+Implement real preference editing.
+
+All Flights:
+
+Use mode = "all" with a valid allChannels value.
+
+Home Airport Flights:
+
+Use mode = "specific" and
+emptyLegHomeAirport with a supported channel.
+
+Preserve existing favorite-airport preferences.
+
+Important:
+
+"All Flights" and "Specific Flights" are
+mutually exclusive backend modes.
+
+Do not implement them as independent
+toggles that produce contradictory state.
+
+Allow users to select Email, SMS, or Both
+where the API supports those channels.
+
+Do not imply native push delivery.
+
+If flight alerts are turned off,
+preserve queue and winner preferences.
+
+==================================================
+6. QUEUE AND FLIGHT CONFIRMATIONS
+==================================================
+
+Queue Updates maps to:
+
+notificationPrefs.queueUpdates
+
+Flight Confirmations / Winner Alerts maps to:
+
+notificationPrefs.winningNotifications
+
+These preferences select a delivery channel.
+
+They do not support "off".
+
+Implement an appropriate channel selector
+instead of a misleading on/off switch.
+
+Allowed:
+- Email
+- SMS
+- Both
+
+Do not add an unsupported disabled state.
+
+==================================================
+7. SMS CONSENT
+==================================================
+
+SMS notification channels require:
+
+- A valid phone number
+- Explicit SMS consent
+- Any required phone verification
+
+Use the existing smsConsent field.
+
+Never automatically enable smsConsent
+when a user selects SMS.
+
+If consent is missing, explain the
+requirement and offer the existing
+supported consent flow if available.
+
+Do not bypass backend validation.
+
+Do not infer marketing consent from
+Clerk phone authentication.
+
+==================================================
+8. HOME AIRPORT
+==================================================
+
+Read:
+
+homeAirportCode
+homeAirportLabel
+
+Use the existing airport search API:
+
+GET /api/airports/search
+
+Allow selecting one real airport.
+
+Save using the full profile PUT.
+
+Preserve the user's favorite city selections.
+
+Do not invent airport data.
+
+==================================================
+9. SAFE PROFILE UPDATES
+==================================================
+
+CRITICAL:
+
+PUT /api/me/profile is a full-profile update.
+
+Required fields include:
+
+firstName
+lastName
+dob
+gender
+homeAirportCode
+favoriteCityKeys
+
+Before saving notification preferences:
+
+- Read the latest authenticated profile.
+- Preserve all required profile fields.
+- Preserve existing favorite city keys.
+- Preserve unrelated notification settings.
+- Preserve SMS consent unless explicitly changed.
+- Avoid overwriting newer edits with stale data.
+
+Do not guess missing required fields.
+
+If the profile is incomplete,
+do not submit an invalid partial update.
+
+Show a clear message directing the user
+to complete the required profile fields.
+
+Use existing API client and auth infrastructure.
+
+Do not change Main API contracts.
+
+==================================================
+10. UNSUPPORTED FEATURES
+==================================================
+
+Main Bluebird currently has no:
+
+- International Flights preference
+- Membership Updates preference
+- Member-facing notification history API
+- Native push registration/delivery integration
+
+Do not create fake toggles.
+
+Do not display fabricated notifications.
+
+If these sections remain visible to
+preserve the approved design, clearly
+mark them as unavailable or coming soon.
+
+Do not imply push notifications are active.
+
+==================================================
+11. REGRESSION PROTECTION
+==================================================
+
+Before changes:
+
+- Record current Git commit and status.
+- Preserve uncommitted work.
+- Identify affected Mobile files.
+- Record relevant test baseline.
+
+Do not modify:
+
+- Main Bluebird Website
+- Main API
+- Database
+- Clerk configuration
+- Production environment
+- EAS configuration
+
+Do not rewrite authentication.
+
+Do not replace real API data with mocks.
+
+Do not modify unrelated screens.
+
+Preserve Queue safety gates.
+
+==================================================
+12. VERIFICATION
+==================================================
+
+Rebuild shared libraries.
+
+Run Mobile TypeScript.
+
+Run existing tests for:
+
+- Clerk authentication
+- Profile
+- Notification preferences
+- Airport search
+- Navigation
+- Membership
+- Queue safety
+
+Test:
+
+- Home Airport selection
+- Notification preference hydration
+- Email channel selection
+- SMS consent validation
+- Safe full-profile updates
+- Incomplete-profile handling
+- Save failure and retry
+- Sign-out and account switching
+
+Visually compare against the approved
+Profile and Notifications design.
+
+Test at:
+
+375px
+393px
+430px
+
+Do not claim real push delivery was tested.
+
+==================================================
+13. DELIVERY
+==================================================
+
+Implement the changes directly.
+
+Do not stop at an audit.
+
+Report:
+
+1. Profile UI changes
+2. Notification Settings UI changes
+3. API fields integrated
+4. Profile update safety measures
+5. Navigation behavior
+6. Files modified
+7. Tests passed
+8. Remaining unsupported features
+
+IMPORTANT:
+
+A visually polished screen must never
+misrepresent the backend's capabilities.
+
+Preserve the approved design while using
+real, supported Main Bluebird functionality.
