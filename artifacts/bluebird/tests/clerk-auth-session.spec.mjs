@@ -247,7 +247,12 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(profileSource, /loadClerkPersonalInfo\(createClerkApi\(\)\.authenticated, signal\)/);
   assert.match(clerkProfile, /profile\?\.firstName/);
   assert.match(clerkProfile, /profile\?\.email/);
-  assert.match(clerkProfile, /Loading this profile may sync phone information/);
+  assert.match(profileSource, /cachedClerkProfile\.current/);
+  assert.match(profileSource, /kind: 'refreshing'/);
+  assert.match(profileSource, /bluebird-bird-mark\.png/);
+  assert.match(profileSource, /ActivityIndicator size="small"/);
+  assert.match(profileSource, /clerkProfileLoadingMark/);
+  assert.doesNotMatch(profileSource, /Loading this profile may sync phone information/);
   assert.doesNotMatch(clerkProfile, /updateProfile|PUT \/me\/profile|useUpdateMe/);
   assert.match(clerkProfile, /title="Account"/);
   assert.match(clerkProfile, /title="Preferences"/);
@@ -290,6 +295,10 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(personalInfoSource, /<ClerkPersonalInfoScreen \/>/);
   assert.match(personalInfoSource, /loadClerkPersonalInfo\(createApi\(\)\.authenticated, signal\)/);
   assert.match(personalInfoSource, /currentIdentity\.current !== clerkUserId/);
+  assert.match(personalInfoSource, /<Stack\.Screen options=\{\{ headerShown: false \}\} \/>/);
+  assert.match(personalInfoSource, /formatClerkDateOfBirth\(values\.dob\)/);
+  assert.match(personalInfoSource, /cachedProfile\.current/);
+  assert.match(personalInfoSource, /bluebird-bird-mark\.png/);
   assert.doesNotMatch(personalInfoSource, /clerk-personal-info-unavailable|profile changes were requested/);
   const personalInfoContract = readFileSync(resolve(projectRoot, "lib/clerkPersonalInfo.ts"), "utf8");
   assert.match(personalInfoContract, /const currentUser = await api\.getMe\(options\)/);

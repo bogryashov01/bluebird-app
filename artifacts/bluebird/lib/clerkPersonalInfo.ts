@@ -32,6 +32,27 @@ export function getClerkPersonalInfoValues(profile: ProductionUserProfile): Cler
   };
 }
 
+/** Format a date-only value using its calendar parts, never a timezone conversion. */
+export function formatClerkDateOfBirth(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const checked = new Date(Date.UTC(year, month - 1, day));
+  if (
+    Number.isNaN(checked.valueOf()) ||
+    checked.getUTCFullYear() !== year ||
+    checked.getUTCMonth() !== month - 1 ||
+    checked.getUTCDate() !== day
+  ) return value;
+  const monthName = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ][month - 1];
+  return `${monthName} ${day}, ${year}`;
+}
+
 /** Confirm /api/me before reading profile details; this helper never writes. */
 export async function loadClerkPersonalInfo(
   api: Pick<ClerkBluebirdProfileApi, 'getMe' | 'getProfile'>,

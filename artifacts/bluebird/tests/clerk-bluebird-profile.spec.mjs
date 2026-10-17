@@ -17,6 +17,7 @@ import {
 } from "../scripts/.clerk-bluebird-profile.test.mjs";
 import {
   buildClerkPersonalInfoUpdateRequest,
+  formatClerkDateOfBirth,
   getChangedClerkPersonalInfoFields,
   getClerkPersonalInfoValues,
   loadClerkPersonalInfo,
@@ -157,6 +158,22 @@ const completePersonalInfoProfile = {
   favoriteCityKeys: ["san-francisco"],
   favoriteCityLabels: ["San Francisco"],
 };
+
+test("Personal Information formats date-only birthdays without timezone shifting", () => {
+  assert.equal(formatClerkDateOfBirth("1985-04-03"), "April 3, 1985");
+  assert.equal(formatClerkDateOfBirth("2000-02-29"), "February 29, 2000");
+  assert.equal(formatClerkDateOfBirth("1985-02-30"), "1985-02-30");
+  assert.equal(formatClerkDateOfBirth(""), "");
+
+  const baseline = getClerkPersonalInfoValues(completePersonalInfoProfile);
+  assert.equal(baseline.dob, "1985-04-03", "editing and API values stay in YYYY-MM-DD form");
+  const request = buildClerkPersonalInfoUpdateRequest(
+    completePersonalInfoProfile,
+    { ...baseline, firstName: "Avery Updated" },
+    baseline,
+  );
+  assert.equal(request.dob, "1985-04-03");
+});
 
 test("Personal Information confirms /me before profile GET and performs no write while loading", async () => {
   const calls = [];

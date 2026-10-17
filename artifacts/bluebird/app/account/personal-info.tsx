@@ -3,6 +3,7 @@ import {
   ActivityIndicator, Alert, Image, Linking, Platform, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { File as ExpoFile } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
@@ -15,7 +16,7 @@ import {
   useUpdateNetworkingProfile,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Redirect, router } from 'expo-router';
+import { Redirect, router, Stack } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { uploadProfilePhoto } from '@/lib/profile-photo-upload';
@@ -35,13 +36,15 @@ import {
   getClerkPersonalInfoValues,
   loadClerkPersonalInfo,
   updateClerkPersonalInfoExplicitly,
+  formatClerkDateOfBirth,
 } from '@/lib/clerkPersonalInfo';
 import type { ClerkPersonalInfoValues } from '@/lib/clerkPersonalInfo';
 import type { ProductionUserProfile } from '@/lib/productionAuthApi';
 
 type ClerkPersonalInfoLoadState =
   | { kind: 'loading' }
-  | { kind: 'error'; message: string }
+  | { kind: 'refreshing'; clerkUserId: string; profile: ProductionUserProfile }
+  | { kind: 'error'; message: string; clerkUserId?: string; staleProfile?: ProductionUserProfile }
   | { kind: 'not_authenticated' }
   | { kind: 'loaded'; clerkUserId: string; profile: ProductionUserProfile };
 
@@ -54,6 +57,7 @@ function ClerkPersonalInfoScreen() {
   const configuration = getMainBluebirdApiConfigurationOrNull();
   const [loadState, setLoadState] = React.useState<ClerkPersonalInfoLoadState>({ kind: 'loading' });
   const [loadAttempt, setLoadAttempt] = React.useState(0);
+  const cachedProfile = React.useRef<{ clerkUserId: string; profile: ProductionUserProfile } | null>(null);
   const currentIdentity = React.useRef<string | null>(session?.userId ?? null);
   currentIdentity.current = session?.userId ?? null;
   const currentSession = React.useRef(session);
@@ -91,7 +95,10 @@ function ClerkPersonalInfoScreen() {
   const loadProfile = React.useCallback(async (signal: AbortSignal) => {
     if (!session?.isLoaded || session.isSignedIn !== true || !session.userId) return;
     const requestedClerkUserId = session.userId;
-    setLoadState({ kind: 'loading' });
+    const cached = cachedProfile.current;
+    setLoadState(cached?.clerkUserId === requestedClerkUserId
+      ? { kind: 'refreshing', ...cached }
+      : { kind: 'loading' });
     try {
       const result = await loadClerkPersonalInfo(createApi().authenticated, signal);
       if (!isClerkBluebirdProfileResultCurrent({
@@ -103,10 +110,18 @@ function ClerkPersonalInfoScreen() {
         setLoadState({ kind: 'not_authenticated' });
         return;
       }
+      cachedProfile.current = { clerkUserId: requestedClerkUserId, profile: result.profile };
       setLoadState({ kind: 'loaded', clerkUserId: requestedClerkUserId, profile: result.profile });
     } catch (error) {
       if (signal.aborted || currentIdentity.current !== requestedClerkUserId) return;
-      setLoadState({ kind: 'error', message: getClerkPersonalInfoErrorMessage(error) });
+      const retained = cachedProfile.current?.clerkUserId === requestedClerkUserId
+        ? cachedProfile.current
+        : null;
+      setLoadState({
+        kind: 'error',
+        message: getClerkPersonalInfoErrorMessage(error),
+        ...(retained ? { clerkUserId: retained.clerkUserId, staleProfile: retained.profile } : {}),
+      });
     }
   }, [createApi, ...requestDependencies]);
 
@@ -130,13 +145,28 @@ function ClerkPersonalInfoScreen() {
   if (!session.isLoaded) return <ClerkPersonalInfoState loading title="Loading your profile" />;
   if (session.isSignedIn !== true) return <Redirect href="/(clerk-auth)/sign-in" />;
 
-  const visibleState = loadState.kind === 'loaded' && loadState.clerkUserId !== session.userId
+  const visibleState = 'clerkUserId' in loadState && loadState.clerkUserId !== session.userId
     ? { kind: 'loading' as const }
     : loadState;
   const bottomPadding = (Platform.OS === 'web' ? 34 : insets.bottom) + 32;
+  const topPadding = Platform.OS === 'web' ? 67 : insets.top;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.offWhite }]} testID="clerk-personal-info">
+      <Stack.Screen options={{ headerShown: false }} />
+      <View style={[styles.clerkHeader, { paddingTop: topPadding + 12 }]}>
+        <TouchableOpacity
+          style={[styles.clerkBackBtn, { backgroundColor: colors.muted }]}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/profile'))}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          testID="clerk-personal-info-back"
+        >
+          <Ionicons name="arrow-back" size={20} color={colors.textOnSurface} />
+        </TouchableOpacity>
+        <Text style={[styles.clerkHeaderTitle, { color: colors.textOnSurface }]}>Personal Information</Text>
+      </View>
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={[styles.clerkInfoContent, { paddingBottom: bottomPadding }]}
         showsVerticalScrollIndicator={false}
@@ -145,19 +175,6 @@ function ClerkPersonalInfoScreen() {
       >
         {visibleState.kind === 'loading' ? (
           <ClerkPersonalInfoState loading title="Loading your profile" />
-        ) : visibleState.kind === 'error' ? (
-          <View style={styles.clerkInfoCard}>
-            <Text style={[styles.title, { color: colors.textOnSurface }]}>Profile unavailable</Text>
-            <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>{visibleState.message}</Text>
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: colors.primary }]}
-              onPress={() => setLoadAttempt((attempt) => attempt + 1)}
-              accessibilityRole="button"
-              testID="clerk-personal-info-retry"
-            >
-              <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Try again</Text>
-            </TouchableOpacity>
-          </View>
         ) : visibleState.kind === 'not_authenticated' ? (
           <View style={styles.clerkInfoCard}>
             <Text style={[styles.title, { color: colors.textOnSurface }]}>Profile unavailable</Text>
@@ -173,16 +190,49 @@ function ClerkPersonalInfoScreen() {
               <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Try again</Text>
             </TouchableOpacity>
           </View>
-        ) : visibleState.kind === 'loaded' ? (
-          <ClerkPersonalInfoForm
-            key={visibleState.clerkUserId}
-            clerkUserId={visibleState.clerkUserId}
-            profile={visibleState.profile}
-            createApi={createApi}
-            currentIdentity={currentIdentity}
-            saveController={saveController}
-          />
-        ) : null}
+        ) : visibleState.kind === 'error' && !visibleState.staleProfile ? (
+          <View style={[styles.clerkInfoCard, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.title, { color: colors.textOnSurface }]}>Profile unavailable</Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>{visibleState.message}</Text>
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: colors.primary }]}
+              onPress={() => setLoadAttempt((attempt) => attempt + 1)}
+              accessibilityRole="button"
+              testID="clerk-personal-info-retry"
+            >
+              <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            {visibleState.kind === 'refreshing' ? (
+              <View style={styles.refreshingRow} accessibilityRole="progressbar" testID="clerk-personal-info-refreshing">
+                <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.refreshingMark} resizeMode="contain" />
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null}
+            {visibleState.kind === 'error' ? (
+              <View style={[styles.inlineLoadError, { backgroundColor: colors.surface }]} testID="clerk-personal-info-refresh-error">
+                <Text style={[styles.helperText, { color: colors.destructive }]}>{visibleState.message}</Text>
+                <TouchableOpacity
+                  onPress={() => setLoadAttempt((attempt) => attempt + 1)}
+                  accessibilityRole="button"
+                  testID="clerk-personal-info-retry"
+                >
+                  <Text style={[styles.retryText, { color: colors.primary }]}>Try again</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            <ClerkPersonalInfoForm
+              key={visibleState.clerkUserId!}
+              clerkUserId={visibleState.clerkUserId!}
+              profile={visibleState.kind === 'error' ? visibleState.staleProfile! : visibleState.profile}
+              createApi={createApi}
+              currentIdentity={currentIdentity}
+              saveController={saveController}
+            />
+          </>
+        )}
       </KeyboardAwareScrollViewCompat>
     </View>
   );
@@ -211,8 +261,16 @@ function ClerkPersonalInfoForm({
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const [saveNotice, setSaveNotice] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [dobFocused, setDobFocused] = React.useState(false);
+  const [focusedField, setFocusedField] = React.useState<keyof ClerkPersonalInfoValues | null>(null);
   const savingRef = React.useRef(false);
   const changedFields = getChangedClerkPersonalInfoFields(values, baseline);
+  React.useEffect(() => {
+    if (getChangedClerkPersonalInfoFields(values, baseline).length > 0) return;
+    const refreshedValues = getClerkPersonalInfoValues(profile);
+    setValues(refreshedValues);
+    setBaseline(refreshedValues);
+  }, [profile]);
   let requestData: ReturnType<typeof buildClerkPersonalInfoUpdateRequest> | null = null;
   let saveIssue: string | null = null;
   if (changedFields.length > 0) {
@@ -260,141 +318,170 @@ function ClerkPersonalInfoForm({
     }
   };
 
-  const fieldStyle = [
+  const fieldStyle = (field: keyof ClerkPersonalInfoValues) => [
     styles.input,
-    { backgroundColor: colors.surface, color: colors.textOnSurface, borderColor: colors.border },
+    {
+      backgroundColor: colors.surface,
+      color: colors.textOnSurface,
+      borderColor: focusedField === field ? colors.primary : colors.border,
+    },
   ];
 
   return (
-    <View style={styles.clerkInfoCard} testID="clerk-personal-info-form">
-      <Text style={[styles.title, { color: colors.textOnSurface }]}>Your details</Text>
-      <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
-        These details come from your authenticated Bluebird profile. Phone and email are read-only here.
-      </Text>
-
-      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>First name</Text>
-      <TextInput
-        style={fieldStyle}
-        value={values.firstName}
-        onChangeText={(value) => setField('firstName', value)}
-        placeholder="Not provided"
-        placeholderTextColor={colors.mutedForegroundLight}
-        autoCapitalize="words"
-        maxLength={80}
-        accessibilityLabel="First name"
-        testID="clerk-personal-info-first-name"
-      />
-
-      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Last name</Text>
-      <TextInput
-        style={fieldStyle}
-        value={values.lastName}
-        onChangeText={(value) => setField('lastName', value)}
-        placeholder="Not provided"
-        placeholderTextColor={colors.mutedForegroundLight}
-        autoCapitalize="words"
-        maxLength={80}
-        accessibilityLabel="Last name"
-        testID="clerk-personal-info-last-name"
-      />
-
-      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Email</Text>
-      <ReadOnlyProfileValue
-        value={profile.email?.trim() || 'Not provided'}
-        accessibilityLabel="Email, read only"
-      />
-
-      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Phone</Text>
-      <ReadOnlyProfileValue
-        value={profile.phoneE164?.trim() || 'Not provided'}
-        accessibilityLabel="Phone, read only"
-      />
-      {profile.phoneE164 ? (
-        <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]}>
-          {profile.phoneVerifiedAt ? 'Verified phone number. ' : 'Phone verification is not confirmed. '}
-          Phone changes aren’t available here.
-        </Text>
-      ) : null}
-
-      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Date of birth</Text>
-      <TextInput
-        style={fieldStyle}
-        value={values.dob}
-        onChangeText={(value) => setField('dob', value)}
-        placeholder="Not provided"
-        placeholderTextColor={colors.mutedForegroundLight}
-        autoCapitalize="none"
-        autoCorrect={false}
-        maxLength={10}
-        accessibilityLabel="Date of birth, year month day"
-        testID="clerk-personal-info-dob"
-      />
-      <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]}>Use YYYY-MM-DD.</Text>
-
-      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Gender</Text>
-      <View style={styles.choiceRow}>
-        {(['female', 'male'] as const).map((gender) => {
-          const selected = values.gender === gender;
-          return (
-            <TouchableOpacity
-              key={gender}
-              style={[
-                styles.choice,
-                { borderColor: selected ? colors.primary : colors.border },
-                selected && { backgroundColor: colors.primary + '12' },
-              ]}
-              onPress={() => setField('gender', gender)}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              testID={`clerk-personal-info-gender-${gender}`}
-            >
-              <Text style={[styles.choiceText, { color: selected ? colors.primary : colors.textOnSurface }]}>
-                {gender === 'female' ? 'Female' : 'Male'}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+    <View style={styles.clerkInfoGroups} testID="clerk-personal-info-form">
+      <View style={[styles.clerkInfoGroup, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.groupTitle, { color: colors.textOnSurface }]}>Personal details</Text>
+        <ClerkInfoField label="First name">
+          <TextInput
+            style={fieldStyle('firstName')}
+            onFocus={() => setFocusedField('firstName')}
+            onBlur={() => setFocusedField(null)}
+            value={values.firstName}
+            onChangeText={(value) => setField('firstName', value)}
+            placeholder="Not provided"
+            placeholderTextColor={colors.mutedForegroundLight}
+            autoCapitalize="words"
+            autoComplete="given-name"
+            maxLength={80}
+            accessibilityLabel="First name"
+            testID="clerk-personal-info-first-name"
+          />
+        </ClerkInfoField>
+        <ClerkInfoField label="Last name">
+          <TextInput
+            style={fieldStyle('lastName')}
+            onFocus={() => setFocusedField('lastName')}
+            onBlur={() => setFocusedField(null)}
+            value={values.lastName}
+            onChangeText={(value) => setField('lastName', value)}
+            placeholder="Not provided"
+            placeholderTextColor={colors.mutedForegroundLight}
+            autoCapitalize="words"
+            autoComplete="family-name"
+            maxLength={80}
+            accessibilityLabel="Last name"
+            testID="clerk-personal-info-last-name"
+          />
+        </ClerkInfoField>
+        <ClerkInfoField label="Date of birth">
+          <TextInput
+            style={fieldStyle('dob')}
+            value={dobFocused ? values.dob : formatClerkDateOfBirth(values.dob)}
+            onFocus={() => {
+              setDobFocused(true);
+              setFocusedField('dob');
+            }}
+            onBlur={() => {
+              setDobFocused(false);
+              setFocusedField(null);
+            }}
+            onChangeText={(value) => setField('dob', value)}
+            placeholder="Not provided"
+            placeholderTextColor={colors.mutedForegroundLight}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="numbers-and-punctuation"
+            maxLength={10}
+            accessibilityLabel="Date of birth"
+            testID="clerk-personal-info-dob"
+          />
+          <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]}>Edit as YYYY-MM-DD.</Text>
+        </ClerkInfoField>
+        <ClerkInfoField label="Gender">
+          <View style={styles.choiceRow}>
+            {(['female', 'male'] as const).map((gender) => {
+              const selected = values.gender === gender;
+              return (
+                <TouchableOpacity
+                  key={gender}
+                  style={[
+                    styles.choice,
+                    { borderColor: selected ? colors.primary : colors.border },
+                    selected && { backgroundColor: colors.primary + '12' },
+                  ]}
+                  onPress={() => setField('gender', gender)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  testID={`clerk-personal-info-gender-${gender}`}
+                >
+                  <Text style={[styles.choiceText, { color: selected ? colors.primary : colors.textOnSurface }]}>
+                    {gender === 'female' ? 'Female' : 'Male'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </ClerkInfoField>
+        <ClerkInfoField label="Weight (lbs)">
+          <TextInput
+            style={fieldStyle('weightLbs')}
+            onFocus={() => setFocusedField('weightLbs')}
+            onBlur={() => setFocusedField(null)}
+            value={values.weightLbs}
+            onChangeText={(value) => setField('weightLbs', value)}
+            placeholder="Not provided"
+            placeholderTextColor={colors.mutedForegroundLight}
+            keyboardType="number-pad"
+            maxLength={4}
+            accessibilityLabel="Weight in pounds, optional"
+            testID="clerk-personal-info-weight"
+          />
+        </ClerkInfoField>
       </View>
-
-      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Weight (lbs)</Text>
-      <TextInput
-        style={fieldStyle}
-        value={values.weightLbs}
-        onChangeText={(value) => setField('weightLbs', value)}
-        placeholder="Not provided"
-        placeholderTextColor={colors.mutedForegroundLight}
-        keyboardType="number-pad"
-        maxLength={4}
-        accessibilityLabel="Weight in pounds, optional"
-        testID="clerk-personal-info-weight"
-      />
-
-      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Home airport</Text>
-      <ReadOnlyProfileValue
-        value={profile.homeAirportLabel?.trim() || profile.homeAirportCode?.trim() || 'Not provided'}
-        accessibilityLabel="Home airport, read only"
-      />
-      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Favorite airports</Text>
-      <ReadOnlyProfileValue
-        value={profile.favoriteAirportLabels.length
-          ? profile.favoriteAirportLabels.join(', ')
-          : profile.favoriteAirportCodes.length
-            ? profile.favoriteAirportCodes.join(', ')
-            : 'Not provided'}
-        accessibilityLabel="Favorite airports, read only"
-      />
-      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Favorite cities</Text>
-      <ReadOnlyProfileValue
-        value={profile.favoriteCityLabels.length
-          ? profile.favoriteCityLabels.join(', ')
-          : profile.favoriteCityKeys.length
-            ? profile.favoriteCityKeys.join(', ')
-            : 'Not provided'}
-        accessibilityLabel="Favorite cities, read only"
-      />
-      <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]}>
-        Phone, email, airport, and city preferences can’t be changed on this screen.
-      </Text>
+      <View style={[styles.clerkInfoGroup, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.groupTitle, { color: colors.textOnSurface }]}>Contact</Text>
+        <ClerkInfoField label="Email">
+          <ReadOnlyProfileValue
+            value={profile.email?.trim() || 'Not provided'}
+            accessibilityLabel="Email, read only"
+          />
+          {profile.emailLocked ? (
+            <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]}>Verified email</Text>
+          ) : null}
+        </ClerkInfoField>
+        <ClerkInfoField label="Phone">
+          <ReadOnlyProfileValue
+            value={profile.phoneE164?.trim() || 'Not provided'}
+            accessibilityLabel="Phone, read only"
+            cue={profile.phoneVerifiedAt ? 'checkmark-circle' : 'lock-closed'}
+            cueColor={profile.phoneVerifiedAt ? colors.success : undefined}
+          />
+          {profile.phoneE164 ? (
+            <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]}>
+              {profile.phoneVerifiedAt ? 'Verified phone number' : 'Phone verification not confirmed'}
+            </Text>
+          ) : null}
+        </ClerkInfoField>
+      </View>
+      <View style={[styles.clerkInfoGroup, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.groupTitle, { color: colors.textOnSurface }]}>Travel preferences</Text>
+        <ClerkInfoField label="Home airport">
+          <ReadOnlyProfileValue
+            value={profile.homeAirportLabel?.trim() || profile.homeAirportCode?.trim() || 'Not provided'}
+            accessibilityLabel="Home airport, read only"
+          />
+        </ClerkInfoField>
+        <ClerkInfoField label="Favorite airports">
+          <ReadOnlyProfileValue
+            value={profile.favoriteAirportLabels.length
+              ? profile.favoriteAirportLabels.join(', ')
+              : profile.favoriteAirportCodes.length
+                ? profile.favoriteAirportCodes.join(', ')
+                : 'Not provided'}
+            accessibilityLabel="Favorite airports, read only"
+          />
+        </ClerkInfoField>
+        <ClerkInfoField label="Favorite cities">
+          <ReadOnlyProfileValue
+            value={profile.favoriteCityLabels.length
+              ? profile.favoriteCityLabels.join(', ')
+              : profile.favoriteCityKeys.length
+                ? profile.favoriteCityKeys.join(', ')
+                : 'Not provided'}
+            accessibilityLabel="Favorite cities, read only"
+          />
+        </ClerkInfoField>
+      </View>
 
       {saveError ? <Text style={[styles.errorText, { color: colors.destructive }]} testID="clerk-personal-info-save-error">{saveError}</Text> : null}
       {saveNotice ? <Text style={[styles.savedText, { color: colors.success }]} testID="clerk-personal-info-save-success">{saveNotice}</Text> : null}
@@ -421,24 +508,40 @@ function ClerkPersonalInfoForm({
   );
 }
 
+function ClerkInfoField({ label, children }: { label: string; children: React.ReactNode }) {
+  const colors = useColors();
+  return (
+    <View style={styles.clerkInfoField}>
+      <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>{label}</Text>
+      {children}
+    </View>
+  );
+}
+
 function ReadOnlyProfileValue({
   value,
   accessibilityLabel,
+  cue = 'lock-closed',
+  cueColor,
 }: {
   value: string;
   accessibilityLabel: string;
+  cue?: 'lock-closed' | 'checkmark-circle';
+  cueColor?: string;
 }) {
   const colors = useColors();
   return (
-    <Text
+    <View
       style={[
         styles.readOnlyValue,
-        { backgroundColor: colors.muted, color: colors.textOnSurface, borderColor: colors.border },
+        { backgroundColor: colors.muted, borderColor: colors.border },
       ]}
       accessibilityLabel={accessibilityLabel}
+      accessible
     >
-      {value}
-    </Text>
+      <Text style={[styles.readOnlyText, { color: colors.textOnSurface }]}>{value}</Text>
+      <Ionicons name={cue} size={16} color={cueColor ?? colors.mutedForegroundLight} />
+    </View>
   );
 }
 
@@ -453,10 +556,18 @@ function ClerkPersonalInfoState({
 }) {
   const colors = useColors();
   return (
-    <View style={styles.center}>
-      {loading ? <ActivityIndicator color={colors.primary} /> : null}
-      <Text style={[styles.title, { color: colors.textOnSurface }]}>{title}</Text>
-      {message ? <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>{message}</Text> : null}
+    <View style={styles.center} accessibilityLabel={loading ? title : undefined}>
+      {loading ? (
+        <>
+          <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.loadingMark} resizeMode="contain" />
+          <ActivityIndicator size="small" color={colors.primary} />
+        </>
+      ) : (
+        <>
+          <Text style={[styles.title, { color: colors.textOnSurface }]}>{title}</Text>
+          {message ? <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>{message}</Text> : null}
+        </>
+      )}
     </View>
   );
 }
@@ -967,24 +1078,51 @@ export default function PersonalInfoScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { paddingHorizontal: 16, paddingTop: 20 },
-  clerkInfoContent: { paddingHorizontal: 20, paddingTop: 20, flexGrow: 1 },
-  clerkInfoCard: { padding: 18, borderRadius: 18, gap: 12 },
+  clerkHeader: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  clerkBackBtn: {
+    width: 42, height: 42, borderRadius: 21,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  clerkHeaderTitle: { fontSize: 26, lineHeight: 32, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
+  clerkInfoContent: { paddingHorizontal: 16, paddingTop: 2, flexGrow: 1, gap: 14 },
+  clerkInfoGroups: { gap: 14 },
+  clerkInfoGroup: { padding: 14, borderRadius: 16, borderWidth: 1, gap: 12 },
+  groupTitle: { fontSize: 16, lineHeight: 22, fontFamily: 'Inter_700Bold', marginBottom: 2 },
+  clerkInfoField: { gap: 6 },
+  clerkInfoCard: { padding: 16, borderRadius: 16, gap: 12 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 12 },
+  loadingMark: { width: 48, height: 48 },
+  refreshingRow: { height: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  refreshingMark: { width: 18, height: 18 },
+  inlineLoadError: { padding: 12, borderRadius: 12, gap: 8 },
+  retryText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   title: { fontSize: 24, lineHeight: 30, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
   subtitle: { fontSize: 14, lineHeight: 21, fontFamily: 'Inter_400Regular' },
   readOnlyValue: {
     minHeight: 50,
     borderWidth: 1,
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  readOnlyText: {
     fontFamily: 'Inter_400Regular',
     fontSize: 15,
+    flex: 1,
+    flexWrap: 'wrap',
   },
   fieldLabel: {
-    fontFamily: 'Inter_600SemiBold', fontSize: 12,
-    textTransform: 'uppercase', letterSpacing: 0.6,
-    marginBottom: 8, marginTop: 6,
+    fontFamily: 'Inter_600SemiBold', fontSize: 13,
   },
   choiceRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   choice: {
@@ -998,13 +1136,14 @@ const styles = StyleSheet.create({
   },
   choiceText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
   input: {
-    borderRadius: 14, borderWidth: 1,
-    paddingHorizontal: 16, paddingVertical: 14,
+    minHeight: 50,
+    borderRadius: 12, borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 10,
     fontFamily: 'Inter_500Medium', fontSize: 15,
-    marginBottom: 18,
+    marginBottom: 0,
   },
   bioInput: { minHeight: 105, paddingTop: 13 },
-  helperText: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: -10, marginBottom: 18, lineHeight: 17 },
+  helperText: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17 },
   errorText: { fontFamily: 'Inter_500Medium', fontSize: 13, marginBottom: 12, lineHeight: 18 },
   savedText: { fontFamily: 'Inter_500Medium', fontSize: 13, marginBottom: 12 },
   button: { borderRadius: 999, paddingVertical: 16, alignItems: 'center', marginTop: 6 },

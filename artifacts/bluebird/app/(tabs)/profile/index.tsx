@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, Image, StyleSheet, ScrollView, TouchableOpacity,
+  ActivityIndicator, View, Text, Image, StyleSheet, ScrollView, TouchableOpacity,
   Platform, Modal, Pressable,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -82,7 +82,8 @@ function resolvePhotoUrl(path: string | null | undefined): string | null {
 
 type ClerkProfileLoadState =
   | { kind: 'loading' }
-  | { kind: 'error'; message: string }
+  | { kind: 'refreshing'; clerkUserId: string; profile: ProductionUserProfile }
+  | { kind: 'error'; message: string; clerkUserId?: string; staleProfile?: ProductionUserProfile }
   | { kind: 'not_authenticated' }
   | { kind: 'loaded'; clerkUserId: string; profile: ProductionUserProfile };
 
@@ -102,6 +103,7 @@ export default function ProfileScreen() {
   const [appearanceOpen, setAppearanceOpen] = React.useState(false);
   const [profileLoadState, setProfileLoadState] = React.useState<ClerkProfileLoadState>({ kind: 'loading' });
   const [profileLoadAttempt, setProfileLoadAttempt] = React.useState(0);
+  const cachedClerkProfile = React.useRef<{ clerkUserId: string; profile: ProductionUserProfile } | null>(null);
   const currentClerkIdentity = React.useRef<string | null>(clerkSession?.userId ?? null);
   currentClerkIdentity.current = clerkSession?.userId ?? null;
   const currentClerkSession = React.useRef(clerkSession);
@@ -141,7 +143,10 @@ export default function ProfileScreen() {
       !clerkSession.userId
     ) return;
     const requestedClerkUserId = clerkSession.userId;
-    setProfileLoadState({ kind: 'loading' });
+    const cached = cachedClerkProfile.current;
+    setProfileLoadState(cached?.clerkUserId === requestedClerkUserId
+      ? { kind: 'refreshing', ...cached }
+      : { kind: 'loading' });
     try {
       const result = await loadClerkPersonalInfo(createClerkApi().authenticated, signal);
       if (!isClerkBluebirdProfileResultCurrent({
@@ -158,6 +163,10 @@ export default function ProfileScreen() {
         clerkUserId: requestedClerkUserId,
         profile: result.profile,
       });
+      cachedClerkProfile.current = {
+        clerkUserId: requestedClerkUserId,
+        profile: result.profile,
+      };
     } catch (error) {
       if (signal.aborted || currentClerkIdentity.current !== requestedClerkUserId) return;
       const typed = error as { code?: string; status?: number };
@@ -166,7 +175,14 @@ export default function ProfileScreen() {
         : typed?.code === 'session_expired' || typed?.status === 401
           ? 'Your sign-in has expired. Sign in again, then reopen your profile.'
           : 'Bluebird could not load your profile details.';
-      setProfileLoadState({ kind: 'error', message });
+      const retained = cachedClerkProfile.current?.clerkUserId === requestedClerkUserId
+        ? cachedClerkProfile.current
+        : null;
+      setProfileLoadState({
+        kind: 'error',
+        message,
+        ...(retained ? { clerkUserId: retained.clerkUserId, staleProfile: retained.profile } : {}),
+      });
     }
   }, [authMode, createClerkApi, ...profileRequestDependencies]);
 
@@ -199,17 +215,16 @@ export default function ProfileScreen() {
   const unreadCount = notifList.filter((n) => !n.read).length;
 
   if (authMode === 'clerk') {
-    const visibleProfileState = profileLoadState.kind === 'loaded' &&
+    const visibleProfileState = 'clerkUserId' in profileLoadState &&
       profileLoadState.clerkUserId !== clerkSession?.userId
       ? { kind: 'loading' as const }
       : profileLoadState;
     if (!clerkSession?.isLoaded || visibleProfileState.kind === 'loading') {
       return (
-        <ProductionAuthenticatedUnavailableNotice
-          title="Loading your profile"
-          description="Bluebird is confirming your signed-in account before loading profile details."
-          testID="clerk-profile-loading"
-        />
+        <View style={[styles.clerkProfileLoading, { backgroundColor: colors.offWhite, paddingTop: topPad }]} testID="clerk-profile-loading" accessibilityLabel="Loading your profile">
+          <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.clerkProfileLoadingMark} resizeMode="contain" />
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
       );
     }
     if (visibleProfileState.kind === 'not_authenticated') {
@@ -223,7 +238,9 @@ export default function ProfileScreen() {
         />
       );
     }
-    const profile = visibleProfileState.kind === 'loaded' ? visibleProfileState.profile : null;
+    const profile = visibleProfileState.kind === 'loaded' || visibleProfileState.kind === 'refreshing'
+      ? visibleProfileState.profile
+      : visibleProfileState.kind === 'error' ? visibleProfileState.staleProfile ?? null : null;
     const firstName = profile?.firstName?.trim() || null;
     const lastName = profile?.lastName?.trim() || null;
     const email = profile?.email?.trim() || null;
@@ -275,9 +292,12 @@ export default function ProfileScreen() {
               {email}
             </Text>
           ) : null}
-          <Text style={[styles.profileReadNote, { color: colors.mutedForegroundLight }]}>
-            Loading this profile may sync phone information already verified by your signed-in account.
-          </Text>
+          {visibleProfileState.kind === 'refreshing' ? (
+            <View style={styles.clerkProfileRefreshing} accessibilityRole="progressbar" testID="clerk-profile-refreshing">
+              <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.clerkProfileRefreshingMark} resizeMode="contain" />
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : null}
           <SettingsGroup
             title="Account"
             rows={[
@@ -555,6 +575,14 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { paddingHorizontal: 20, gap: 18 },
+  clerkProfileLoading: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10,
+  },
+  clerkProfileLoadingMark: { width: 48, height: 48 },
+  clerkProfileRefreshing: {
+    height: 24, flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  clerkProfileRefreshingMark: { width: 18, height: 18 },
 
   avatarRow: {
     flexDirection: 'row', alignItems: 'center',

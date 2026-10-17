@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
@@ -30,7 +30,8 @@ import type { BluebirdProfileLoadResult } from '@/lib/clerkBluebirdProfile';
 type ApiClient = ReturnType<typeof createMainBluebirdApiIntegration>;
 type LoadState =
   | { kind: 'loading' }
-  | { kind: 'error'; message: string }
+  | { kind: 'refreshing'; clerkUserId: string; result: BluebirdProfileLoadResult }
+  | { kind: 'error'; message: string; clerkUserId?: string; staleResult?: BluebirdProfileLoadResult }
   | { kind: 'loaded'; clerkUserId: string; result: BluebirdProfileLoadResult };
 
 export default function BluebirdProfileScreen() {
@@ -47,6 +48,7 @@ export default function BluebirdProfileScreen() {
       : undefined;
   const [loadState, setLoadState] = useState<LoadState>({ kind: 'loading' });
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const cachedProfile = useRef<{ clerkUserId: string; result: BluebirdProfileLoadResult } | null>(null);
   const currentIdentity = useRef<string | null>(session?.userId ?? null);
   currentIdentity.current = session?.userId ?? null;
   const currentSession = useRef(session);
@@ -82,7 +84,10 @@ export default function BluebirdProfileScreen() {
   const loadProfile = useCallback(async (signal: AbortSignal) => {
     if (!session?.isLoaded || session.isSignedIn !== true || !session.userId) return;
     const requestedClerkUserId = session.userId;
-    setLoadState({ kind: 'loading' });
+    const cached = cachedProfile.current;
+    setLoadState(cached?.clerkUserId === requestedClerkUserId
+      ? { kind: 'refreshing', ...cached }
+      : { kind: 'loading' });
     try {
       const result = await loadClerkBluebirdProfile(
         createApi().authenticated,
@@ -94,10 +99,18 @@ export default function BluebirdProfileScreen() {
         currentClerkUserId: currentIdentity.current,
         aborted: signal.aborted,
       })) return;
+      cachedProfile.current = { clerkUserId: requestedClerkUserId, result };
       setLoadState({ kind: 'loaded', clerkUserId: requestedClerkUserId, result });
     } catch (error) {
       if (signal.aborted || currentIdentity.current !== requestedClerkUserId) return;
-      setLoadState({ kind: 'error', message: getProfileErrorMessage(error) });
+      const retained = cachedProfile.current?.clerkUserId === requestedClerkUserId
+        ? cachedProfile.current
+        : null;
+      setLoadState({
+        kind: 'error',
+        message: getProfileErrorMessage(error),
+        ...(retained ? { clerkUserId: retained.clerkUserId, staleResult: retained.result } : {}),
+      });
     }
   }, [createApi, verifiedCurrentUser, ...profileLoadDependencies]);
 
@@ -123,11 +136,13 @@ export default function BluebirdProfileScreen() {
     return <CenteredState title="Profile unavailable" message="Your Bluebird profile could not be loaded." />;
   }
 
-  const visibleLoadState: LoadState = loadState.kind === 'loaded' &&
+  const visibleLoadState: LoadState = 'clerkUserId' in loadState &&
     loadState.clerkUserId !== session.userId
     ? { kind: 'loading' }
     : loadState;
-  const result = visibleLoadState.kind === 'loaded' ? visibleLoadState.result : null;
+  const result = visibleLoadState.kind === 'loaded' || visibleLoadState.kind === 'refreshing'
+    ? visibleLoadState.result
+    : visibleLoadState.kind === 'error' ? visibleLoadState.staleResult ?? null : null;
   const authenticatedResult = result?.kind === 'authenticated' ? result : null;
   const profileEditable = result ? canEditClerkBluebirdProfile(result) : false;
   const profile = authenticatedResult?.profile ?? null;
@@ -161,9 +176,25 @@ export default function BluebirdProfileScreen() {
           <Text style={[styles.linkText, { color: colors.primary }]}>‹ Account</Text>
         </Pressable>
 
+        {visibleLoadState.kind === 'refreshing' ? (
+          <View style={styles.refreshingRow} accessibilityRole="progressbar" testID="clerk-bluebird-profile-refreshing">
+            <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.refreshingMark} resizeMode="contain" />
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        ) : null}
+        {visibleLoadState.kind === 'error' && visibleLoadState.staleResult ? (
+          <View style={[styles.stateCard, { backgroundColor: colors.surface }]} testID="clerk-bluebird-profile-refresh-error">
+            <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>{visibleLoadState.message}</Text>
+            <ActionButton
+              label="Try again"
+              onPress={() => setLoadAttempt((attempt) => attempt + 1)}
+            />
+          </View>
+        ) : null}
+
         {visibleLoadState.kind === 'loading' ? (
           <CenteredState loading title="Loading your profile" />
-        ) : visibleLoadState.kind === 'error' ? (
+        ) : visibleLoadState.kind === 'error' && !visibleLoadState.staleResult ? (
           <View style={styles.stateCard}>
             <Text style={[styles.title, { color: colors.textOnSurface }]}>Profile unavailable</Text>
             <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
@@ -482,10 +513,18 @@ function CenteredState({
 }) {
   const colors = useColors();
   return (
-    <View style={styles.center}>
-      {loading ? <ActivityIndicator color={colors.primary} /> : null}
-      <Text style={[styles.title, { color: colors.textOnSurface }]}>{title}</Text>
-      {message ? <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>{message}</Text> : null}
+    <View style={styles.center} accessibilityLabel={loading ? title : undefined}>
+      {loading ? (
+        <>
+          <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.loadingMark} resizeMode="contain" />
+          <ActivityIndicator size="small" color={colors.primary} />
+        </>
+      ) : (
+        <>
+          <Text style={[styles.title, { color: colors.textOnSurface }]}>{title}</Text>
+          {message ? <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>{message}</Text> : null}
+        </>
+      )}
     </View>
   );
 }
@@ -505,6 +544,9 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { paddingHorizontal: 22, gap: 12, flexGrow: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 12 },
+  refreshingRow: { minHeight: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  refreshingMark: { width: 18, height: 18 },
+  loadingMark: { width: 48, height: 48 },
   backLink: { alignSelf: 'flex-start', paddingVertical: 8, paddingRight: 16 },
   linkText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
   title: { fontSize: 26, lineHeight: 32, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
