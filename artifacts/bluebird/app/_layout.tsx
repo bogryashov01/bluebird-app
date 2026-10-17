@@ -228,7 +228,7 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="account/payment-methods"
-        options={{ headerShown: true, title: 'Payment Methods', ...headerOptions }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="account/contacts"

@@ -277,12 +277,10 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.doesNotMatch(clerkProfile, /recentActivity/);
 
   const contactsSource = readFileSync(resolve(projectRoot, "app/account/contacts.tsx"), "utf8");
-  const paymentMethodsSource = readFileSync(resolve(projectRoot, "app/account/payment-methods.tsx"), "utf8");
   const communitySource = readFileSync(resolve(projectRoot, "app/community.tsx"), "utf8");
   const conciergeSource = readFileSync(resolve(projectRoot, "app/concierge.tsx"), "utf8");
   for (const [source, unavailableTitle] of [
     [contactsSource, "Connect Contacts unavailable"],
-    [paymentMethodsSource, "Payment methods unavailable"],
     [communitySource, "Community unavailable"],
     [conciergeSource, "AI Concierge unavailable"],
   ]) {
@@ -290,6 +288,9 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
     assert.match(source, new RegExp(unavailableTitle));
     assert.match(source, /ProductionAuthenticatedUnavailableNotice/);
   }
+  const paymentMethodsSource = readFileSync(resolve(projectRoot, "app/account/payment-methods.tsx"), "utf8");
+  assert.match(paymentMethodsSource, /No payment methods available/);
+  assert.doesNotMatch(paymentMethodsSource, /authMode === 'clerk'/);
   const personalInfoSource = readFileSync(resolve(projectRoot, "app/account/personal-info.tsx"), "utf8");
   assert.match(personalInfoSource, /authMode === 'clerk'/);
   assert.match(personalInfoSource, /<ClerkPersonalInfoScreen \/>/);
