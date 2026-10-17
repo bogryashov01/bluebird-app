@@ -64,47 +64,49 @@ function flightStatusText(status: string | null): string | null {
 interface FlightInfoItem {
   label: string;
   value: string;
+  detail?: string;
+  detailTestID?: string;
   testID?: string;
+  valueTestID?: string;
 }
 
 type AirportDisplayRecord = Pick<AirportRecord, 'code' | 'name' | 'city' | 'state' | 'country'>
   & Partial<Pick<AirportRecord, 'latitude' | 'longitude'>>;
 
-function FlightInfoGroup({
-  title,
-  items,
+interface DirectionsTarget {
+  kind: 'airport' | 'fbo';
+  label: string;
+  destination: string;
+  location?: string;
+}
+
+function FlightInfoCard({
+  item,
   testID,
-  compactLayout,
   colors,
 }: {
-  title: string;
-  items: FlightInfoItem[];
+  item: FlightInfoItem;
   testID: string;
-  compactLayout: boolean;
   colors: ReturnType<typeof useColors>;
 }) {
-  if (items.length === 0) return null;
   return (
     <View
       testID={testID}
-      style={[
-        styles.flightInfoGroup,
-        compactLayout && styles.flightInfoGroupCompact,
-        { backgroundColor: colors.surface },
-      ]}
+      style={[styles.flightInfoCard, { backgroundColor: colors.surface, borderColor: colors.separator }]}
     >
-      <Text style={[styles.flightInfoHeading, { color: colors.textOnSurface }]}>{title}</Text>
-      {items.map((item) => (
-        <View key={item.label} style={styles.flightInfoRow}>
-          <Text style={[styles.flightInfoLabel, { color: colors.mutedForegroundLight }]}>{item.label}</Text>
-          <Text
-            testID={item.testID}
-            style={[styles.flightInfoValue, { color: colors.textOnSurface }]}
-          >
-            {item.value}
-          </Text>
-        </View>
-      ))}
+      <Text style={[styles.flightInfoLabel, { color: colors.mutedForegroundLight }]}>{item.label}</Text>
+      <Text
+        testID={item.valueTestID}
+        style={[styles.flightInfoValue, { color: colors.textOnSurface }]}
+        numberOfLines={2}
+      >
+        {item.value}
+      </Text>
+      {!!item.detail && (
+        <Text testID={item.detailTestID} style={[styles.flightInfoDetail, { color: colors.mutedForegroundLight }]} numberOfLines={1}>
+          {item.detail}
+        </Text>
+      )}
     </View>
   );
 }
@@ -114,15 +116,15 @@ export default function FlightDetailScreen() {
   const colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
-  // Scale hero with screen height so small iPhones keep content above the fold
-  const heroHeight = Math.round(Math.min(300, Math.max(200, windowHeight * 0.32)));
-  const compactLayout = windowWidth < 380;
+  const { height: windowHeight } = useWindowDimensions();
+  // Keep the aircraft image present without pushing the key flight details below the fold.
+  const heroHeight = Math.round(Math.min(240, Math.max(150, windowHeight * 0.23)));
   const { user, updateUser, authMode } = useAuth();
   const queryClient = useQueryClient();
   const localReadMode = shouldUseLocalFlightReadMode(authMode, isLocalFlightReadMode());
   const numericFlightId = parseProductionFlightId(id);
-  const [directionsOpen, setDirectionsOpen] = useState(false);
+  const [directionsTarget, setDirectionsTarget] = useState<DirectionsTarget | null>(null);
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const [networkMessage, setNetworkMessage] = useState('');
   const [networkError, setNetworkError] = useState('');
 
@@ -313,7 +315,9 @@ export default function FlightDetailScreen() {
   const f = flight;
   const imagePresentation = getFlightImagePresentation(f);
   const aircraftName = f.aircraftTypeName?.trim() || f.aircraftType?.trim() || null;
-  const imgSource = imagePresentation === 'provided' ? { uri: f.imageUrl! } : null;
+  const imgSource = imagePresentation === 'provided' && failedImageUrl !== f.imageUrl
+    ? { uri: f.imageUrl! }
+    : null;
   const readOnlyProduction = f.source === 'production';
 
   const status = myStatus?.status ?? 'none';
@@ -336,111 +340,93 @@ export default function FlightDetailScreen() {
   const arrivalTime = formatTime12(f.arrivalTime);
   const dateLabel = formatDate(f.departureDate);
   const arrivalDateLabel = formatDate(f.arrivalDate);
+  const distinctArrivalDate = arrivalDateLabel && arrivalDateLabel !== dateLabel
+    ? arrivalDateLabel
+    : null;
   const scheduleParts = [
     dateLabel,
     departureTime
       ? `Departs ${departureTime}${f.departureTimeZone ? ` ${f.departureTimeZone}` : ''}`
       : null,
   ].filter((part): part is string => !!part);
-  const hasRouteDetails = !!(fromLabel || toLabel);
+  const routeSummary = fromAirport || toAirport
+    ? `${fromAirport ?? '—'} → ${toAirport ?? '—'}`
+    : 'Route unavailable';
   const findAirport = (code: string | null) =>
     code ? airportRecords.find((airport) => airport.code === code.toUpperCase()) : undefined;
   const originAirportInfo = findAirport(fromAirport);
   const destinationAirportInfo = findAirport(toAirport);
-  const airportInformation = (
-    code: string | null,
-    city: string | null,
-    airport: AirportDisplayRecord | undefined,
-  ): FlightInfoItem[] => {
-    const items: FlightInfoItem[] = [];
-    const airportName = airport?.name?.trim();
-    if (airportName) {
-      items.push({ label: 'Airport', value: `${airportName}${code ? ` (${code})` : ''}` });
-    } else if (code) {
-      items.push({ label: 'Airport', value: code });
-    }
-    const location = [
+  const formatAirportLocation = (airport: AirportDisplayRecord | undefined, city: string | null) =>
+    [
       airport?.city?.trim() || city,
       airport?.state?.trim(),
       airport?.country?.trim(),
-    ].filter((part): part is string => !!part?.trim());
-    if (location.length > 0) items.push({ label: 'Location', value: location.join(', ') });
-    return items;
+    ].filter((part): part is string => !!part?.trim()).join(', ');
+  const hasCoordinates = (airport: AirportDisplayRecord | undefined) =>
+    Number.isFinite(airport?.latitude) && Number.isFinite(airport?.longitude);
+  const airportDirectionsTarget = (
+    code: string | null,
+    airport: AirportDisplayRecord | undefined,
+  ): DirectionsTarget | null => {
+    if (!hasCoordinates(airport)) return null;
+    const label = airport?.name?.trim()
+      ? `${airport.name.trim()}${code ? ` (${code})` : ''}`
+      : code ?? airport?.city?.trim() ?? null;
+    if (!label) return null;
+    return {
+      kind: 'airport',
+      label,
+      destination: `${airport!.latitude},${airport!.longitude}`,
+      location: formatAirportLocation(airport, null) || undefined,
+    };
   };
-  const departureInformation = [
-    ...airportInformation(fromAirport, fromCity, originAirportInfo),
-    ...(dateLabel ? [{ label: 'Date', value: dateLabel, testID: 'flight-info-departure-date' }] : []),
-    ...(departureTime ? [{
-      label: 'Time',
-      value: `${departureTime}${f.departureTimeZone ? ` ${f.departureTimeZone}` : ''}`,
-      testID: 'flight-info-departure-time',
-    }] : []),
-  ];
-  const arrivalInformation = [
-    ...airportInformation(toAirport, toCity, destinationAirportInfo),
-    ...(arrivalDateLabel ? [{ label: 'Date', value: arrivalDateLabel, testID: 'flight-info-arrival-date' }] : []),
-    ...(arrivalTime ? [{
-      label: 'Time',
-      value: `${arrivalTime}${f.arrivalTimeZone ? ` ${f.arrivalTimeZone}` : ''}`,
-      testID: 'flight-info-arrival-time',
-    }] : []),
-  ];
-  const aircraftInformation: FlightInfoItem[] = [
-    ...(aircraftName ? [{ label: 'Type', value: aircraftName, testID: 'flight-info-aircraft-type' }] : []),
-    ...(f.aircraftTypeCode?.trim()
-      ? [{ label: 'Code', value: f.aircraftTypeCode.trim(), testID: 'flight-info-aircraft-code' }]
-      : []),
-  ];
-  const additionalInformation: FlightInfoItem[] = [
-    ...(f.duration?.trim()
-      ? [{ label: 'Estimated duration', value: f.duration.trim(), testID: 'flight-info-duration' }]
-      : []),
-    ...(flightStatusText(f.status)
-      ? [{ label: 'Status', value: flightStatusText(f.status)!, testID: 'flight-info-status' }]
-      : []),
-    ...(f.international !== null
-      ? [{ label: 'Route type', value: f.international ? 'International' : 'Domestic', testID: 'flight-info-international' }]
-      : []),
-    ...(!readOnlyProduction && Number.isSafeInteger(f.queueCount) && f.queueCount! >= 0
-      ? [{ label: 'Queue count', value: f.queueCount!.toLocaleString(), testID: 'flight-info-queue-count' }]
-      : []),
-  ];
-  const hasFlightInformation = [
-    departureInformation,
-    arrivalInformation,
-    aircraftInformation,
-    additionalInformation,
-  ].some((items) => items.length > 0);
-
-  const departureAirportName = originAirportInfo?.name?.trim() || null;
-  const departureAirportLocation = [
-    originAirportInfo?.city?.trim(),
-    originAirportInfo?.state?.trim(),
-    originAirportInfo?.country?.trim(),
-  ].filter((part): part is string => !!part);
-  const departureAirportLabel = departureAirportName
-    ? `${departureAirportName}${fromAirport ? ` (${fromAirport})` : ''}`
-    : null;
-  const airportCoordinatesAvailable =
-    Number.isFinite(originAirportInfo?.latitude) &&
-    Number.isFinite(originAirportInfo?.longitude);
-  const airportDirectionsDestination = airportCoordinatesAvailable
-    ? `${originAirportInfo!.latitude},${originAirportInfo!.longitude}`
-    : departureAirportLabel;
-  const departureDirectionsTarget = hasAuthorizedFboLocation
+  const departureAirportTarget = airportDirectionsTarget(fromAirport, originAirportInfo);
+  const arrivalAirportTarget = airportDirectionsTarget(toAirport, destinationAirportInfo);
+  const departureAirportLocation = formatAirportLocation(originAirportInfo, fromCity);
+  const arrivalAirportLocation = formatAirportLocation(destinationAirportInfo, toCity);
+  const departureFboTarget: DirectionsTarget | null = hasAuthorizedFboLocation
     ? {
-      kind: 'fbo' as const,
+      kind: 'fbo',
       label: departureFbo!.trim(),
       destination: departureFboAddress!.trim(),
     }
-    : departureAirportLabel && airportDirectionsDestination
-      ? {
-        kind: 'airport' as const,
-        label: departureAirportLabel,
-        destination: airportDirectionsDestination,
-      }
-      : null;
-  const canOpenDirections = !!departureDirectionsTarget;
+    : null;
+  const flightInformation: FlightInfoItem[] = [
+    ...(aircraftName
+      ? [{
+        label: 'Aircraft',
+        value: aircraftName,
+        detail: f.aircraftTypeCode?.trim() || undefined,
+        testID: 'flight-info-aircraft',
+        detailTestID: 'flight-info-aircraft-code',
+        valueTestID: 'flight-info-aircraft-type',
+      }]
+      : []),
+    ...(f.duration?.trim()
+      ? [{
+        label: 'Duration',
+        value: f.duration.trim(),
+        testID: 'flight-info-duration-card',
+        valueTestID: 'flight-info-duration',
+      }]
+      : []),
+    ...(f.international !== null
+      ? [{
+        label: 'Route type',
+        value: f.international ? 'International' : 'Domestic',
+        testID: 'flight-info-international-card',
+        valueTestID: 'flight-info-international',
+      }]
+      : []),
+    ...(flightStatusText(f.status)
+      ? [{
+        label: 'Status',
+        value: flightStatusText(f.status)!,
+        testID: 'flight-info-status-card',
+        valueTestID: 'flight-info-status',
+      }]
+      : []),
+  ];
 
   const showMapError = (target: string) => {
     const message = `We couldn't open maps. Search for this location instead:\n\n${target}`;
@@ -452,8 +438,8 @@ export default function FlightDetailScreen() {
   };
 
   const openDirections = async (service: 'apple' | 'google') => {
-    setDirectionsOpen(false);
-    const target = departureDirectionsTarget;
+    const target = directionsTarget;
+    setDirectionsTarget(null);
     if (!target) return;
     const destination = encodeURIComponent(target.destination.replace(/\n/g, ', '));
     const url = service === 'apple'
@@ -674,6 +660,62 @@ export default function FlightDetailScreen() {
     );
   }
 
+  function renderAirportRow(
+    label: 'Departure' | 'Arrival',
+    code: string | null,
+    city: string | null,
+    airport: AirportDisplayRecord | undefined,
+    location: string,
+    target: DirectionsTarget | null,
+  ) {
+    const airportName = airport?.name?.trim() || null;
+    const primary = airportName
+      ? `${airportName}${code ? ` (${code})` : ''}`
+      : code ?? city;
+    if (!primary) return null;
+    const rowContent = (
+      <>
+        <View style={styles.airportRowCopy}>
+          <Text style={[styles.airportRowLabel, { color: colors.mutedForegroundLight }]}>{label}</Text>
+          <Text style={[styles.airportRowName, { color: colors.textOnSurface }]} numberOfLines={1}>
+            {primary}
+          </Text>
+          {!!location && (
+            <Text style={[styles.airportRowLocation, { color: colors.mutedForegroundLight }]} numberOfLines={1}>
+              {location}
+            </Text>
+          )}
+        </View>
+        {target && (
+          <Feather name="navigation" size={17} color={colors.primary} />
+        )}
+      </>
+    );
+    return (
+      <View
+        key={label}
+        testID={`flight-airport-${label.toLowerCase()}`}
+        style={[styles.airportRow, { backgroundColor: colors.surface }]}
+      >
+        {target ? (
+          <TouchableOpacity
+            testID={label === 'Departure' ? 'departure-airport-directions' : 'arrival-airport-directions'}
+            style={styles.airportRowAction}
+            onPress={() => setDirectionsTarget(target)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel={`Get directions to ${target.label}`}
+            accessibilityHint="Choose Apple Maps or Google Maps"
+          >
+            {rowContent}
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.airportRowAction}>{rowContent}</View>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.root, { backgroundColor: colors.offWhite }]}>
       {/* ── Frosted back button (floats above hero) ── */}
@@ -700,6 +742,7 @@ export default function FlightDetailScreen() {
               testID="flight-detail-photo"
               source={imgSource}
               style={StyleSheet.absoluteFill}
+              onError={() => setFailedImageUrl(f.imageUrl)}
             >
               {/* Top-to-middle dark fade so back button is visible */}
               <LinearGradient
@@ -725,52 +768,51 @@ export default function FlightDetailScreen() {
               </Text>
             </View>
           )}
-          {/* Route pill at bottom of hero */}
-          <View
-            style={[
-              styles.routePill,
-              {
-                backgroundColor: imgSource ? colors.primaryForeground + '2E' : colors.card,
-                borderColor: imgSource ? colors.primaryForeground + '4D' : colors.border,
-              },
-            ]}
-          >
-            <Text
-              testID="flight-detail-route"
-              style={[styles.routePillText, { color: imgSource ? colors.primaryForeground : colors.foreground }]}
+          {!!(fromAirport || toAirport) && (
+            <View
+              testID="flight-detail-hero-route"
+              style={[
+                styles.heroRouteBadge,
+                {
+                  backgroundColor: imgSource ? colors.primaryForeground + '2E' : colors.surface,
+                  borderColor: imgSource ? colors.primaryForeground + '4D' : colors.border,
+                },
+              ]}
             >
-              {fromLabel && toLabel
-                ? `${fromLabel} → ${toLabel}`
-                : fromLabel ?? toLabel ?? 'Route unavailable'}
-            </Text>
-          </View>
+              <Text style={[styles.heroRouteBadgeText, { color: imgSource ? colors.primaryForeground : colors.textOnSurface }]}>
+                {routeSummary}
+              </Text>
+            </View>
+          )}
         </View>
 
-        {/* ── Aircraft name ── */}
-        {!!aircraftName && (
-          <View style={styles.titleRow}>
+        <View style={styles.flightHeader}>
+          {!!aircraftName && (
             <Text style={[styles.aircraftName, { color: colors.textOnSurface }]} numberOfLines={1}>
               {aircraftName}
             </Text>
-          </View>
-        )}
+          )}
+          {scheduleParts.length > 0 && (
+            <Text style={[styles.dateText, { color: colors.mutedForegroundLight }]} numberOfLines={1}>
+              {scheduleParts.join(' · ')}
+            </Text>
+          )}
+        </View>
 
-        {/* ── Local schedule, when supplied ── */}
-        {scheduleParts.length > 0 && (
-          <Text style={[styles.dateText, { color: colors.mutedForegroundLight }]}>
-            {scheduleParts.join(' · ')}
+        {/* ── Compact route and local schedule ── */}
+        <View
+          testID="flight-detail-route-card"
+          style={[styles.routeCard, { backgroundColor: colors.surface, borderColor: colors.separator }]}
+        >
+          <Text
+            testID="flight-detail-route"
+            style={[styles.routeSummary, { color: colors.textOnSurface }]}
+            numberOfLines={1}
+          >
+            {routeSummary}
           </Text>
-        )}
-
-        {/* ── Route and schedule details ── */}
-        {hasRouteDetails && (
-          <View style={[styles.routeCard, compactLayout && styles.routeCardCompact, { backgroundColor: colors.surface }]}>
+          <View style={styles.routeSchedule}>
             <View style={styles.routeEndpoint}>
-              {fromLabel && (
-                <Text style={[styles.routeCode, compactLayout && styles.routeCodeCompact, { color: colors.textOnSurface }]} numberOfLines={1}>
-                  {fromLabel}
-                </Text>
-              )}
               {departureTime && (
                 <Text
                   testID="flight-detail-route-departure-time"
@@ -780,27 +822,24 @@ export default function FlightDetailScreen() {
                   {departureTime}
                 </Text>
               )}
-              {fromAirport && fromCity && (
-                <Text style={[styles.routeCity, { color: colors.mutedForegroundLight }]} numberOfLines={1}>{fromCity}</Text>
+              {!!(fromCity || originAirportInfo?.city) && (
+                <Text style={[styles.routeCity, { color: colors.mutedForegroundLight }]} numberOfLines={1}>
+                  {fromCity || originAirportInfo?.city}
+                </Text>
               )}
             </View>
-            <View style={[styles.routeCenter, compactLayout && styles.routeCenterCompact]}>
+            <View style={styles.routeCenter}>
               <View style={[styles.routeLine, { backgroundColor: colors.separator }]} />
               <View style={[styles.routeDot, { backgroundColor: colors.primary }]} />
               {!!f.duration && (
-                <Text style={[styles.routeDuration, compactLayout && styles.routeDurationCompact, { color: colors.mutedForegroundLight }]} numberOfLines={1}>
+                <Text testID="flight-detail-route-duration" style={[styles.routeDuration, { color: colors.mutedForegroundLight }]} numberOfLines={1}>
                   {f.duration}
                 </Text>
               )}
               <View style={[styles.routeDot, { backgroundColor: colors.primary }]} />
               <View style={[styles.routeLine, { backgroundColor: colors.separator }]} />
             </View>
-            <View style={[styles.routeEndpoint, { alignItems: 'flex-end' }]}>
-              {toLabel && (
-                <Text style={[styles.routeCode, compactLayout && styles.routeCodeCompact, { color: colors.textOnSurface }]} numberOfLines={1}>
-                  {toLabel}
-                </Text>
-              )}
+            <View style={[styles.routeEndpoint, styles.routeEndpointRight]}>
               {arrivalTime && (
                 <Text
                   testID="flight-detail-route-arrival-time"
@@ -810,49 +849,63 @@ export default function FlightDetailScreen() {
                   {arrivalTime}
                 </Text>
               )}
-              {toAirport && toCity && (
-                <Text style={[styles.routeCity, { color: colors.mutedForegroundLight }]} numberOfLines={1}>{toCity}</Text>
+              {!!distinctArrivalDate && (
+                <Text
+                  testID="flight-detail-route-arrival-date"
+                  style={[styles.routeCity, { color: colors.mutedForegroundLight }]}
+                  numberOfLines={1}
+                >
+                  Arrives {distinctArrivalDate}
+                </Text>
               )}
+              {!!(toCity || destinationAirportInfo?.city) && (
+                <Text style={[styles.routeCity, { color: colors.mutedForegroundLight }]} numberOfLines={1}>
+                  {toCity || destinationAirportInfo?.city}
+                </Text>
+              )}
+            </View>
+          </View>
+        </View>
+
+        {/* ── Four supported flight facts ── */}
+        {flightInformation.length > 0 && (
+          <View style={styles.flightInfoSection}>
+            <Text testID="flight-info-section-title" style={[styles.flightInfoTitle, { color: colors.textOnSurface }]}>
+              Flight information
+            </Text>
+            <View style={styles.flightInfoGrid}>
+              {flightInformation.map((item) => (
+                <FlightInfoCard
+                  key={item.label}
+                  item={item}
+                  testID={item.testID!}
+                  colors={colors}
+                />
+              ))}
             </View>
           </View>
         )}
 
-        {/* ── Contract-backed flight data, grouped by topic ── */}
-        {hasFlightInformation && (
-          <View style={styles.flightInfoSection}>
-            <Text testID="flight-info-section-title" style={[styles.flightInfoTitle, { color: colors.textOnSurface }]}>
-              Flight Information
-            </Text>
-            <View style={styles.flightInfoGrid}>
-              <FlightInfoGroup
-                title="Departure"
-                items={departureInformation}
-                testID="flight-info-departure"
-                compactLayout={compactLayout}
-                colors={colors}
-              />
-              <FlightInfoGroup
-                title="Arrival"
-                items={arrivalInformation}
-                testID="flight-info-arrival"
-                compactLayout={compactLayout}
-                colors={colors}
-              />
-              <FlightInfoGroup
-                title="Aircraft"
-                items={aircraftInformation}
-                testID="flight-info-aircraft"
-                compactLayout={compactLayout}
-                colors={colors}
-              />
-              <FlightInfoGroup
-                title="Additional Details"
-                items={additionalInformation}
-                testID="flight-info-additional"
-                compactLayout={compactLayout}
-                colors={colors}
-              />
-            </View>
+        {/* ── Airport locations only use names and locations returned by the readers ── */}
+        {(fromLabel || toLabel) && (
+          <View style={styles.airportSection}>
+            <Text style={[styles.flightInfoTitle, { color: colors.textOnSurface }]}>Airport locations</Text>
+            {renderAirportRow(
+              'Departure',
+              fromAirport,
+              fromCity,
+              originAirportInfo,
+              departureAirportLocation,
+              departureAirportTarget,
+            )}
+            {renderAirportRow(
+              'Arrival',
+              toAirport,
+              toCity,
+              destinationAirportInfo,
+              arrivalAirportLocation,
+              arrivalAirportTarget,
+            )}
           </View>
         )}
 
@@ -894,59 +947,30 @@ export default function FlightDetailScreen() {
           </View>
         )}
 
-        {/* ── Confirmed FBO or public departure-airport directions ── */}
-        {!!departureDirectionsTarget && (
+        {/* ── FBO destination remains separate and is only read for confirmed members ── */}
+        {!!departureFboTarget && (
           <TouchableOpacity
-            style={[
-              styles.fboCard,
-              { backgroundColor: departureDirectionsTarget.kind === 'fbo' ? colors.backgroundMid : colors.surface },
-            ]}
-            disabled={!canOpenDirections}
-            onPress={() => setDirectionsOpen(true)}
+            style={[styles.fboCard, { backgroundColor: colors.backgroundMid }]}
+            onPress={() => setDirectionsTarget(departureFboTarget)}
             activeOpacity={0.78}
-            accessibilityRole={canOpenDirections ? 'button' : undefined}
-            accessibilityLabel={`Get directions to ${departureDirectionsTarget.label}`}
-            accessibilityHint={canOpenDirections ? 'Choose Apple Maps or Google Maps' : undefined}
-            testID={departureDirectionsTarget.kind === 'fbo'
-              ? 'departure-fbo-directions'
-              : 'departure-airport-directions'}
+            accessibilityRole="button"
+            accessibilityLabel={`Get directions to ${departureFboTarget.label}`}
+            accessibilityHint="Choose Apple Maps or Google Maps"
+            testID="departure-fbo-directions"
           >
             <View style={styles.fboHeader}>
-              <Text style={[
-                styles.fboLabel,
-                { color: departureDirectionsTarget.kind === 'fbo' ? colors.mutedOnBrand : colors.mutedForegroundLight },
-              ]}>
-                {departureDirectionsTarget.kind === 'fbo' ? 'FBO · DEPARTURE' : 'DEPARTURE AIRPORT'}
+              <Text style={[styles.fboLabel, { color: colors.mutedOnBrand }]}>
+                FBO · DEPARTURE
               </Text>
-              <Feather
-                name="navigation"
-                size={19}
-                color={departureDirectionsTarget.kind === 'fbo' ? colors.textOnBrand : colors.primary}
-              />
+              <Feather name="navigation" size={19} color={colors.textOnBrand} />
             </View>
-            <Text style={[
-              styles.fboValue,
-              { color: departureDirectionsTarget.kind === 'fbo' ? colors.textOnBrand : colors.textOnSurface },
-            ]}>
-              {departureDirectionsTarget.label}
+            <Text style={[styles.fboValue, { color: colors.textOnBrand }]}>
+              {departureFboTarget.label}
             </Text>
-            {departureDirectionsTarget.kind === 'fbo' ? (
-              <>
-                <Text style={[styles.fboAddress, { color: colors.mutedOnBrand }]}>
-                  {departureFboAddress}
-                </Text>
-                <Text style={[styles.fboAction, { color: colors.textOnBrand }]}>Get directions</Text>
-              </>
-            ) : (
-              <>
-                {departureAirportLocation.length > 0 && (
-                  <Text style={[styles.fboAddress, { color: colors.mutedForegroundLight }]}>
-                    {departureAirportLocation.join(', ')}
-                  </Text>
-                )}
-                <Text style={[styles.fboAction, { color: colors.primary }]}>Get directions</Text>
-              </>
-            )}
+            <Text style={[styles.fboAddress, { color: colors.mutedOnBrand }]}>
+              {departureFboAddress}
+            </Text>
+            <Text style={[styles.fboAction, { color: colors.textOnBrand }]}>Get directions</Text>
           </TouchableOpacity>
         )}
 
@@ -962,29 +986,30 @@ export default function FlightDetailScreen() {
       </ScrollView>
 
       <Modal
-        visible={directionsOpen && !!departureDirectionsTarget}
+        visible={!!directionsTarget}
         transparent
         animationType="fade"
-        onRequestClose={() => setDirectionsOpen(false)}
+        onRequestClose={() => setDirectionsTarget(null)}
       >
         <Pressable
           style={[styles.modalBackdrop, { backgroundColor: colors.backgroundMid + 'B8', paddingBottom: botPad + 12 }]}
-          onPress={() => setDirectionsOpen(false)}
+          onPress={() => setDirectionsTarget(null)}
         >
           <Pressable style={[styles.mapSheet, { backgroundColor: colors.surface }]} onPress={(event) => event.stopPropagation()}>
             <View style={styles.mapSheetHeader}>
               <View style={styles.mapSheetTitleGroup}>
                 <Text style={[styles.mapSheetTitle, { color: colors.textOnSurface }]}>
-                  Directions to {departureDirectionsTarget?.label}
+                  Directions to {directionsTarget?.label}
                 </Text>
                 <Text style={[styles.mapSheetAddress, { color: colors.mutedForegroundLight }]}>
-                  {departureDirectionsTarget?.kind === 'fbo'
-                    ? departureFboAddress
-                    : departureAirportLocation.join(', ') || fromAirport}
+                  {directionsTarget?.kind === 'fbo'
+                    ? directionsTarget.destination
+                    : directionsTarget?.location || directionsTarget?.label}
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => setDirectionsOpen(false)}
+                style={styles.mapSheetClose}
+                onPress={() => setDirectionsTarget(null)}
                 accessibilityRole="button"
                 accessibilityLabel="Close directions choices"
               >
@@ -1014,18 +1039,20 @@ export default function FlightDetailScreen() {
       </Modal>
 
       {/* ── Bottom sticky CTA ── */}
-      <View style={[styles.ctaBar, { backgroundColor: colors.offWhite, borderTopColor: colors.separator, paddingBottom: botPad + 12 }]}>
-        {renderCTA()}
-        <TouchableOpacity
-          style={styles.conciergeLink}
-          onPress={() => router.push({ pathname: '/concierge' })}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="Ask AI Concierge"
-        >
-          <Text style={[styles.conciergeLinkText, { color: colors.mutedForegroundLight }]}>Ask AI Concierge</Text>
-        </TouchableOpacity>
-      </View>
+      {!directionsTarget && (
+        <View style={[styles.ctaBar, { backgroundColor: colors.offWhite, borderTopColor: colors.separator, paddingBottom: botPad + 12 }]}>
+          {renderCTA()}
+          <TouchableOpacity
+            style={styles.conciergeLink}
+            onPress={() => router.push({ pathname: '/concierge' })}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Ask AI Concierge"
+          >
+            <Text style={[styles.conciergeLinkText, { color: colors.mutedForegroundLight }]}>Ask AI Concierge</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -1048,7 +1075,10 @@ const styles = StyleSheet.create({
   backChevron: { fontFamily: 'Inter_500Medium', fontSize: 22, marginTop: -2 },
 
   // Hero
-  heroFrame: { width: '100%', justifyContent: 'flex-end', position: 'relative', overflow: 'hidden' },
+  heroFrame: {
+    width: '100%', justifyContent: 'flex-end', position: 'relative', overflow: 'hidden',
+    borderTopLeftRadius: 22, borderTopRightRadius: 22,
+  },
   heroUnavailable: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
@@ -1056,60 +1086,62 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   heroUnavailableText: { fontFamily: 'Inter_500Medium', fontSize: 13 },
-  routePill: {
-    marginLeft: 20, marginBottom: 18, alignSelf: 'flex-start',
-    borderRadius: 100, paddingHorizontal: 16, paddingVertical: 6,
-    borderWidth: 1,
+  heroRouteBadge: {
+    position: 'absolute', left: 16, bottom: 13,
+    borderRadius: 999, borderWidth: 1, paddingHorizontal: 13, paddingVertical: 6,
   },
-  routePillText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, letterSpacing: 0.5 },
-
-  // Title row
-  titleRow: {
-    paddingHorizontal: 20, marginTop: 8,
-  },
-  aircraftName: { fontFamily: 'Inter_700Bold', fontSize: 22 },
+  heroRouteBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, letterSpacing: 0.35 },
+  // Aircraft and date header
+  flightHeader: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 10 },
+  aircraftName: { fontFamily: 'Inter_700Bold', fontSize: 20 },
 
   // Date
-  dateText: { fontFamily: 'Inter_400Regular', fontSize: 14, paddingHorizontal: 20, marginTop: 4, marginBottom: 18 },
+  dateText: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 3 },
 
-  // Horizontal route card
+  // Compact route card
   routeCard: {
-    marginHorizontal: 16,
-    borderRadius: 18, padding: 18, flexDirection: 'row', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, shadowOpacity: 0.05, elevation: 3,
-    marginBottom: 14,
+    marginHorizontal: 16, marginBottom: 12,
+    borderRadius: 16, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 13,
   },
-  routeCardCompact: { paddingHorizontal: 12 },
-  routeEndpoint: { flex: 1, alignItems: 'flex-start' },
-  routeCode:   { fontFamily: 'Inter_700Bold', fontSize: 18 },
-  routeCodeCompact: { fontSize: 16 },
-  routeTime:   { fontFamily: 'Inter_500Medium', fontSize: 14, marginTop: 2 },
-  routeCity:   { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 2 },
-  routeCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
-  routeCenterCompact: { flex: 0.8, gap: 3 },
+  routeSummary: { fontFamily: 'Inter_700Bold', fontSize: 19, textAlign: 'center', letterSpacing: 0.2 },
+  routeSchedule: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
+  routeEndpoint: { flex: 1, minWidth: 0, alignItems: 'flex-start' },
+  routeEndpointRight: { alignItems: 'flex-end' },
+  routeTime:   { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  routeCity:   { fontFamily: 'Inter_400Regular', fontSize: 11, marginTop: 2 },
+  routeCenter: { flex: 1.1, minWidth: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
   routeLine:   { flex: 1, height: 1 },
   routeDot:    { width: 5, height: 5, borderRadius: 3 },
-  routeDuration: { fontFamily: 'Inter_500Medium', fontSize: 11 },
-  routeDurationCompact: { fontSize: 10 },
+  routeDuration: { fontFamily: 'Inter_500Medium', fontSize: 10 },
 
   // Flight information
-  flightInfoSection: { marginHorizontal: 16, marginBottom: 14 },
-  flightInfoTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, marginHorizontal: 2, marginBottom: 10 },
+  flightInfoSection: { marginHorizontal: 16, marginBottom: 12 },
+  flightInfoTitle: { fontFamily: 'Inter_700Bold', fontSize: 15, marginHorizontal: 2, marginBottom: 7 },
   flightInfoGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  flightInfoGroup: {
-    width: '48.5%', borderRadius: 14, padding: 14, marginBottom: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
+  flightInfoCard: {
+    width: '48.5%', borderRadius: 13, borderWidth: 1, borderColor: 'transparent',
+    paddingHorizontal: 12, paddingVertical: 9, marginBottom: 7,
   },
-  flightInfoGroupCompact: { width: '100%' },
-  flightInfoHeading: { fontFamily: 'Inter_600SemiBold', fontSize: 14, marginBottom: 10 },
-  flightInfoRow: { marginTop: 6 },
-  flightInfoLabel: { fontFamily: 'Inter_500Medium', fontSize: 11, letterSpacing: 0.2 },
-  flightInfoValue: { fontFamily: 'Inter_500Medium', fontSize: 14, lineHeight: 20, marginTop: 2 },
+  flightInfoLabel: { fontFamily: 'Inter_500Medium', fontSize: 10, letterSpacing: 0.3 },
+  flightInfoValue: { fontFamily: 'Inter_600SemiBold', fontSize: 14, lineHeight: 18, marginTop: 3 },
+  flightInfoDetail: { fontFamily: 'Inter_400Regular', fontSize: 10, marginTop: 1 },
+
+  // Compact airport rows
+  airportSection: { marginHorizontal: 16, marginBottom: 12 },
+  airportRow: { borderRadius: 13, marginBottom: 7, overflow: 'hidden' },
+  airportRowAction: {
+    minHeight: 58, paddingHorizontal: 13, paddingVertical: 9,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+  },
+  airportRowCopy: { flex: 1, minWidth: 0 },
+  airportRowLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 9, letterSpacing: 0.8 },
+  airportRowName: { fontFamily: 'Inter_600SemiBold', fontSize: 13, marginTop: 2 },
+  airportRowLocation: { fontFamily: 'Inter_400Regular', fontSize: 10, marginTop: 1 },
 
   // Dark FBO departure card
   fboCard: {
     marginHorizontal: 16, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   fboLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 1, marginBottom: 4 },
   fboValue: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
@@ -1134,10 +1166,12 @@ const styles = StyleSheet.create({
   networkButtonText: { fontFamily: 'Inter_700Bold', fontSize: 14 },
 
   modalBackdrop: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100,
     flex: 1, justifyContent: 'flex-end', paddingHorizontal: 12,
   },
   mapSheet: { borderRadius: 20, padding: 18, gap: 10 },
   mapSheetHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 },
+  mapSheetClose: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', marginTop: -6 },
   mapSheetTitleGroup: { flex: 1, paddingRight: 16 },
   mapSheetTitle: { fontFamily: 'Inter_700Bold', fontSize: 19 },
   mapSheetAddress: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, marginTop: 4 },

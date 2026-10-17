@@ -408,29 +408,34 @@ test("Discover cards load their selected detail and preserve search when returni
   await expect(page.getByTestId("production-flight-card-81002")).toHaveCount(0);
   await dallasFlight.click({ position: { x: 16, y: 16 } });
   await expect(page).toHaveURL(/\/flight\/81001$/);
+  await expect(page.getByTestId("flight-detail-hero-route")).toHaveText("DAL → SFO");
   await expect(page.getByTestId("flight-detail-route")).toHaveText("DAL → SFO");
   await expect(page.getByTestId("flight-detail-route-departure-time")).toHaveText("4:00 AM");
   await expect(page.getByTestId("flight-detail-route-arrival-time")).toHaveText("5:00 AM");
+  await expect(page.getByTestId("flight-detail-route-arrival-date")).toHaveCount(0);
   await expect(page.getByText(/Sunday, November 1 · Departs/)).toBeVisible();
   await expect(page.getByTestId("flight-info-section-title")).toBeVisible();
-  await expect(page.getByTestId("flight-info-departure")).toContainText("Dallas Love Field (DAL)");
-  await expect(page.getByTestId("flight-info-departure")).toContainText("Dallas, Texas, United States");
-  await expect(page.getByTestId("flight-info-arrival")).toContainText("San Francisco International (SFO)");
-  await expect(page.getByTestId("flight-info-arrival")).toContainText("San Francisco, California, United States");
-  await expect(page.getByTestId("flight-info-departure-date")).toHaveText("Sunday, November 1");
-  await expect(page.getByTestId("flight-info-departure-time")).toHaveText(/4:00 AM .+/);
-  await expect(page.getByTestId("flight-info-arrival-date")).toHaveText("Sunday, November 1");
-  await expect(page.getByTestId("flight-info-arrival-time")).toHaveText(/5:00 AM .+/);
+  await expect(page.getByTestId("flight-airport-departure")).toContainText("Dallas Love Field (DAL)");
+  await expect(page.getByTestId("flight-airport-departure")).toContainText("Dallas, Texas, United States");
+  await expect(page.getByTestId("flight-airport-arrival")).toContainText("San Francisco International (SFO)");
+  await expect(page.getByTestId("flight-airport-arrival")).toContainText("San Francisco, California, United States");
+  await expect(page.getByText(/Sunday, November 1 · Departs 4:00 AM/)).toBeVisible();
   await expect(page.getByTestId("flight-info-aircraft-type")).toHaveText("Citation Latitude");
   await expect(page.getByTestId("flight-info-aircraft-code")).toHaveText("LATITUDE");
   await expect(page.getByTestId("flight-info-duration")).toHaveText("3h");
   await expect(page.getByTestId("flight-info-status")).toHaveText("Available");
   await expect(page.getByTestId("flight-info-international")).toHaveText("Domestic");
+  await expect(page.getByTestId("flight-detail-route-duration")).toHaveText("3h");
   await expect(page.getByTestId("flight-info-queue-count")).toHaveCount(0);
   await expect(page.getByText("Seats", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Range", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Price", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("flight-detail-photo-unavailable")).toBeVisible();
+  await page.setViewportSize({ width: 375, height: 812 });
+  const arrivalAirportBox = await page.getByTestId("flight-airport-arrival").boundingBox();
+  expect(arrivalAirportBox).not.toBeNull();
+  expect(arrivalAirportBox.y + arrivalAirportBox.height).toBeLessThan(812 - 110);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
 
   await page.goBack();
   await expect(dallasFlight).toBeVisible();
@@ -444,9 +449,8 @@ test("Discover cards load their selected detail and preserve search when returni
   await expect(page).toHaveURL(/\/flight\/81002$/);
   await expect(page.getByTestId("flight-detail-route")).toHaveText("MIA → JFK");
   await expect(page.getByText(/Monday, November 2 · Departs/)).toBeVisible();
-  await expect(page.getByTestId("flight-info-departure-time")).toHaveText(/5:00 AM .+/);
-  await expect(page.getByTestId("flight-info-arrival-date")).toHaveCount(0);
-  await expect(page.getByTestId("flight-info-arrival-time")).toHaveCount(0);
+  await expect(page.getByTestId("flight-detail-route-departure-time")).toHaveText("5:00 AM");
+  await expect(page.getByTestId("flight-detail-route-arrival-time")).toHaveCount(0);
   await expect(page.getByTestId("flight-info-aircraft")).toHaveCount(0);
   await expect(page.getByTestId("flight-info-duration")).toHaveCount(0);
   await expect(page.getByTestId("flight-info-international")).toHaveCount(0);
@@ -514,6 +518,9 @@ test("Discover keeps one real featured flight through search and opens that flig
   });
   await setupPreview(page, async (route, url) => {
     if (url.pathname === "/api/empty-legs") return json(route, 200, flights);
+    if (/^\/api\/empty-legs\/\d+$/.test(url.pathname)) {
+      return json(route, 200, flightDetail(Number(url.pathname.split("/").at(-1))));
+    }
     return json(route, 503, { error: "Unexpected intercepted production request." });
   });
 
@@ -695,6 +702,29 @@ test("Direct Flight Details rejects a response whose ID does not match the reque
   expect(legacyFlightRequests).toEqual([]);
 });
 
+test("Flight Details shows a distinct airport-local arrival date for an overnight route", async ({ page }) => {
+  const overnightFlight = {
+    ...flightDetail(81001),
+    departureTime: "2026-11-02T05:30:00.000Z",
+    arrivalTime: "2026-11-02T09:30:00.000Z",
+    durationHours: 4,
+  };
+  await setupPreview(page, async (route, url) => {
+    if (url.pathname === "/api/empty-legs/81001") return json(route, 200, overnightFlight);
+    if (url.pathname === "/api/airports") {
+      const codes = url.searchParams.get("codes")?.split(",") ?? [];
+      return json(route, 200, codes.map((code) => airports[code]).filter(Boolean));
+    }
+    return json(route, 503, { error: "Unexpected intercepted production request." });
+  });
+
+  await page.goto("/flight/81001");
+  await expect(page.getByTestId("flight-detail-route-departure-time")).toHaveText("11:30 PM");
+  await expect(page.getByTestId("flight-detail-route-arrival-time")).toHaveText("1:30 AM");
+  await expect(page.getByTestId("flight-detail-route-arrival-date")).toHaveText("Arrives Monday, November 2");
+  await expect(page.getByTestId("flight-detail-route-duration")).toHaveText("4h");
+});
+
 test("Flight Details opens directions to the airport API location when no confirmed FBO is available", async ({ page }) => {
   await setupPreview(page, async (route, url) => {
     if (url.pathname === "/api/empty-legs/81001") {
@@ -718,6 +748,8 @@ test("Flight Details opens directions to the airport API location when no confir
   await expect(page.getByText("Directions to Dallas Love Field (DAL)", { exact: true })).toBeVisible();
   await expect(page.getByText("Dallas, Texas, United States", { exact: true }).last()).toBeVisible();
   await expect(page.getByText(/FBO/i)).toHaveCount(0);
+  await page.getByRole("button", { name: "Close directions choices" }).click();
+  await expect(page.getByRole("button", { name: "Close directions choices" })).toHaveCount(0);
 
   await page.evaluate(() => {
     window.__bluebirdMapUrls = [];
@@ -726,10 +758,20 @@ test("Flight Details opens directions to the airport API location when no confir
       return null;
     };
   });
+  await airportDirections.click();
   await page.getByTestId("open-google-maps").click();
   await expect.poll(() => page.evaluate(() => window.__bluebirdMapUrls.length)).toBe(1);
   const mapUrl = await page.evaluate(() => window.__bluebirdMapUrls[0]);
   expect(mapUrl).toContain("https://www.google.com/maps/dir/?api=1&destination=32.844776%2C-96.84766");
+
+  const arrivalDirections = page.getByTestId("arrival-airport-directions");
+  await expect(arrivalDirections).toBeVisible();
+  await arrivalDirections.click();
+  await expect(page.getByText("Directions to San Francisco International (SFO)", { exact: true })).toBeVisible();
+  await page.getByTestId("open-google-maps").click();
+  await expect.poll(() => page.evaluate(() => window.__bluebirdMapUrls.length)).toBe(2);
+  const arrivalMapUrl = await page.evaluate(() => window.__bluebirdMapUrls[1]);
+  expect(arrivalMapUrl).toContain("destination=37.6213%2C-122.379");
 });
 
 test("Flight Details omits empty information cards and fits narrow phone layouts", async ({ page }) => {
@@ -756,9 +798,15 @@ test("Flight Details omits empty information cards and fits narrow phone layouts
   await page.goto("/flight/81002");
   await expect(page.getByTestId("flight-detail-route")).toHaveText("MIA → JFK");
   await expect(page.getByTestId("flight-detail-photo-unavailable")).toBeVisible();
-  await expect(page.getByTestId("flight-info-section-title")).toBeVisible();
+  await expect(page.getByTestId("flight-info-section-title")).toHaveCount(0);
   await expect(page.getByTestId("flight-info-aircraft")).toHaveCount(0);
-  await expect(page.getByTestId("flight-info-additional")).toHaveCount(0);
+  await expect(page.getByTestId("flight-info-duration-card")).toHaveCount(0);
+  await expect(page.getByTestId("flight-info-international-card")).toHaveCount(0);
+  await expect(page.getByTestId("flight-info-status-card")).toHaveCount(0);
+  await expect(page.getByTestId("flight-detail-route-arrival-time")).toHaveCount(0);
+  await expect(page.getByTestId("flight-airport-departure")).toContainText("Miami International (MIA)");
+  await expect(page.getByTestId("flight-airport-arrival")).toContainText("John F. Kennedy International (JFK)");
+  await expect(page.getByTestId("flight-info-queue-count")).toHaveCount(0);
   await expect(page.getByText(/Price|Seats|Range|Speed|Weather|Wi-Fi|Pets|Baggage/i)).toHaveCount(0);
 
   for (const width of [320, 375, 393, 430]) {
@@ -779,10 +827,48 @@ test("Flight Details uses an aircraft photo only when the detail response suppli
     if (url.pathname === "/api/empty-legs/81001") return json(route, 200, flightWithPhoto);
     return json(route, 503, { error: "Unexpected intercepted production request." });
   });
+  await page.route(providedPhotoUrl, (route) => route.fulfill({
+    status: 200,
+    contentType: "image/svg+xml",
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"></svg>',
+  }));
 
   await page.goto("/flight/81001");
   await expect(page.getByTestId("flight-detail-photo")).toBeVisible();
   await expect(page.getByTestId("flight-detail-photo-unavailable")).toHaveCount(0);
+});
+
+test("Flight Details shows its neutral photo fallback when a supplied image fails", async ({ page }) => {
+  const providedPhotoUrl = "https://cdn.example.test/unavailable-flight-81001.jpg";
+  const flightWithPhoto = {
+    ...flightDetail(81001),
+    aircraftGalleryUrls: [providedPhotoUrl],
+    aircraftGalleryAlts: ["Verified aircraft photo"],
+  };
+  await setupPreview(page, async (route, url) => {
+    if (url.pathname === "/api/empty-legs/81001") return json(route, 200, flightWithPhoto);
+    return json(route, 503, { error: "Unexpected intercepted production request." });
+  });
+  await page.route(providedPhotoUrl, (route) => route.fulfill({ status: 404, body: "not found" }));
+
+  await page.goto("/flight/81001");
+  await expect(page.getByTestId("flight-detail-photo-unavailable")).toBeVisible();
+  await expect(page.getByTestId("flight-detail-photo")).toHaveCount(0);
+});
+
+test("Flight Details does not offer map actions without returned airport coordinates", async ({ page }) => {
+  await setupPreview(page, async (route, url) => {
+    if (url.pathname === "/api/empty-legs/81003") return json(route, 200, flightDetail(81003));
+    if (url.pathname === "/api/airports") return json(route, 200, []);
+    return json(route, 503, { error: "Unexpected intercepted production request." });
+  });
+
+  await page.goto("/flight/81003");
+  await expect(page.getByTestId("flight-detail-route")).toHaveText("SAT → CXO");
+  await expect(page.getByTestId("flight-airport-departure")).toContainText("San Antonio");
+  await expect(page.getByTestId("flight-airport-arrival")).toContainText("Conroe");
+  await expect(page.getByTestId("departure-airport-directions")).toHaveCount(0);
+  await expect(page.getByTestId("arrival-airport-directions")).toHaveCount(0);
 });
 
 test("Map retries missing airport coordinates and does not invent a route", async ({ page }) => {
