@@ -1,0 +1,122 @@
+BLUEBIRD MOBILE — FINAL MVP RELEASE POLISH
+
+PRIORITY: CRITICAL
+MODE: BUILD / EXECUTE
+
+GOAL:
+Finish the Bluebird Mobile MVP for its first iOS release.
+
+Stop creating investigation-only tasks.
+Implement actual Mobile improvements.
+
+SCOPE:
+artifacts/bluebird ONLY.
+
+DO NOT MODIFY:
+- Main Bluebird Website
+- Main API
+- Database
+- Clerk configuration
+- Production backend
+- EAS configuration
+- Existing authentication infrastructure
+
+TASK 1 — FLIGHT DETAILS
+
+Remove developer-facing technical explanations
+from the user interface.
+
+Do not show:
+- API contract details
+- Clerk issuer diagnostics
+- Legacy JWT explanations
+- Verification gate lists
+- Internal development terminology
+
+When Queue is unavailable, display:
+
+"Queue is temporarily unavailable.
+Please try again later."
+
+Keep existing Queue safety gates intact.
+
+Do not enable unverified Queue mutations.
+
+TASK 2 — NAVIGATION
+
+Ensure the following screens have working
+navigation and back buttons:
+
+- Login / Registration
+- Discover
+- Flight Details
+- Trips
+- Membership
+- Profile
+- Settings
+
+Fix broken navigation and dead buttons.
+
+TASK 3 — UI POLISH
+
+Improve:
+- Loading states
+- Empty states
+- Error states
+- Retry actions
+- Mobile layouts
+- Keyboard handling
+- Safe areas
+- Scroll behavior
+
+Preserve existing Bluebird design.
+
+TASK 4 — REAL DATA
+
+Ensure all screens use existing real API
+integrations where available.
+
+No fake trips.
+No fake memberships.
+No mock queue positions.
+No invented pricing.
+No simulated successful actions.
+
+Do not replace real functionality with demo UI.
+
+TASK 5 — RELEASE CLEANUP
+
+Remove development-only messages,
+debug UI, placeholder labels,
+and internal technical information
+from production-facing screens.
+
+Do not remove useful error handling.
+
+TASK 6 — TESTING
+
+Rebuild shared libraries.
+
+Run:
+- Mobile TypeScript check
+- Relevant unit tests
+- Navigation tests
+- Existing browser tests
+
+Fix regressions within Mobile scope.
+
+TASK 7 — REPORT
+
+Report:
+- Files changed
+- Screens improved
+- Bugs fixed
+- Tests passed
+- Remaining release blockers
+
+IMPORTANT:
+Implement the improvements directly.
+
+Do not create another research-only task.
+
+Do not modify Main Bluebird.
