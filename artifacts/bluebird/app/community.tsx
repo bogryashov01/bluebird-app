@@ -6,6 +6,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { useAuth } from '@/context/AuthContext';
+import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
 import { getTierLabel } from '@/lib/membershipPlans';
 
 const POSTS = [
@@ -22,7 +24,7 @@ const TIER_COLORS: Record<string, string> = {
   concierge: '#F59E0B',
 };
 
-export default function CommunityScreen() {
+function CommunityContent() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -82,6 +84,20 @@ export default function CommunityScreen() {
       />
     </View>
   );
+}
+
+export default function CommunityScreen() {
+  const { authMode } = useAuth();
+  if (authMode === 'clerk') {
+    return (
+      <ProductionAuthenticatedUnavailableNotice
+        title="Community unavailable"
+        description="Community posts are not connected to your signed-in Bluebird account. No demo posts or actions are shown."
+        testID="clerk-community-unavailable"
+      />
+    );
+  }
+  return <CommunityContent />;
 }
 
 const styles = StyleSheet.create({

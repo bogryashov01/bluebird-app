@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useListAirports, useUpdateMe } from '@workspace/api-client-react';
 import { AirportMultiSelect } from '@/components/AirportMultiSelect';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
@@ -39,6 +39,13 @@ import {
   type AirportRecord,
   type ProductionAirportCityGroupResponse,
 } from '@/lib/productionFlights';
+import {
+  buildHomeAirportProfileUpdate,
+  getClerkNotificationPreferencesQueryKey,
+  readClerkNotificationProfile,
+  saveClerkHomeAirport,
+} from '@/lib/clerkNotificationPreferences';
+import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
 
 export default function AirportPickerScreen() {
   const insets = useSafeAreaInsets();
@@ -51,6 +58,12 @@ export default function AirportPickerScreen() {
     session.isSignedIn === true &&
     clerkMemberResolution.status === 'profile_incomplete' &&
     clerkMemberResolution.clerkUserId === session.userId;
+  const isClerkProfileEditing =
+    authMode === 'clerk' &&
+    session?.isLoaded === true &&
+    session.isSignedIn === true &&
+    clerkMemberResolution.status === 'profile_complete' &&
+    clerkMemberResolution.clerkUserId === session.userId;
   const clerkIdentity = isClerkOnboarding ? session?.userId ?? null : null;
   const [selection, setSelection] = useState<{ identity: string | null; codes: string[] }>(() => ({
     identity: user?.id ?? null,
@@ -60,7 +73,9 @@ export default function AirportPickerScreen() {
     ? selection.codes
     : user?.homeAirports ?? [];
   const [saveError, setSaveError] = useState<string | null>(null);
-  const { data: groups, isLoading, isError, refetch } = useListAirports();
+  const { data: groups, isLoading, isError, refetch } = useListAirports({
+    query: { enabled: authMode !== 'clerk' },
+  });
   const updateMutation = useUpdateMe();
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -69,8 +84,11 @@ export default function AirportPickerScreen() {
     setSelection({ identity: user?.id ?? null, codes: user?.homeAirports ?? [] });
   }, [user?.id]);
 
-  if (authMode === 'clerk' && !isClerkOnboarding) {
+  if (authMode === 'clerk' && !isClerkOnboarding && !isClerkProfileEditing) {
     return <Redirect href="/(clerk-auth)/signed-in" />;
+  }
+  if (isClerkProfileEditing && session?.userId) {
+    return <ClerkHomeAirportEditor key={session.userId} clerkUserId={session.userId} />;
   }
   if (isClerkOnboarding && clerkIdentity) {
     return <ClerkRegistrationAirportPicker key={clerkIdentity} clerkUserId={clerkIdentity} />;
@@ -119,6 +137,285 @@ export default function AirportPickerScreen() {
         saveError={saveError}
         bottomInset={bottomPad}
       />
+    </View>
+  );
+}
+
+function ClerkHomeAirportEditor({ clerkUserId }: { clerkUserId: string }) {
+  const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const session = useClerkAuthSnapshot();
+  const { clerkMemberResolution } = useAuth();
+  const configuration = getMainBluebirdApiConfigurationOrNull();
+  const sessionRef = React.useRef(session);
+  sessionRef.current = session;
+  const currentIdentity = React.useRef<string | null>(session?.userId ?? null);
+  currentIdentity.current = session?.userId ?? null;
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedAirport, setSelectedAirport] = useState<AirportRecord | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveController = React.useRef<AbortController | null>(null);
+  const topPad = Platform.OS === 'web' ? 60 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const canLoad = !!configuration &&
+    session?.isLoaded === true &&
+    session.isSignedIn === true &&
+    session.userId === clerkUserId &&
+    clerkMemberResolution.status === 'profile_complete' &&
+    clerkMemberResolution.clerkUserId === clerkUserId;
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+  React.useEffect(() => () => saveController.current?.abort(), []);
+
+  const createApi = React.useCallback(() => {
+    if (!configuration || !canLoad) {
+      throw new Error('Your complete signed-in Bluebird profile is unavailable.');
+    }
+    return createMainBluebirdApiIntegration({
+      configuration,
+      tokenProvider: {
+        environment: configuration.environment,
+        getVerifiedAccessToken: async () => {
+          const active = sessionRef.current;
+          if (!active?.isLoaded || active.isSignedIn !== true || active.userId !== clerkUserId) return null;
+          const token = await active.getToken();
+          const latest = sessionRef.current;
+          return latest?.isLoaded && latest.isSignedIn === true && latest.userId === clerkUserId
+            ? token
+            : null;
+        },
+      },
+    });
+  }, [canLoad, clerkUserId, configuration]);
+
+  const profileQuery = useQuery({
+    queryKey: ['clerk-home-airport-profile', configuration?.environment, configuration?.apiBaseUrl, clerkUserId],
+    enabled: canLoad,
+    retry: false,
+    staleTime: 0,
+    queryFn: ({ signal }) => readClerkNotificationProfile({
+      getCurrentSession: () => sessionRef.current,
+      requestedClerkUserId: clerkUserId,
+      readProfile: (options) => createApi().authenticated.getProfile(options),
+      signal,
+    }),
+  });
+  const airportQuery = useQuery({
+    queryKey: ['clerk-home-airport-search', configuration?.environment, debouncedSearch],
+    enabled: !!configuration && !!debouncedSearch,
+    retry: shouldRetryProductionRead,
+    retryDelay: productionReadRetryDelay,
+    staleTime: 5 * 60 * 1000,
+    queryFn: ({ signal }) => fetchProductionAirportSearch(debouncedSearch, {
+      signal,
+      environment: configuration!.environment,
+      baseUrl: configuration!.apiBaseUrl,
+    }),
+  });
+
+  const searchState = getProductionAirportSearchViewState({
+    configurationAvailable: !!configuration,
+    query: search,
+    isLoading: search.trim() !== debouncedSearch || airportQuery.isLoading,
+    error: search.trim() !== debouncedSearch ? undefined : airportQuery.error,
+    resultCount: search.trim() === debouncedSearch ? airportQuery.data?.length ?? 0 : 0,
+  });
+  const profile = profileQuery.data;
+  const selectedCode = selectedAirport?.code ?? profile?.homeAirportCode ?? null;
+  const airportAlreadySaved = !!selectedAirport && selectedAirport.code === profile?.homeAirportCode;
+  const safeProfile = !!profile && !!selectedCode &&
+    !!buildHomeAirportProfileUpdate(profile, selectedCode);
+
+  const save = async () => {
+    if (!selectedAirport || !session?.userId || saving || !canLoad) return;
+    if (currentIdentity.current !== clerkUserId) {
+      setSaveError('Your signed-in account changed. Reopen Home Airport before saving.');
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    const controller = new AbortController();
+    saveController.current = controller;
+    try {
+      const api = createApi();
+      const refreshed = await saveClerkHomeAirport({
+        getCurrentSession: () => sessionRef.current,
+        requestedClerkUserId: clerkUserId,
+        readProfile: (options) => api.authenticated.getProfile(options),
+        updateProfile: (data, options) => api.authenticated.updateProfile(data, options),
+        homeAirportCode: selectedAirport.code,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted || currentIdentity.current !== clerkUserId) return;
+      queryClient.setQueryData(
+        getClerkNotificationPreferencesQueryKey(
+          configuration?.environment,
+          configuration?.apiBaseUrl,
+          clerkUserId,
+        ),
+        refreshed,
+      );
+      router.back();
+    } catch (error) {
+      if (!controller.signal.aborted && currentIdentity.current === clerkUserId) {
+        const typed = error as { code?: string; status?: number };
+        setSaveError(typed?.status === 401 || typed?.code === 'session_expired'
+          ? 'Your sign-in has expired. Sign in again, then retry.'
+          : typed?.code === 'network' || typed?.code === 'timeout'
+            ? 'Bluebird could not be reached. Check your connection and try again.'
+            : error instanceof Error
+              ? error.message
+              : 'Home Airport could not be saved and verified. Please try again.');
+      }
+    } finally {
+      if (saveController.current === controller) saveController.current = null;
+      if (!controller.signal.aborted && currentIdentity.current === clerkUserId) setSaving(false);
+    }
+  };
+
+  return (
+    <View style={[styles.registrationContainer, { backgroundColor: colors.offWhite, paddingTop: topPad }]} testID="clerk-home-airport-editor">
+      <View style={styles.registrationHeader}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Back to Notification Settings"
+          style={[styles.backButton, { backgroundColor: colors.muted }]}
+          onPress={() => router.back()}
+        >
+          <Text style={[styles.backChevron, { color: colors.textOnSurface }]}>‹</Text>
+        </TouchableOpacity>
+        <View style={styles.headerText}>
+          <Text style={[styles.title, { color: colors.textOnSurface }]}>Home Airport</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
+            Search the airport catalog and choose one home airport.
+          </Text>
+        </View>
+      </View>
+
+      <KeyboardAwareScrollViewCompat
+        style={styles.registrationScroll}
+        contentContainerStyle={[styles.locationListContent, { paddingBottom: bottomPad + 24 }]}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={[styles.selectionHint, { color: colors.mutedForegroundLight }]}>
+          Loading the saved profile may synchronize phone information already verified on your account.
+        </Text>
+        <View style={[styles.searchWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.searchGlyph, { color: colors.mutedForeground }]}>⌕</Text>
+          <TextInput
+            style={[styles.searchInput, { color: colors.foreground }]}
+            placeholder="Search airports by name, city, or code"
+            placeholderTextColor={colors.mutedForeground}
+            value={search}
+            onChangeText={(value) => { setSearch(value); setSaveError(null); }}
+            autoCorrect={false}
+            autoCapitalize="none"
+            accessibilityLabel="Search airports"
+            testID="clerk-home-airport-search"
+          />
+        </View>
+
+        {profileQuery.isLoading ? <CatalogLoading label="Loading your saved profile…" /> : null}
+        {profileQuery.isError ? (
+          <CatalogError
+            label="Could not load your saved profile. Check your connection and try again."
+            retryable
+            onRetry={() => void profileQuery.refetch()}
+            testID="clerk-home-airport-profile-error"
+          />
+        ) : null}
+        {!configuration ? (
+          <Text style={[styles.emptyText, { color: colors.destructive }]} testID="clerk-home-airport-config-error">
+            Home Airport is unavailable because the Main Bluebird API is not configured.
+          </Text>
+        ) : null}
+        {profile && !safeProfile ? (
+          <Text style={[styles.emptyText, { color: colors.mutedForeground }]} testID="clerk-home-airport-read-only">
+            Read-only: required profile details are incomplete or the current settings cannot be safely preserved in a full-profile update. No change was sent.
+          </Text>
+        ) : null}
+        {profile ? (
+          <View style={[styles.currentAirportCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.selectionHint, { color: colors.mutedForegroundLight }]}>
+              {selectedAirport && !airportAlreadySaved ? 'SELECTED HOME AIRPORT' : 'CURRENT HOME AIRPORT'}
+            </Text>
+            <Text style={[styles.catalogTitle, { color: colors.textOnSurface }]}>
+              {selectedAirport?.name ?? profile.homeAirportLabel ?? profile.homeAirportCode ?? 'Unavailable'}
+            </Text>
+            <Text style={[styles.catalogMeta, { color: colors.mutedForegroundLight }]}>
+              {selectedAirport
+                ? [selectedAirport.code, selectedAirport.city, selectedAirport.state, selectedAirport.country].filter(Boolean).join(' · ')
+                : profile.homeAirportCode ?? ''}
+            </Text>
+            {selectedAirport && !airportAlreadySaved ? (
+              <Text style={[styles.catalogMeta, { color: colors.mutedForegroundLight }]}>Not saved yet</Text>
+            ) : null}
+          </View>
+        ) : null}
+        {searchState.kind === 'unsupported-empty-query' ? (
+          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+            Search by airport name, city, or code. The full airport list isn’t available to browse.
+          </Text>
+        ) : null}
+        {searchState.kind === 'loading' ? <CatalogLoading label="Searching airports…" /> : null}
+        {searchState.kind === 'error' ? (
+          <CatalogError
+            label={searchState.failure.message}
+            retryable={searchState.failure.retryable}
+            onRetry={() => void airportQuery.refetch()}
+            testID="clerk-home-airport-search-error"
+          />
+        ) : null}
+        {searchState.kind === 'no-match' ? (
+          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+            No airports matched “{search.trim()}”.
+          </Text>
+        ) : null}
+        {searchState.kind === 'results' ? (airportQuery.data ?? []).map((airport) => (
+          <RegistrationAirportRow
+            key={airport.code}
+            airport={airport}
+            selected={selectedCode === airport.code}
+            onSelect={(next) => { setSelectedAirport(next); setSaveError(null); }}
+          />
+        )) : null}
+        {saveError ? (
+          <Text accessibilityRole="alert" style={[styles.error, { color: colors.destructive }]} testID="clerk-home-airport-save-error">
+            {saveError}
+          </Text>
+        ) : null}
+      </KeyboardAwareScrollViewCompat>
+
+      <View style={[styles.registrationFooter, { borderTopColor: colors.border, paddingBottom: bottomPad + 12 }]}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={
+            saving || !safeProfile || !selectedAirport ||
+            selectedAirport.code === profile?.homeAirportCode ||
+            !canLoad
+          }
+          onPress={() => { void save(); }}
+          style={[
+            styles.actionButton,
+            { backgroundColor: colors.primary },
+            (saving || !safeProfile || !selectedAirport || selectedAirport.code === profile?.homeAirportCode || !canLoad) &&
+              { opacity: 0.5 },
+          ]}
+          testID="clerk-home-airport-save"
+        >
+          {saving
+            ? <ActivityIndicator color={colors.primaryForeground} />
+            : <Text style={[styles.actionText, { color: colors.primaryForeground }]}>Save Home Airport</Text>}
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -578,6 +875,7 @@ const styles = StyleSheet.create({
   catalogRowText: { flex: 1, gap: 3 },
   catalogTitle: { fontSize: 14, lineHeight: 19, fontFamily: 'Inter_600SemiBold' },
   catalogMeta: { fontSize: 12, lineHeight: 17, fontFamily: 'Inter_400Regular' },
+  currentAirportCard: { borderRadius: 14, borderWidth: 1, padding: 14, gap: 4 },
   radioMark: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   radioSelected: { width: 10, height: 10, borderRadius: 5 },
   checkboxMark: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },

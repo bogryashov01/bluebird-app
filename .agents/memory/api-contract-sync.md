@@ -25,3 +25,9 @@ Rule: Keep mobile `GET /api/me/profile` validation strict for the full `UserProf
 **Why:** The supplied Development observation showed a `CurrentUser` body without `upgradeCreditBalances`, while the source-snapshot document describes a full `UserProfile` PUT response.
 
 **How to apply:** Keep this response-shape discrepancy visible in `AUTHENTICATED-API-READINESS.md`; do not weaken GET validation, infer completion from the PUT body, or retry an ambiguous write.
+
+Rule: After a mobile full-profile settings PUT, verify both the requested change and the unrelated account settings that must remain unchanged; the PUT response alone does not prove preservation.
+
+**Why:** A valid-looking update can still drop favorite selections, notification preferences, or SMS consent if the server applies only part of the submitted profile. Profile GET may also synchronize phone-verification fields, so those expected syncs must be distinguished from lost settings.
+
+**How to apply:** Re-read the authenticated profile after notification or airport writes, compare the edited value and preserved keys/preferences/consent, and report success only when they match. Do not compare phone fields when the API contract permits GET to synchronize them.

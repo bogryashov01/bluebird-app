@@ -1,3 +1,18 @@
-// Kept as a compatibility route for old deep links. Family management is now
-// server-backed instead of the former local demo contacts list.
-export { default } from '../membership/family';
+import React from 'react';
+import { useAuth } from '@/context/AuthContext';
+import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
+import FamilyMembershipScreen from '../membership/family';
+
+export default function ContactsScreen() {
+  const { authMode } = useAuth();
+  if (authMode === 'clerk') {
+    return (
+      <ProductionAuthenticatedUnavailableNotice
+        title="Connect Contacts unavailable"
+        description="Contact matching is not available for this signed-in account yet. No contacts are uploaded or changed."
+        testID="clerk-connect-contacts-unavailable"
+      />
+    );
+  }
+  return <FamilyMembershipScreen />;
+}

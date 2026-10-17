@@ -5,12 +5,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   useListNotifications, useMarkNotificationRead, getListNotificationsQueryKey, useUpdateMe,
 } from '@workspace/api-client-react';
 import type { Notification, User } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
@@ -18,7 +17,12 @@ import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConf
 import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
 import { ProductionAuthHttpError } from '@/lib/productionAuthApi';
 import type { ProductionNotificationPrefs } from '@/lib/productionAuthApi';
-import { readClerkNotificationProfile, saveClerkNotificationPreferences, notificationPreferenceRows } from '@/lib/clerkNotificationPreferences';
+import {
+  getClerkNotificationPreferencesQueryKey,
+  notificationPreferenceRows,
+  readClerkNotificationProfile,
+  saveClerkNotificationPreferences,
+} from '@/lib/clerkNotificationPreferences';
 import { NotificationPreferenceEditor } from '@/components/NotificationPreferenceEditor';
 import { SettingsGroup } from '@/components/SettingsGroup';
 import { NETWORKING_INBOX_ROUTE, notificationRoute } from '@/lib/notificationRoute';
@@ -112,12 +116,11 @@ function ClerkNotificationSettings() {
     !!session.userId &&
     currentUser?.isAuthenticated === true;
 
-  const queryKey = [
-    'clerk-notification-preferences',
-    configuration?.environment ?? 'unconfigured',
-    configuration?.apiBaseUrl ?? 'unconfigured',
-    session?.userId ?? 'signed-out',
-  ];
+  const queryKey = getClerkNotificationPreferencesQueryKey(
+    configuration?.environment,
+    configuration?.apiBaseUrl,
+    session?.userId,
+  );
   const createApi = () => {
     if (!configuration || !session?.userId || !canLoadPreferences) {
       throw new Error('A complete authenticated Clerk profile and matching Main API configuration are required.');
@@ -160,8 +163,11 @@ function ClerkNotificationSettings() {
   const profile = canLoadPreferences ? preferencesQuery.data : undefined;
   const prefs = profile?.notificationPrefs;
   const prefRows = prefs ? notificationPreferenceRows(prefs).map(({ key, label, value }) => ({
+    key,
     label,
-    hint: key === 'mode' ? notificationModeLabel(value as ProductionNotificationPrefs['mode']) : notificationChannelLabel(value),
+    hint: key === 'mode'
+      ? notificationModeLabel(value as ProductionNotificationPrefs['mode'])
+      : notificationChannelLabel(value),
   })) : [];
   const savePreferences = async (preferences: ProductionNotificationPrefs) => {
     if (!session?.userId || saveController.current || preferencesQuery.isFetching) throw new Error('Refresh or save already in progress.');
@@ -212,12 +218,25 @@ function ClerkNotificationSettings() {
         contentContainerStyle={[styles.clerkScroll, { paddingBottom: botPad + 40 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>SAVED PREFERENCES</Text>
+        <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>TRAVEL PREFERENCES</Text>
+        <Text style={[styles.noticeBody, { color: colors.mutedForegroundLight }]}>
+          Loading or refreshing these settings may synchronize phone information already verified by your account.
+        </Text>
+        <SettingsGroup rows={[
+          {
+            label: 'Home Airport',
+            hint: profile?.homeAirportLabel || profile?.homeAirportCode || 'Search and choose one airport',
+            onPress: () => router.push('/airport-picker' as any),
+          },
+          ...(profile ? [{
+            label: 'Favorite Airports',
+            hint: profile.favoriteAirportLabels.length
+              ? profile.favoriteAirportLabels.join(', ')
+              : profile.favoriteAirportCodes.join(', ') || 'Not set',
+          }] : []),
+        ]} />
         {!prefs ? (
           <View style={[styles.preferenceNotice, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.noticeBody, { color: colors.textOnSurface }]}>
-              Loading saved preferences may also update the phone number on your profile if it has already been verified.
-            </Text>
             {preferencesQuery.isError && (
               <Text style={[styles.noticeError, { color: colors.destructive }]} testID="clerk-notification-preferences-error">
                 {notificationReadError(preferencesQuery.error)}
@@ -249,10 +268,23 @@ function ClerkNotificationSettings() {
         ) : (
           <>
             <Text style={[styles.noticeBody, { color: colors.mutedForegroundLight }]}>
-              These are the last loaded account preferences. Email and SMS are delivery channels, not push settings. Refreshing may also synchronize your verified phone number.
+              These are your saved account preferences. Email and SMS are delivery channels; push delivery is not available.
             </Text>
-            <SettingsGroup title="Flight alerts" rows={prefRows.slice(0, prefs.mode === 'specific' ? 4 : prefs.mode === 'all' ? 2 : 1)} />
-            <SettingsGroup title="Updates" rows={prefRows.slice(prefs.mode === 'specific' ? 4 : prefs.mode === 'all' ? 2 : 1)} />
+            <SettingsGroup
+              title="Flights"
+              rows={[
+                ...prefRows.filter(({ key }) => key === 'mode' || key === 'allChannels' ||
+                  key === 'emptyLegHomeAirport' || key === 'departingFavorite' || key === 'arrivingFavorite'),
+              ]}
+            />
+            <SettingsGroup
+              title="Queue Updates"
+              rows={prefRows.filter(({ key }) => key === 'queueUpdates')}
+            />
+            <SettingsGroup
+              title="Flight Confirmations"
+              rows={prefRows.filter(({ key }) => key === 'winningNotifications')}
+            />
             {profile && <NotificationPreferenceEditor
               key={preferencesQuery.dataUpdatedAt}
               profile={profile}
@@ -281,18 +313,18 @@ function ClerkNotificationSettings() {
           </>
         )}
 
-        <View style={styles.unavailableSections}>
-          <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>NOTIFICATION HISTORY</Text>
-          <SettingsGroup rows={[{
-            label: 'Recent notifications',
-            hint: 'Unavailable right now',
-          }]} />
-          <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>PUSH DELIVERY</Text>
-          <SettingsGroup rows={[{
-            label: 'Push notification settings',
-            hint: 'Unavailable right now',
-          }]} />
-        </View>
+        <SettingsGroup title="Membership & Offers" rows={[{
+          label: 'Membership updates',
+          hint: 'Coming soon',
+        }]} />
+        <SettingsGroup title="Notification History" rows={[{
+          label: 'Notification history',
+          hint: 'Unavailable',
+        }]} />
+        <SettingsGroup title="Push Delivery" rows={[{
+          label: 'Push notifications',
+          hint: 'Not supported',
+        }]} />
       </ScrollView>
     </View>
   );

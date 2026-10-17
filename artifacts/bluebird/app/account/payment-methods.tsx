@@ -10,6 +10,7 @@ import { usePersistedState } from '@/hooks/usePersistedState';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { INITIAL_CARDS, type CardBrand, type MockCard } from '@/lib/paymentMethods';
+import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
 
 interface FormErrors {
   name?: string;
@@ -103,8 +104,18 @@ function cardNumberError(number: string, brand: CardBrand | null): string | unde
 }
 
 export default function PaymentMethodsScreen() {
-  const { user } = useAuth();
+  const { user, authMode } = useAuth();
   const colors = useColors();
+
+  if (authMode === 'clerk') {
+    return (
+      <ProductionAuthenticatedUnavailableNotice
+        title="Payment methods unavailable"
+        description="Payment methods are not connected to your signed-in Bluebird account yet. No card changes can be made here."
+        testID="clerk-payment-methods-unavailable"
+      />
+    );
+  }
 
   if (!user) {
     return (

@@ -89,7 +89,7 @@ type ClerkProfileLoadState =
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { user, signOut, authMode } = useAuth();
+  const { user, signOut, authMode, clerkMemberResolution } = useAuth();
   const { preference } = useTheme();
   const clerkSession = useClerkAuthSnapshot();
   const mainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
@@ -230,15 +230,20 @@ export default function ProfileScreen() {
     const fullName = [firstName, lastName]
       .filter((value): value is string => value !== null)
       .join(' ');
-    const favoriteAirports = profile
-      ? (profile.favoriteAirportLabels.length > 0
-        ? profile.favoriteAirportLabels
-        : profile.favoriteAirportCodes).filter(Boolean).join(', ')
-      : '';
-    const favoriteCities = profile?.favoriteCityLabels.filter(Boolean).join(', ') ?? '';
-    const homeAirport = profile
-      ? [profile.homeAirportLabel, profile.homeAirportCode].filter(Boolean).join(' · ')
-      : '';
+    const memberProjection =
+      clerkMemberResolution.status === 'profile_complete' &&
+      clerkMemberResolution.clerkUserId === clerkSession?.userId
+        ? clerkMemberResolution.currentUser
+        : null;
+    const membershipStatus = !memberProjection
+      ? 'Membership status unavailable'
+      : !memberProjection.isMember
+        ? 'Not a member'
+        : memberProjection.memberTier === 'plus'
+          ? 'Plus Member'
+          : memberProjection.memberTier === 'base'
+            ? 'Base Member'
+            : 'Member tier unavailable';
     return (
       <View style={[styles.container, { backgroundColor: colors.offWhite }]} testID="clerk-profile">
         <ScrollView
@@ -261,42 +266,36 @@ export default function ProfileScreen() {
                 {fullName || 'Name unavailable'}
               </Text>
               <Text style={[styles.memberSince, { color: colors.mutedForegroundLight }]}>
-                {email || 'Email unavailable'}
+                {membershipStatus}
               </Text>
             </View>
           </View>
+          {email ? (
+            <Text style={[styles.profileReadNote, { color: colors.mutedForegroundLight }]}>
+              {email}
+            </Text>
+          ) : null}
           <Text style={[styles.profileReadNote, { color: colors.mutedForegroundLight }]}>
-            Saved details come from Bluebird. Loading this profile may sync phone information already verified by your signed-in account.
+            Loading this profile may sync phone information already verified by your signed-in account.
           </Text>
           <SettingsGroup
             title="Account"
             rows={[
-              { label: 'First name', hint: firstName || 'Unavailable' },
-              { label: 'Last name', hint: lastName || 'Unavailable' },
-              { label: 'Email', hint: email || 'Unavailable' },
-              { label: 'Date of birth', hint: profile?.dob || 'Unavailable' },
               {
-                label: 'Gender',
-                hint: profile?.gender ? profile.gender[0].toUpperCase() + profile.gender.slice(1) : 'Unavailable',
+                label: 'Personal Information',
+                hint: 'Account details',
+                onPress: () => router.push('/account/personal-info' as any),
               },
               {
-                label: 'Weight',
-                hint: profile?.weightLbs != null ? `${profile.weightLbs} lb` : 'Unavailable',
+                label: 'Connect Contacts',
+                hint: 'Unavailable for this account',
+                onPress: () => router.push('/account/contacts' as any),
               },
-              { label: 'Phone', hint: profile?.phoneE164 || 'Unavailable' },
               {
-                label: 'Phone verification',
-                hint: profile?.phoneVerifiedAt ? `Verified ${profile.phoneVerifiedAt.slice(0, 10)}` : 'Unavailable',
+                label: 'Payment Methods',
+                hint: 'Unavailable for this account',
+                onPress: () => router.push('/account/payment-methods' as any),
               },
-            ]}
-          />
-          <SettingsGroup
-            title="Travel preferences"
-            rows={[
-              { label: 'Home airport', hint: homeAirport || 'Unavailable' },
-              { label: 'Favorite airports', hint: favoriteAirports || 'Unavailable' },
-              { label: 'Favorite cities', hint: favoriteCities || 'Unavailable' },
-              { label: 'SMS consent', hint: profile ? (profile.smsConsent ? 'Yes' : 'No') : 'Unavailable' },
             ]}
           />
           {visibleProfileState.kind === 'error' && (
@@ -314,16 +313,11 @@ export default function ProfileScreen() {
             </View>
           )}
           <SettingsGroup
-            title="Settings"
+            title="Preferences"
             rows={[
               {
-                label: 'Personal Information',
-                hint: 'View account details',
-                onPress: () => router.push('/account/personal-info' as any),
-              },
-              {
                 label: 'Notification Settings',
-                hint: 'Unavailable right now',
+                hint: 'Travel preferences and alerts',
                 onPress: () => router.push('/notifications'),
               },
               {
@@ -334,13 +328,20 @@ export default function ProfileScreen() {
             ]}
           />
           <SettingsGroup
-            title="Community"
+            title="Support"
             rows={[
               {
-                label: 'Connections',
-                hint: 'Member access required',
-                onPress: () => router.push('/(tabs)/connections' as any),
+                label: 'Community',
+                hint: 'Unavailable for this account',
+                onPress: () => router.push('/community'),
               },
+              {
+                label: 'AI Concierge',
+                hint: 'Unavailable for this account',
+                onPress: () => router.push('/concierge'),
+              },
+              { label: 'Help Center', onPress: () => router.push('/support/help-center' as any) },
+              { label: 'Legal', onPress: () => router.push('/support/legal' as any) },
             ]}
           />
           <SettingsGroup

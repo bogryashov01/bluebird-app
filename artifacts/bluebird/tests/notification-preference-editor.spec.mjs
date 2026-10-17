@@ -65,7 +65,7 @@ test.beforeEach(async ({ page }) => {
 test("edits only documented categories, disables controls while pending and closes only after acceptance", async ({ page }) => {
   await page.getByTestId("clerk-edit-notification-preferences").click();
   await expect(page.getByText("Home airport flights", { exact: true })).toBeVisible();
-  await expect(page.getByRole("radio", { name: "Arriving at favorites: Not set", exact: true })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("radio", { name: "Arriving at favorite airports: email", exact: true })).toHaveAttribute("aria-checked", "false");
   await page.getByRole("radio", { name: "Queue updates: email", exact: true }).click();
   await page.getByTestId("clerk-save-notification-preferences").click();
   await expect(page.getByText("Saving and refreshing…")).toBeVisible();
@@ -107,8 +107,112 @@ test("mode changes expose only applicable categories and cannot grant SMS consen
   await page.getByRole("radio", { name: "Flight alert mode: all", exact: true }).click();
   await expect(page.getByText("All flight alerts", { exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: "All flight alerts: sms", exact: true })).toHaveAttribute("aria-disabled", "true");
+  await page.getByRole("radio", { name: "All flight alerts: email", exact: true }).click();
   await page.getByRole("radio", { name: "Flight alert mode: specific", exact: true }).click();
   await expect(page.getByText("All flight alerts", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Home airport flights", { exact: true })).toBeVisible();
-  await expect(page.getByText(/SMS requires existing consent/)).toBeVisible();
+  await expect(page.getByText(/SMS needs explicit SMS consent/)).toBeVisible();
+});
+
+test("SMS eligibility explains missing consent, phone, and verification without making SMS selectable", async ({ page }) => {
+  const emailOnly = {
+    mode: 'off',
+    allChannels: null,
+    emptyLegHomeAirport: null,
+    departingFavorite: null,
+    arrivingFavorite: null,
+    queueUpdates: 'email',
+    winningNotifications: 'email',
+  };
+  const cases = [
+    {
+      profile: {
+        smsConsent: false,
+        phoneE164: '+12025550123',
+        phoneVerifiedAt: '2026-10-01',
+        phoneVerificationRequired: false,
+      },
+      expected: /SMS needs explicit SMS consent/,
+    },
+    {
+      profile: {
+        smsConsent: true,
+        phoneE164: null,
+        phoneVerifiedAt: null,
+        phoneVerificationRequired: false,
+      },
+      expected: /SMS needs a phone number, phone verification/,
+    },
+    {
+      profile: {
+        smsConsent: true,
+        phoneE164: '+12025550123',
+        phoneVerifiedAt: null,
+        phoneVerificationRequired: true,
+      },
+      expected: /SMS needs phone verification/,
+    },
+  ];
+  for (let index = 0; index < cases.length; index++) {
+    const { profile, expected } = cases[index];
+    await page.evaluate((props) => window.mountEditor(props, Date.now()), {
+      ...profile,
+      notificationPrefs: emailOnly,
+    });
+    await expect(page.getByText(expected).first()).toBeVisible();
+    await page.getByTestId("clerk-edit-notification-preferences").click();
+    await expect(page.getByRole("radio", { name: "Queue updates: sms", exact: true }))
+      .toHaveAttribute("aria-disabled", "true");
+  }
+});
+
+test("an ineligible saved SMS preference can be changed to Email without granting consent", async ({ page }) => {
+  await page.evaluate(() => window.mountEditor({
+    smsConsent: false,
+    notificationPrefs: {
+      mode: 'specific',
+      allChannels: null,
+      emptyLegHomeAirport: 'sms',
+      departingFavorite: 'sms',
+      arrivingFavorite: null,
+      queueUpdates: 'both',
+      winningNotifications: 'sms',
+    },
+  }, 904));
+  await expect(page.getByTestId("clerk-edit-notification-preferences")).toBeVisible();
+  await page.getByTestId("clerk-edit-notification-preferences").click();
+  await expect(page.getByRole("radio", { name: "Home airport flights: sms", exact: true }))
+    .toHaveAttribute("aria-disabled", "true");
+  await page.getByRole("radio", { name: "Home airport flights: email", exact: true }).click();
+  await page.getByRole("radio", { name: "Departing from favorite airports: email", exact: true }).click();
+  await page.getByRole("radio", { name: "Queue updates: email", exact: true }).click();
+  await page.getByRole("radio", { name: "Flight confirmations: email", exact: true }).click();
+  await page.getByTestId("clerk-save-notification-preferences").click();
+  expect(await page.evaluate(() => window.submitted)).toMatchObject({
+    mode: 'specific',
+    emptyLegHomeAirport: 'email',
+    departingFavorite: 'email',
+    queueUpdates: 'email',
+    winningNotifications: 'email',
+  });
+  await page.evaluate(() => window.acceptSave());
+  await expect(page.getByTestId("clerk-edit-notification-preferences")).toBeVisible();
+});
+
+test("notification editor fits common phone widths", async ({ page }) => {
+  for (const width of [375, 393, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.evaluate((version) => window.mountEditor({}, version), width);
+    await page.getByTestId("clerk-edit-notification-preferences").click();
+    await expect(page.getByText("Flight Confirmations", { exact: true })).toBeVisible();
+    const dimensions = await page.evaluate(() => ({
+      viewport: document.documentElement.clientWidth,
+      content: document.documentElement.scrollWidth,
+    }));
+    expect(dimensions.content).toBeLessThanOrEqual(dimensions.viewport);
+    await page.screenshot({
+      path: `/tmp/bluebird-notification-editor-${width}.png`,
+      fullPage: true,
+    });
+  }
 });

@@ -220,7 +220,7 @@ test("both tab bars expose exactly Discover, Trips, Membership, and Profile", ()
   assert.match(source, /title: 'Discover'/);
   assert.match(source, /<Tabs\.Screen name="connections" options=\{\{ href: null \}\} \/>/);
   const profileSource = readFileSync(resolve(projectRoot, "app/(tabs)/profile/index.tsx"), "utf8");
-  assert.match(profileSource, /router\.push\(['"]\/\(tabs\)\/connections/);
+  assert.doesNotMatch(profileSource, /router\.push\(['"]\/\(tabs\)\/connections/);
   const unreadHookSource = readFileSync(resolve(projectRoot, "hooks/useUnreadNotifications.ts"), "utf8");
   assert.match(unreadHookSource, /authMode === 'legacy' && isLocalFlightReadMode\(\)/);
 });
@@ -247,20 +247,44 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(profileSource, /loadClerkPersonalInfo\(createClerkApi\(\)\.authenticated, signal\)/);
   assert.match(clerkProfile, /profile\?\.firstName/);
   assert.match(clerkProfile, /profile\?\.email/);
-  assert.match(clerkProfile, /Date of birth/);
-  assert.match(clerkProfile, /Travel preferences/);
-  assert.match(clerkProfile, /Favorite airports/);
-  assert.match(clerkProfile, /clerk-profile-retry/);
   assert.match(clerkProfile, /Loading this profile may sync phone information/);
   assert.doesNotMatch(clerkProfile, /updateProfile|PUT \/me\/profile|useUpdateMe/);
-  assert.match(clerkProfile, /title="Settings"/);
+  assert.match(clerkProfile, /title="Account"/);
+  assert.match(clerkProfile, /title="Preferences"/);
+  assert.match(clerkProfile, /title="Support"/);
   assert.match(clerkProfile, /label: 'Appearance'/);
   assert.match(clerkProfile, /label: 'Personal Information'/);
   assert.match(clerkProfile, /router\.push\('\/account\/personal-info'/);
+  assert.match(clerkProfile, /label: 'Connect Contacts'/);
+  assert.match(clerkProfile, /router\.push\('\/account\/contacts'/);
+  assert.match(clerkProfile, /label: 'Payment Methods'/);
+  assert.match(clerkProfile, /router\.push\('\/account\/payment-methods'/);
   assert.match(clerkProfile, /label: 'Notification Settings'/);
   assert.match(clerkProfile, /router\.push\('\/notifications'/);
-  assert.match(clerkProfile, /label: 'Connections'/);
+  assert.match(clerkProfile, /label: 'Community'/);
+  assert.match(clerkProfile, /router\.push\('\/community'/);
+  assert.match(clerkProfile, /label: 'AI Concierge'/);
+  assert.match(clerkProfile, /router\.push\('\/concierge'/);
+  assert.match(clerkProfile, /router\.push\('\/support\/help-center'/);
+  assert.match(clerkProfile, /router\.push\('\/support\/legal'/);
   assert.match(clerkProfile, /label: 'Sign Out'/);
+  assert.match(clerkProfile, /membershipStatus/);
+  assert.doesNotMatch(clerkProfile, /recentActivity/);
+
+  const contactsSource = readFileSync(resolve(projectRoot, "app/account/contacts.tsx"), "utf8");
+  const paymentMethodsSource = readFileSync(resolve(projectRoot, "app/account/payment-methods.tsx"), "utf8");
+  const communitySource = readFileSync(resolve(projectRoot, "app/community.tsx"), "utf8");
+  const conciergeSource = readFileSync(resolve(projectRoot, "app/concierge.tsx"), "utf8");
+  for (const [source, unavailableTitle] of [
+    [contactsSource, "Connect Contacts unavailable"],
+    [paymentMethodsSource, "Payment methods unavailable"],
+    [communitySource, "Community unavailable"],
+    [conciergeSource, "AI Concierge unavailable"],
+  ]) {
+    assert.match(source, /authMode === 'clerk'/);
+    assert.match(source, new RegExp(unavailableTitle));
+    assert.match(source, /ProductionAuthenticatedUnavailableNotice/);
+  }
   const personalInfoSource = readFileSync(resolve(projectRoot, "app/account/personal-info.tsx"), "utf8");
   assert.match(personalInfoSource, /authMode === 'clerk'/);
   assert.match(personalInfoSource, /<ClerkPersonalInfoScreen \/>/);
@@ -282,9 +306,11 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
     ?.split("function LegacyNotificationsScreen()")[0] ?? "";
   assert.match(clerkNotifications, /api\.authenticated\.getProfile/);
   assert.match(clerkNotifications, /notificationPrefs/);
-  assert.match(clerkNotifications, /Loading them may also synchronize your verified phone number/);
-  assert.match(clerkNotifications, /Unavailable: no Clerk-authenticated history read is verified/);
-  assert.match(clerkNotifications, /notificationPrefs does not define push-delivery settings/);
+  assert.match(clerkNotifications, /Loading or refreshing these settings may synchronize phone information/);
+  assert.match(clerkNotifications, /title="Notification History"/);
+  assert.match(clerkNotifications, /label: 'Notification history'/);
+  assert.match(clerkNotifications, /hint: 'Unavailable'/);
+  assert.match(clerkNotifications, /Push Delivery/);
   assert.match(clerkNotifications, /clerk-load-notification-preferences/);
   assert.match(clerkNotifications, /enabled: false/);
   assert.match(clerkNotifications, /preferencesQuery\.refetch\(\)/);
@@ -292,6 +318,21 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
    assert.match(clerkNotifications, /saveClerkNotificationPreferences/);
    assert.doesNotMatch(clerkNotifications, /useUpdateMe|useMarkNotificationRead|useListNotifications/);
   assert.match(notificationsSource, /authMode === 'clerk'/);
+  assert.match(clerkNotifications, /Flight Confirmations/);
+  assert.match(clerkNotifications, /Membership & Offers/);
+  assert.match(clerkNotifications, /Coming soon/);
+  assert.match(clerkNotifications, /Queue Updates/);
+  const preferenceEditorSource = readFileSync(resolve(projectRoot, "components/NotificationPreferenceEditor.tsx"), "utf8");
+  assert.match(preferenceEditorSource, /Flight alert mode/);
+  assert.match(preferenceEditorSource, /All Flights/);
+  assert.match(preferenceEditorSource, /Specific Flights/);
+  const airportPickerSource = readFileSync(resolve(projectRoot, "app/airport-picker.tsx"), "utf8");
+  assert.match(airportPickerSource, /fetchProductionAirportSearch/);
+  assert.match(airportPickerSource, /saveClerkHomeAirport/);
+  assert.match(airportPickerSource, /buildHomeAirportProfileUpdate/);
+  assert.match(airportPickerSource, /Loading the saved profile may synchronize phone information/);
+  assert.match(airportPickerSource, /Read-only: required profile details are incomplete/);
+  assert.match(notificationsSource, /router\.canGoBack\(\) \? router\.back\(\)/);
   assert.match(membershipSource, /loadClerkBluebirdMembership\(createClerkApi\(\)\.authenticated, signal\)/);
   assert.match(clerkMembership, /membershipState === 'available'/);
   assert.match(clerkMembership, /membershipState === 'conflict'/);
@@ -314,7 +355,7 @@ test("Clerk Trips uses the selected account-scoped read-only Main API contract w
   assert.match(clerkTripsSource, /query\.data\?\.\[activeList\]/);
   assert.match(clerkTripsSource, /query\.isError/);
   assert.match(clerkTripsSource, /items\?\.length === 0/);
-  assert.match(clerkTripsSource, /Live authorization and account mapping have not been verified/);
+  assert.match(clerkTripsSource, /Your trip information is unavailable right now/);
   assert.doesNotMatch(clerkTripsSource, /useListTrips|useGetQueueStatus|useCancelTrip|useMutation|router\.push|router\.replace/);
   assert.doesNotMatch(clerkTripsSource, /getEmptyLegQueue|joinEmptyLegQueue|leaveEmptyLegQueue|updateProfile|getMembership|passengers|manifest|boardingPass/);
   assert.match(tripsSource, /authMode === 'legacy' && isLocalFlightReadMode\(\)/);
