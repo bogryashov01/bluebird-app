@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Ionicons } from '@expo/vector-icons';
 import {
   useListNotifications, useMarkNotificationRead, getListNotificationsQueryKey, useUpdateMe,
 } from '@workspace/api-client-react';
@@ -80,15 +81,15 @@ function notificationModeLabel(mode: ProductionNotificationPrefs['mode']): strin
 
 function notificationReadError(error: unknown): string {
   if (error instanceof ProductionAuthHttpError && error.status === 401) {
-    return 'Your sign-in may have expired. Sign in again, then try once more.';
+    return 'Your session has expired. Sign in and try again.';
   }
   if (error instanceof ProductionAuthHttpError && error.status === 403) {
-    return 'Notification preferences are unavailable for this account right now.';
+    return 'Your notification settings are unavailable right now.';
   }
   if (error instanceof ProductionAuthHttpError) {
-    return 'Could not load notification preferences. Please try again.';
+    return 'Couldn’t load preferences. Try again.';
   }
-  return 'Could not load notification preferences. Check your connection and try again.';
+  return 'Couldn’t load preferences. Check your connection and try again.';
 }
 
 function ClerkNotificationSettings() {
@@ -142,7 +143,7 @@ function ClerkNotificationSettings() {
   };
   const preferencesQuery = useQuery({
     queryKey,
-    enabled: false,
+    enabled: canLoadPreferences,
     retry: false,
     staleTime: 0,
     queryFn: async ({ signal }) => {
@@ -159,6 +160,9 @@ function ClerkNotificationSettings() {
       });
     },
   });
+  useFocusEffect(React.useCallback(() => {
+    if (canLoadPreferences) void preferencesQuery.refetch();
+  }, [canLoadPreferences, preferencesQuery.refetch]));
 
   const profile = canLoadPreferences ? preferencesQuery.data : undefined;
   const prefs = profile?.notificationPrefs;
@@ -192,40 +196,42 @@ function ClerkNotificationSettings() {
       saveController.current = null;
     }
   };
+  const refreshPreferences = async () => {
+    const result = await preferencesQuery.refetch();
+    if (result.isError) throw result.error;
+  };
 
-  const topPad = Platform.OS === 'web' ? 60 : insets.top;
+  const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.offWhite }]} testID="clerk-notifications">
       <View style={[
-        styles.header,
-        { paddingTop: topPad + 12, borderBottomColor: colors.separator },
+        styles.clerkHeader,
+        { paddingTop: topPad + 12 },
       ]}>
         <TouchableOpacity
-          style={[styles.backBtn, { backgroundColor: colors.muted }]}
+          style={[styles.clerkBackBtn, { backgroundColor: colors.muted }]}
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/profile'))}
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel="Back"
         >
-          <Text style={[styles.backChevron, { color: colors.textOnSurface }]}>‹</Text>
+          <Ionicons name="arrow-back" size={20} color={colors.textOnSurface} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textOnSurface }]}>Notification Settings</Text>
+        <Text style={[styles.clerkHeaderTitle, { color: colors.textOnSurface }]}>Notifications</Text>
       </View>
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={[styles.clerkScroll, { paddingBottom: botPad + 40 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>TRAVEL PREFERENCES</Text>
-        <Text style={[styles.noticeBody, { color: colors.mutedForegroundLight }]}>
-          Loading or refreshing these settings may synchronize phone information already verified by your account.
-        </Text>
-        <SettingsGroup rows={[
+        <SettingsGroup compact title="Travel Preferences" rows={[
           {
             label: 'Home Airport',
-            hint: profile?.homeAirportLabel || profile?.homeAirportCode || 'Search and choose one airport',
+            hint: profile
+              ? profile.homeAirportCode || 'Choose airport'
+              : preferencesQuery.isError ? 'Unavailable' : 'Loading…',
             onPress: () => router.push('/airport-picker' as any),
           },
           ...(profile ? [{
@@ -235,96 +241,58 @@ function ClerkNotificationSettings() {
               : profile.favoriteAirportCodes.join(', ') || 'Not set',
           }] : []),
         ]} />
-        {!prefs ? (
-          <View style={[styles.preferenceNotice, { backgroundColor: colors.surface }]}>
-            {preferencesQuery.isError && (
-              <Text style={[styles.noticeError, { color: colors.destructive }]} testID="clerk-notification-preferences-error">
-                {notificationReadError(preferencesQuery.error)}
-              </Text>
-            )}
-            {canLoadPreferences ? (
-              <TouchableOpacity
-                style={[styles.loadPreferencesButton, { backgroundColor: colors.primary }]}
-                onPress={() => { void preferencesQuery.refetch(); }}
-                disabled={preferencesQuery.isFetching}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                testID="clerk-load-notification-preferences"
-              >
-                {preferencesQuery.isFetching ? (
-                  <ActivityIndicator size="small" color={colors.primaryForeground} />
-                ) : (
-                  <Text style={[styles.loadPreferencesText, { color: colors.primaryForeground }]}>
-                    {preferencesQuery.isError ? 'Try again' : 'Load saved preferences'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            ) : (
-              <Text style={[styles.noticeError, { color: colors.mutedForegroundLight }]}>
-                Notification preferences are unavailable right now. Please try again later.
-              </Text>
-            )}
+        {preferencesQuery.isLoading ? (
+          <View style={styles.loadingRow} testID="clerk-notification-preferences-loading">
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.noticeBody, { color: colors.mutedForegroundLight }]}>Loading preferences…</Text>
           </View>
-        ) : (
+        ) : null}
+        {prefs ? (
           <>
-            <Text style={[styles.noticeBody, { color: colors.mutedForegroundLight }]}>
-              These are your saved account preferences. Email and SMS are delivery channels; push delivery is not available.
-            </Text>
             <SettingsGroup
+              compact
               title="Flights"
               rows={[
                 ...prefRows.filter(({ key }) => key === 'mode' || key === 'allChannels' ||
                   key === 'emptyLegHomeAirport' || key === 'departingFavorite' || key === 'arrivingFavorite'),
+                { label: 'International Flights', hint: 'Coming soon', disabled: true },
+                ...prefRows.filter(({ key }) => key === 'queueUpdates' || key === 'winningNotifications'),
               ]}
-            />
-            <SettingsGroup
-              title="Queue Updates"
-              rows={prefRows.filter(({ key }) => key === 'queueUpdates')}
-            />
-            <SettingsGroup
-              title="Flight Confirmations"
-              rows={prefRows.filter(({ key }) => key === 'winningNotifications')}
             />
             {profile && <NotificationPreferenceEditor
               key={preferencesQuery.dataUpdatedAt}
               profile={profile}
               disabled={saving || preferencesQuery.isFetching || preferencesQuery.isError}
               onSave={savePreferences}
+              onRefresh={refreshPreferences}
             />}
-            <TouchableOpacity
-              style={[styles.refreshPreferencesButton, { borderColor: colors.border }]}
-              onPress={() => { void preferencesQuery.refetch(); }}
-              disabled={preferencesQuery.isFetching || saving}
-              activeOpacity={0.75}
-              accessibilityRole="button"
-              testID="clerk-refresh-notification-preferences"
-            >
-              {preferencesQuery.isFetching ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text style={[styles.refreshPreferencesText, { color: colors.primary }]}>Refresh preferences</Text>
-              )}
-            </TouchableOpacity>
-            {preferencesQuery.isError && (
-              <Text style={[styles.noticeError, { color: colors.destructive }]} testID="clerk-notification-preferences-error">
-                {notificationReadError(preferencesQuery.error)}
-              </Text>
-            )}
           </>
-        )}
-
-        <SettingsGroup title="Membership & Offers" rows={[{
-          label: 'Membership updates',
-          hint: 'Coming soon',
-        }]} />
-        <SettingsGroup title="Notification History" rows={[{
-          label: 'Notification history',
-          hint: 'Unavailable',
-        }]} />
-        <SettingsGroup title="Push Delivery" rows={[{
-          label: 'Push notifications',
-          hint: 'Not supported',
-        }]} />
+        ) : null}
+        {preferencesQuery.isError ? (
+          <View style={[styles.preferenceError, { backgroundColor: colors.surface }]} testID="clerk-notification-preferences-error">
+            <Text style={[styles.noticeError, { color: colors.destructive }]}>
+              {notificationReadError(preferencesQuery.error)}
+            </Text>
+            <TouchableOpacity
+              onPress={() => { void refreshPreferences().catch(() => {}); }}
+              disabled={preferencesQuery.isFetching || saving}
+              accessibilityRole="button"
+              testID="clerk-retry-notification-preferences"
+            >
+              {preferencesQuery.isFetching
+                ? <ActivityIndicator size="small" color={colors.primary} />
+                : <Text style={[styles.retryText, { color: colors.primary }]}>Try again</Text>}
+            </TouchableOpacity>
+          </View>
+        ) : null}
+        {!prefs && !preferencesQuery.isLoading && !preferencesQuery.isError ? (
+          <Text style={[styles.noticeError, { color: colors.mutedForegroundLight }]}>
+            Notification settings are unavailable right now.
+          </Text>
+        ) : null}
+        <SettingsGroup compact title="Membership & Offers" rows={[
+          { label: 'Membership Updates', hint: 'Coming soon', disabled: true },
+        ]} />
       </ScrollView>
     </View>
   );
@@ -639,23 +607,46 @@ const styles = StyleSheet.create({
   backChevron:  { fontFamily: 'Inter_500Medium', fontSize: 22, marginTop: -2 },
   headerTitle:  { fontFamily: 'Inter_700Bold', fontSize: 20 },
 
-  clerkScroll: { paddingHorizontal: 16, paddingTop: 20, gap: 10 },
+  clerkHeader: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 14,
+  },
+  clerkBackBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clerkHeaderTitle: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 32,
+    lineHeight: 38,
+  },
+
+  clerkScroll: { paddingHorizontal: 16, paddingTop: 12, gap: 12 },
   scroll: { paddingHorizontal: 16, paddingTop: 20 },
 
-  preferenceNotice: { borderRadius: 18, padding: 16, gap: 12 },
+  preferenceError: {
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 4,
+  },
   noticeBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19 },
   noticeError: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17 },
-  loadPreferencesButton: {
-    minHeight: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
-  loadPreferencesText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
-  refreshPreferencesButton: {
-    minHeight: 42, borderRadius: 14, borderWidth: 1, alignItems: 'center',
-    justifyContent: 'center', paddingHorizontal: 16,
-  },
-  refreshPreferencesText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
-  unavailableSections: { gap: 10, marginTop: 14 },
 
   sectionLabel: {
     fontFamily: 'Inter_600SemiBold', fontSize: 11,

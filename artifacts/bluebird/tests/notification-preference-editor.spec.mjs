@@ -33,7 +33,7 @@ test.beforeAll(async () => {
                 window.acceptSave = resolve;
                 window.rejectSave = () => reject(new Error('HTTP 403'));
               });
-            }} />
+            }} onRefresh={async () => { window.refreshRequested = true; }} />
         );
         window.mountEditor();
       `,
@@ -66,10 +66,10 @@ test("edits only documented categories, disables controls while pending and clos
   await page.getByTestId("clerk-edit-notification-preferences").click();
   await expect(page.getByText("Home airport flights", { exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: "Arriving at favorite airports: email", exact: true })).toHaveAttribute("aria-checked", "false");
-  await page.getByRole("radio", { name: "Queue updates: email", exact: true }).click();
+  await page.getByRole("radio", { name: "Queue Updates: email", exact: true }).click();
   await page.getByTestId("clerk-save-notification-preferences").click();
-  await expect(page.getByText("Saving and refreshing…")).toBeVisible();
-  await expect(page.getByRole("radio", { name: "Queue updates: sms", exact: true })).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByText("Saving…")).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Queue Updates: sms", exact: true })).toHaveAttribute("aria-disabled", "true");
   expect(await page.evaluate(() => window.submitted.queueUpdates)).toBe("email");
   await page.evaluate(() => window.acceptSave());
   await expect(page.getByTestId("clerk-edit-notification-preferences")).toBeVisible();
@@ -79,11 +79,11 @@ test("failed or unverified saves keep edits unsaved and require an explicit succ
   await page.getByTestId("clerk-edit-notification-preferences").click();
   await page.getByTestId("clerk-save-notification-preferences").click();
   await page.evaluate(() => window.rejectSave());
-  await expect(page.getByRole("alert")).toContainText("HTTP 403");
-  await expect(page.getByRole("alert")).toContainText("No save is confirmed");
+  await expect(page.getByRole("alert")).toContainText("Couldn’t verify your changes");
+  await expect(page.getByRole("alert")).not.toContainText("HTTP 403");
   await expect(page.getByTestId("clerk-save-notification-preferences")).toHaveAttribute("aria-disabled", "true");
-  await page.getByRole("button", { name: "Close editor and refresh", exact: true }).click();
-  await expect(page.getByTestId("clerk-edit-notification-preferences")).toHaveAttribute("aria-disabled", "true");
+  await page.getByTestId("clerk-refresh-notification-preferences-after-save").click();
+  expect(await page.evaluate(() => window.refreshRequested)).toBe(true);
   // A new server-refreshed projection remounts the editor in the actual screen.
   await page.evaluate(() => window.mountEditor({}, 2));
   await expect(page.getByTestId("clerk-edit-notification-preferences")).not.toHaveAttribute("aria-disabled", "true");
@@ -91,7 +91,7 @@ test("failed or unverified saves keep edits unsaved and require an explicit succ
 
 test("incomplete profile is explicitly read-only with no edit or save action", async ({ page }) => {
   await page.evaluate(() => window.mountEditor({ dob: null }, 2));
-  await expect(page.getByText(/Read-only: a complete valid profile/)).toBeVisible();
+  await expect(page.getByText("Complete your profile to edit these preferences.")).toBeVisible();
   await expect(page.getByTestId("clerk-edit-notification-preferences")).toHaveCount(0);
   await expect(page.getByTestId("clerk-save-notification-preferences")).toHaveCount(0);
 });
@@ -111,7 +111,7 @@ test("mode changes expose only applicable categories and cannot grant SMS consen
   await page.getByRole("radio", { name: "Flight alert mode: specific", exact: true }).click();
   await expect(page.getByText("All flight alerts", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Home airport flights", { exact: true })).toBeVisible();
-  await expect(page.getByText(/SMS needs explicit SMS consent/)).toBeVisible();
+  await expect(page.getByText("SMS requires consent and a verified phone number.").first()).toBeVisible();
 });
 
 test("SMS eligibility explains missing consent, phone, and verification without making SMS selectable", async ({ page }) => {
@@ -132,7 +132,7 @@ test("SMS eligibility explains missing consent, phone, and verification without 
         phoneVerifiedAt: '2026-10-01',
         phoneVerificationRequired: false,
       },
-      expected: /SMS needs explicit SMS consent/,
+      expected: "SMS requires consent and a verified phone number.",
     },
     {
       profile: {
@@ -141,7 +141,7 @@ test("SMS eligibility explains missing consent, phone, and verification without 
         phoneVerifiedAt: null,
         phoneVerificationRequired: false,
       },
-      expected: /SMS needs a phone number, phone verification/,
+      expected: "SMS requires consent and a verified phone number.",
     },
     {
       profile: {
@@ -150,7 +150,7 @@ test("SMS eligibility explains missing consent, phone, and verification without 
         phoneVerifiedAt: null,
         phoneVerificationRequired: true,
       },
-      expected: /SMS needs phone verification/,
+      expected: "SMS requires consent and a verified phone number.",
     },
   ];
   for (let index = 0; index < cases.length; index++) {
@@ -161,7 +161,7 @@ test("SMS eligibility explains missing consent, phone, and verification without 
     });
     await expect(page.getByText(expected).first()).toBeVisible();
     await page.getByTestId("clerk-edit-notification-preferences").click();
-    await expect(page.getByRole("radio", { name: "Queue updates: sms", exact: true }))
+    await expect(page.getByRole("radio", { name: "Queue Updates: sms", exact: true }))
       .toHaveAttribute("aria-disabled", "true");
   }
 });
@@ -185,8 +185,8 @@ test("an ineligible saved SMS preference can be changed to Email without grantin
     .toHaveAttribute("aria-disabled", "true");
   await page.getByRole("radio", { name: "Home airport flights: email", exact: true }).click();
   await page.getByRole("radio", { name: "Departing from favorite airports: email", exact: true }).click();
-  await page.getByRole("radio", { name: "Queue updates: email", exact: true }).click();
-  await page.getByRole("radio", { name: "Flight confirmations: email", exact: true }).click();
+  await page.getByRole("radio", { name: "Queue Updates: email", exact: true }).click();
+  await page.getByRole("radio", { name: "Flight Confirmations: email", exact: true }).click();
   await page.getByTestId("clerk-save-notification-preferences").click();
   expect(await page.evaluate(() => window.submitted)).toMatchObject({
     mode: 'specific',

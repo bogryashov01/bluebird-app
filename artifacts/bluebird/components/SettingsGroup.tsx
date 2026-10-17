@@ -13,9 +13,10 @@ export interface SettingsRow {
 interface SettingsGroupProps {
   title?: string;
   rows: SettingsRow[];
+  compact?: boolean;
 }
 
-export function SettingsGroup({ title, rows }: SettingsGroupProps) {
+export function SettingsGroup({ title, rows, compact = false }: SettingsGroupProps) {
   const colors = useColors();
   return (
     <View style={styles.wrap}>
@@ -27,13 +28,25 @@ export function SettingsGroup({ title, rows }: SettingsGroupProps) {
           <React.Fragment key={row.label}>
             {i > 0 && <View style={[styles.sep, { backgroundColor: colors.separator }]} />}
             <TouchableOpacity
-              style={styles.row}
+              style={[styles.row, row.disabled && styles.disabledRow]}
               onPress={row.onPress}
               activeOpacity={row.onPress ? 0.6 : 1}
-              disabled={!row.onPress}
+              disabled={!row.onPress || row.disabled}
+              accessibilityState={row.disabled ? { disabled: true } : undefined}
             >
               <Text style={[styles.label, { color: colors.textOnSurface }]}>{row.label}</Text>
-              {row.hint ? <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>{row.hint}</Text> : null}
+              {row.hint ? (
+                <Text
+                  style={[
+                    styles.hint,
+                    compact && styles.compactHint,
+                    { color: colors.mutedForegroundLight },
+                  ]}
+                  numberOfLines={compact ? 2 : undefined}
+                >
+                  {row.hint}
+                </Text>
+              ) : null}
               {row.right !== undefined ? row.right : (
                 row.onPress ? <Text style={[styles.chevron, { color: colors.mutedForegroundLight }]}>›</Text> : null
               )}
@@ -84,8 +97,16 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     marginRight: 6,
   },
+  compactHint: {
+    flexShrink: 1,
+    maxWidth: '58%',
+    textAlign: 'right',
+  },
   chevron: {
     fontSize: 20,
     lineHeight: 22,
+  },
+  disabledRow: {
+    opacity: 0.55,
   },
 });

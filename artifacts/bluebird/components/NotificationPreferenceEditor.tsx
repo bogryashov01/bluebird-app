@@ -29,12 +29,13 @@ type ChannelPreferenceKey =
   | 'winningNotifications';
 
 function getSmsUnavailableReason(profile: ProductionUserProfile): string | null {
-  const missing: string[] = [];
-  if (!profile.smsConsent) missing.push('explicit SMS consent');
-  if (!profile.phoneE164) missing.push('a phone number');
-  if (!profile.phoneVerifiedAt || profile.phoneVerificationRequired) missing.push('phone verification');
-  if (!missing.length) return null;
-  return `SMS needs ${missing.join(', ')}. Consent and phone verification can’t be started from this screen.`;
+  if (
+    profile.smsConsent &&
+    profile.phoneE164 &&
+    profile.phoneVerifiedAt &&
+    !profile.phoneVerificationRequired
+  ) return null;
+  return 'SMS requires consent and a verified phone number.';
 }
 
 function emailSafeCandidate(prefs: ProductionNotificationPrefs): ProductionNotificationPrefs {
@@ -167,16 +168,18 @@ function PreferenceCard({
   );
 }
 
-export function NotificationPreferenceEditor({ profile, disabled, onSave }: {
+export function NotificationPreferenceEditor({ profile, disabled, onSave, onRefresh }: {
   profile: ProductionUserProfile;
   disabled: boolean;
   onSave: (prefs: ProductionNotificationPrefs) => Promise<void>;
+  onRefresh: () => Promise<void>;
 }) {
   const colors = useColors();
   const [draft, setDraft] = useState<ProductionNotificationPrefs | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsRefresh, setNeedsRefresh] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   // Validate that the profile itself can support a safe edit. Existing SMS
   // values may now be ineligible, but must remain editable to Email.
   const safe = !!buildNotificationProfileUpdate(
@@ -188,7 +191,7 @@ export function NotificationPreferenceEditor({ profile, disabled, onSave }: {
   if (!safe) return (
     <View style={{ gap: 8 }}>
       <Text style={{ color: colors.mutedForegroundLight, fontSize: 13, lineHeight: 19 }}>
-        Read-only: a complete valid profile and any required existing SMS consent and verified phone are needed for a safe full profile update.
+        Complete your profile to edit these preferences.
       </Text>
       {smsUnavailableReason ? (
         <Text style={{ color: colors.mutedForegroundLight, fontSize: 12, lineHeight: 18 }}>
@@ -216,13 +219,14 @@ export function NotificationPreferenceEditor({ profile, disabled, onSave }: {
         disabled={disabled || needsRefresh}
         onPress={() => setDraft({ ...profile.notificationPrefs })}
         style={{
-          padding: 14,
-          borderRadius: 14,
-          backgroundColor: colors.primary,
+          minHeight: 40,
+          alignSelf: 'flex-start',
+          justifyContent: 'center',
+          paddingHorizontal: 4,
           opacity: disabled || needsRefresh ? 0.5 : 1,
         }}
       >
-        <Text style={{ color: colors.primaryForeground, textAlign: 'center', fontFamily: 'Inter_600SemiBold' }}>
+        <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold', fontSize: 14 }}>
           Edit preferences
         </Text>
       </TouchableOpacity>
@@ -238,9 +242,6 @@ export function NotificationPreferenceEditor({ profile, disabled, onSave }: {
   return (
     <View style={{ gap: 12 }}>
       <PreferenceCard title="Flights">
-        <Text style={{ color: colors.mutedForegroundLight, fontSize: 13, lineHeight: 19 }}>
-          Choose one flight-alert mode. Email and SMS are delivery channels; this does not configure push notifications.
-        </Text>
         <View style={{ gap: 9 }}>
           <Text style={{ color: colors.textOnSurface, fontFamily: 'Inter_500Medium', fontSize: 14 }}>
             Flight alert mode
@@ -300,33 +301,23 @@ export function NotificationPreferenceEditor({ profile, disabled, onSave }: {
             />
           </>
         ) : null}
-      </PreferenceCard>
-
-      {smsUnavailableReason ? (
-        <Text style={{ color: colors.mutedForegroundLight, fontSize: 12, lineHeight: 18 }}>
-          {smsUnavailableReason}
-        </Text>
-      ) : null}
-      <PreferenceCard title="Queue Updates">
-        <Text style={{ color: colors.mutedForegroundLight, fontSize: 13, lineHeight: 19 }}>
-          Choose how to receive updates about your place in a flight queue.
-        </Text>
+        {smsUnavailableReason ? (
+          <Text style={{ color: colors.mutedForegroundLight, fontSize: 12, lineHeight: 18 }}>
+            {smsUnavailableReason}
+          </Text>
+        ) : null}
+        <View style={{ height: 1, backgroundColor: colors.separator }} />
         <ChannelSelector
-          label="Queue updates"
+          label="Queue Updates"
           value={draft.queueUpdates}
           profile={profile}
           disabled={blocked}
           onChange={(value) => setChannel('queueUpdates', value)}
           testPrefix="clerk-notification-queue-channel"
         />
-      </PreferenceCard>
-
-      <PreferenceCard title="Flight Confirmations">
-        <Text style={{ color: colors.mutedForegroundLight, fontSize: 13, lineHeight: 19 }}>
-          Choose where to receive flight confirmation updates. This preference can’t be turned off.
-        </Text>
+        <View style={{ height: 1, backgroundColor: colors.separator }} />
         <ChannelSelector
-          label="Flight confirmations"
+          label="Flight Confirmations"
           value={draft.winningNotifications}
           profile={profile}
           disabled={blocked}
@@ -351,9 +342,9 @@ export function NotificationPreferenceEditor({ profile, disabled, onSave }: {
           try {
             await onSave(draft);
             setDraft(null);
-          } catch (failure) {
+          } catch {
             setNeedsRefresh(true);
-            setError(`${failure instanceof Error ? failure.message : 'Update could not be verified.'} No save is confirmed. Refresh preferences before editing again; a request may already have reached the server.`);
+            setError('Couldn’t verify your changes. Refresh preferences before trying again.');
           } finally {
             setPending(false);
           }
@@ -361,19 +352,40 @@ export function NotificationPreferenceEditor({ profile, disabled, onSave }: {
         style={{ padding: 14, backgroundColor: colors.primary, borderRadius: 12, opacity: blocked ? 0.5 : 1 }}
       >
         <Text style={{ color: colors.primaryForeground, textAlign: 'center', fontFamily: 'Inter_600SemiBold' }}>
-          {pending ? 'Saving and refreshing…' : 'Save preferences'}
+          {pending ? 'Saving…' : 'Save preferences'}
         </Text>
       </TouchableOpacity>
-      <TouchableOpacity
-        accessibilityRole="button"
-        disabled={pending}
-        onPress={() => { setDraft(null); setError(null); }}
-        style={{ padding: 12 }}
-      >
-        <Text style={{ color: colors.primary, textAlign: 'center' }}>
-          {needsRefresh ? 'Close editor and refresh' : 'Cancel'}
-        </Text>
-      </TouchableOpacity>
+      {needsRefresh ? (
+        <TouchableOpacity
+          accessibilityRole="button"
+          testID="clerk-refresh-notification-preferences-after-save"
+          disabled={pending || refreshing || disabled}
+          onPress={async () => {
+            setRefreshing(true);
+            try {
+              await onRefresh();
+            } catch {
+              setError('Couldn’t refresh preferences. Try again.');
+            } finally {
+              setRefreshing(false);
+            }
+          }}
+          style={{ padding: 12 }}
+        >
+          <Text style={{ color: colors.primary, textAlign: 'center' }}>
+            {refreshing ? 'Refreshing…' : 'Refresh preferences'}
+          </Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          accessibilityRole="button"
+          disabled={pending}
+          onPress={() => { setDraft(null); setError(null); }}
+          style={{ padding: 12 }}
+        >
+          <Text style={{ color: colors.primary, textAlign: 'center' }}>Cancel</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
