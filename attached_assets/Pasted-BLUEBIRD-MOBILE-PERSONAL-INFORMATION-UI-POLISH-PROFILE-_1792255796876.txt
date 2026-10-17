@@ -1,0 +1,299 @@
+BLUEBIRD MOBILE — PERSONAL INFORMATION UI POLISH + PROFILE LOADING
+
+PRIORITY: HIGH
+MODE: BUILD / EXECUTE
+
+GOAL:
+
+Redesign the existing Personal Information screen
+and improve Profile loading states.
+
+The current Personal Information screen has:
+- Excessive vertical spacing
+- Oversized input fields
+- Too much technical explanatory text
+- Inconsistent padding
+- Dark developer-style layout
+- Poor visual hierarchy
+
+We want a compact, premium, native iOS experience
+consistent with the approved Bluebird design.
+
+VISUAL REFERENCE:
+https://bluebird-app-prototype.replit.app
+
+Use the approved LIGHT Notifications screen as
+the visual reference for nested Profile screens.
+
+SCOPE:
+Bluebird Mobile ONLY.
+
+Do not modify Main Bluebird Website, API,
+database, Clerk configuration, or production.
+
+==================================================
+1. PERSONAL INFORMATION SCREEN
+==================================================
+
+Redesign the existing screen.
+
+BACKGROUND:
+Light off-white, matching approved Notifications.
+
+HEADER:
+- Small circular back button
+- Large bold title: Personal Information
+- Match Notifications header spacing
+- Respect iPhone safe areas
+
+Remove unnecessary headings such as:
+"Your details"
+
+Remove long technical descriptions such as:
+"These details come from your authenticated
+Bluebird profile..."
+
+Do not expose API implementation details.
+
+==================================================
+2. COMPACT PROFILE FIELDS
+==================================================
+
+Display the user's real information:
+
+First Name
+Last Name
+Email
+Phone
+Date of Birth
+Gender
+Home Airport, if currently part of this screen
+
+Do not hardcode user information.
+
+Use consistent field styling:
+
+- Horizontal screen padding: 16px
+- Input height: approximately 48–52px
+- Border radius: 12–14px
+- Small, readable labels
+- Consistent spacing between fields
+- Clear focus states
+- No oversized vertical gaps
+
+Target approximately 12–16px between
+field groups, not 30–40px.
+
+Keep the layout compact without sacrificing
+readability or touch accessibility.
+
+==================================================
+3. EDITABLE VS READ-ONLY FIELDS
+==================================================
+
+Inspect existing functionality before changing it.
+
+Editable fields should remain editable.
+
+Read-only fields must look read-only.
+
+For example:
+
+Email:
+Show the real email address.
+
+Phone:
+Show the real phone number.
+
+If the existing backend does not support
+editing these fields through this screen,
+do not make them appear editable.
+
+Use a subtle lock icon or "Verified" label
+where appropriate.
+
+Do not invent account-management flows.
+
+Do not change Clerk identity fields.
+
+==================================================
+4. DATE OF BIRTH
+==================================================
+
+Do not display raw ISO dates such as:
+
+2001-11-22
+
+Display a human-readable date:
+
+November 22, 2001
+
+If editing DOB is already supported,
+preserve the existing date-picker behavior.
+
+Keep API submission in the format
+required by the backend.
+
+Do not change the actual stored date
+through timezone conversion.
+
+==================================================
+5. PROFILE SAVE BEHAVIOR
+==================================================
+
+Preserve existing profile save functionality.
+
+Main Bluebird uses:
+
+PUT /api/me/profile
+
+This is a full-profile update.
+
+Required fields include:
+
+firstName
+lastName
+dob
+gender
+homeAirportCode
+favoriteCityKeys
+
+Do not submit partial updates.
+
+Preserve unrelated profile fields,
+including notification preferences
+and SMS consent.
+
+Do not invent missing values.
+
+Do not save automatically on every keystroke.
+
+Use the existing supported save flow.
+
+Show clear success/error feedback.
+
+Avoid oversized status messages.
+
+==================================================
+6. PROFILE LOADING SCREEN
+==================================================
+
+Replace the current text-heavy loading UI.
+
+Do not show large messages such as:
+
+"Your profile is loading..."
+
+Instead, use:
+
+- Bluebird logo or existing brand icon
+- Small native ActivityIndicator
+- Clean centered layout
+- No technical explanation text
+
+Use an existing bundled brand asset.
+
+Do not fetch arbitrary external images.
+
+Do not block the entire screen when
+cached profile information is available.
+
+Use a small inline loading indicator
+for background refreshes.
+
+==================================================
+7. SHARED PROFILE DESIGN
+==================================================
+
+Where appropriate, reuse existing
+Profile UI components for:
+
+- Back button
+- Section labels
+- Input fields
+- Grouped cards
+- Loading indicators
+
+Keep styling consistent between:
+
+- Profile
+- Personal Information
+- Notifications
+
+Do not redesign unrelated screens.
+
+Avoid introducing unnecessary dependencies.
+
+==================================================
+8. KEYBOARD & MOBILE UX
+==================================================
+
+Ensure:
+
+- Inputs remain visible above keyboard
+- Screen scrolls correctly
+- Keyboard does not cover Save button
+- Correct keyboard types
+- Proper autofill where supported
+- Clear disabled/read-only states
+- No content clipped by safe areas
+
+Test common iPhone widths:
+
+375px
+393px
+430px
+
+==================================================
+9. REGRESSION PROTECTION
+==================================================
+
+Preserve:
+
+- Clerk authentication
+- Real profile API integration
+- Existing validation
+- Existing editable fields
+- Existing profile navigation
+- Existing membership information
+- Existing notification preferences
+- SMS consent behavior
+
+Do not modify:
+
+- Main Bluebird
+- Main API
+- Database
+- Production settings
+- Clerk configuration
+- EAS configuration
+
+==================================================
+10. VERIFICATION
+==================================================
+
+Run Mobile TypeScript checks.
+
+Verify:
+
+- Real user data renders correctly
+- Editable fields still work
+- Read-only fields cannot be modified
+- DOB formatting is correct
+- Save preserves unrelated profile fields
+- Loading states work
+- Error states remain accessible
+- Keyboard behavior
+- Back navigation
+
+Report:
+
+1. Files changed
+2. Visual improvements
+3. Existing functionality preserved
+4. Tests passed
+5. Remaining limitations
+
+IMPLEMENT DIRECTLY.
+
+Do not stop at an audit or planning.
