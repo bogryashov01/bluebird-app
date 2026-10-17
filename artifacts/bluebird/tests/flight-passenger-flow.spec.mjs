@@ -64,14 +64,25 @@ async function mockFlightApi(page, {
   statusErrorStatus,
   joinErrorStatus,
   joinDelayMs = 0,
+  flightResponse = flight,
 } = {}) {
   let joinBody;
   let joinRequestCount = 0;
+  const passMutationRequests = [];
 
   await page.addInitScript(({ cachedUser }) => {
     localStorage.setItem("bluebird_token", "mobile-flight-flow-test-token");
     localStorage.setItem("bluebird_user", JSON.stringify(cachedUser));
   }, { cachedUser });
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (
+      request.method() !== "GET" &&
+      /\/api\/(?:queue(?:\/|$)|passes?(?:\/|$)|empty-legs\/\d+\/(?:skip-line|queue)(?:\/|$))/.test(path)
+    ) {
+      passMutationRequests.push(`${request.method()} ${path}`);
+    }
+  });
 
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -81,7 +92,7 @@ async function mockFlightApi(page, {
     if (path === "/api/trips") return route.fulfill({ json: trips });
     if (path === "/api/notifications") return route.fulfill({ json: [] });
     if (path === "/api/queue/status") return route.fulfill({ json: queueEntries });
-    if (path === "/api/flights/flight-1") return route.fulfill({ json: flight });
+    if (path === "/api/flights/flight-1") return route.fulfill({ json: flightResponse });
     if (path === "/api/flights/flight-1/my-status") {
       if (statusErrorStatus) {
         return route.fulfill({
@@ -128,7 +139,11 @@ async function mockFlightApi(page, {
     return route.continue();
   });
 
-  return { getJoinBody: () => joinBody, getJoinRequestCount: () => joinRequestCount };
+  return {
+    getJoinBody: () => joinBody,
+    getJoinRequestCount: () => joinRequestCount,
+    getPassMutationRequests: () => passMutationRequests,
+  };
 }
 
 test("My Trips shows an honest empty state when the member has no trips", async ({ page }) => {
@@ -196,13 +211,74 @@ test("flight details omit unsupported facts and keep join requests unavailable",
 
 test("flight details explain when membership is required without opening purchase or queue flows", async ({ page }) => {
   const nonMember = { ...user, id: "flight-flow-nonmember", membershipTier: "none" };
-  const { getJoinBody } = await mockFlightApi(page, { cachedUser: nonMember });
+  const { getJoinBody, getPassMutationRequests } = await mockFlightApi(page, { cachedUser: nonMember });
   await page.goto("/flight/flight-1");
 
   await expect(page.getByText("Membership required", { exact: true })).toBeVisible();
+  await page.getByTestId("flight-skip-line-pass-card").click();
+  await expect(page).toHaveURL(/\/membership\/join$/);
   await expect(page.getByText("Request to Join", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Ask AI Concierge", { exact: true })).toBeVisible();
+  expect(getPassMutationRequests()).toEqual([]);
   expect(getJoinBody()).toBeUndefined();
+});
+
+test("members see safe pass details without inferring ownership, and repeated taps do not create a booking", async ({ page }) => {
+  const memberWithUnverifiedPass = { ...user, linePassCount: 2 };
+  const { getPassMutationRequests, getJoinBody } = await mockFlightApi(page, {
+    cachedUser: memberWithUnverifiedPass,
+    trips: [],
+  });
+  await page.goto("/flight/flight-1");
+
+  const passCard = page.getByTestId("flight-skip-line-pass-card");
+  await expect(passCard).toBeVisible();
+  await passCard.evaluate((element) => {
+    element.click();
+    element.click();
+  });
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/flight/skip-line-pass");
+  await expect(page.getByTestId("skip-line-instant-booking-notice")).toHaveText("Instant booking is coming soon.");
+  await expect(page.getByTestId("skip-line-purchase-notice")).toHaveText("Purchasing will be available soon.");
+  await expect(page.getByText(/Pass ownership cannot be verified on this screen/)).toBeVisible();
+  await expect(page.getByText(/A seat must still be available/)).toBeVisible();
+  await expect(page.getByText(/Pass available/i)).toHaveCount(0);
+  await expect(page.getByText(/Use pass|Book now|Purchase pass/i)).toHaveCount(0);
+  await expect(page.locator("input")).toHaveCount(0);
+
+  await page.getByTestId("skip-line-pass-back").click();
+  await expect(page.getByTestId("flight-skip-line-pass-card")).toBeVisible();
+  expect(getPassMutationRequests()).toEqual([]);
+  expect(getJoinBody()).toBeUndefined();
+});
+
+test("a member with no pass can see pass terms without checkout or reservation requests", async ({ page }) => {
+  const memberWithoutPass = { ...user, linePassCount: 0 };
+  const { getPassMutationRequests, getJoinBody } = await mockFlightApi(page, {
+    cachedUser: memberWithoutPass,
+    trips: [],
+  });
+  await page.goto("/flight/flight-1");
+  await page.getByTestId("flight-skip-line-pass-card").click();
+
+  await expect(page.getByTestId("skip-line-instant-booking-notice")).toHaveText("Instant booking is coming soon.");
+  await expect(page.getByTestId("skip-line-purchase-notice")).toHaveText("Purchasing will be available soon.");
+  await expect(page.locator("input")).toHaveCount(0);
+  expect(getPassMutationRequests()).toEqual([]);
+  expect(getJoinBody()).toBeUndefined();
+});
+
+test("flight details state does not offer pass booking when a flight is ineligible", async ({ page }) => {
+  const departedFlight = { ...flight, status: "departed" };
+  const { getPassMutationRequests } = await mockFlightApi(page, {
+    flightResponse: departedFlight,
+    trips: [],
+  });
+  await page.goto("/flight/flight-1");
+  await page.getByTestId("flight-skip-line-pass-card").click();
+
+  await expect(page.getByText("This flight is not currently accepting requests.", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("skip-line-instant-booking-notice")).toHaveText("Instant booking is coming soon.");
+  expect(getPassMutationRequests()).toEqual([]);
 });
 
 test("flight details show clear signed-out and unavailable access states without queue requests", async ({ page }) => {

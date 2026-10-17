@@ -65,6 +65,36 @@ test("DEMO queue previews show isolated fixture states and never submit a queue 
     }
   }
 
+  for (const state of [
+    "pass-no-pass",
+    "pass-unavailable",
+    "pass-available",
+    "pass-loading",
+    "pass-success",
+    "pass-failure",
+  ]) {
+    await page.getByTestId(`queue-preview-state-${state}`).click();
+    await expect(page.getByTestId("queue-preview-demo-label")).toHaveText("DEMO — NOT A REAL BOOKING");
+    await expect(page.getByText(/· DEMO/).first()).toBeVisible();
+  }
+
+  await page.getByTestId("queue-preview-state-pass-available").click();
+  const startRedemption = page.getByTestId("pass-preview-start-redemption");
+  await startRedemption.evaluate((element) => {
+    element.click();
+    element.click();
+  });
+  await expect(page.getByTestId("pass-preview-state-title")).toHaveText("Redemption loading · DEMO");
+  await expect(page.getByText(/No API request or pass use occurs/)).toBeVisible();
+  await page.getByText("Preview simulated success", { exact: true }).click();
+  await expect(page.getByTestId("pass-preview-demo-booking-label")).toHaveText("DEMO — NOT A REAL BOOKING");
+  await expect(page.getByText("DAL → SFO · Citation Latitude · Saturday, November 7 at 10:00 AM", { exact: true })).toBeVisible();
+  await expect(page.getByText(/No trip, queue entry, identity, membership, or pass balance was created or changed/)).toBeVisible();
+
+  await page.getByTestId("queue-preview-state-pass-failure").click();
+  await expect(page.getByTestId("pass-preview-state-title")).toHaveText("Simulated booking failure · DEMO");
+  await expect(page.getByText(/No booking, pass use, or API request occurred/)).toBeVisible();
+
   await page.goto("/trips");
   await expect(page.getByTestId("queue-preview-demo-label")).toHaveCount(0);
   expect(mutationRequests).toEqual([]);

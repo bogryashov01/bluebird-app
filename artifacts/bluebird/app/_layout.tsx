@@ -103,6 +103,10 @@ function RootLayoutNav() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="flight/skip-line-pass"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
         name="flight/policy"
         options={{ headerShown: true, title: 'Flight Policy', ...headerOptions }}
       />

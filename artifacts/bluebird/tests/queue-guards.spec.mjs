@@ -6,6 +6,7 @@ import {
 } from "../scripts/.queue-guards/queueJoinGuards.mjs";
 import {
   isQueueDevelopmentPreviewEnabled,
+  isPassPreviewState,
   parseQueuePreviewState,
   QUEUE_PREVIEW_STATES,
 } from "../scripts/.queue-guards/queueDevelopmentPreview.mjs";
@@ -40,9 +41,18 @@ test("development queue fixtures have named states and are excluded outside deve
     "unavailable",
     "selected",
     "winner",
+    "pass-no-pass",
+    "pass-unavailable",
+    "pass-available",
+    "pass-loading",
+    "pass-success",
+    "pass-failure",
   ]);
   assert.equal(isQueueDevelopmentPreviewEnabled(true), true);
   assert.equal(isQueueDevelopmentPreviewEnabled(false), false);
   assert.equal(parseQueuePreviewState("winner"), "winner");
+  assert.equal(parseQueuePreviewState("pass-success"), "pass-success");
   assert.equal(parseQueuePreviewState("unknown"), "eligible-flight");
+  assert.equal(isPassPreviewState("pass-success"), true);
+  assert.equal(isPassPreviewState("eligible-flight"), false);
 });

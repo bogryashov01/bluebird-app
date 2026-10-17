@@ -7,7 +7,7 @@ description: Shared query and auth setup required by Bluebird Playwright fixture
 
 **Why:** The tab badge filters notifications and the global queue observer searches queue entries. Home Airports renders the local airport-group catalog separately from its public search API. Non-array fixture responses can crash shared UI and replace the tested screen with the error fallback.
 
-**How to apply:** Add the shared array responses plus the catalog response when relevant, then assert public airport-search traffic separately. If a test crashes outside its screen, check other globally mounted queries.
+**How to apply:** Add the shared array responses plus the catalog response when relevant, then assert public airport-search traffic separately. For Clerk-gated routes, use local synthetic-session tests rather than bypassing hosted Preview auth, and state when hosted signed-in UI was not verified.
 
 **Rule:** Local Playwright tests using a synthetic local-shell session must explicitly set `EXPO_PUBLIC_ENABLE_CLERK_AUTH=false`.
 

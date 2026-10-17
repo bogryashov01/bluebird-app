@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Alert, ImageBackground, useWindowDimensions,
@@ -7,7 +7,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useGetFlight, useGetFlightMyStatus, useCancelQueueEntry, useCancelTrip, useListAirports,
@@ -123,7 +123,13 @@ export default function FlightDetailScreen() {
   const { height: windowHeight } = useWindowDimensions();
   // Keep the aircraft image present without pushing the key flight details below the fold.
   const heroHeight = Math.round(Math.min(240, Math.max(150, windowHeight * 0.23)));
-  const { user, updateUser, authMode } = useAuth();
+  const {
+    user,
+    updateUser,
+    authMode,
+    clerkSignedIn,
+    clerkMemberResolution,
+  } = useAuth();
   const queryClient = useQueryClient();
   const localReadMode = shouldUseLocalFlightReadMode(authMode, isLocalFlightReadMode());
   const numericFlightId = parseProductionFlightId(id);
@@ -131,6 +137,12 @@ export default function FlightDetailScreen() {
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const [networkMessage, setNetworkMessage] = useState('');
   const [networkError, setNetworkError] = useState('');
+  const [skipLineNavigationPending, setSkipLineNavigationPending] = useState(false);
+  const skipLineNavigationLock = useRef(false);
+  useFocusEffect(useCallback(() => {
+    skipLineNavigationLock.current = false;
+    setSkipLineNavigationPending(false);
+  }, []));
 
   const localFlightQuery = useGetFlight(id ?? '', {
     query: { enabled: localReadMode && !!id },
@@ -323,6 +335,32 @@ export default function FlightDetailScreen() {
     ? { uri: f.imageUrl! }
     : null;
   const readOnlyProduction = f.source === 'production';
+  const clerkMembership =
+    authMode === 'clerk' && clerkMemberResolution.status === 'profile_complete'
+      ? clerkMemberResolution.currentUser.isMember
+      : null;
+  const skipLineRequiresMembership =
+    authMode === 'clerk'
+      ? !clerkSignedIn || clerkMembership === false
+      : !user || String(user.membershipTier) === 'none';
+
+  const openSkipLinePass = () => {
+    if (skipLineNavigationLock.current) return;
+    skipLineNavigationLock.current = true;
+    setSkipLineNavigationPending(true);
+    if (skipLineRequiresMembership) {
+      router.push('/membership/join' as any);
+      return;
+    }
+    router.push({
+      pathname: '/flight/skip-line-pass',
+      params: {
+        flightId: String(f.id),
+        route: routeSummary,
+        flightAvailable: flightAvailable ? 'true' : 'false',
+      },
+    } as any);
+  };
 
   const status = myStatus?.status ?? 'none';
   // Public flight responses intentionally omit FBO details. A confirmed
@@ -882,6 +920,32 @@ export default function FlightDetailScreen() {
           </View>
         </View>
 
+        <TouchableOpacity
+          testID="flight-skip-line-pass-card"
+          accessibilityRole="button"
+          accessibilityLabel="Skip the Line Pass details"
+          accessibilityHint="Opens pass eligibility and availability information"
+          disabled={skipLineNavigationPending}
+          onPress={openSkipLinePass}
+          activeOpacity={0.78}
+          style={[
+            styles.skipLineCard,
+            { backgroundColor: colors.surface, borderColor: colors.separator },
+            skipLineNavigationPending && { opacity: 0.7 },
+          ]}
+        >
+          <View style={[styles.skipLineIcon, { backgroundColor: colors.primary + '16' }]}>
+            <Feather name="fast-forward" size={19} color={colors.primary} />
+          </View>
+          <View style={styles.skipLineCopy}>
+            <Text style={[styles.skipLineTitle, { color: colors.textOnSurface }]}>Skip the Line Pass</Text>
+            <Text style={[styles.skipLineSubtitle, { color: colors.mutedForegroundLight }]}>
+              Check pass details, eligibility and availability
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={19} color={colors.mutedForegroundLight} />
+        </TouchableOpacity>
+
         {/* ── Four supported flight facts ── */}
         {flightInformation.length > 0 && (
           <View style={styles.flightInfoSection}>
@@ -1118,6 +1182,22 @@ const styles = StyleSheet.create({
     marginHorizontal: 16, marginBottom: 12,
     borderRadius: 16, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 13,
   },
+  skipLineCard: {
+    minHeight: 74,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 15,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  skipLineIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  skipLineCopy: { flex: 1, minWidth: 0 },
+  skipLineTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  skipLineSubtitle: { fontFamily: 'Inter_400Regular', fontSize: 11, lineHeight: 16, marginTop: 3 },
   routeSummary: { fontFamily: 'Inter_700Bold', fontSize: 19, textAlign: 'center', letterSpacing: 0.2 },
   routeSchedule: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   routeEndpoint: { flex: 1, minWidth: 0, alignItems: 'flex-start' },
