@@ -1,0 +1,288 @@
+BLUEBIRD MOBILE — FIX BROKEN PROFILE NAVIGATION
+
+PRIORITY: CRITICAL
+MODE: BUILD / EXECUTE
+
+THIS IS A BUG FIX TASK, NOT AN AUDIT.
+
+The previous implementation did not solve
+the reported issues.
+
+Two user-visible flows are still broken.
+
+==================================================
+BUG 1 — PAYMENT METHODS
+==================================================
+
+CURRENT BEHAVIOR:
+
+1. Open Profile.
+2. Tap Payment Methods.
+3. UI displays:
+   "Unavailable for this account"
+4. Tapping the item redirects to Discover
+   instead of opening Payment Methods.
+
+EXPECTED BEHAVIOR:
+
+Profile
+  → Payment Methods
+  → Back
+  → Profile
+
+Payment Methods must open for ANY
+authenticated user.
+
+It must NOT depend on:
+
+- Having an active membership
+- Having a saved payment method
+- Having a Stripe customer
+- Having payment provider credentials
+
+This is a UI-only placeholder screen
+until payment integration is implemented.
+
+IMPLEMENT:
+
+A dedicated Payment Methods screen with:
+
+- Light background
+- Circular back button
+- Title: Payment Methods
+- White rounded content card
+- Credit card icon
+- Heading: Your payment methods
+- Message:
+  "Payment method management is coming soon."
+
+Do not display:
+"Unavailable for this account"
+
+Do not invent saved cards.
+
+Do not collect payment details.
+
+Do not integrate Stripe.
+
+==================================================
+BUG 2 — HOME AIRPORT
+==================================================
+
+CURRENT BEHAVIOR:
+
+1. Open Profile.
+2. Open Notifications.
+3. Tap Home Airport.
+4. App unexpectedly navigates to Discover.
+
+EXPECTED BEHAVIOR:
+
+Profile
+  → Notifications
+  → Home Airport
+  → Select airport
+  → Save
+  → Notifications
+
+IMPLEMENT:
+
+A dedicated, working airport selection screen.
+
+It must:
+
+- Open from Notifications
+- Show current home airport
+- Include a search input
+- Search real airports
+- Allow selecting an airport
+- Save the selected airport
+- Return to Notifications
+- Display the updated airport code
+
+Use:
+
+GET /api/airports/search?q={query}
+
+Save via:
+
+PUT /api/me/profile
+
+Preserve required profile fields:
+
+firstName
+lastName
+dob
+gender
+homeAirportCode
+favoriteCityKeys
+
+Preserve unrelated profile data,
+including notificationPrefs and smsConsent.
+
+If the profile is incomplete, show a
+clear validation message instead of
+silently redirecting to Discover.
+
+==================================================
+ROOT CAUSE INVESTIGATION
+==================================================
+
+Before changing code, trace the exact
+navigation paths involved.
+
+Inspect:
+
+1. Profile menu onPress handlers
+2. Notification Settings Home Airport handler
+3. Expo Router route files
+4. Route group nesting
+5. Stack and Tabs layout configuration
+6. Authentication redirects
+7. Membership-based route guards
+8. Unknown-route fallback behavior
+
+Determine WHY both actions redirect
+to Discover.
+
+Do not assume the cause.
+
+Fix the actual root cause.
+
+IMPORTANT:
+
+If the existing navigation uses Expo Router,
+verify that every destination has a real
+matching route file.
+
+Do not navigate to routes that do not exist.
+
+Do not use navigation.reset() or replace()
+to hide broken routing.
+
+Do not redirect to Discover when a
+Profile subpage is unavailable.
+
+==================================================
+PAYMENT METHODS NAVIGATION
+==================================================
+
+Ensure the Payment Methods menu item
+is actually clickable.
+
+Remove any disabled/unavailable state
+that prevents opening the placeholder UI.
+
+The placeholder screen should be reachable
+even without payment backend support.
+
+==================================================
+HOME AIRPORT NAVIGATION
+==================================================
+
+Ensure the Home Airport row opens
+the actual airport selector.
+
+Do not reuse an unrelated onboarding route
+if it resets navigation to Discover.
+
+Use a dedicated Profile navigation path
+when necessary.
+
+After saving, return to Notifications,
+not Discover.
+
+On cancellation, return to Notifications
+without changing the airport.
+
+==================================================
+VERIFICATION — REQUIRED
+==================================================
+
+Do not report this task complete based
+only on TypeScript passing.
+
+Actually verify the navigation flows.
+
+TEST FLOW A:
+
+Launch Mobile
+→ Sign in
+→ Profile
+→ Payment Methods
+→ Verify placeholder screen opens
+→ Back
+→ Verify Profile is visible
+
+TEST FLOW B:
+
+Launch Mobile
+→ Sign in
+→ Profile
+→ Notifications
+→ Home Airport
+→ Verify airport selector opens
+→ Search for "Miami"
+→ Verify real airport results appear
+→ Select an airport
+→ Save
+→ Verify return to Notifications
+→ Verify selected airport code updates
+
+Use a test account and authorized
+environment for any real profile write.
+
+Do not modify production user data
+without explicit authorization.
+
+If authenticated runtime testing is
+not possible, clearly state that and
+add automated navigation tests using
+the actual route configuration.
+
+Do not claim the flow was manually
+verified unless it actually was.
+
+==================================================
+REGRESSION PROTECTION
+==================================================
+
+Do not modify Main Bluebird.
+
+Do not modify:
+
+- Main API
+- Database
+- Clerk configuration
+- Payment provider configuration
+- Production settings
+- Queue functionality
+- Unrelated screens
+
+Preserve existing Mobile authentication.
+
+Run Mobile TypeScript and relevant tests.
+
+==================================================
+DELIVERY
+==================================================
+
+Implement the fixes directly.
+
+Report:
+
+1. Exact root cause of Payment Methods redirect
+2. Exact root cause of Home Airport redirect
+3. Routes and handlers fixed
+4. Files modified
+5. Navigation tests performed
+6. Whether authenticated runtime testing
+   was actually completed
+7. Any remaining blockers
+
+DO NOT MARK THIS TASK COMPLETE
+UNTIL BOTH DESTINATION SCREENS
+ARE REACHABLE THROUGH THEIR
+ACTUAL PROFILE NAVIGATION FLOWS.
+
+Do not stop at planning or an audit.
