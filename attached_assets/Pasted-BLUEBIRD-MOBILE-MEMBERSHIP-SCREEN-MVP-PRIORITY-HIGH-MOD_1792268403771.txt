@@ -1,0 +1,374 @@
+BLUEBIRD MOBILE — MEMBERSHIP SCREEN MVP
+
+PRIORITY: HIGH
+MODE: BUILD / EXECUTE
+
+GOAL:
+
+Build a polished, functional Membership experience
+for the Bluebird Mobile application.
+
+The Membership screen must support:
+
+1. Users without active membership
+2. Users with active membership
+3. Membership plan browsing
+4. Membership details
+5. Integration with Queue and Skip the Line Pass
+6. Development-only preview states
+
+Payment processing is NOT part of this task.
+
+SCOPE:
+
+Bluebird Mobile ONLY.
+
+Main Bluebird Website/API may be inspected
+READ-ONLY to confirm existing contracts.
+
+Do not modify Main Bluebird code,
+database, Clerk configuration,
+production settings, or payment systems.
+
+==================================================
+1. INSPECT EXISTING MEMBERSHIP IMPLEMENTATION
+==================================================
+
+Before making changes, inspect:
+
+- Existing Membership tab
+- Existing membership screens
+- Existing membership API client
+- Existing authenticated member state
+- Existing membership plans
+- Existing membership status handling
+- Existing Queue membership requirements
+- Existing Skip the Line Pass integration
+- Existing membership-related tests
+
+Inspect Main Bluebird source READ-ONLY
+if necessary.
+
+Determine:
+
+- How membership plans are retrieved
+- How active membership is identified
+- Which membership statuses exist
+- Which plan details are available
+- Whether membership benefits are returned
+- Whether membership pricing is available
+- Whether membership checkout is supported
+
+Do not invent endpoints or business rules.
+
+Preserve working functionality.
+
+==================================================
+2. MEMBERSHIP SCREEN DESIGN
+==================================================
+
+Use the approved Bluebird visual style.
+
+Background:
+Light off-white.
+
+Typography:
+Dark navy.
+
+Accent:
+Bluebird blue.
+
+Layout:
+
+- Safe-area-aware header
+- Large "Membership" title
+- Compact spacing
+- White rounded cards
+- Subtle borders and dividers
+- Premium native iOS appearance
+
+Avoid:
+
+- Excessive padding
+- Technical API descriptions
+- Placeholder developer text
+- Oversized empty sections
+- Fake pricing
+- Fake membership benefits
+
+==================================================
+3. NON-MEMBER EXPERIENCE
+==================================================
+
+For users without active membership:
+
+Display:
+
+Title:
+"Bluebird Membership"
+
+Subtitle:
+"Your access to exclusive private aviation."
+
+Show available membership plans
+using real supported data.
+
+Each plan card should display:
+
+- Plan name
+- Price, if verified
+- Billing period, if verified
+- Confirmed benefits
+- "View Details" action
+
+Do not fabricate plan names,
+prices, discounts, or benefits.
+
+If the API does not expose plans,
+show a polished informational state
+instead of inventing plans.
+
+==================================================
+4. MEMBERSHIP DETAILS SCREEN
+==================================================
+
+Create a dedicated Membership Details screen.
+
+Include:
+
+- Back button
+- Plan name
+- Verified pricing, if available
+- Verified benefits
+- Eligibility information, if available
+- Clear next action
+
+If checkout is not implemented:
+
+Show:
+"Membership enrollment will be available soon."
+
+Do not show a fake successful purchase.
+
+Do not collect payment information.
+
+Do not create a membership locally.
+
+==================================================
+5. ACTIVE MEMBER EXPERIENCE
+==================================================
+
+If the authenticated API confirms
+an active membership:
+
+Display:
+
+"Your Membership"
+
+Show:
+
+- Membership name
+- Membership status
+- Relevant membership details
+- Renewal or expiration date,
+  only if available
+- Available benefits,
+  only if verified
+
+Do not infer active membership
+from Clerk authentication alone.
+
+Do not assume all authenticated
+users are members.
+
+Do not fabricate renewal dates
+or membership entitlements.
+
+==================================================
+6. SKIP THE LINE PASS
+==================================================
+
+Integrate the Membership screen with
+the existing Skip the Line Pass UI.
+
+Product behavior:
+
+Skip the Line Pass allows an eligible
+member to bypass the regular queue
+and immediately secure a seat on
+an eligible flight.
+
+IMPORTANT:
+
+This is not queue priority.
+
+Show a Skip the Line Pass section
+where appropriate.
+
+For non-members:
+
+Explain that Membership is required.
+
+For members without a Pass:
+
+Show the existing Pass details entry.
+
+For members with a verified Pass:
+
+Show Pass availability only if
+the backend confirms it.
+
+Do not invent Pass balances.
+
+Do not implement Pass purchase
+or redemption in this task.
+
+Preserve existing Pass functionality.
+
+==================================================
+7. QUEUE INTEGRATION
+==================================================
+
+Preserve the existing Queue flow.
+
+If a Queue or Skip the Line action
+requires Membership:
+
+- Show the existing Membership entry
+- Explain the restriction clearly
+- Allow navigation to Membership
+- Preserve the selected flight context
+  where the current navigation supports it
+
+Do not change backend eligibility rules.
+
+Do not bypass membership checks.
+
+Do not create queue entries
+from the Membership screen.
+
+==================================================
+8. DEVELOPMENT PREVIEW
+==================================================
+
+Provide development-only Membership previews:
+
+A. Non-member
+B. Active member
+C. Membership unavailable
+D. Membership loading
+E. Membership API error
+
+All preview states must:
+
+- Be clearly marked DEMO
+- Use isolated fixture data
+- Never write to Main API
+- Never alter real membership
+- Never appear in production
+
+Use existing development preview
+infrastructure where possible.
+
+==================================================
+9. LOADING AND ERROR STATES
+==================================================
+
+Use a small native loading indicator.
+
+If cached authenticated membership
+data exists, keep it visible
+during background refresh.
+
+Handle:
+
+- Not authenticated
+- No active membership
+- Membership loading
+- API unavailable
+- Unexpected response
+- Missing plan data
+
+Do not treat an API error
+as proof that the user is not a member.
+
+Do not show membership data
+from another authenticated account.
+
+==================================================
+10. NAVIGATION
+==================================================
+
+Verify:
+
+Bottom Tabs → Membership
+
+Membership → Plan Details
+
+Plan Details → Membership
+
+Flight Details → Membership
+
+Membership → Back to previous context
+
+Preserve:
+
+- Discover
+- Trips
+- Profile
+- Queue
+- Payment Methods
+- Home Airport
+
+No unexpected redirects to Discover.
+
+==================================================
+11. TESTING
+==================================================
+
+Run Mobile TypeScript checks.
+
+Run relevant existing tests.
+
+Add focused tests for:
+
+- Non-member
+- Active member
+- Loading state
+- API failure
+- Plan details navigation
+- Membership eligibility
+- Skip the Line Pass section
+- Queue navigation
+- Demo isolation
+- Production demo exclusion
+
+Verify real API integration
+where authenticated testing is available.
+
+Do not claim live verification
+if only mocked tests were run.
+
+==================================================
+12. DELIVERY
+==================================================
+
+Implement directly.
+
+Report:
+
+1. Existing Membership implementation found
+2. Membership API endpoints used
+3. Membership status source
+4. Plan data source
+5. Screens implemented
+6. Files modified
+7. Tests passed
+8. Development preview entry point
+9. Live functionality verified
+10. Remaining backend limitations
+
+Do not stop at planning or audit.
+
+Focus on a functional, polished
+Membership MVP.
