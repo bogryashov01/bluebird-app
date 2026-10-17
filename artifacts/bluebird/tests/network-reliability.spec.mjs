@@ -281,33 +281,28 @@ test("public membership plans honor HTTP 429 Retry-After and recover without dem
   expect(plansRequests).toBe(2);
 });
 
-test("Flight Details reports a timed-out read and recovers with Retry", async ({ page }) => {
+test("Flight Details reports a timed-out detail read and recovers with Retry", async ({ page }) => {
   test.setTimeout(60_000);
-  let listRequests = 0;
-  let unsupportedDetailRequests = 0;
+  let detailRequests = 0;
   const legacyFlightRequests = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
     if (/^\/api\/flights\/[^/]+$/.test(url.pathname)) legacyFlightRequests.push(url.pathname);
   });
   await setupPreview(page, async (route, url) => {
-    if (url.pathname === "/api/empty-legs") {
-      listRequests += 1;
-      if (listRequests === 1) {
+    if (url.pathname === "/api/empty-legs/81001") {
+      detailRequests += 1;
+      if (detailRequests === 1) {
         await new Promise((resolve) => setTimeout(resolve, 12_000));
         try {
-          await json(route, 200, flights);
+          await json(route, 200, flightDetail(81001));
         } catch {
           // The app's request deadline cancels this simulated stalled response.
         }
         return;
       }
-      if (listRequests === 2) return json(route, 503, { error: "simulated" });
-      return json(route, 200, flights);
-    }
-    if (/^\/api\/empty-legs\/\d+$/.test(url.pathname)) {
-      unsupportedDetailRequests += 1;
-      return json(route, 503, { error: "Flight detail endpoint is not used." });
+      if (detailRequests === 2) return json(route, 503, { error: "simulated" });
+      return json(route, 200, flightDetail(81001));
     }
     return json(route, 503, { error: "Unexpected intercepted production request." });
   });
@@ -317,8 +312,7 @@ test("Flight Details reports a timed-out read and recovers with Retry", async ({
   await page.getByTestId("flight-detail-retry").click();
   await expect(page.getByTestId("flight-detail-route")).toHaveText("DAL → SFO");
   await expect(page.getByText("Could not load flight details", { exact: true })).toHaveCount(0);
-  expect(listRequests).toBe(3);
-  expect(unsupportedDetailRequests).toBe(0);
+  expect(detailRequests).toBe(3);
   expect(legacyFlightRequests).toEqual([]);
 });
 
@@ -382,7 +376,7 @@ test("Airport typeahead keeps the latest result when an older response arrives l
   await expect(page.getByTestId("airport-result-DAL")).toHaveCount(0);
 });
 
-test("Discover cards open their selected flights and preserve search when returning", async ({ page }) => {
+test("Discover cards load their selected detail and preserve search when returning", async ({ page }) => {
   const mutationRequests = [];
   const flightDetailRequests = [];
   page.on("request", (request) => {
@@ -395,6 +389,9 @@ test("Discover cards open their selected flights and preserve search when return
   });
   await setupPreview(page, async (route, url) => {
     if (url.pathname === "/api/empty-legs") return json(route, 200, flights);
+    if (/^\/api\/empty-legs\/\d+$/.test(url.pathname)) {
+      return json(route, 200, flightDetail(Number(url.pathname.split("/").at(-1))));
+    }
     if (url.pathname === "/api/airports") {
       const codes = url.searchParams.get("codes")?.split(",") ?? [];
       return json(route, 200, codes.map((code) => airports[code]).filter(Boolean));
@@ -412,6 +409,8 @@ test("Discover cards open their selected flights and preserve search when return
   await dallasFlight.click({ position: { x: 16, y: 16 } });
   await expect(page).toHaveURL(/\/flight\/81001$/);
   await expect(page.getByTestId("flight-detail-route")).toHaveText("DAL → SFO");
+  await expect(page.getByTestId("flight-detail-route-departure-time")).toHaveText("4:00 AM");
+  await expect(page.getByTestId("flight-detail-route-arrival-time")).toHaveText("5:00 AM");
   await expect(page.getByText(/Sunday, November 1 · Departs/)).toBeVisible();
   await expect(page.getByTestId("flight-info-section-title")).toBeVisible();
   await expect(page.getByTestId("flight-info-departure")).toContainText("Dallas Love Field (DAL)");
@@ -428,6 +427,10 @@ test("Discover cards open their selected flights and preserve search when return
   await expect(page.getByTestId("flight-info-status")).toHaveText("Available");
   await expect(page.getByTestId("flight-info-international")).toHaveText("Domestic");
   await expect(page.getByTestId("flight-info-queue-count")).toHaveCount(0);
+  await expect(page.getByText("Seats", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Range", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Price", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("flight-detail-photo-unavailable")).toBeVisible();
 
   await page.goBack();
   await expect(dallasFlight).toBeVisible();
@@ -453,7 +456,7 @@ test("Discover cards open their selected flights and preserve search when return
   await expect(miamiFlight).toBeVisible();
   await expect(search).toHaveValue("MIA");
   expect(mutationRequests).toEqual([]);
-  expect(flightDetailRequests).toEqual([]);
+  expect(flightDetailRequests).toEqual(["/api/empty-legs/81001", "/api/empty-legs/81002"]);
 });
 
 test("Discover opens the correct SAT and HEF flights from both ends of each card", async ({ page }) => {
@@ -468,6 +471,9 @@ test("Discover opens the correct SAT and HEF flights from both ends of each card
 
   await setupPreview(page, async (route, url) => {
     if (url.pathname === "/api/empty-legs") return json(route, 200, flights);
+    if (/^\/api\/empty-legs\/\d+$/.test(url.pathname)) {
+      return json(route, 200, flightDetail(Number(url.pathname.split("/").at(-1))));
+    }
     return json(route, 503, { error: "Unexpected intercepted production request." });
   });
 
@@ -496,7 +502,7 @@ test("Discover opens the correct SAT and HEF flights from both ends of each card
   await expect(page.getByTestId("flight-detail-route")).not.toHaveText("SAT → CXO");
 
   expect(pageErrors).toEqual([]);
-  expect(flightDetailRequests).toEqual([]);
+  expect(flightDetailRequests).toEqual(["/api/empty-legs/81003", "/api/empty-legs/81004"]);
 });
 
 test("Discover keeps one real featured flight through search and opens that flight's details", async ({ page }) => {
@@ -636,19 +642,21 @@ test("Discover filters only supported flight fields and stays within common phon
   }
 });
 
-test("Direct Flight Details resolves the current ID from the list while a read is pending", async ({ page }) => {
-  let listReadStarted = false;
+test("Direct Flight Details requests the selected flight ID from the detail endpoint", async ({ page }) => {
+  let detailReadStarted = false;
+  const detailReads = [];
   const legacyFlightRequests = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
+    if (/^\/api\/empty-legs\/\d+$/.test(url.pathname)) detailReads.push(url.pathname);
     if (/^\/api\/flights\/[^/]+$/.test(url.pathname)) legacyFlightRequests.push(url.pathname);
   });
   await setupPreview(page, async (route, url) => {
-    if (url.pathname === "/api/empty-legs") {
-      listReadStarted = true;
+    if (url.pathname === "/api/empty-legs/81002") {
+      detailReadStarted = true;
       await new Promise((resolve) => setTimeout(resolve, 1200));
       try {
-        return await json(route, 200, flights);
+        return await json(route, 200, flightDetail(81002));
       } catch {
         return;
       }
@@ -657,30 +665,124 @@ test("Direct Flight Details resolves the current ID from the list while a read i
   });
 
   await page.goto("/flight/81002");
-  await expect.poll(() => listReadStarted).toBe(true);
+  await expect.poll(() => detailReadStarted).toBe(true);
   await expect(page.getByTestId("flight-detail-route")).toHaveText("MIA → JFK");
   await expect(page.getByTestId("flight-detail-route")).not.toHaveText("DAL → SFO");
+  expect(detailReads).toEqual(["/api/empty-legs/81002"]);
   expect(legacyFlightRequests).toEqual([]);
 });
 
-test("Direct Flight Details shows unavailable when its ID is absent from the flight list", async ({ page }) => {
-  const unsupportedDetailRequests = [];
+test("Direct Flight Details rejects a response whose ID does not match the requested flight", async ({ page }) => {
+  const detailRequests = [];
+  const listRequests = [];
   const legacyFlightRequests = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
-    if (/^\/api\/empty-legs\/\d+$/.test(url.pathname)) unsupportedDetailRequests.push(url.pathname);
+    if (/^\/api\/empty-legs\/\d+$/.test(url.pathname)) detailRequests.push(url.pathname);
+    if (url.pathname === "/api/empty-legs") listRequests.push(url.pathname);
     if (/^\/api\/flights\/[^/]+$/.test(url.pathname)) legacyFlightRequests.push(url.pathname);
   });
   await setupPreview(page, async (route, url) => {
-    if (url.pathname === "/api/empty-legs") return json(route, 200, flights);
+    if (url.pathname === "/api/empty-legs/99999") return json(route, 200, flightDetail(81001));
     return json(route, 503, { error: "Unexpected intercepted production request." });
   });
 
   await page.goto("/flight/99999");
   await expect(page.getByText("Flight unavailable", { exact: true })).toBeVisible();
-  await expect(page.getByText("This flight could not be found in the available flight list.", { exact: true })).toBeVisible();
-  expect(unsupportedDetailRequests).toEqual([]);
+  await expect(page.getByText("This flight could not be found in the selected flight service.", { exact: true })).toBeVisible();
+  expect(detailRequests).toEqual(["/api/empty-legs/99999"]);
+  expect(listRequests).toEqual([]);
   expect(legacyFlightRequests).toEqual([]);
+});
+
+test("Flight Details opens directions to the airport API location when no confirmed FBO is available", async ({ page }) => {
+  await setupPreview(page, async (route, url) => {
+    if (url.pathname === "/api/empty-legs/81001") {
+      return json(route, 200, flightDetail(81001));
+    }
+    if (url.pathname === "/api/airports") {
+      const codes = url.searchParams.get("codes")?.split(",") ?? [];
+      return json(route, 200, codes.map((code) => airports[code]).filter(Boolean));
+    }
+    return json(route, 503, { error: "Unexpected intercepted production request." });
+  });
+
+  await page.goto("/flight/81001");
+  const airportDirections = page.getByTestId("departure-airport-directions");
+  await expect(airportDirections).toBeVisible();
+  await expect(airportDirections).toContainText("Dallas Love Field (DAL)");
+  await expect(airportDirections).toContainText("Dallas, Texas, United States");
+  await expect(page.getByTestId("departure-fbo-directions")).toHaveCount(0);
+
+  await airportDirections.click();
+  await expect(page.getByText("Directions to Dallas Love Field (DAL)", { exact: true })).toBeVisible();
+  await expect(page.getByText("Dallas, Texas, United States", { exact: true }).last()).toBeVisible();
+  await expect(page.getByText(/FBO/i)).toHaveCount(0);
+
+  await page.evaluate(() => {
+    window.__bluebirdMapUrls = [];
+    window.open = (url) => {
+      window.__bluebirdMapUrls.push(String(url));
+      return null;
+    };
+  });
+  await page.getByTestId("open-google-maps").click();
+  await expect.poll(() => page.evaluate(() => window.__bluebirdMapUrls.length)).toBe(1);
+  const mapUrl = await page.evaluate(() => window.__bluebirdMapUrls[0]);
+  expect(mapUrl).toContain("https://www.google.com/maps/dir/?api=1&destination=32.844776%2C-96.84766");
+});
+
+test("Flight Details omits empty information cards and fits narrow phone layouts", async ({ page }) => {
+  const sparseFlight = {
+    ...flightDetail(81002),
+    status: null,
+    aircraftType: null,
+    aircraftTypeName: null,
+    aircraftTypeCode: null,
+    durationHours: null,
+    isInternational: null,
+    queueCount: null,
+    arrivalTime: null,
+  };
+  await setupPreview(page, async (route, url) => {
+    if (url.pathname === "/api/empty-legs/81002") return json(route, 200, sparseFlight);
+    if (url.pathname === "/api/airports") {
+      const codes = url.searchParams.get("codes")?.split(",") ?? [];
+      return json(route, 200, codes.map((code) => airports[code]).filter(Boolean));
+    }
+    return json(route, 503, { error: "Unexpected intercepted production request." });
+  });
+
+  await page.goto("/flight/81002");
+  await expect(page.getByTestId("flight-detail-route")).toHaveText("MIA → JFK");
+  await expect(page.getByTestId("flight-detail-photo-unavailable")).toBeVisible();
+  await expect(page.getByTestId("flight-info-section-title")).toBeVisible();
+  await expect(page.getByTestId("flight-info-aircraft")).toHaveCount(0);
+  await expect(page.getByTestId("flight-info-additional")).toHaveCount(0);
+  await expect(page.getByText(/Price|Seats|Range|Speed|Weather|Wi-Fi|Pets|Baggage/i)).toHaveCount(0);
+
+  for (const width of [320, 375, 393, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(documentWidth).toBeLessThanOrEqual(width);
+  }
+});
+
+test("Flight Details uses an aircraft photo only when the detail response supplies one", async ({ page }) => {
+  const providedPhotoUrl = "https://cdn.example.test/flight-81001.jpg";
+  const flightWithPhoto = {
+    ...flightDetail(81001),
+    aircraftGalleryUrls: [providedPhotoUrl],
+    aircraftGalleryAlts: ["Verified aircraft photo"],
+  };
+  await setupPreview(page, async (route, url) => {
+    if (url.pathname === "/api/empty-legs/81001") return json(route, 200, flightWithPhoto);
+    return json(route, 503, { error: "Unexpected intercepted production request." });
+  });
+
+  await page.goto("/flight/81001");
+  await expect(page.getByTestId("flight-detail-photo")).toBeVisible();
+  await expect(page.getByTestId("flight-detail-photo-unavailable")).toHaveCount(0);
 });
 
 test("Map retries missing airport coordinates and does not invent a route", async ({ page }) => {

@@ -327,9 +327,9 @@ test("member-data query gates require local demo mode and a legacy-auth member",
   assert.equal(shouldUseLocalFlightReadMode("legacy", false), false);
   const flightDetailSource = readFileSync(resolve(projectRoot, "app/flight/[id].tsx"), "utf8");
   assert.match(flightDetailSource, /shouldUseLocalFlightReadMode\(authMode, isLocalFlightReadMode\(\)\)/);
-  assert.match(flightDetailSource, /queryKey: PRODUCTION_FLIGHTS_QUERY_KEY/);
-  assert.match(flightDetailSource, /fetchProductionFlights/);
-  assert.doesNotMatch(flightDetailSource, /fetchProductionFlight\(/);
+  assert.match(flightDetailSource, /queryKey: \['production-empty-leg', numericFlightId\]/);
+  assert.match(flightDetailSource, /fetchProductionFlight\(numericFlightId!/);
+  assert.doesNotMatch(flightDetailSource, /fetchProductionFlights/);
   assert.equal(isLegacyMemberQueryEnabled({
     authMode: "clerk",
     localDemoFlow: true,

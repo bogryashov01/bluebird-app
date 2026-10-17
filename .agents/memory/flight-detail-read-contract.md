@@ -3,8 +3,8 @@ name: Flight detail read contract
 description: Safe source and cache behavior for public flight details in Bluebird Mobile.
 ---
 
-Rule: Resolve public flight details by stable ID from the same environment-selected flight-list response and cache used by Discover. Do not assume a per-flight endpoint exists unless the selected Main API documents it.
+Rule: Use the selected API environment's existing `GET /api/empty-legs/{id}` reader when supported, and verify the returned ID matches the request. Preserve the auth-aware local read path; use list/cache resolution only when that environment's documented contract requires it.
 
-**Why:** A guessed detail URL can send a Clerk session to the legacy Mobile API or rely on an unsupported Main API route, even though Discover already has the selected flight data.
+**Why:** The existing detail route is supported for the selected flight environment. Reusing it provides fresh detail data without sending credentials across environments or trusting a mismatched response.
 
-**How to apply:** Keep Discover and Details on one auth-aware local-versus-Main-API decision and one list query key. For a direct link without cached data, use the documented list read; if its response lacks the ID, show unavailable rather than inventing fields.
+**How to apply:** Keep local-versus-Main-API selection explicit and auth-aware. Validate flight IDs before requesting and validating the response; if the selected contract cannot resolve the ID, show unavailable rather than fabricating fields.

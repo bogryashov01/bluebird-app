@@ -21,7 +21,7 @@
 - [Expo tab auto-routes](expo-tab-auto-routes.md) — tab-group route files can appear as extra classic tabs unless explicitly hidden; hidden routes remain pushable.
 - [Occupant capacity](occupant-capacity.md) — passenger and pet counts share one six-occupant ceiling; reserved passenger capacity remains the other bound.
 - [Confirmed-only flight metadata](confirmed-flight-metadata.md) — FBO fields stay out of public and waiting-flight payloads; expose them only from confirmed authenticated responses.
-- [Flight detail read contract](flight-detail-read-contract.md) — resolve public detail by stable ID from Discover's selected Main API flight list; do not assume a per-flight endpoint.
+- [Flight detail read contract](flight-detail-read-contract.md) — use the selected environment's existing detail reader when supported, validate its ID, and preserve the auth-aware unavailable state.
 - [Saved passenger identity](saved-passenger-identity.md) — dedupe member-owned reusable passengers by normalized first/last name; keep date of birth flight-specific.
 - [Queue join merge invariant](queue-join-merge-invariant.md) — validate that POST /queue/join inserts a fresh entry before returning; conflict merges can compile while leaving route-param lookups in place.
 - [Approved queue product rules](queue-approved-product-rules.md) — use approved Pass/price wording and keep the known local queue-closure mismatch explicit before production integration.

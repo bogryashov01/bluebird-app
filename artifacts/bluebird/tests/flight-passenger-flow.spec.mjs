@@ -162,7 +162,10 @@ test("flight details omit unsupported facts and keep join requests unavailable",
   await page.goto("/flight/flight-1");
 
   await expect(page.getByTestId("flight-info-aircraft-type")).toHaveText("Citation CJ3");
-  await expect(page.getByText("4 available", { exact: true })).toBeVisible();
+  await expect(page.getByText("4 available", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Seats", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Range", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("flight-detail-photo-unavailable")).toBeVisible();
   await expect(page.getByText("Passengers", { exact: true })).toHaveCount(0);
   await expect(page.getByText("View Flight Policy & Terms", { exact: true })).toBeVisible();
 
@@ -220,7 +223,21 @@ test("only confirmed-flight status data can disclose departure FBO details", asy
   });
   await page.goto("/flight/flight-1");
   await expect(page.getByTestId("departure-fbo-directions")).toBeVisible();
-  await expect(page.getByText("100 Airport Way", { exact: true })).toBeVisible();
+  await expect(page.getByText("100 Airport Way", { exact: true }).last()).toBeVisible();
+  await page.getByTestId("departure-fbo-directions").click();
+  await expect(page.getByText("Directions to Confirmed Departure FBO", { exact: true })).toBeVisible();
+  await expect(page.getByText("100 Airport Way", { exact: true }).last()).toBeVisible();
+  await page.evaluate(() => {
+    window.__bluebirdMapUrls = [];
+    window.open = (url) => {
+      window.__bluebirdMapUrls.push(String(url));
+      return null;
+    };
+  });
+  await page.getByTestId("open-google-maps").click();
+  await expect.poll(() => page.evaluate(() => window.__bluebirdMapUrls.length)).toBe(1);
+  const fboMapUrl = await page.evaluate(() => window.__bluebirdMapUrls[0]);
+  expect(fboMapUrl).toContain("destination=100%20Airport%20Way");
 
   await page.unroute("**/api/**");
   await mockFlightApi(page, {
