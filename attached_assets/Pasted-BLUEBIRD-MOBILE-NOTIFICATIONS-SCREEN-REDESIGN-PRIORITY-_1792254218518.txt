@@ -1,0 +1,452 @@
+BLUEBIRD MOBILE — NOTIFICATIONS SCREEN REDESIGN
+
+PRIORITY: HIGH
+MODE: BUILD / EXECUTE
+
+GOAL:
+
+Completely redesign the existing Mobile
+Notification Settings screen to closely match
+the approved Bluebird Notifications prototype.
+
+This is a targeted UI implementation task,
+not another audit.
+
+APPROVED DESIGN:
+
+The user provided three screenshots:
+
+1. Approved Notifications design — LIGHT UI
+2. Current Mobile Notification Settings — DARK UI
+3. Current Mobile Personal Information — DARK UI
+
+For this task, implement ONLY Notifications.
+
+The approved Notifications screenshot is the
+visual source of truth.
+
+SCOPE:
+
+Bluebird Mobile ONLY.
+
+Do not modify Main Bluebird Website, API,
+database, Clerk, or production configuration.
+
+==================================================
+1. SCREEN DESIGN
+==================================================
+
+Replace the existing dark Notification Settings
+layout with the approved light design.
+
+Background:
+#FAFAF9 or closest existing approved color.
+
+Cards:
+White background.
+
+Text:
+Dark navy / near-black.
+
+Accent:
+Blue matching the existing Bluebird brand.
+
+Use the existing Mobile typography and
+design tokens where appropriate.
+
+Do not introduce a completely new design system.
+
+==================================================
+2. HEADER
+==================================================
+
+Match the approved screenshot:
+
+Top:
+Circular back button aligned left.
+
+Below:
+Large bold title:
+
+Notifications
+
+Remove the current single-row header:
+
+< Notification Settings
+
+Use compact spacing.
+
+Respect iPhone safe areas.
+
+==================================================
+3. TRAVEL PREFERENCES
+==================================================
+
+Small uppercase section label:
+
+TRAVEL PREFERENCES
+
+Below, one rounded white card:
+
+Home Airport                  TEB >
+
+IMPORTANT:
+
+TEB is only an example.
+
+Display the user's actual homeAirportCode
+from GET /api/me/profile.
+
+If no airport is configured, display:
+
+Choose airport >
+
+Tapping opens the existing airport selector.
+
+Use:
+
+GET /api/airports/search
+
+Save through the existing full-profile PUT.
+
+Do not hardcode airport values.
+
+==================================================
+4. FLIGHTS SECTION
+==================================================
+
+Add a compact white grouped card.
+
+Section label:
+
+FLIGHTS
+
+Rows:
+
+Flights from my Home Airport
+All Flights
+International Flights
+Queue Updates
+Flight Confirmations
+
+Use the approved screenshot's:
+
+- Row heights
+- Typography
+- Thin separators
+- Rounded outer corners
+- Right-aligned controls
+- Blue accent
+- Compact vertical spacing
+
+IMPORTANT:
+
+Do not blindly implement all five as
+independent boolean switches.
+
+Main Bluebird supports email/SMS channel
+preferences, not native push toggles.
+
+==================================================
+5. REAL FLIGHT PREFERENCES
+==================================================
+
+Read preferences from:
+
+GET /api/me/profile
+
+Existing fields:
+
+notificationPrefs.mode
+notificationPrefs.allChannels
+notificationPrefs.emptyLegHomeAirport
+notificationPrefs.departingFavorite
+notificationPrefs.arrivingFavorite
+notificationPrefs.queueUpdates
+notificationPrefs.winningNotifications
+
+Allowed modes:
+
+off
+all
+specific
+
+Allowed channels:
+
+email
+sms
+both
+
+Nullable flight-specific channels may
+also be null.
+
+Implement a compact, intuitive UI.
+
+Use switches only where their meaning
+can be accurately represented.
+
+For example:
+
+All Flights and Home Airport Flights
+must reflect the mutually exclusive
+backend modes.
+
+Do not allow conflicting selections.
+
+Provide a compact Email / SMS / Both
+selector when needed.
+
+Preserve existing favorite-airport
+preferences.
+
+Do not accidentally overwrite
+unrelated settings.
+
+==================================================
+6. QUEUE & CONFIRMATION SETTINGS
+==================================================
+
+Queue Updates maps to:
+
+notificationPrefs.queueUpdates
+
+Flight Confirmations maps to:
+
+notificationPrefs.winningNotifications
+
+These are mandatory channel preferences.
+
+They support:
+
+email
+sms
+both
+
+They do NOT support off.
+
+Do not create fake off switches.
+
+Use a compact channel selection control
+that visually fits the approved design.
+
+Avoid lengthy technical descriptions.
+
+==================================================
+7. UNSUPPORTED SETTINGS
+==================================================
+
+International Flights:
+
+No dedicated backend preference exists.
+
+Membership Updates:
+
+No dedicated backend preference exists.
+
+Show these only as clearly disabled
+design rows with a subtle indication
+that they are not yet available.
+
+Do not render active switches.
+
+Do not persist fake values.
+
+Do not invent new API fields.
+
+==================================================
+8. RECENT NOTIFICATIONS
+==================================================
+
+The approved design includes:
+
+RECENT PUSH NOTIFICATIONS
+
+Main Bluebird currently has no
+member-facing notification history API.
+
+Do not display sample notifications.
+
+Do not use staff-only notification
+history endpoints.
+
+Do not display a large technical card
+saying "Notification history unavailable".
+
+Instead:
+
+Either omit this section until supported,
+or use a very compact, polished empty state.
+
+Prioritize a clean screen.
+
+==================================================
+9. MEMBERSHIP & OFFERS
+==================================================
+
+Section label:
+
+MEMBERSHIP & OFFERS
+
+One compact rounded white card:
+
+Membership updates
+
+Because the backend does not support
+this preference, show an understated
+disabled state.
+
+Do not present it as an active toggle.
+
+==================================================
+10. REMOVE TECHNICAL UI
+==================================================
+
+Remove the following from the
+normal screen layout:
+
+"Loading or refreshing these settings
+may synchronize phone information
+already verified by your account."
+
+"Load saved preferences"
+
+"Notification history — Unavailable"
+
+"Push notifications — Not supported"
+
+Do not expose backend implementation
+details to ordinary users.
+
+Load preferences automatically when
+the screen opens.
+
+Show a small loading indicator only
+while necessary.
+
+Avoid full-screen loading if cached
+profile data is already available.
+
+==================================================
+11. SAFE PROFILE SAVING
+==================================================
+
+The Main API uses:
+
+PUT /api/me/profile
+
+This is NOT a partial PATCH.
+
+Required fields:
+
+firstName
+lastName
+dob
+gender
+homeAirportCode
+favoriteCityKeys
+
+Read and preserve the latest
+profile data before saving.
+
+Do not guess missing required fields.
+
+Do not overwrite unrelated profile fields.
+
+Do not automatically enable smsConsent.
+
+If SMS consent is required, provide
+a clear, compact explanation.
+
+If the profile is incomplete, show
+a short actionable message rather
+than submitting an invalid request.
+
+Show a subtle saving indicator.
+
+On save failure:
+- Restore the previous saved value.
+- Show a concise error.
+- Allow retry.
+
+Do not claim a setting was saved
+until the API confirms success.
+
+==================================================
+12. VISUAL PRECISION
+==================================================
+
+Match the approved screenshot closely.
+
+Target:
+
+- Horizontal screen padding: ~16px
+- Compact section spacing
+- Small uppercase section labels
+- Grouped white cards
+- Subtle shadows
+- Thin row separators
+- Rounded corners
+- No oversized buttons
+- No oversized text descriptions
+- No unnecessary scrolling
+
+Support common iPhone widths:
+
+375px
+393px
+430px
+
+The screen should feel like a polished
+native iOS settings screen.
+
+==================================================
+13. REGRESSION PROTECTION
+==================================================
+
+Preserve:
+
+- Clerk authentication
+- Existing API integration
+- Home Airport selection
+- Existing profile data
+- Navigation
+- SMS consent safeguards
+- Queue safety gates
+
+Do not modify unrelated screens.
+
+Do not modify Main API.
+
+==================================================
+14. VERIFICATION
+==================================================
+
+Run Mobile TypeScript checks.
+
+Verify:
+
+- Real profile hydration
+- Home Airport display
+- Airport search
+- Preference editing
+- Full-profile save safety
+- Loading and error states
+- Navigation
+- Missing data handling
+- No fake notification history
+
+Compare the final screen against
+the approved reference screenshot.
+
+Report:
+
+1. Files changed
+2. UI improvements
+3. Preferences connected
+4. Unsupported features
+5. Tests passed
+6. Remaining issues
+
+IMPLEMENT DIRECTLY.
+
+Do not stop at planning or another audit.
