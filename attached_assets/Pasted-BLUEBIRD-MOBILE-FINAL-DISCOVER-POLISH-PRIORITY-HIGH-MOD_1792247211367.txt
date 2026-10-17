@@ -1,0 +1,207 @@
+BLUEBIRD MOBILE — FINAL DISCOVER POLISH
+
+PRIORITY: HIGH
+MODE: BUILD / EXECUTE
+
+The Discover screen has already been redesigned
+to match the approved Bluebird prototype.
+
+The current layout, navigation, filters,
+flight cards, and search are working.
+
+DO NOT redesign the screen again.
+
+We need only TWO final improvements.
+
+SCOPE:
+artifacts/bluebird ONLY.
+
+==================================================
+1. FEATURED EMPTY LEG
+==================================================
+
+Add the missing Featured Empty Leg section
+to the existing Discover screen.
+
+VISUAL REFERENCE:
+
+https://bluebird-app-prototype.replit.app
+
+Match the Featured Empty Leg component
+from the approved Discover prototype.
+
+POSITION:
+
+Below the greeting and available-flight count,
+above the search field.
+
+DESIGN:
+
+- Premium dark navy card
+- Subtle blue accents
+- Small "FEATURED EMPTY LEG" label
+- Route information
+- Departure date
+- Aircraft image when available
+- Price only when provided by the API
+- Rounded corners
+- Compact premium typography
+
+DATA:
+
+Select ONE random flight from the real
+available flights returned by the existing API.
+
+This is a Discover recommendation,
+not an API-defined featured promotion.
+
+Do not invent a featured flag.
+
+Do not use mock flights.
+
+Do not invent prices, discounts,
+aircraft information, or availability.
+
+SELECTION BEHAVIOR:
+
+- Select one random flight after the
+  real available-flight list loads.
+- Keep the same selection during the
+  current Discover session.
+- Do not change it on every render.
+- Do not change it when filters change.
+- When the underlying flight list refreshes,
+  keep the selected flight if it is still available.
+- Otherwise select another real available flight.
+- Hide Featured if no flights are available.
+
+INTERACTION:
+
+Tapping the Featured card must open
+the existing Flight Details screen
+for the selected real flight.
+
+Use the existing navigation and API contracts.
+
+Do not introduce new backend endpoints.
+
+==================================================
+2. DYNAMIC TIME-BASED GREETING
+==================================================
+
+Make the Discover greeting automatically
+adapt to the user's local device time.
+
+TIME RULES:
+
+05:00–11:59 → Good morning
+12:00–16:59 → Good afternoon
+17:00–20:59 → Good evening
+21:00–04:59 → Good night
+
+Use the device's local time zone.
+
+Do not use server time or UTC hours
+for determining the greeting.
+
+If the authenticated user's real first name
+is available, append it.
+
+Examples:
+
+Good morning, Alex
+Good afternoon, Alex
+Good evening, Alex
+Good night, Alex
+
+If the name is unavailable, display
+the greeting without a name.
+
+Do not hardcode "Alex".
+
+Update the greeting when:
+
+- Discover first loads
+- The user returns to Discover
+- The application returns from background
+
+Do not add unnecessary continuous timers.
+
+==================================================
+3. REGRESSION PROTECTION
+==================================================
+
+Preserve:
+
+- Existing Discover layout
+- Search
+- Flight filters
+- List / Map behavior
+- Flight cards
+- Bottom navigation
+- Clerk authentication
+- Real flight API integration
+- Flight Details navigation
+- Queue safety gates
+
+Do not modify:
+
+- Main Bluebird Website
+- Main API
+- Database
+- Clerk configuration
+- EAS configuration
+- Production settings
+
+Do not add mock data.
+
+Do not modify unrelated screens.
+
+==================================================
+4. VERIFICATION
+==================================================
+
+Rebuild shared libraries.
+
+Run Mobile TypeScript checks.
+
+Verify:
+
+- Featured renders using a real flight.
+- Featured opens correct Flight Details.
+- Featured stays stable across rerenders.
+- Featured handles an empty flight list.
+- Featured handles flight list refreshes.
+- Greeting changes based on local time.
+- Greeting updates after app resume.
+- Existing Discover functionality still works.
+
+Test layouts at:
+
+375px
+393px
+430px
+
+==================================================
+5. DELIVERY
+==================================================
+
+Implement these changes directly.
+
+Do not stop at planning.
+
+Report:
+
+1. Featured component implemented.
+2. Random selection behavior.
+3. Greeting behavior.
+4. Files changed.
+5. Tests passed.
+6. Remaining limitations.
+
+IMPORTANT:
+
+This is the FINAL Discover polish.
+
+Do not redesign or restructure
+the rest of the application.
