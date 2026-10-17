@@ -122,10 +122,15 @@ assert.throws(
   }),
   /cardFeatures\.plus.*array/i,
 );
-assert.throws(
-  () => mapProductionMembershipPlans({ plans: [] }),
-  /at least one plan/i,
-);
+const emptyCatalog = mapProductionMembershipPlans({
+  ...responseFixture,
+  plans: [],
+  features: [],
+  cardFeatures: {},
+});
+assert.deepEqual(emptyCatalog.plans, []);
+assert.deepEqual(emptyCatalog.features, []);
+assert.deepEqual(emptyCatalog.cardFeatures, {});
 
 const requests = [];
 const fetched = await fetchProductionMembershipPlans({

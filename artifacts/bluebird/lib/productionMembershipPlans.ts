@@ -141,8 +141,8 @@ function mapCardFeatures(value: unknown, planTiers: readonly string[]): Record<s
 
 export function mapProductionMembershipPlans(value: unknown): ProductionMembershipPlanCatalog {
   const raw = objectValue(value, 'response');
-  if (!Array.isArray(raw.plans) || raw.plans.length === 0) {
-    throw new Error('Production plans response must contain at least one plan.');
+  if (!Array.isArray(raw.plans)) {
+    throw new Error('Production plans response must contain a plans array.');
   }
   const plans = raw.plans.map(mapPlan);
   const tiers = plans.map(({ tier }) => tier);

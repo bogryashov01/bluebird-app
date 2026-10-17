@@ -19,6 +19,7 @@ import {
 } from '@/lib/membershipPlans';
 import {
   formatProductionPlanPrice,
+  productionPlanFeatureLabel,
   productionPlanPurchaseNotice,
 } from '@/lib/productionMembershipPlans';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
@@ -32,6 +33,7 @@ import {
   loadClerkBluebirdMembership,
 } from '@/lib/clerkBluebirdProfile';
 import type { ClerkBluebirdMembershipLoadResult } from '@/lib/clerkBluebirdProfile';
+import { isMembershipDevelopmentPreviewEnabled } from '@/lib/membershipDevelopmentPreview';
 
 // ── Tier config ───────────────────────────────────────────────────────────────
 const TIER_META: Record<string, { label: string }> = {
@@ -48,7 +50,13 @@ type ClerkMembershipLoadState =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
   | { kind: 'not_authenticated' }
-  | { kind: 'loaded'; clerkUserId: string; result: ClerkBluebirdMembershipLoadResult };
+  | {
+      kind: 'loaded' | 'refreshing' | 'stale_error';
+      clerkUserId: string;
+      result: ClerkBluebirdMembershipLoadResult;
+      passBalance: number | null;
+      message?: string;
+    };
 
 function formatMembershipDate(value: string | null | undefined): string {
   if (!value) return 'Unavailable';
@@ -77,11 +85,19 @@ export default function MembershipScreen() {
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { data: membership, isLoading, isError, refetch } = useGetMembership({
-    query: { enabled: memberQueryEnabled },
+  const { data: membership, isLoading, isFetching: membershipFetching, isError, refetch } = useGetMembership({
+    query: {
+      enabled: memberQueryEnabled,
+      queryKey: ['/api/membership', user?.id ?? 'no-local-account'],
+    },
   });
   const [clerkMembershipState, setClerkMembershipState] = React.useState<ClerkMembershipLoadState>({ kind: 'loading' });
   const [clerkMembershipAttempt, setClerkMembershipAttempt] = React.useState(0);
+  const cachedClerkMembership = React.useRef<{
+    clerkUserId: string;
+    result: ClerkBluebirdMembershipLoadResult;
+    passBalance: number | null;
+  } | null>(null);
   const currentClerkIdentity = React.useRef<string | null>(clerkSession?.userId ?? null);
   currentClerkIdentity.current = clerkSession?.userId ?? null;
   const currentClerkSession = React.useRef(clerkSession);
@@ -121,9 +137,15 @@ export default function MembershipScreen() {
       !clerkSession.userId
     ) return;
     const requestedClerkUserId = clerkSession.userId;
-    setClerkMembershipState({ kind: 'loading' });
+    const cached = cachedClerkMembership.current?.clerkUserId === requestedClerkUserId
+      ? cachedClerkMembership.current
+      : null;
+    setClerkMembershipState(cached
+      ? { kind: 'refreshing', ...cached }
+      : { kind: 'loading' });
     try {
-      const result = await loadClerkBluebirdMembership(createClerkApi().authenticated, signal);
+      const api = createClerkApi().authenticated;
+      const result = await loadClerkBluebirdMembership(api, signal);
       if (!isClerkBluebirdProfileResultCurrent({
         requestedClerkUserId,
         currentClerkUserId: currentClerkIdentity.current,
@@ -133,7 +155,28 @@ export default function MembershipScreen() {
         setClerkMembershipState({ kind: 'not_authenticated' });
         return;
       }
-      setClerkMembershipState({ kind: 'loaded', clerkUserId: requestedClerkUserId, result });
+      let passBalance: number | null = null;
+      if (
+        result.kind === 'authenticated' &&
+        result.membershipState === 'available' &&
+        result.membership?.isMember === true
+      ) {
+        try {
+          const profile = await api.getProfile({ signal });
+          passBalance = profile.upgradeCreditBalances.skipTheLine;
+        } catch {
+          // The profile balance is optional for this screen. Membership remains
+          // confirmed, but an unverified pass count must stay unavailable.
+        }
+      }
+      if (!isClerkBluebirdProfileResultCurrent({
+        requestedClerkUserId,
+        currentClerkUserId: currentClerkIdentity.current,
+        aborted: signal.aborted,
+      })) return;
+      const loaded = { clerkUserId: requestedClerkUserId, result, passBalance };
+      cachedClerkMembership.current = loaded;
+      setClerkMembershipState({ kind: 'loaded', ...loaded });
     } catch (error) {
       if (signal.aborted || currentClerkIdentity.current !== requestedClerkUserId) return;
       const typed = error as { code?: string; status?: number };
@@ -142,7 +185,9 @@ export default function MembershipScreen() {
         : typed?.code === 'session_expired' || typed?.status === 401
           ? 'Your sign-in has expired. Sign in again, then reopen Membership.'
           : 'Bluebird could not load your membership details.';
-      setClerkMembershipState({ kind: 'error', message });
+      setClerkMembershipState(cached
+        ? { kind: 'stale_error', ...cached, message }
+        : { kind: 'error', message });
     }
   }, [authMode, createClerkApi, ...membershipRequestDependencies]);
   React.useEffect(() => {
@@ -155,17 +200,16 @@ export default function MembershipScreen() {
     void loadClerkMembership(controller.signal);
     return () => controller.abort();
   }, [authMode, loadClerkMembership, ...membershipRequestDependencies]);
-  const plansQuery = useProductionMembershipPlans({
-    enabled: authMode !== 'clerk' && localDemoFlow,
-  });
+  const plansQuery = useProductionMembershipPlans();
   const mem = membership;
 
   if (authMode === 'clerk') {
-    const visibleState = clerkMembershipState.kind === 'loaded' &&
+    const visibleState = 'clerkUserId' in clerkMembershipState &&
       clerkMembershipState.clerkUserId !== clerkSession?.userId
       ? { kind: 'loading' as const }
       : clerkMembershipState;
-    const result = visibleState.kind === 'loaded' ? visibleState.result : null;
+    const result = 'result' in visibleState ? visibleState.result : null;
+    const passBalance = 'passBalance' in visibleState ? visibleState.passBalance : null;
     const currentUser = result?.kind === 'authenticated' ? result.currentUser : null;
     const membershipIsVerified = result?.kind === 'authenticated' &&
       result.membershipState === 'available' &&
@@ -174,23 +218,31 @@ export default function MembershipScreen() {
       result.membershipState === 'available'
       ? result.membership
       : null;
-    const tierLabel = confirmedMembership?.isMember && confirmedMembership.tier
+    const confirmedMember = membershipIsVerified && confirmedMembership?.isMember === true &&
+      !!confirmedMembership.tier;
+    const tierLabel = confirmedMember && confirmedMembership?.tier
       ? TIER_META[confirmedMembership.tier]?.label ?? 'Unavailable'
-      : currentUser?.isMember === false && currentUser.memberTier === null
-        ? 'Not a member yet'
-        : currentUser?.isMember === true && currentUser.memberTier
-          ? TIER_META[currentUser.memberTier]?.label ?? 'Unavailable'
-          : 'Unavailable';
+      : 'Unavailable';
     const confirmedNonMember = membershipIsVerified &&
       confirmedMembership?.isMember === false &&
       confirmedMembership.tier === null;
     const membershipStatus = confirmedMembership
       ? confirmedMembership.status ?? (confirmedMembership.isMember ? 'Unavailable' : 'Not a member')
-      : currentUser?.isMember === false && currentUser.memberTier === null
-        ? 'Not a member'
-        : currentUser?.isMember === true
-          ? 'Member'
-          : 'Unavailable';
+      : 'Unavailable';
+    const clerkMemberPlan = confirmedMember
+      ? plansQuery.data?.plans.find((plan) => plan.tier === confirmedMembership?.tier)
+      : null;
+    const clerkMemberFeatures = clerkMemberPlan && plansQuery.data
+      ? [
+          ...(plansQuery.data.cardFeatures[clerkMemberPlan.tier] ?? []),
+          ...plansQuery.data.features
+            .filter((feature) => {
+              const value = feature.values[clerkMemberPlan.tier];
+              return value === true || (typeof value === 'string' && value.trim().length > 0);
+            })
+            .map((feature) => `${feature.label}: ${productionPlanFeatureLabel(feature.values[clerkMemberPlan.tier])}`),
+        ]
+      : [];
     const detailRows = confirmedMembership ? [
       { label: 'Tier', value: confirmedMembership.tier ? TIER_META[confirmedMembership.tier]?.label ?? 'Unavailable' : confirmedNonMember ? 'Not a member' : 'Unavailable' },
       { label: 'Membership status', value: confirmedMembership.status ?? 'Unavailable' },
@@ -223,16 +275,17 @@ export default function MembershipScreen() {
               style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 8 }]}
               testID="clerk-membership-status"
             >
-              {visibleState.kind === 'loading'
+              {visibleState.kind === 'loading' || visibleState.kind === 'refreshing'
                 ? 'Loading membership details'
                 : visibleState.kind === 'not_authenticated' || !currentUser
                   ? 'Unavailable'
-                  : membershipIsVerified || currentUser.isMember === true ||
-                      (currentUser.isMember === false && currentUser.memberTier === null)
-                    ? `${tierLabel} · ${membershipStatus}`
+                  : confirmedNonMember
+                    ? 'Not a member · Confirmed'
+                    : confirmedMember
+                      ? `${tierLabel} · ${membershipStatus}`
                     : 'Membership status unavailable'}
             </Text>
-            {visibleState.kind === 'error' ? (
+            {visibleState.kind === 'error' || visibleState.kind === 'stale_error' ? (
               <>
                 <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 12 }]} testID="clerk-membership-error">
                   {visibleState.message}
@@ -272,6 +325,11 @@ export default function MembershipScreen() {
                 Additional membership details are unavailable right now.
               </Text>
             ) : null}
+            {visibleState.kind === 'refreshing' ? (
+              <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 8 }]}>
+                Refreshing confirmed account details…
+              </Text>
+            ) : null}
             {detailRows.length > 0 ? (
               <View
                 style={[styles.clerkMembershipDetails, { borderTopColor: colors.separator }]}
@@ -299,6 +357,95 @@ export default function MembershipScreen() {
               </View>
             ) : null}
           </View>
+          {confirmedMember && clerkMemberPlan ? (
+            <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="clerk-membership-benefits">
+              <Text style={[styles.usageTitle, { color: colors.textOnSurface }]}>Available benefits</Text>
+              {clerkMemberFeatures.length > 0
+                ? clerkMemberFeatures.map((feature) => (
+                    <View key={feature} style={styles.inlineFeatureRow}>
+                      <Text style={[styles.inlineFeatureCheck, { color: colors.primary }]}>✓</Text>
+                      <Text style={[styles.inlineFeatureText, { color: colors.textOnSurface }]}>{feature}</Text>
+                    </View>
+                  ))
+                : <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
+                    No benefits are listed for this tier in the public catalog.
+                  </Text>}
+            </View>
+          ) : null}
+          <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="membership-skip-line">
+            <Text style={[styles.usageTitle, { color: colors.textOnSurface }]}>Skip the Line Pass</Text>
+            <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 8 }]}>
+              {confirmedNonMember
+                ? 'An active membership is required to join a queue or use a Skip the Line Pass.'
+                : confirmedMember
+                  ? passBalance === null
+                    ? 'Pass balance unavailable. We could not verify an account-bound pass balance.'
+                    : `${passBalance} available`
+                  : 'Pass status unavailable until your membership and account balance are confirmed.'}
+            </Text>
+            {confirmedNonMember ? (
+              <TouchableOpacity onPress={() => router.push('/membership/plans' as any)} style={styles.plansLink}>
+                <Text style={[styles.plansLinkText, { color: colors.primary }]}>Browse public plans</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          {plansQuery.isLoading ? (
+            <View
+              style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              testID="membership-catalog-loading"
+            >
+              <ActivityIndicator color={colors.primary} />
+              <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 8 }]}>
+                Loading public plans…
+              </Text>
+            </View>
+          ) : plansQuery.isError || !plansQuery.data ? (
+            <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
+                Public plan information is unavailable.
+              </Text>
+              <TouchableOpacity disabled={plansQuery.isFetching} onPress={() => plansQuery.refetch()}>
+                <Text style={[styles.plansLinkText, { color: colors.primary }]}>
+                  {plansQuery.isFetching ? 'Loading plans…' : 'Retry loading plans'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : plansQuery.data.plans.length === 0 ? (
+            <View
+              style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              testID="membership-catalog-empty"
+            >
+              <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
+                No public membership plans are currently listed. Prices, billing periods, and benefits are unavailable.
+              </Text>
+            </View>
+          ) : confirmedMember && !clerkMemberPlan ? (
+            <View
+              style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              testID="clerk-membership-catalog-missing-tier"
+            >
+              <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
+                Public plan details for your confirmed membership tier are unavailable. No plan price or benefits are shown.
+              </Text>
+            </View>
+          ) : null}
+          {plansQuery.data?.plans.map((plan) => (
+            <TouchableOpacity
+              key={plan.tier}
+              testID={`membership-plan-details-${plan.tier}`}
+              accessibilityRole="button"
+              onPress={() => router.push({ pathname: '/upgrade/[tier]', params: { tier: plan.tier } } as any)}
+              style={[styles.inlinePlanCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <Text style={[styles.inlinePlanName, { color: TIER_COLORS[plan.tier as keyof typeof TIER_COLORS] ?? colors.primary }]}>
+                {plan.name}
+              </Text>
+              <Text style={[styles.inlinePlanPrice, { color: colors.mutedForegroundLight }]}>
+                {formatProductionPlanPrice(plan)}
+              </Text>
+              <Text style={[styles.plansLinkText, { color: colors.primary, marginTop: 8 }]}>View Details</Text>
+            </TouchableOpacity>
+          ))}
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.push('/membership/plans' as any)}
@@ -306,18 +453,30 @@ export default function MembershipScreen() {
           >
             <Text style={[styles.plansLinkText, { color: colors.primary }]}>Compare public plans</Text>
           </TouchableOpacity>
+          {isMembershipDevelopmentPreviewEnabled(typeof __DEV__ !== 'undefined' && __DEV__) ? (
+            <TouchableOpacity
+              testID="membership-demo-preview-entry"
+              accessibilityRole="button"
+              onPress={() => router.push('/membership/dev-preview' as any)}
+              style={styles.plansLink}
+            >
+              <Text style={[styles.plansLinkText, { color: colors.mutedForegroundLight }]}>Open DEMO preview states</Text>
+            </TouchableOpacity>
+          ) : null}
         </ScrollView>
       </View>
     );
   }
 
-  const currentTier: string = mem?.tier ?? user?.membershipTier ?? 'base';
-  const currentIdx = TIER_ORDER[currentTier] ?? -1;
+  const currentTier: string | null = mem?.tier ?? null;
+  const currentIdx = currentTier ? TIER_ORDER[currentTier] ?? -1 : -1;
   const plans = plansQuery.data?.plans ?? [];
-  const nextPublicPlan = plans.find((plan) => (TIER_ORDER[plan.tier] ?? -1) > currentIdx);
+  const nextPublicPlan = currentTier
+    ? plans.find((plan) => (TIER_ORDER[plan.tier] ?? -1) > currentIdx)
+    : undefined;
   const family = mem?.family;
 
-  const tierLabel = getTierLabel(currentTier, mem?.plans ?? []);
+  const tierLabel = currentTier ? getTierLabel(currentTier, mem?.plans ?? []) : 'Membership';
 
   if (!localDemoFlow) {
     return (
@@ -331,27 +490,38 @@ export default function MembershipScreen() {
     );
   }
 
-  if (isLoading) {
+  if (isLoading && !mem) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.offWhite }]}>
-        <ActivityIndicator color={colors.primary} size="large" />
+        <ActivityIndicator testID="membership-loading" color={colors.primary} size="large" />
       </View>
     );
   }
-  if (isError || !mem) {
+  if (!mem) {
     return (
       <View style={[styles.centered, styles.errorState, { backgroundColor: colors.offWhite }]}>
-        <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>Could not load membership</Text>
-        <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>Check your connection and try again.</Text>
-        <TouchableOpacity style={[styles.retryBtn, { backgroundColor: colors.primary }]} onPress={() => refetch()}>
-          <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>
+        <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>
+          {isError ? 'Membership status unavailable' : 'Membership details unavailable'}
+        </Text>
+        <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
+          {isError
+            ? 'We could not confirm your membership. This does not mean your membership has ended.'
+            : 'No account-bound membership details are available right now.'}
+        </Text>
+        {isError ? (
+          <TouchableOpacity testID="legacy-membership-retry" style={[styles.retryBtn, { backgroundColor: colors.primary }]} onPress={() => refetch()}>
+            <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity onPress={() => router.push('/membership/plans' as any)} style={styles.plansLink}>
+          <Text style={[styles.plansLinkText, { color: colors.primary }]}>Browse public plans</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   // ── Non-member: "join Bluebird" state instead of member stats ──
-  if (currentTier === 'none') {
+  if (mem.tier === 'none') {
     return (
       <View style={[styles.root, { backgroundColor: colors.offWhite }]}>
         <ScrollView
@@ -375,11 +545,9 @@ export default function MembershipScreen() {
               style={styles.upgradeCard}
             >
               <Text style={styles.upgradeEyebrow}>JOIN BLUEBIRD</Text>
-              <Text style={styles.upgradeTitle}>
-                One membership.{'\n'}Unlimited flights.
-              </Text>
+              <Text style={styles.upgradeTitle}>Bluebird Membership</Text>
               <Text style={styles.upgradeBody}>
-                Review the public membership plans and their current features. Membership purchases are unavailable.
+                Your access to exclusive private aviation. Review verified public plans and benefits below.
               </Text>
               <View style={[styles.upgradeBtn, { backgroundColor: colors.surface }]}>
                 <Text style={[styles.upgradeBtnText, { color: '#0A1128' }]}>Browse plans</Text>
@@ -387,10 +555,22 @@ export default function MembershipScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
+          <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="membership-skip-line">
+            <Text style={[styles.usageTitle, { color: colors.textOnSurface }]}>Skip the Line Pass</Text>
+            <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 8 }]}>
+              An active membership is required to join a flight queue or use a Skip the Line Pass.
+            </Text>
+          </View>
+
           <Text style={[styles.becomeMemberTitle, { color: colors.textOnSurface }]}>Become a member</Text>
           <View style={styles.inlinePlans}>
             {plansQuery.isLoading ? (
-              <ActivityIndicator color={colors.primary} size="large" />
+              <View testID="membership-catalog-loading" style={[styles.centered, { flex: 0, gap: 8 }]}>
+                <ActivityIndicator color={colors.primary} size="large" />
+                <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
+                  Loading public plans…
+                </Text>
+              </View>
             ) : plansQuery.isError || !plansQuery.data ? (
               <View style={styles.planLoadError}>
                 <Text style={[styles.planLoadErrorText, { color: colors.mutedForegroundLight }]}>
@@ -406,9 +586,18 @@ export default function MembershipScreen() {
                     : <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>}
                 </TouchableOpacity>
               </View>
+            ) : plans.length === 0 ? (
+              <View
+                style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                testID="membership-catalog-empty"
+              >
+                <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
+                  No public membership plans are currently listed. Prices, billing periods, and benefits are unavailable.
+                </Text>
+              </View>
             ) : (
               <>
-                {plans.map((plan) => {
+              {plans.map((plan) => {
                   const planColor = TIER_COLORS[plan.tier as keyof typeof TIER_COLORS] ?? colors.primary;
                   return (
                     <View
@@ -438,6 +627,14 @@ export default function MembershipScreen() {
                       <Text style={[styles.purchaseUnavailable, { color: colors.mutedForegroundLight }]}>
                         Purchases unavailable
                       </Text>
+                      <TouchableOpacity
+                        testID={`membership-plan-details-${plan.tier}`}
+                        accessibilityRole="button"
+                        onPress={() => router.push({ pathname: '/upgrade/[tier]', params: { tier: plan.tier } } as any)}
+                        style={styles.planDetailsButton}
+                      >
+                        <Text style={[styles.plansLinkText, { color: colors.primary }]}>View Details</Text>
+                      </TouchableOpacity>
                     </View>
                   );
                 })}
@@ -454,7 +651,31 @@ export default function MembershipScreen() {
           >
             <Text style={[styles.plansLinkText, { color: colors.mutedForegroundLight }]}>View full plan comparison</Text>
           </TouchableOpacity>
+          {isMembershipDevelopmentPreviewEnabled(typeof __DEV__ !== 'undefined' && __DEV__) ? (
+            <TouchableOpacity
+              testID="membership-demo-preview-entry"
+              accessibilityRole="button"
+              onPress={() => router.push('/membership/dev-preview' as any)}
+              style={styles.plansLink}
+            >
+              <Text style={[styles.plansLinkText, { color: colors.mutedForegroundLight }]}>Open DEMO preview states</Text>
+            </TouchableOpacity>
+          ) : null}
         </ScrollView>
+      </View>
+    );
+  }
+
+  if (!currentTier || TIER_ORDER[currentTier] === undefined) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.offWhite, padding: 28 }]}>
+        <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>Membership status unavailable</Text>
+        <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
+          Your account response did not confirm a supported membership plan.
+        </Text>
+        <TouchableOpacity onPress={() => router.push('/membership/plans' as any)} style={styles.plansLink}>
+          <Text style={[styles.plansLinkText, { color: colors.primary }]}>Browse public plans</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -462,12 +683,12 @@ export default function MembershipScreen() {
   const totalSaved: number = mem.totalSavedUsd ?? 0;
   const lifetimeFlights: number = mem.lifetimeCompletedFlights ?? 0;
   const familyMember = family?.members.find((member) => member.userId === user?.id);
-  const linePasses: number = familyMember
+  const linePasses: number | null = familyMember
     ? familyMember.availablePasses
-    : mem.linePassCount ?? user?.linePassCount ?? 0;
-  const memberSince = user?.createdAt
-    ? new Date(user.createdAt).getFullYear().toString()
-    : '—';
+    : Number.isSafeInteger(mem.linePassCount) && mem.linePassCount >= 0
+      ? mem.linePassCount
+      : null;
+  const renewalDate = mem.renewalDate ? formatMembershipDate(mem.renewalDate) : 'Unavailable';
   const allowance: number = mem.annualFlightAllowance ?? 0;
   const usedThisYear: number = mem.flightsThisYear ?? 0;
   const usagePct = allowance > 0 ? Math.min(usedThisYear / allowance, 1) : 0;
@@ -487,13 +708,18 @@ export default function MembershipScreen() {
       >
         {/* ── Header: name + dark tier pill ── */}
         <Text style={[styles.headerName, { color: colors.textOnSurface }]} numberOfLines={1}>
-          {user?.name ?? 'Member'}
+          Membership
         </Text>
         <View style={[styles.tierPill, { backgroundColor: colors.backgroundMid }]}>
           <Text style={[styles.tierPillText, { color: colors.primaryForeground }]} numberOfLines={1}>
             {tierLabel} Member
           </Text>
         </View>
+        {membershipFetching ? (
+          <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginBottom: 10 }]}>
+            Refreshing account membership…
+          </Text>
+        ) : null}
 
         {/* ── Lifetime membership value ── */}
         <View style={[styles.valueCard, { backgroundColor: colors.backgroundMid }]}>
@@ -515,11 +741,50 @@ export default function MembershipScreen() {
         {/* ── Supporting membership stats ── */}
         <View style={styles.statRow}>
           <StatCard label="Flights Taken" value={lifetimeFlights} />
-          <StatCard label="Member Since" value={memberSince} />
+          <StatCard label="Renewal" value={renewalDate} />
         </View>
         <View style={[styles.statRow, { marginTop: 10 }]}>
-          <StatCard label="Skip the Line Passes" value={linePasses} />
+          <StatCard label="Skip the Line Passes" value={linePasses ?? 'Unavailable'} />
         </View>
+        <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="membership-skip-line">
+          <Text style={[styles.usageTitle, { color: colors.textOnSurface }]}>Skip the Line Pass</Text>
+          <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 8 }]}>
+            {linePasses === null
+              ? 'Pass balance unavailable. We could not verify an account-bound balance.'
+              : linePasses === 0
+                ? 'No passes are currently available on this account.'
+                : `${linePasses} account-confirmed pass${linePasses === 1 ? '' : 'es'} available.`}
+          </Text>
+          <TouchableOpacity
+            testID="membership-view-flights"
+            accessibilityRole="button"
+            onPress={() => router.push('/(tabs)/discover' as any)}
+            style={styles.planDetailsButton}
+          >
+            <Text style={[styles.plansLinkText, { color: colors.primary }]}>View eligible flights</Text>
+          </TouchableOpacity>
+        </View>
+        {Array.isArray(mem.features) && mem.features.length > 0 ? (
+          <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="membership-benefits">
+            <Text style={[styles.usageTitle, { color: colors.textOnSurface }]}>Available benefits</Text>
+            {mem.features.map((feature) => (
+              <View key={feature} style={styles.inlineFeatureRow}>
+                <Text style={[styles.inlineFeatureCheck, { color: colors.primary }]}>✓</Text>
+                <Text style={[styles.inlineFeatureText, { color: colors.textOnSurface }]}>{feature}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {isError ? (
+          <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
+              Membership refresh failed. The last verified account details are still shown.
+            </Text>
+            <TouchableOpacity accessibilityRole="button" testID="legacy-membership-retry" onPress={() => refetch()}>
+              <Text style={[styles.plansLinkText, { color: colors.primary }]}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* ── This Year's Usage ── */}
         <View style={[styles.usageCard, { backgroundColor: colors.surface }]}>
@@ -571,6 +836,19 @@ export default function MembershipScreen() {
               </Text>
             </LinearGradient>
           </View>
+        ) : !family && plansQuery.isLoading ? (
+          <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="membership-catalog-loading">
+            <ActivityIndicator color={colors.primary} />
+            <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
+              Loading public plan details…
+            </Text>
+          </View>
+        ) : !family && plansQuery.data?.plans.length === 0 ? (
+          <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="membership-catalog-empty">
+            <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
+              No public membership plans are currently listed. No higher plan price or benefits are available.
+            </Text>
+          </View>
         ) : !family && plansQuery.data ? (
           <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.catalogStatusText, { color: colors.textOnSurface }]}>
@@ -620,6 +898,16 @@ export default function MembershipScreen() {
         >
           <Text style={[styles.plansLinkText, { color: colors.mutedForegroundLight }]}>Compare all plans</Text>
         </TouchableOpacity>
+        {isMembershipDevelopmentPreviewEnabled(typeof __DEV__ !== 'undefined' && __DEV__) ? (
+          <TouchableOpacity
+            testID="membership-demo-preview-entry"
+            accessibilityRole="button"
+            onPress={() => router.push('/membership/dev-preview' as any)}
+            style={styles.plansLink}
+          >
+            <Text style={[styles.plansLinkText, { color: colors.mutedForegroundLight }]}>Open DEMO preview states</Text>
+          </TouchableOpacity>
+        ) : null}
 
         {/* ── Grouped link list ── */}
         <View style={[styles.linkCard, { backgroundColor: colors.surface }]}>
@@ -712,6 +1000,7 @@ const styles = StyleSheet.create({
 
   plansLink: { alignSelf: 'center', paddingVertical: 14 },
   plansLinkText: { fontFamily: 'Inter_500Medium', fontSize: 13, textDecorationLine: 'underline' },
+  planDetailsButton: { alignSelf: 'flex-start', paddingTop: 12, paddingBottom: 4 },
 
   becomeMemberTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, marginTop: 22, marginBottom: 10 },
   inlinePlans: { gap: 12 },

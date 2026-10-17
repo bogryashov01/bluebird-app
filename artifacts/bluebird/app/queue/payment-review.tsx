@@ -120,7 +120,7 @@ export default function InternationalPaymentReviewScreen() {
           setOverlayPhase(null);
           router.replace({
             pathname: '/membership/join' as any,
-            params: { flightId: params.flightId ?? '' },
+            params,
           });
           return;
         }

@@ -29,6 +29,7 @@ import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
 import { canAccessClerkProfileOnboardingRoute } from '@/lib/clerkProfileOnboarding';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
+import { isMembershipDevelopmentPreviewRoute } from '@/lib/membershipDevelopmentPreview';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -51,6 +52,10 @@ function RootLayoutNav() {
   const segments = useSegments();
   const { authMode, clerkSignedIn, clerkMemberResolution, memberAccessResolved } = useAuth();
   const clerkSession = useClerkAuthSnapshot();
+  const isMembershipDemoPreview = isMembershipDevelopmentPreviewRoute(
+    segments,
+    typeof __DEV__ !== 'undefined' && __DEV__,
+  );
   const isClerkProfileRoute = segments[0] === 'account' && segments[1] === 'bluebird-profile';
   if (isClerkProfileRoute && authMode !== 'clerk') {
     return <Redirect href="/(auth)/welcome" />;
@@ -71,6 +76,7 @@ function RootLayoutNav() {
   const clerkRouteGuarded =
     authMode === 'clerk' &&
     !incompleteProfileOnboardingRoute &&
+    !isMembershipDemoPreview &&
     shouldRedirectClerkRoute(segments, memberAccessResolved, registeredHomeReady);
   if (clerkRouteGuarded) {
     return <Redirect href={clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(clerk-auth)/sign-in'} />;
@@ -85,7 +91,7 @@ function RootLayoutNav() {
     <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
     {/* App-wide waiting→confirmed watcher: celebrates a confirmed seat even
         when the member isn't on the Queue Status screen. */}
-    <QueueConfirmationWatcher />
+    {!isMembershipDemoPreview ? <QueueConfirmationWatcher /> : null}
     <Stack
       screenOptions={{
         contentStyle: { backgroundColor: colors.background },
@@ -160,6 +166,10 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="queue/dev-preview"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="membership/dev-preview"
         options={{ headerShown: false }}
       />
       <Stack.Screen

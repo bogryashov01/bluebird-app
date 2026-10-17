@@ -83,7 +83,7 @@ export default function BuyPassScreen() {
         if (code === 'MEMBERSHIP_REQUIRED') {
           router.replace({
             pathname: '/membership/join' as any,
-            params: params.flightId ? { flightId: params.flightId } : {},
+            params,
           });
           return;
         }
@@ -98,7 +98,7 @@ export default function BuyPassScreen() {
     if (localDemoFlow && user?.membershipTier === 'none') {
       router.replace({
         pathname: '/membership/join' as any,
-        params: params.flightId ? { flightId: params.flightId } : {},
+        params,
       });
     }
   }, [localDemoFlow, user?.membershipTier]);

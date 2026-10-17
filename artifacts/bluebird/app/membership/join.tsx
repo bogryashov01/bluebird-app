@@ -3,6 +3,7 @@ import {
   ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
@@ -16,6 +17,7 @@ import {
 export default function MembershipRequiredScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { flightId } = useLocalSearchParams<{ flightId?: string }>();
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
   const plansQuery = useProductionMembershipPlans();
 
@@ -53,6 +55,18 @@ export default function MembershipRequiredScreen() {
           <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
             Joining flight queues and Skip the Line passes are member features. Review the current public plans below.
           </Text>
+
+          {plansQuery.data.plans.length === 0 ? (
+            <View
+              style={[styles.planCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              testID="membership-catalog-empty"
+            >
+              <Text style={[styles.errorText, { color: colors.textOnSurface }]}>No public membership plans are listed.</Text>
+              <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
+                Prices, billing periods, and benefits are unavailable until the catalog lists a plan.
+              </Text>
+            </View>
+          ) : null}
 
           {plansQuery.data.plans.map((plan) => {
             const planColor = TIER_COLORS[plan.tier as keyof typeof TIER_COLORS] ?? colors.primary;
@@ -93,6 +107,14 @@ export default function MembershipRequiredScreen() {
                     <Text style={[styles.featureText, { color: colors.textOnSurface }]}>{feature}</Text>
                   </View>
                 ))}
+                <TouchableOpacity
+                  testID={`membership-plan-details-${plan.tier}`}
+                  accessibilityRole="button"
+                  onPress={() => router.push({ pathname: '/upgrade/[tier]', params: { tier: plan.tier } } as any)}
+                  style={styles.detailsLink}
+                >
+                  <Text style={[styles.comparisonLinkText, { color: colors.primary }]}>View Details</Text>
+                </TouchableOpacity>
               </View>
             );
           })}
@@ -106,6 +128,18 @@ export default function MembershipRequiredScreen() {
           >
             <Text style={[styles.comparisonLinkText, { color: colors.primary }]}>View full plan comparison</Text>
           </TouchableOpacity>
+          {flightId ? (
+            <TouchableOpacity
+              testID="membership-return-to-flight"
+              accessibilityRole="button"
+              style={styles.comparisonLink}
+              onPress={() => router.canGoBack()
+                ? router.back()
+                : router.replace(`/flight/${encodeURIComponent(flightId)}` as any)}
+            >
+              <Text style={[styles.comparisonLinkText, { color: colors.primary }]}>Return to selected flight</Text>
+            </TouchableOpacity>
+          ) : null}
         </ScrollView>
       )}
     </View>
@@ -144,6 +178,7 @@ const styles = StyleSheet.create({
   featureRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
   featureCheck: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   featureText: { fontFamily: 'Inter_400Regular', fontSize: 13, flex: 1 },
+  detailsLink: { alignSelf: 'flex-start', paddingTop: 12 },
   demoNote: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 6 },
   comparisonLink: { alignSelf: 'center', paddingVertical: 14 },
   comparisonLinkText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, textDecorationLine: 'underline' },

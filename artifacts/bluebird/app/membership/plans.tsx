@@ -1,4 +1,5 @@
 import React from 'react';
+import { router } from 'expo-router';
 import {
   ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
@@ -50,7 +51,10 @@ export default function AllPlansScreen() {
     isError: legacyMembershipError,
     refetch: refetchLegacyMembership,
   } = useGetMembership({
-    query: { enabled: legacyMembershipEnabled, queryKey: ['/api/membership'] },
+    query: {
+      enabled: legacyMembershipEnabled,
+      queryKey: ['/api/membership', user?.id ?? 'no-local-account'],
+    },
   });
   const [clerkMembershipState, setClerkMembershipState] =
     React.useState<ClerkMembershipState>({ kind: 'loading' });
@@ -134,10 +138,13 @@ export default function AllPlansScreen() {
     ? { kind: 'loading' as const }
     : clerkMembershipState;
   const clerkResult = visibleClerkState.kind === 'loaded' ? visibleClerkState.result : null;
-  const clerkCurrentUser = clerkResult?.kind === 'authenticated' ? clerkResult.currentUser : null;
-  const legacyTier = membership ? membership.tier : user?.membershipTier;
+  const clerkConfirmedMembership = clerkResult?.kind === 'authenticated' &&
+    clerkResult.membershipState === 'available'
+    ? clerkResult.membership
+    : null;
+  const legacyTier = membership?.tier;
   const currentTier: string | null = authMode === 'clerk'
-    ? clerkCurrentUser?.isMember === true ? clerkCurrentUser.memberTier : null
+    ? clerkConfirmedMembership?.isMember === true ? clerkConfirmedMembership.tier : null
     : legacyMembershipEnabled && !legacyMembershipError && legacyTier && TIER_ORDER[legacyTier] >= 0
       ? legacyTier
       : null;
@@ -152,7 +159,7 @@ export default function AllPlansScreen() {
         ? 'Sign in to see your current membership.'
         : visibleClerkState.kind === 'error'
           ? 'Membership status unavailable'
-          : clerkCurrentUser?.isMember === false && clerkCurrentUser.memberTier === null
+          : clerkConfirmedMembership?.isMember === false && clerkConfirmedMembership.tier === null
             ? 'Not a member yet'
             : currentTier
               ? currentTierLabel
@@ -163,9 +170,11 @@ export default function AllPlansScreen() {
         ? 'Loading membership details'
         : legacyMembershipError
           ? 'Membership status unavailable'
-          : currentTier
-            ? currentTierLabel
-            : 'Not a member yet';
+          : legacyTier === 'none'
+            ? 'Not a member yet'
+            : currentTier
+              ? currentTierLabel
+              : 'Membership status unavailable';
   const currentMembershipDetail = authMode === 'clerk'
     ? visibleClerkState.kind === 'error'
       ? visibleClerkState.message
@@ -173,25 +182,27 @@ export default function AllPlansScreen() {
         ? 'No authenticated membership details were loaded.'
         : clerkResult?.kind === 'authenticated'
           ? clerkResult.membershipState === 'available'
-            ? clerkResult.membership?.status ?? (clerkResult.membership?.isMember ? 'Active' : 'Not a member')
+            ? clerkConfirmedMembership?.status ?? (clerkConfirmedMembership?.isMember ? 'Active' : 'Not a member')
             : clerkResult.membershipState === 'conflict'
               ? 'Membership details did not match the authenticated account and are hidden.'
-              : currentTier
-                ? 'Your tier is confirmed, but other membership details are unavailable.'
-                : 'Membership details are unavailable.'
+              : 'Membership details are unavailable.'
           : null
     : legacyMembershipError
       ? 'Your membership details could not be loaded. Public plan pricing remains available.'
     : legacyMembershipEnabled && !legacyMembershipLoading
-      ? currentTier ? 'Member' : 'Not a member'
+      ? legacyTier === 'none'
+        ? 'Not a member'
+        : currentTier ? 'Member' : 'Membership status unavailable'
       : null;
   const clerkMembershipNeedsRetry = visibleClerkState.kind === 'error' ||
-    (clerkResult?.kind === 'authenticated' && clerkResult.membershipState === 'unavailable');
+    (clerkResult?.kind === 'authenticated' &&
+      (clerkResult.membershipState === 'unavailable' || clerkResult.membershipState === 'conflict'));
 
   if (plansQuery.isLoading) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.offWhite }]}>
+      <View style={[styles.centered, { backgroundColor: colors.offWhite }]} testID="membership-catalog-loading">
         <ActivityIndicator color={colors.primary} size="large" />
+        <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>Loading public plan catalog…</Text>
       </View>
     );
   }
@@ -210,6 +221,24 @@ export default function AllPlansScreen() {
           {plansQuery.isFetching
             ? <ActivityIndicator color={colors.primaryForeground} />
             : <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>}
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (plansQuery.data.plans.length === 0) {
+    return (
+      <View style={[styles.centered, styles.errorState, { backgroundColor: colors.offWhite }]} testID="membership-catalog-empty">
+        <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>No public membership plans are listed</Text>
+        <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
+          Prices, billing periods, and benefits are unavailable until the public catalog lists a plan.
+        </Text>
+        <TouchableOpacity
+          style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -329,6 +358,14 @@ export default function AllPlansScreen() {
                   Upgrade purchases are unavailable.
                 </Text>
               )}
+              <TouchableOpacity
+                testID={`membership-plan-details-${plan.tier}`}
+                accessibilityRole="button"
+                onPress={() => router.push({ pathname: '/upgrade/[tier]', params: { tier: plan.tier } } as any)}
+                style={styles.planDetailsButton}
+              >
+                <Text style={[styles.membershipRetryText, { color: colors.primary }]}>View Details</Text>
+              </TouchableOpacity>
             </View>
           );
         })}
@@ -384,6 +421,7 @@ const styles = StyleSheet.create({
   featureCheck: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   cardFeatureText: { fontFamily: 'Inter_400Regular', fontSize: 12.5, flex: 1 },
   purchaseUnavailable: { fontFamily: 'Inter_600SemiBold', fontSize: 12, paddingHorizontal: 16, paddingTop: 12 },
+  planDetailsButton: { alignSelf: 'flex-start', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 },
   availabilityCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12 },
   availabilityTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14, marginBottom: 6 },
   availabilityText: { fontFamily: 'Inter_400Regular', fontSize: 12.5, lineHeight: 18, marginTop: 3 },

@@ -349,7 +349,10 @@ export default function FlightDetailScreen() {
     skipLineNavigationLock.current = true;
     setSkipLineNavigationPending(true);
     if (skipLineRequiresMembership) {
-      router.push('/membership/join' as any);
+      router.push({
+        pathname: '/membership/join' as any,
+        params: { flightId: String(f.id) },
+      });
       return;
     }
     router.push({
