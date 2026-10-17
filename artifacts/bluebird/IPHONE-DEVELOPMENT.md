@@ -75,6 +75,15 @@ This repository now includes `expo-dev-client` and an internal
 `development` profile in `eas.json`; those are preparation only. No build,
 signing, device registration, or account login was performed.
 
+The separate `development-simulator` profile extends `development` and sets
+`ios.simulator: true`. Expo documents that simulator builds do not require an
+Apple Developer account; they can only be installed on an iOS Simulator, not an
+iPhone. The profile does not bypass the need for an approved bundle identifier,
+an EAS project link, or an Expo account authorized to run the cloud build. This
+Linux workspace cannot install or launch the resulting app in Apple's
+Simulator. Do not run the build until its cloud-build use is separately
+approved.
+
 Before producing an iPhone build, the Bluebird owner must:
 
 - Associate this project with the approved Expo/EAS project and use an
@@ -89,6 +98,9 @@ Before producing an iPhone build, the Bluebird owner must:
 This guide does not start a build or request credentials. Follow the
 organization's approved iOS build and signing process only after those
 prerequisites and separate approval are in place.
+
+For an audit of the current configuration and prerequisite status, see
+`IOS-BUILD-READINESS.md`.
 
 ## SDK alignment note
 
