@@ -14,7 +14,7 @@ interface ProductionReadOnlyNoticeProps {
 
 export function ProductionReadOnlyNotice({
   flightId,
-  title = 'Queue unavailable in this preview',
+  title = 'Queue temporarily unavailable',
   description = getProductionQueueReadOnlyMessage(),
 }: ProductionReadOnlyNoticeProps) {
   const colors = useColors();
@@ -32,18 +32,9 @@ export function ProductionReadOnlyNotice({
         <Text style={[styles.title, { color: colors.textOnSurface }]}>{title}</Text>
         <Text style={[styles.description, { color: colors.mutedForegroundLight }]}>{description}</Text>
 
-        {validatedFlightId !== null && (
-          <Text
-            style={[styles.flightId, { color: colors.mutedForegroundLight }]}
-            testID="production-flight-id"
-          >
-            Production flight ID: {validatedFlightId}
-          </Text>
-        )}
-
         <TouchableOpacity
           accessibilityRole="button"
-          accessibilityLabel={validatedFlightId !== null ? 'View flight details' : 'Browse production flights'}
+          accessibilityLabel={validatedFlightId !== null ? 'View flight details' : 'Browse flights'}
           style={[styles.button, { backgroundColor: colors.primary }]}
           onPress={() => {
             if (validatedFlightId !== null) {
@@ -54,7 +45,7 @@ export function ProductionReadOnlyNotice({
           }}
         >
           <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>
-            {validatedFlightId !== null ? 'View Flight Details' : 'Browse Production Flights'}
+            {validatedFlightId !== null ? 'View Flight Details' : 'Browse Flights'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -83,7 +74,6 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: 'Inter_700Bold', fontSize: 22, textAlign: 'center' },
   description: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21, textAlign: 'center' },
-  flightId: { fontFamily: 'Inter_500Medium', fontSize: 13, marginTop: 2 },
   button: { minHeight: 48, borderRadius: 14, paddingHorizontal: 20, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
   buttonText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
 });

@@ -161,7 +161,7 @@ test("flight details omit unsupported facts and keep join requests unavailable",
   await page.setViewportSize({ width: 320, height: 700 });
   await page.goto("/flight/flight-1");
 
-  await expect(page.getByText("Citation CJ3", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("flight-info-aircraft-type")).toHaveText("Citation CJ3");
   await expect(page.getByText("4 available", { exact: true })).toBeVisible();
   await expect(page.getByText("Passengers", { exact: true })).toHaveCount(0);
   await expect(page.getByText("View Flight Policy & Terms", { exact: true })).toBeVisible();
@@ -309,7 +309,7 @@ test("malformed direct passenger trip ID shows unavailable without loading trip 
   await page.goto("/trip/%40%40%40/passengers");
 
   await expect(page.getByTestId("trip-availability-state-title")).toHaveText("Passenger information unavailable");
-  await expect(page.getByText("This trip reference is invalid. No manifest or passenger data was requested.", { exact: true })).toBeVisible();
+  await expect(page.getByText("We couldn’t find this trip. Go back to My Trips and try again.", { exact: true })).toBeVisible();
   expect(requestedTripData).toEqual([]);
 });
 

@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 
 export function ClerkAuthConfigurationError() {
   const colors = useColors();
@@ -16,8 +15,7 @@ export function ClerkAuthConfigurationError() {
         style={[styles.message, { color: colors.mutedOnBrand }]}
         testID="clerk-configuration-error"
       >
-        {CLERK_AUTH_CONFIGURATION.configurationError ??
-          'Development Clerk sign-in is unavailable. Check the Development authentication configuration.'}
+        Sign-in is temporarily unavailable. Please try again later.
       </Text>
     </View>
   );

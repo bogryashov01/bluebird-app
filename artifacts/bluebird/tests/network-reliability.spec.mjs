@@ -424,9 +424,9 @@ test("Discover cards open their selected flights and preserve search when return
   await expect(page.getByTestId("flight-info-aircraft-type")).toHaveText("Citation Latitude");
   await expect(page.getByTestId("flight-info-aircraft-code")).toHaveText("LATITUDE");
   await expect(page.getByTestId("flight-info-duration")).toHaveText("3h");
-  await expect(page.getByTestId("flight-info-status")).toHaveText("Published");
+  await expect(page.getByTestId("flight-info-status")).toHaveText("Available");
   await expect(page.getByTestId("flight-info-international")).toHaveText("Domestic");
-  await expect(page.getByTestId("flight-info-queue-count")).toHaveText("4");
+  await expect(page.getByTestId("flight-info-queue-count")).toHaveCount(0);
 
   await page.goBack();
   await expect(dallasFlight).toBeVisible();

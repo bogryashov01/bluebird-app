@@ -10,7 +10,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth as useBluebirdAuth } from '@/context/AuthContext';
 import {
   getClerkPostLoginJourney,
-  getClerkPostLoginStatusMessage,
 } from '@/lib/clerkMemberResolution';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 
@@ -70,28 +69,14 @@ export function ClerkSignedInScreen() {
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 12 }]} showsVerticalScrollIndicator={false}>
         <Text style={[styles.eyebrow, { color: colors.paleBlue }]}>BLUEBIRD ACCOUNT</Text>
         <Text style={[styles.title, { color: colors.textOnBrand }]}>
-          {clerkMemberResolution.status === 'registration_required'
-            ? 'New account setup is blocked'
-            : clerkMemberResolution.status === 'error'
-              ? 'We couldn’t verify your next step'
-              : 'Your next step isn’t verified yet'}
+          We couldn’t finish setting up your account
         </Text>
         <Text style={[styles.body, { color: colors.mutedOnBrand }]} testID="clerk-post-login-status">
-          {getClerkPostLoginStatusMessage(clerkMemberResolution, CLERK_MEMBER_NAVIGATION_READINESS)}
-        </Text>
-
-        <View style={[styles.contractCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.textOnSurface }]}>What the API needs to confirm</Text>
-          <Text style={[styles.memberGateNote, { color: colors.mutedForegroundLight }]} testID="clerk-registration-contract-blocker">
-            Routing requires /api/me to confirm isAuthenticated === true and return a strict boolean isProfileComplete value. An HTTP success status alone does not authorize Home or profile completion.
-          </Text>
-          <Text style={[styles.memberGateNote, { color: colors.mutedForegroundLight }]} testID="clerk-airport-contract-blocker">
-            Registration saves one homeAirportCode and favoriteCityKeys selected from the Main API’s airport search and city catalog.
-          </Text>
-        </View>
-
-        <Text style={[styles.memberGateNote, { color: colors.mutedOnBrand }]} testID="clerk-new-user-journey-order">
-          Once confirmed, new accounts continue in this order: Complete Profile → Airport Selection → Onboarding → Home. There is no membership-selection step. Confirmed registered users should reach Home even without a membership; booking, queues, and trips remain protected by backend authorization.
+          {clerkMemberResolution.status === 'error' && clerkMemberResolution.reason === 'unauthorized'
+            ? 'Please sign in again to continue.'
+            : clerkMemberResolution.status === 'error' && clerkMemberResolution.reason === 'network'
+              ? 'Check your connection and try again.'
+              : 'Your account needs a little more setup before you can continue. Please try again later.'}
         </Text>
 
         {isDevelopment && isLoaded && isSignedIn && (
@@ -121,7 +106,7 @@ export function ClerkSignedInScreen() {
             <ActivityIndicator color={colors.primaryForeground} />
           ) : (
             <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>
-              Sign out of Clerk
+              Sign out
             </Text>
           )}
         </Pressable>
@@ -137,11 +122,8 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 12, fontFamily: 'Inter_600SemiBold', letterSpacing: 1.4, marginBottom: 10 },
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },
   body: { fontSize: 15, fontFamily: 'Inter_400Regular', lineHeight: 22, marginTop: 10, marginBottom: 16 },
-  contractCard: { borderWidth: 1, borderRadius: 18, padding: 16, gap: 8 },
-  cardTitle: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
   secondaryButton: { minHeight: 48, borderWidth: 1, borderRadius: 999, justifyContent: 'center', alignItems: 'center', marginTop: 12 },
   secondaryButtonText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
-  memberGateNote: { fontSize: 12, lineHeight: 18, marginTop: 4, textAlign: 'left', fontFamily: 'Inter_400Regular' },
   developmentLink: { minHeight: 42, borderWidth: 1, borderRadius: 999, justifyContent: 'center', alignItems: 'center', marginTop: 18 },
   error: { fontSize: 14, fontFamily: 'Inter_400Regular', lineHeight: 21, marginBottom: 14 },
   primaryButton: { minHeight: 50, borderRadius: 999, justifyContent: 'center', alignItems: 'center' },

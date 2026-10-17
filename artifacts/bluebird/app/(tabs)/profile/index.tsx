@@ -216,7 +216,7 @@ export default function ProfileScreen() {
       return (
         <ProductionAuthenticatedUnavailableNotice
           title="Profile unavailable"
-          description="The Main API did not confirm this signed-in session. No profile details were loaded."
+          description="We couldn’t confirm your account details. Please try again."
           testID="clerk-profile-unavailable"
           actionLabel="Try again"
           onAction={() => setProfileLoadAttempt((attempt) => attempt + 1)}
@@ -323,7 +323,7 @@ export default function ProfileScreen() {
               },
               {
                 label: 'Notification Settings',
-                hint: 'Unavailable in this preview',
+                hint: 'Unavailable right now',
                 onPress: () => router.push('/notifications'),
               },
               {
@@ -381,7 +381,8 @@ export default function ProfileScreen() {
   if (!localDemoFlow) {
     return (
       <ProductionAuthenticatedUnavailableNotice
-        title="Profile unavailable in production preview"
+        title="Profile unavailable"
+          description="Member profile information is unavailable right now."
         testID="production-profile-unavailable"
       />
     );

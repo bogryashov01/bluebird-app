@@ -119,7 +119,7 @@ export function ClerkTrips() {
         </View>
         <StateMessage
           title="Sign in to view your trips"
-          description="A signed-in Clerk account is required. No trip data is shown while signed out."
+          description="Sign in to see your trip information."
           colors={colors}
         />
       </View>
@@ -133,7 +133,7 @@ export function ClerkTrips() {
         </View>
         <StateMessage
           title="Trips unavailable"
-          description="The selected Main API and matching Clerk environment are not configured."
+          description="Your trip information is unavailable right now."
           colors={colors}
         />
       </View>
@@ -157,10 +157,10 @@ export function ClerkTrips() {
       <StateMessage
         title={unauthorized ? 'Sign in again to view trips' : forbidden ? 'Trips unavailable for this account' : 'Could not load your trips'}
         description={unauthorized
-          ? 'Your Main API session could not be authorized. Your trips have not been replaced with an empty list.'
+          ? 'Please sign in again to view your trips.'
           : forbidden
-            ? 'The Main API did not authorize this trip-list request. Your trips have not been replaced with an empty list.'
-            : 'Trip data could not be loaded or did not match the supported response contract. Try again when the service is available.'}
+            ? 'Your trip information is unavailable right now.'
+            : 'Check your connection and try again.'}
         colors={colors}
         actionLabel="Try Again"
         onAction={() => { void query.refetch(); }}
@@ -214,9 +214,6 @@ export function ClerkTrips() {
             </TouchableOpacity>
           ))}
         </View>
-        <Text style={[styles.contractNote, { color: colors.mutedForeground }]}>
-          Uses the checked-in Main API trip-list source contract. Live authorization and account mapping have not been verified.
-        </Text>
       </View>
       {state}
     </View>
@@ -263,7 +260,6 @@ const styles = StyleSheet.create({
   tabRow: { flexDirection: 'row', gap: 4, borderRadius: 14, padding: 4 },
   tabButton: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999 },
   tabLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
-  contractNote: { fontFamily: 'Inter_400Regular', fontSize: 11, lineHeight: 16, marginTop: 12 },
   body: { flex: 1 },
   list: { gap: 14, paddingHorizontal: 20 },
   tripCard: { borderRadius: 20, padding: 18, gap: 8 },

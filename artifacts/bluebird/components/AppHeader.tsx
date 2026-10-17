@@ -1,6 +1,7 @@
 import React from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 
@@ -36,7 +37,10 @@ export function AppHeader({ navigation, options, back }: AppHeaderProps) {
         <View style={styles.side}>
           {back ? (
             <TouchableOpacity
-              onPress={() => navigation.goBack()}
+              onPress={() => {
+                if (router.canGoBack()) navigation.goBack();
+                else router.replace('/(tabs)/discover');
+              }}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               activeOpacity={0.6}
               testID="header-back"

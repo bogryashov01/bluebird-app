@@ -78,6 +78,19 @@ async function stubLocalApi(page, authResponse = { status: 200, body: localUser 
   });
 }
 
+test("phone sign-in screens have a working back destination when opened directly", async ({ page }) => {
+  test.skip(clerkAuthExpected, "This case runs against the legacy phone sign-in flow.");
+
+  await page.goto("/phone");
+  await page.getByLabel("Back", { exact: true }).click();
+  await expect(page).toHaveURL(/\/welcome$/);
+
+  await page.goto("/verify-code?phone=%2B15555550199&referralCode=FRIEND");
+  await page.getByLabel("Back to phone number", { exact: true }).click();
+  await expect(page).toHaveURL(/\/phone\?referralCode=FRIEND$/);
+  await expect(page.getByTestId("phone-input")).toBeVisible();
+});
+
 test("fresh signed-out startup reaches Welcome and Sign In, and refresh/back stay in auth flow", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("Get Started", { exact: true })).toBeVisible();
@@ -158,18 +171,18 @@ test("Clerk-enabled Welcome routes the phone journey into Clerk without starting
 
   await page.getByTestId("welcome-phone-entry").click();
   await expect(page).toHaveURL(/\/sign-in$/);
-  await expect(page.getByText("Sign in with Clerk", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sign in to Bluebird", { exact: true })).toBeVisible();
   expect(authApiCalls).toEqual([]);
 
   await page.getByTestId("clerk-go-to-sign-up").click();
   await expect(page).toHaveURL(/\/sign-up$/);
-  await expect(page.getByText("Create a Clerk account", { exact: true })).toBeVisible();
+  await expect(page.getByText("Create your Bluebird account", { exact: true })).toBeVisible();
   await page.getByTestId("clerk-go-to-sign-in").click();
   await expect(page).toHaveURL(/\/sign-in$/);
   expect(authApiCalls).toEqual([]);
 
   await page.goto("/sign-up");
-  await expect(page.getByText("Create a Clerk account", { exact: true })).toBeVisible();
+  await expect(page.getByText("Create your Bluebird account", { exact: true })).toBeVisible();
   expect(authApiCalls).toEqual([]);
 
   await page.goto("/discover");
@@ -192,8 +205,8 @@ test("requested Clerk with a missing key shows configuration errors instead of d
   await page.goto("/welcome");
   await page.getByTestId("welcome-phone-entry").click();
   await expect(page).toHaveURL(/\/sign-in$/);
-  await expect(page.getByTestId("clerk-configuration-error")).toContainText(
-    "EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY",
+  await expect(page.getByTestId("clerk-configuration-error")).toHaveText(
+    "Sign-in is temporarily unavailable. Please try again later.",
   );
   await expect(page.getByTestId("phone-input")).toHaveCount(0);
   await expect(page.getByTestId("verification-code-input")).toHaveCount(0);
@@ -232,7 +245,8 @@ test("valid local demo session reaches Discover on startup, direct navigation, a
   await expect(plansLink).toBeVisible();
   await plansLink.click();
   await expect(page).toHaveURL(/\/membership\/plans$/);
-  await expect(page.getByText("Plan features", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Plan information unavailable", { exact: true })).toBeVisible();
+  await expect(page.getByText("Try Again", { exact: true }).first()).toBeVisible();
 
   await page.goto("/profile");
   const personalInformation = page.getByText("Personal Information", { exact: true }).first();

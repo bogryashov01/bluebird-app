@@ -50,7 +50,7 @@ export default function TripDetailsScreen() {
     return (
       <TripAvailabilityState
         title="Trip details unavailable"
-        description="This trip reference is invalid. Flight IDs and trip IDs are separate, and no trip ID was created from this route."
+        description="We couldn’t find this trip. Go back to My Trips and try again."
         actionLabel="Back to My Trips"
         onAction={backToTrips}
       />
@@ -60,7 +60,7 @@ export default function TripDetailsScreen() {
     return (
       <TripAvailabilityState
         title="Trip details unavailable"
-        description={`${PRODUCTION_AUTH_UNAVAILABLE_MESSAGE} No trip or manifest request is made.`}
+        description={`${PRODUCTION_AUTH_UNAVAILABLE_MESSAGE} Please try again later.`}
         actionLabel="Back to My Trips"
         onAction={backToTrips}
         testID="production-trip-details-unavailable"
@@ -91,7 +91,7 @@ export default function TripDetailsScreen() {
       return (
         <TripAvailabilityState
           title="Sign in required"
-          description="Your member session could not access this trip. No trip details have been substituted."
+          description="Please sign in again to view this trip."
           actionLabel="Back to My Trips"
           onAction={backToTrips}
           testID="trip-details-auth-required"
@@ -101,7 +101,7 @@ export default function TripDetailsScreen() {
     return (
       <TripAvailabilityState
         title="Could not load trip details"
-        description="Trip information could not be loaded. Try again when the local demo service is available."
+        description="Trip details could not be loaded. Check your connection and try again."
         actionLabel="Try Again"
         onAction={() => { void query.refetch(); }}
         testID="trip-details-api-error"
@@ -114,7 +114,7 @@ export default function TripDetailsScreen() {
     return (
       <TripAvailabilityState
         title="Trip not found"
-        description="No trip matches this trip reference. It has not been converted into a flight ID."
+        description="We couldn’t find this trip. Return to My Trips and choose an existing trip."
         actionLabel="Back to My Trips"
         onAction={backToTrips}
       />
@@ -184,7 +184,7 @@ export default function TripDetailsScreen() {
 
       <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.sectionTitle, { color: colors.textOnSurface }]}>Boarding pass</Text>
-        <Text style={[styles.detail, { color: colors.mutedForegroundLight }]}>Boarding pass unavailable. No pass or QR code is generated in this preview.</Text>
+        <Text style={[styles.detail, { color: colors.mutedForegroundLight }]}>A boarding pass is unavailable for this trip.</Text>
         <TouchableOpacity
           testID="trip-boarding-pass"
           accessibilityRole="button"

@@ -50,7 +50,7 @@ export default function ManagePlanScreen() {
     return (
       <ProductionAuthenticatedUnavailableNotice
         title="Membership management unavailable"
-        description="Membership status and changes are not connected to a verified production token provider. No membership action is available in this preview."
+        description="We can’t manage your membership right now. Please try again later. No changes were made."
         testID="production-membership-management-unavailable"
       />
     );

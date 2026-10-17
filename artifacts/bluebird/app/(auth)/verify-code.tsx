@@ -130,7 +130,21 @@ export default function VerifyCodeScreen() {
     <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad, paddingBottom: bottomPad + 24 }]}>
       <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
 
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+      <TouchableOpacity
+        style={styles.backBtn}
+        onPress={() => (
+          router.canGoBack()
+            ? router.back()
+            : router.replace({
+                pathname: '/(auth)/phone',
+                params: typeof params.referralCode === 'string'
+                  ? { referralCode: params.referralCode }
+                  : {},
+              })
+        )}
+        accessibilityRole="button"
+        accessibilityLabel="Back to phone number"
+      >
         <Feather name="arrow-left" size={20} color={colors.mutedOnBrand} />
       </TouchableOpacity>
 

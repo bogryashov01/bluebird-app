@@ -248,18 +248,28 @@ export default function MembershipScreen() {
               </>
             ) : null}
             {visibleState.kind === 'not_authenticated' ? (
-              <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 12 }]}>
-                The Main API did not confirm this signed-in session. No membership details were loaded.
-              </Text>
+              <>
+                <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 12 }]}>
+                  We couldn’t confirm your membership details. Please try again.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setClerkMembershipAttempt((attempt) => attempt + 1)}
+                  accessibilityRole="button"
+                  testID="clerk-membership-retry"
+                  style={styles.plansLink}
+                >
+                  <Text style={[styles.plansLinkText, { color: colors.primary }]}>Try again</Text>
+                </TouchableOpacity>
+              </>
             ) : null}
             {result?.kind === 'authenticated' && result.membershipState === 'conflict' ? (
               <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 12 }]} testID="clerk-membership-conflict">
-                Membership details did not agree with the authenticated account projection, so they are hidden.
+                Membership details are unavailable right now.
               </Text>
             ) : null}
             {result?.kind === 'authenticated' && result.membershipState === 'unavailable' ? (
               <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 12 }]} testID="clerk-membership-details-unavailable">
-                The account status above is confirmed by the Main API. Other membership details are unavailable.
+                Additional membership details are unavailable right now.
               </Text>
             ) : null}
             {detailRows.length > 0 ? (
@@ -313,7 +323,7 @@ export default function MembershipScreen() {
     return (
       <ProductionAuthenticatedUnavailableNotice
         title="Membership status unavailable"
-        description="No member tier, pass balance, family status, or usage data is loaded in this production preview. Public plan details remain available on Compare all plans."
+        description="Your membership details are unavailable right now. Public plan information is still available."
         testID="production-membership-unavailable"
         actionLabel="Compare all plans"
         onAction={() => router.push('/membership/plans' as any)}
@@ -384,7 +394,7 @@ export default function MembershipScreen() {
             ) : plansQuery.isError || !plansQuery.data ? (
               <View style={styles.planLoadError}>
                 <Text style={[styles.planLoadErrorText, { color: colors.mutedForegroundLight }]}>
-                  Could not load production plans. Demo pricing is not shown.
+                  Could not load plan information. Please try again.
                 </Text>
                 <TouchableOpacity
                   style={[styles.retryBtn, { backgroundColor: colors.primary }]}

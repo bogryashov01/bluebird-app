@@ -30,7 +30,7 @@ export const CLERK_MEMBER_NAVIGATION_READINESS = {
 } as const;
 
 export const PRODUCTION_AUTH_UNAVAILABLE_MESSAGE =
-  'Authenticated production member data is unavailable. Acceptance of Clerk tokens by the deployed API and mapping to a stable Bluebird member account are unverified; safe profile and member endpoint behavior has not been confirmed.';
+  'Member information is unavailable right now.';
 
 export interface ProductionAuthAvailability {
   status: 'unavailable';

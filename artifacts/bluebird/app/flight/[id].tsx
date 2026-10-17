@@ -71,6 +71,7 @@ function flightStatusText(status: string | null): string | null {
   const value = status?.trim();
   if (!value) return null;
   if (value === 'available') return 'Available';
+  if (value === 'published') return 'Available';
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 function infoTiles(f: FlightView) {
@@ -177,8 +178,9 @@ export default function FlightDetailScreen() {
     retry: shouldRetryProductionRead,
     retryDelay: productionReadRetryDelay,
   });
-  const localAirportRecords = (localAirportsQuery.data ?? []).flatMap((group) =>
-    group.airports.map((airport) => ({
+  const localAirportGroups = Array.isArray(localAirportsQuery.data) ? localAirportsQuery.data : [];
+  const localAirportRecords = localAirportGroups.flatMap((group) =>
+    (Array.isArray(group?.airports) ? group.airports : []).map((airport) => ({
       code: airport.code,
       name: airport.name,
       city: airport.city,
@@ -423,7 +425,7 @@ export default function FlightDetailScreen() {
     ...(f.international !== null
       ? [{ label: 'Route type', value: f.international ? 'International' : 'Domestic', testID: 'flight-info-international' }]
       : []),
-    ...(Number.isSafeInteger(f.queueCount) && f.queueCount! >= 0
+    ...(!readOnlyProduction && Number.isSafeInteger(f.queueCount) && f.queueCount! >= 0
       ? [{ label: 'Queue count', value: f.queueCount!.toLocaleString(), testID: 'flight-info-queue-count' }]
       : []),
   ];
@@ -476,7 +478,7 @@ export default function FlightDetailScreen() {
         <>
           <View style={[styles.unavailableBadge, { backgroundColor: colors.muted }]}>
             <Text style={[styles.unavailableBadgeText, { color: colors.mutedForegroundLight }]}>
-              Flight details
+              Queue temporarily unavailable
             </Text>
           </View>
           <Text
@@ -488,7 +490,7 @@ export default function FlightDetailScreen() {
           <TouchableOpacity
             testID="production-queue-read-only-cta"
             accessibilityRole="button"
-            accessibilityLabel="View read-only queue access"
+            accessibilityLabel="View queue availability"
             disabled={productionFlightId === null}
             onPress={() => {
               if (productionFlightId === null) return;
@@ -503,7 +505,7 @@ export default function FlightDetailScreen() {
             ]}
           >
             <Text style={[styles.queueReadOnlyLinkText, { color: colors.primaryForeground }]}>
-              View read-only queue access
+              View availability
             </Text>
           </TouchableOpacity>
         </>
@@ -666,8 +668,11 @@ export default function FlightDetailScreen() {
       {/* ── Frosted back button (floats above hero) ── */}
       <TouchableOpacity
         style={[styles.backBtn, { top: backTop, backgroundColor: colors.surface + 'CC' }]}
-        onPress={() => router.back()}
+        onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/discover'))}
         activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel="Back to flights"
+        testID="flight-detail-back"
       >
         <Text style={[styles.backChevron, { color: colors.textOnSurface }]}>‹</Text>
       </TouchableOpacity>

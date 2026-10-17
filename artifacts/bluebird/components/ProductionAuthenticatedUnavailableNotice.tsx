@@ -3,7 +3,7 @@ import { TripAvailabilityState } from '@/components/TripAvailabilityState';
 import { PRODUCTION_AUTH_UNAVAILABLE_MESSAGE } from '@/lib/productionAuthState';
 
 export function ProductionAuthenticatedUnavailableNotice({
-  title = 'Production account data unavailable',
+  title = 'Account information unavailable',
   description,
   testID = 'production-auth-unavailable',
   actionLabel,

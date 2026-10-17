@@ -17,8 +17,8 @@ export default function BoardingPassScreen() {
       title="Boarding pass unavailable"
       description={
         tripId
-          ? 'No authenticated boarding-pass contract is connected. This preview does not generate a QR code or pass, and Apple Wallet is unavailable.'
-          : 'This trip reference is invalid. No boarding pass, QR code, or Apple Wallet pass can be opened.'
+          ? 'Boarding passes are unavailable right now. No pass or QR code has been created, and Apple Wallet is unavailable.'
+          : 'We couldn’t find this trip. Go back to My Trips and try again.'
       }
       actionLabel={tripId ? 'Back to Trip Details' : 'Back to My Trips'}
       onAction={tripId ? backToTrip : backToTrips}

@@ -27,9 +27,9 @@ export default function MembershipRequiredScreen() {
         </View>
       ) : plansQuery.isError || !plansQuery.data ? (
         <View style={styles.loadingState}>
-          <Text style={[styles.errorText, { color: colors.textOnSurface }]}>Could not load production plans.</Text>
+          <Text style={[styles.errorText, { color: colors.textOnSurface }]}>Plan information unavailable.</Text>
           <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
-            Plan details are unavailable. Demo pricing is not shown.
+            We couldn’t load plan details. Please try again.
           </Text>
           <TouchableOpacity
             style={[styles.retryBtn, { backgroundColor: colors.primary }]}

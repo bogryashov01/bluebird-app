@@ -50,12 +50,5 @@ export function getProductionQueueVerificationBlockers(): string[] {
 }
 
 export function getProductionQueueReadOnlyMessage(): string {
-  const blockers = getProductionQueueVerificationBlockers();
-  return [
-    'Queue reads and actions remain disabled.',
-    ' The supplied Main-source audit verifies the per-flight route definitions, Clerk Bearer handling, and Clerk-user-to-member mapping; Mobile source verifies its prepared parsers and fail-closed integration, not live compatibility.',
-    ' Remaining runtime gates:',
-    ...blockers.map((blocker) => ` ${blocker}.`),
-    ' The separate checked-in legacy API uses app-JWT /api/queue/* routes; it is neither evidence for nor a fallback to the Main API.',
-  ].join('');
+  return 'Queue is temporarily unavailable. Please try again later.';
 }

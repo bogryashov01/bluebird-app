@@ -221,7 +221,7 @@ export default function TripsScreen() {
         </View>
         <TripAvailabilityState
           title="Trips unavailable"
-          description={`${PRODUCTION_AUTH_UNAVAILABLE_MESSAGE} No member trip or queue data is loaded here.`}
+          description={`${PRODUCTION_AUTH_UNAVAILABLE_MESSAGE} Please try again later.`}
           testID="production-trips-unavailable"
         />
       </View>

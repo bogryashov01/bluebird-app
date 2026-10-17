@@ -154,9 +154,9 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
       <Text style={[styles.subGreeting, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
         {allCount > 0
           ? productionReadOnly
-            ? `${allCount} published flight${allCount === 1 ? '' : 's'}`
+            ? `${allCount} available flight${allCount === 1 ? '' : 's'}`
             : `${allCount} empty legs available`
-          : productionReadOnly ? 'Browse published empty legs' : 'Browse available empty legs'}
+          : productionReadOnly ? 'Browse available flights' : 'Browse available empty legs'}
       </Text>
 
       {/* Featured empty leg — hidden when it doesn't match an active search */}

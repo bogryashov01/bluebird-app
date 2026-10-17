@@ -140,7 +140,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
   const pending = busyAction !== null;
-  const title = isSignIn ? 'Sign in with Clerk' : 'Create a Clerk account';
+  const title = isSignIn ? 'Sign in to Bluebird' : 'Create your Bluebird account';
 
   return (
     <View
@@ -170,7 +170,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
           <Text style={[styles.title, { color: colors.textOnBrand }]}>{title}</Text>
           <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>
             {isSignIn
-              ? 'Use your phone and SMS code to open your Clerk session.'
+              ? 'Enter your phone number to receive a sign-in code.'
               : 'Create an account with your phone. Bluebird member access is confirmed separately after sign-in.'}
           </Text>
 
@@ -178,7 +178,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
             <View style={styles.stateBox} accessibilityLiveRegion="polite" testID="clerk-auth-loading">
               <ActivityIndicator color={colors.primary} />
               <Text style={[styles.stateText, { color: colors.mutedOnBrand }]}>
-                Connecting to Clerk…
+                Preparing sign-in…
               </Text>
             </View>
           )}
@@ -326,14 +326,14 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
                 onPress={() =>
                   navigateToClerkSignedIn(() => {
                     setErrorStage('navigation');
-                    setError('Your Clerk session is active, but the signed-in screen could not be opened.');
+                    setError('Your sign-in is complete, but we couldn’t open your account. Try again.');
                   })
                 }
                 style={styles.secondaryAction}
                 testID="clerk-retry-navigation"
               >
                 <Text style={[styles.linkText, { color: colors.paleBlue }]}>
-                  Retry opening the signed-in screen
+                  Try again
                 </Text>
               </Pressable>
             </View>
@@ -342,7 +342,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
 
         <View style={styles.links}>
           <Text style={[styles.footerText, { color: colors.mutedOnBrand }]}>
-            {isSignIn ? 'Need a Clerk account?' : 'Already have a Clerk account?'}
+            {isSignIn ? 'New to Bluebird?' : 'Already have a Bluebird account?'}
           </Text>
           <Pressable
             accessibilityRole="link"

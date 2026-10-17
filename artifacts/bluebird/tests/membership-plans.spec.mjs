@@ -232,8 +232,8 @@ test("plan loading errors show no demo pricing and retry the public request", as
   });
 
   await page.goto("/membership/plans");
-  await expect(page.getByText("Could not load production plans", { exact: true })).toBeVisible();
-  await expect(page.getByText("Plan details are unavailable. Demo pricing is not shown.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Plan information unavailable", { exact: true })).toBeVisible();
+  await expect(page.getByText("We couldn’t load plan details. Please try again.", { exact: true })).toBeVisible();
   await expect(page.getByText("Base demo fallback", { exact: true })).toHaveCount(0);
   await page.getByText("Try Again", { exact: true }).click();
   await expect(page.getByText("$3,995 / year", { exact: true })).toBeVisible();

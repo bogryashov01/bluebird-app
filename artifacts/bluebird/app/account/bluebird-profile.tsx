@@ -153,7 +153,11 @@ export default function BluebirdProfileScreen() {
         bottomOffset={24}
         showsVerticalScrollIndicator={false}
       >
-        <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backLink}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/profile'))}
+          style={styles.backLink}
+        >
           <Text style={[styles.linkText, { color: colors.primary }]}>‹ Account</Text>
         </Pressable>
 

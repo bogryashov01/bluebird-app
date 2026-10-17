@@ -306,7 +306,7 @@ export default function PassengerListScreen() {
     return (
       <TripAvailabilityState
         title="Passenger information unavailable"
-        description="This trip reference is invalid. No manifest or passenger data was requested."
+        description="We couldn’t find this trip. Go back to My Trips and try again."
         actionLabel="Back to My Trips"
         onAction={() => router.dismissTo('/(tabs)/trips')}
       />
@@ -316,7 +316,7 @@ export default function PassengerListScreen() {
     return (
       <TripAvailabilityState
         title="Passenger information unavailable"
-        description={`${PRODUCTION_AUTH_UNAVAILABLE_MESSAGE} The checked-in contract only supports passenger and pet data on an owned confirmed trip manifest, not a per-empty-leg endpoint. This preview does not load, save, or submit those details.`}
+        description={`${PRODUCTION_AUTH_UNAVAILABLE_MESSAGE} Passenger and pet details have not been loaded, saved, or submitted.`}
         actionLabel="Back to Trip Details"
         onAction={() => router.replace(`/trip/${tripId}` as any)}
         testID="production-passenger-information-unavailable"

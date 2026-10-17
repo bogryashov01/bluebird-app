@@ -76,15 +76,15 @@ function notificationModeLabel(mode: ProductionNotificationPrefs['mode']): strin
 
 function notificationReadError(error: unknown): string {
   if (error instanceof ProductionAuthHttpError && error.status === 401) {
-    return 'Your Main API session was rejected (HTTP 401). Sign in again before retrying.';
+    return 'Your sign-in may have expired. Sign in again, then try once more.';
   }
   if (error instanceof ProductionAuthHttpError && error.status === 403) {
-    return 'The Main API denied access to notification preferences (HTTP 403).';
+    return 'Notification preferences are unavailable for this account right now.';
   }
   if (error instanceof ProductionAuthHttpError) {
-    return `The Main API could not load notification preferences (HTTP ${error.status}).`;
+    return 'Could not load notification preferences. Please try again.';
   }
-  return 'Notification preferences could not be loaded. Check the selected Main API and Clerk configuration, then try again.';
+  return 'Could not load notification preferences. Check your connection and try again.';
 }
 
 function ClerkNotificationSettings() {
@@ -198,7 +198,7 @@ function ClerkNotificationSettings() {
       ]}>
         <TouchableOpacity
           style={[styles.backBtn, { backgroundColor: colors.muted }]}
-          onPress={() => router.back()}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/profile'))}
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel="Back"
@@ -216,7 +216,7 @@ function ClerkNotificationSettings() {
         {!prefs ? (
           <View style={[styles.preferenceNotice, { backgroundColor: colors.surface }]}>
             <Text style={[styles.noticeBody, { color: colors.textOnSurface }]}>
-              Loading them may also synchronize your verified phone number with your profile. Editing is available only when a safe complete profile update can be formed.
+              Loading saved preferences may also update the phone number on your profile if it has already been verified.
             </Text>
             {preferencesQuery.isError && (
               <Text style={[styles.noticeError, { color: colors.destructive }]} testID="clerk-notification-preferences-error">
@@ -242,7 +242,7 @@ function ClerkNotificationSettings() {
               </TouchableOpacity>
             ) : (
               <Text style={[styles.noticeError, { color: colors.mutedForegroundLight }]}>
-                A complete authenticated profile and matching Main API configuration are required to load preferences.
+                Notification preferences are unavailable right now. Please try again later.
               </Text>
             )}
           </View>
@@ -285,12 +285,12 @@ function ClerkNotificationSettings() {
           <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>NOTIFICATION HISTORY</Text>
           <SettingsGroup rows={[{
             label: 'Recent notifications',
-            hint: 'Unavailable: no Clerk-authenticated history read is verified.',
+            hint: 'Unavailable right now',
           }]} />
           <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>PUSH DELIVERY</Text>
           <SettingsGroup rows={[{
             label: 'Push notification settings',
-            hint: 'Unavailable: notificationPrefs does not define push-delivery settings.',
+            hint: 'Unavailable right now',
           }]} />
         </View>
       </ScrollView>

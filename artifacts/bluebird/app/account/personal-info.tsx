@@ -769,7 +769,7 @@ export default function PersonalInfoScreen() {
   if (!localDemoFlow) {
     return (
       <ProductionAuthenticatedUnavailableNotice
-        title="Profile unavailable in production preview"
+        title="Profile unavailable"
         testID="production-personal-info-unavailable"
       />
     );

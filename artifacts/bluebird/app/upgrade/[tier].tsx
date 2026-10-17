@@ -30,9 +30,9 @@ export default function UpgradeScreen() {
   if (plansQuery.isError || !plansQuery.data) {
     return (
       <View style={[styles.centered, styles.errorState, { backgroundColor: colors.offWhite }]}>
-        <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>Could not load production plans</Text>
+        <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>Plan information unavailable</Text>
         <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
-          Plan details are unavailable. Demo pricing is not shown.
+          We couldn’t load plan details. Please try again.
         </Text>
         <TouchableOpacity
           style={[styles.retryBtn, { backgroundColor: colors.primary }]}

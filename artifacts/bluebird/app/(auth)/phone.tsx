@@ -81,7 +81,12 @@ export default function PhoneScreen() {
         bottomOffset={24}
         keyboardShouldPersistTaps="handled"
       >
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/welcome'))}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
           <Feather name="arrow-left" size={20} color={colors.mutedOnBrand} />
         </TouchableOpacity>
 

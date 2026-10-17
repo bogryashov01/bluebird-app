@@ -24,14 +24,9 @@ test("Main-source audit facts are distinguished from unresolved runtime gates", 
   ]);
 });
 
-test("read-only explanation acknowledges Main source evidence and rules out legacy app-JWT fallback", () => {
+test("read-only explanation uses concise member-facing copy", () => {
   const message = getProductionQueueReadOnlyMessage();
-  assert.match(message, /supplied Main-source audit verifies the per-flight route definitions, Clerk Bearer handling, and Clerk-user-to-member mapping/);
-  assert.match(message, /Mobile source verifies its prepared parsers and fail-closed integration, not live compatibility/);
-  for (const blocker of getProductionQueueVerificationBlockers()) {
-    assert.ok(message.includes(blocker), `missing blocker: ${blocker}`);
-  }
-  assert.match(message, /separate checked-in legacy API uses app-JWT \/api\/queue\/\* routes/);
-  assert.match(message, /neither evidence for nor a fallback to the Main API/);
+  assert.equal(message, "Queue is temporarily unavailable. Please try again later.");
+  assert.doesNotMatch(message, /Main API|Clerk|JWT|contract|verification/i);
   assert.doesNotMatch(message, /per-flight queue endpoints (?:are )?absent|Main source (?:lacks|does not contain)/i);
 });

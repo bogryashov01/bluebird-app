@@ -185,17 +185,10 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   await firstCard.click();
   await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
   const queueBlockers = page.getByTestId("production-queue-read-only-message");
-  await expect(queueBlockers).toContainText("supplied Main-source audit verifies the per-flight route definitions");
-  await expect(queueBlockers).toContainText("Clerk Bearer handling, and Clerk-user-to-member mapping");
-  await expect(queueBlockers).toContainText("Mobile source verifies its prepared parsers and fail-closed integration, not live compatibility");
-  await expect(queueBlockers).toContainText("deployment of the Main service covered by the source audit is unverified");
-  await expect(queueBlockers).toContainText("exact deployed request/response compatibility with the Mobile client is unverified");
-  await expect(queueBlockers).toContainText("selected Main API and Clerk issuer pairing");
-  await expect(queueBlockers).toContainText("live server acceptance and validation of Clerk Bearer tokens is unverified");
-  await expect(queueBlockers).toContainText("runtime resolution of the Clerk user to the intended Bluebird member is unverified");
-  await expect(queueBlockers).toContainText("trusted source of an existing Skip the Line credit balance");
-  await expect(queueBlockers).not.toContainText("per-flight queue endpoints are absent");
-  await expect(page.getByText("Flight queue", { exact: true })).toHaveCount(0);
+  await expect(queueBlockers).toHaveText("Queue is temporarily unavailable. Please try again later.");
+  await expect(queueBlockers).not.toContainText(/Main API|Clerk|JWT|contract|verification/i);
+  await expect(page.getByTestId("flight-info-queue-count")).toHaveCount(0);
+  await expect(page.getByTestId("flight-info-status")).toHaveText("Available");
   expect(new URL(page.url()).pathname).toMatch(new RegExp(`/flight/${flightId}$`));
   await page.goBack();
   await expect(page.locator(`[data-testid="production-flight-card-${flightId}"]`)).toBeVisible();
@@ -212,15 +205,21 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
 
   await page.getByTestId("production-queue-read-only-cta").click();
   await expect(page.getByTestId("production-read-only-notice")).toBeVisible();
-  await expect(page.getByTestId("production-flight-id")).toHaveText(`Production flight ID: ${flightId}`);
-  await expect(page.getByTestId("production-read-only-notice")).toContainText("supplied Main-source audit verifies the per-flight route definitions");
-  await expect(page.getByTestId("production-read-only-notice")).toContainText("legacy API uses app-JWT /api/queue/* routes");
-  await expect(page.getByTestId("production-read-only-notice")).toContainText("neither evidence for nor a fallback to the Main API");
+  await expect(page.getByTestId("production-read-only-notice")).toContainText("Queue is temporarily unavailable. Please try again later.");
+  await expect(page.getByTestId("production-read-only-notice")).not.toContainText(/Main API|Clerk|JWT|contract|verification/i);
+  await expect(page.getByTestId("production-flight-id")).toHaveCount(0);
 
   await page.goto(appUrl(baseURL, `flight/${flightId}`));
   await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
   await page.reload();
   await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
+  const directPage = await page.context().newPage();
+  await installSyntheticLocalShellSession(directPage);
+  await directPage.goto(appUrl(baseURL, `flight/${flightId}`));
+  await expect(directPage.getByTestId("flight-detail-back")).toBeVisible();
+  await directPage.getByTestId("flight-detail-back").click();
+  await expect(directPage.getByPlaceholder("Search routes, airports, aircraft")).toBeVisible();
+  await directPage.close();
   await page.goto(appUrl(baseURL, "flight/not-a-number"));
   await expect(page.getByText("Flight unavailable", { exact: true })).toBeVisible();
 
@@ -283,6 +282,23 @@ test("production plans and Airport Search remain public read-only flows", async 
   expect(blockedRequests).toEqual([]);
 });
 
+test("production membership management stays unavailable without exposing setup details", async ({ page, baseURL }) => {
+  const membershipRequests = [];
+  await installSyntheticLocalShellSession(page);
+  page.on("request", (request) => {
+    if (/\/api\/membership(?:\/|$)/.test(new URL(request.url()).pathname)) {
+      membershipRequests.push(`${request.method()} ${request.url()}`);
+    }
+  });
+
+  await page.goto(appUrl(baseURL, "membership/manage"));
+  const notice = page.getByTestId("production-membership-management-unavailable");
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("We can’t manage your membership right now. Please try again later. No changes were made.");
+  await expect(notice).not.toContainText(/Main API|Clerk|JWT|contract|token provider|preview/i);
+  expect(membershipRequests).toEqual([]);
+});
+
 test("production My Trips, Trip Details, manifest and boarding pass stay unavailable without member-trip requests", async ({ page, baseURL }) => {
   const memberTripRequests = [];
   await installSyntheticLocalShellSession(page);
@@ -295,8 +311,8 @@ test("production My Trips, Trip Details, manifest and boarding pass stay unavail
 
   await page.goto(appUrl(baseURL, "trips"));
   await expect(page.getByTestId("production-trips-unavailable")).toBeVisible();
-  await expect(page.getByTestId("production-trips-unavailable-title")).toHaveText("Sign in to view your trips");
-  await expect(page.getByTestId("production-trips-unavailable")).toContainText(/authenticated production data is unavailable/i);
+  await expect(page.getByTestId("production-trips-unavailable-title")).toHaveText("Trips unavailable");
+  await expect(page.getByTestId("production-trips-unavailable")).not.toContainText(/Main API|Clerk|JWT|contract|verification/i);
 
   await page.goto(appUrl(baseURL, "trip/21623"));
   await expect(page.getByTestId("production-trip-details-unavailable")).toBeVisible();
@@ -308,21 +324,21 @@ test("production My Trips, Trip Details, manifest and boarding pass stay unavail
 
   await page.goto(appUrl(baseURL, "trip/%40%40%40"));
   await expect(page.getByTestId("trip-availability-state-title")).toHaveText("Trip details unavailable");
-  await expect(page.getByTestId("trip-availability-state-description")).toContainText("reference is invalid");
+  await expect(page.getByTestId("trip-availability-state-description")).toContainText("We couldn’t find this trip.");
 
   await page.goto(appUrl(baseURL, "trip/21623/passengers"));
   await expect(page.getByTestId("production-passenger-information-unavailable")).toBeVisible();
-  await expect(page.getByTestId("production-passenger-information-unavailable")).toContainText("does not load, save, or submit those details");
+  await expect(page.getByTestId("production-passenger-information-unavailable")).toContainText("have not been loaded, saved, or submitted");
   await expect(page.getByTestId("production-passenger-information-unavailable")).not.toContainText(/TRAVELER|Primary traveler|Weight ·|Crate ·/i);
 
   await page.goto(appUrl(baseURL, "trip/21623/boarding-pass"));
   await expect(page.getByTestId("boarding-pass-unavailable")).toContainText("Boarding pass unavailable");
-  await expect(page.getByTestId("boarding-pass-unavailable")).toContainText("does not generate a QR code or pass");
+  await expect(page.getByTestId("boarding-pass-unavailable")).toContainText("No pass or QR code has been created");
   await expect(page.getByTestId("boarding-pass-unavailable")).toContainText("Apple Wallet is unavailable");
 
   await page.goto(appUrl(baseURL, "trip/%40%40%40/passengers"));
   await expect(page.getByTestId("trip-availability-state-title")).toHaveText("Passenger information unavailable");
-  await expect(page.getByTestId("trip-availability-state-description")).toContainText("reference is invalid");
+  await expect(page.getByTestId("trip-availability-state-description")).toContainText("We couldn’t find this trip.");
   expect(memberTripRequests).toEqual([]);
 });
 
@@ -352,6 +368,7 @@ test("production profile, membership and saved-passenger screens never fall back
   await expect(page.getByTestId("production-saved-passengers-unavailable")).toBeVisible();
   await page.goto(appUrl(baseURL, "membership"));
   await expect(page.getByTestId("production-membership-unavailable")).toBeVisible();
+  await expect(page.getByTestId("production-membership-unavailable")).not.toContainText(/Main API|Clerk|JWT|contract|verification/i);
   await page.getByTestId("production-membership-unavailable-action").click();
   await expect(page).toHaveURL(/\/membership\/plans$/);
   await expect(page.getByText("Plan features", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
