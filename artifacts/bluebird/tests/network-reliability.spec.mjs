@@ -73,6 +73,7 @@ const flights = [
     aircraftType: "Citation Latitude",
     aircraftTypeName: "Citation Latitude",
     aircraftTypeCode: "LATITUDE",
+    totalPrice: 12500,
     queueCount: 4,
     isInternational: false,
   },
@@ -496,6 +497,107 @@ test("Discover opens the correct SAT and HEF flights from both ends of each card
 
   expect(pageErrors).toEqual([]);
   expect(flightDetailRequests).toEqual([]);
+});
+
+test("Discover keeps one real featured flight through search and opens that flight's details", async ({ page }) => {
+  const mutationRequests = [];
+  await page.on("request", (request) => {
+    if (request.method() !== "GET") {
+      mutationRequests.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    }
+  });
+  await setupPreview(page, async (route, url) => {
+    if (url.pathname === "/api/empty-legs") return json(route, 200, flights);
+    return json(route, 503, { error: "Unexpected intercepted production request." });
+  });
+
+  await page.goto("/discover");
+  const featured = page.locator('[data-testid^="discover-featured-card-"]');
+  await expect(featured).toHaveCount(1);
+  const featuredTestId = await featured.getAttribute("data-testid");
+  const featuredId = featuredTestId?.replace("discover-featured-card-", "");
+  expect(["81001", "81002", "81003", "81004"]).toContain(featuredId);
+  await expect(page.getByTestId("discover-featured-date")).toBeVisible();
+  await expect(featured).toContainText({
+    "81001": "DAL → SFO",
+    "81002": "MIA → JFK",
+    "81003": "SAT → CXO",
+    "81004": "HEF → HUF",
+  }[featuredId]);
+  await expect(page.getByTestId("discover-featured-image")).toHaveCount(0);
+  if (featuredId === "81001") {
+    await expect(page.getByTestId("discover-featured-details")).toContainText("Citation Latitude");
+    await expect(page.getByTestId("discover-featured-details")).toContainText("$12,500 total");
+  } else if (featuredId === "81002") {
+    await expect(page.getByTestId("discover-featured-details")).toHaveCount(0);
+  } else {
+    await expect(page.getByTestId("discover-featured-details")).toContainText("Citation Latitude");
+    await expect(page.getByTestId("discover-featured-details")).not.toContainText("$");
+  }
+
+  const search = page.getByPlaceholder("Search routes, airports, aircraft");
+  await search.fill("no matching route");
+  await expect(page.getByText("No flights match", { exact: true })).toBeVisible();
+  await expect(featured).toHaveCount(1);
+  await expect(featured).toHaveAttribute("data-testid", featuredTestId);
+  await page.getByTestId("discover-filter-short").click();
+  await expect(featured).toHaveCount(1);
+  await expect(featured).toHaveAttribute("data-testid", featuredTestId);
+  await featured.click();
+  await expect(page).toHaveURL(new RegExp(`/flight/${featuredId}$`));
+  const routes = {
+    "81001": "DAL → SFO",
+    "81002": "MIA → JFK",
+    "81003": "SAT → CXO",
+    "81004": "HEF → HUF",
+  };
+  await expect(page.getByTestId("flight-detail-route")).toHaveText(routes[featuredId]);
+  expect(mutationRequests).toEqual([]);
+});
+
+test("Discover hides the featured card when there are no eligible flights", async ({ page }) => {
+  await setupPreview(page, async (route, url) => {
+    if (url.pathname === "/api/empty-legs") return json(route, 200, []);
+    return json(route, 503, { error: "Unexpected intercepted production request." });
+  });
+
+  await page.goto("/discover");
+  await expect(page.getByText("No flights match", { exact: true })).toBeVisible();
+  await expect(page.locator('[data-testid^="discover-featured-card-"]')).toHaveCount(0);
+});
+
+test("Discover greeting refreshes when the route regains focus and the app resumes", async ({ page }) => {
+  await page.clock.install({ time: new Date(2026, 10, 1, 4, 59).getTime() });
+  await setupPreview(page, async (route, url) => {
+    if (url.pathname === "/api/empty-legs") return json(route, 200, flights);
+    return json(route, 503, { error: "Unexpected intercepted production request." });
+  });
+
+  await page.goto("/discover");
+  const greeting = page.getByTestId("discover-greeting");
+  await expect(greeting).toHaveText("Good night, Reliability");
+  await page.locator('[data-testid^="discover-featured-card-"]').click();
+  await expect(page).toHaveURL(/\/flight\/\d+$/);
+  await page.clock.setFixedTime(new Date(2026, 10, 1, 12, 0).getTime());
+  await page.goBack();
+  await expect(greeting).toHaveText("Good afternoon, Reliability");
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "hidden",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.clock.setFixedTime(new Date(2026, 10, 1, 17, 0).getTime());
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "visible",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(greeting).toHaveText("Good evening, Reliability");
 });
 
 test("Discover filters only supported flight fields and stays within common phone widths", async ({ page }, testInfo) => {
