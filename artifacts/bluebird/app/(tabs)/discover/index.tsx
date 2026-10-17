@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert,
-  RefreshControl, ActivityIndicator, Platform, Image, ImageBackground,
+  RefreshControl, ActivityIndicator, Platform, Image, ScrollView,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useColors } from '@/hooks/useColors';
 import {
+  getGetQueueStatusQueryKey, getListFlightsQueryKey, getListTripsQueryKey,
   useListFlights, useGetQueueStatus, useListTrips,
   type QueueEntry, type Trip,
 } from '@workspace/api-client-react';
@@ -36,7 +38,6 @@ const AIRCRAFT_IMAGES: { match: RegExp; source: any }[] = [
   { match: /phenom|xls|latitude/i, source: require('@/assets/images/aircraft-midsize.jpg') },
 ];
 const LIGHT_JET = require('@/assets/images/aircraft-light.jpg');
-const HERO = require('@/assets/images/hero-aircraft.jpg');
 
 function aircraftImage(type: string | null) {
   return AIRCRAFT_IMAGES.find((a) => a.match.test(type ?? ''))?.source ?? LIGHT_JET;
@@ -81,6 +82,34 @@ function airportLabel(code: string | null, city: string | null): string {
   return code || city || '—';
 }
 
+type FlightFilter = 'all' | 'week' | 'short';
+
+function validDepartureDate(value: string | null): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+    ? date
+    : null;
+}
+
+function durationInMinutes(value: string | null): number | null {
+  if (!value) return null;
+  const match = value.trim().match(/^(?:(\d+(?:\.\d+)?)\s*h)?(?:\s*(\d+)\s*m)?$/i);
+  if (!match || (!match[1] && !match[2])) return null;
+  return Math.round(Number(match[1] ?? 0) * 60 + Number(match[2] ?? 0));
+}
+
+function isThisWeek(date: Date): boolean {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const weekday = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - weekday);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+  return date >= start && date < end;
+}
+
 function openFlightDetails(flight: FlightView): void {
   const id = typeof flight.id === 'string' ? flight.id.trim() : '';
   if (!id || (flight.source === 'production' && parseProductionFlightId(id) === null)) {
@@ -113,6 +142,9 @@ interface HeaderProps {
   mapLoading: boolean;
   mapError: boolean;
   onMapRetry: () => void;
+  filter: FlightFilter;
+  filters: FlightFilter[];
+  onFilterChange: (filter: FlightFilter) => void;
   showEmpty: boolean;
   hasActiveQuery: boolean;
   onClearSearchFromEmpty: () => void;
@@ -126,12 +158,20 @@ interface HeaderProps {
 const DiscoverHeader = React.memo(function DiscoverHeader({
   colors, topPad, userName, allCount, productionReadOnly, featured, search, onSearchChange, onClearSearch,
   view, onViewChange, mapFlights, mapAirports, mapLoading, mapError, onMapRetry,
-  showEmpty, hasActiveQuery, onClearSearchFromEmpty,
+  filter, filters, onFilterChange, showEmpty, hasActiveQuery, onClearSearchFromEmpty,
 }: HeaderProps) {
+  const featuredImage = featured
+    ? getFlightImagePresentation(featured) === 'provided'
+      ? { uri: featured.imageUrl! }
+      : getFlightImagePresentation(featured) === 'local-fallback'
+        ? aircraftImage(featured.aircraftType)
+        : null
+    : null;
+
   return (
     <View>
       {/* Logo + concierge */}
-      <View style={[styles.topBar, { paddingTop: topPad + 24 }]}>
+      <View style={[styles.topBar, { paddingTop: topPad }]}>
         <View style={styles.logoRow}>
           <Image
             source={require('@/assets/images/bluebird-bird-mark.png')}
@@ -165,23 +205,35 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
           style={styles.featuredWrap}
           activeOpacity={0.85}
           onPress={() => openFlightDetails(featured)}
+          accessibilityRole="button"
+          accessibilityLabel={`Featured flight from ${airportLabel(featured.fromCity, featured.fromAirport)} to ${airportLabel(featured.toCity, featured.toAirport)}`}
         >
-          <ImageBackground source={HERO} style={styles.featuredImage} imageStyle={{ borderRadius: 24 }}>
-            <View style={styles.featuredOverlay} />
+          <View style={[styles.featuredImage, { backgroundColor: colors.backgroundMid }]}>
+            {featuredImage && (
+              <Image
+                source={featuredImage}
+                style={[StyleSheet.absoluteFill, styles.featuredImageShape]}
+                resizeMode="cover"
+              />
+            )}
+            <LinearGradient
+              colors={[colors.discoverHeroOverlayTop, colors.discoverHeroOverlayBottom]}
+              style={styles.featuredOverlay}
+            />
             <View style={[styles.featuredBadge, { backgroundColor: colors.primary }]}>
               <Text style={[styles.featuredBadgeText, { color: colors.primaryForeground, fontFamily: 'Inter_700Bold' }]}>
                 FEATURED EMPTY LEG
               </Text>
             </View>
             <View style={styles.featuredBottom}>
-              <Text style={[styles.featuredRoute, { color: '#FFFFFF', fontFamily: 'Inter_700Bold' }]}>
-              {airportLabel(featured.fromCity, featured.fromAirport)} → {airportLabel(featured.toCity, featured.toAirport)}
+              <Text style={[styles.featuredRoute, { color: colors.textOnBrand, fontFamily: 'Inter_700Bold' }]}>
+                {airportLabel(featured.fromCity, featured.fromAirport)} → {airportLabel(featured.toCity, featured.toAirport)}
               </Text>
-              <Text style={[styles.featuredMeta, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_400Regular' }]}>
-              {featured.aircraftType ?? 'Aircraft details unavailable'} · {formatDateTime(featured)}
+              <Text style={[styles.featuredMeta, { color: colors.mutedOnBrand, fontFamily: 'Inter_400Regular' }]}>
+                {[featured.aircraftType, formatDateTime(featured)].filter(Boolean).join(' · ')}
               </Text>
             </View>
-          </ImageBackground>
+          </View>
         </TouchableOpacity>
       )}
 
@@ -210,11 +262,45 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
         )}
       </View>
 
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+        accessibilityLabel="Flight filters"
+      >
+        {filters.map((item) => {
+          const label = item === 'all' ? 'All' : item === 'week' ? 'This Week' : 'Under 4 hrs';
+          const selected = filter === item;
+          return (
+            <TouchableOpacity
+              key={item}
+              testID={`discover-filter-${item}`}
+              style={[
+                styles.filterChip,
+                { borderColor: colors.border },
+                selected && { backgroundColor: colors.primary, borderColor: colors.primary },
+              ]}
+              onPress={() => onFilterChange(item)}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`Filter flights: ${label}`}
+            >
+              <Text style={[
+                styles.filterText,
+                { color: selected ? colors.primaryForeground : colors.mutedForeground, fontFamily: 'Inter_500Medium' },
+              ]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
       {/* List / Map toggle */}
       <View style={styles.toggleRow}>
         <TouchableOpacity
           style={[styles.toggleBtn, view === 'list' && { backgroundColor: colors.card }]}
           onPress={() => onViewChange('list')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: view === 'list' }}
         >
           <Text style={[
             styles.toggleText,
@@ -225,6 +311,8 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
         <TouchableOpacity
           style={[styles.toggleBtn, view === 'map' && { backgroundColor: colors.card }]}
           onPress={() => onViewChange('map')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: view === 'map' }}
         >
           <Text style={[
             styles.toggleText,
@@ -264,10 +352,10 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
             <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
               No flights match your search
             </Text>
-            {hasActiveQuery && (
+            {(hasActiveQuery || filter !== 'all') && (
               <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={onClearSearchFromEmpty}>
                 <Text style={[styles.retryText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
-                  Clear search
+                  {filter !== 'all' ? 'Reset filters' : 'Clear search'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -281,10 +369,10 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
           <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
             No flights match
           </Text>
-          {hasActiveQuery && (
+          {(hasActiveQuery || filter !== 'all') && (
             <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={onClearSearchFromEmpty}>
               <Text style={[styles.retryText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
-                Clear search
+                {filter !== 'all' ? 'Reset filters' : 'Clear search'}
               </Text>
             </TouchableOpacity>
           )}
@@ -295,11 +383,21 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
 });
 
 export default function DiscoverScreen() {
-  const colors = useColors();
+  const activeColors = useColors();
+  const colors = {
+    ...activeColors,
+    background: activeColors.discoverBackground,
+    card: activeColors.discoverCard,
+    muted: activeColors.discoverMuted,
+    foreground: activeColors.discoverForeground,
+    mutedForeground: activeColors.discoverMutedForeground,
+    border: activeColors.discoverBorder,
+  };
   const insets = useSafeAreaInsets();
   const { user, isLoading: authLoading, authMode } = useAuth();
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
+  const [filter, setFilter] = useState<FlightFilter>('all');
 
   const localReadMode = shouldUseLocalFlightReadMode(authMode, isLocalFlightReadMode());
   const memberQueryEnabled = isLegacyMemberQueryEnabled({
@@ -307,7 +405,9 @@ export default function DiscoverScreen() {
     localDemoFlow: localReadMode,
     hasLegacyUser: !!user,
   });
-  const localFlightsQuery = useListFlights({}, { query: { enabled: localReadMode } });
+  const localFlightsQuery = useListFlights({}, {
+    query: { enabled: localReadMode, queryKey: getListFlightsQueryKey({}) },
+  });
   const productionFlightsQuery = useQuery({
     queryKey: PRODUCTION_FLIGHTS_QUERY_KEY,
     queryFn: ({ signal }) => fetchProductionFlights({ signal }),
@@ -326,10 +426,10 @@ export default function DiscoverScreen() {
   // Personalized data: flights the member is already queued for or booked on
   // are hidden from Discover. Signed-out users see the full list.
   const { data: queueEntries, isLoading: queueLoading } = useGetQueueStatus({
-    query: { enabled: memberQueryEnabled },
+    query: { enabled: memberQueryEnabled, queryKey: getGetQueueStatusQueryKey() },
   });
   const { data: trips, isLoading: tripsLoading } = useListTrips({
-    query: { enabled: memberQueryEnabled },
+    query: { enabled: memberQueryEnabled, queryKey: getListTripsQueryKey() },
   });
 
   // Avoid flashing soon-to-be-hidden flights: stay in the loading state while
@@ -350,7 +450,7 @@ export default function DiscoverScreen() {
     return ids;
   }, [user, queueEntries, trips]);
 
-  const topPad = Platform.OS === 'web' ? 40 : insets.top;
+  const topPad = Platform.OS === 'web' ? 64 : insets.top + 5;
 
   // Keep the status contract source-specific. The production API's published
   // status is a discoverability signal, not proof of queue eligibility.
@@ -363,21 +463,41 @@ export default function DiscoverScreen() {
   const featured = all.find((f) => f.featured);
   const q = search.trim().toLowerCase();
 
-  // Featured card steps aside when it doesn't match an active search
-  const showFeatured = featured && (!q || matchesQuery(featured, q));
+  const filters: FlightFilter[] = [
+    'all',
+    ...(all.some((flight) => validDepartureDate(flight.departureDate)) ? ['week' as const] : []),
+    ...(all.some((flight) => durationInMinutes(flight.duration) !== null) ? ['short' as const] : []),
+  ];
+  const selectedFilter: FlightFilter = filters.includes(filter) ? filter : 'all';
+
+  const matchesFilter = React.useCallback((flight: FlightView) => {
+    if (selectedFilter === 'week') {
+      const date = validDepartureDate(flight.departureDate);
+      return !!date && isThisWeek(date);
+    }
+    if (selectedFilter === 'short') {
+      const minutes = durationInMinutes(flight.duration);
+      return minutes !== null && minutes < 240;
+    }
+    return true;
+  }, [selectedFilter]);
+
+  const showFeatured = featured && (!q || matchesQuery(featured, q)) && matchesFilter(featured);
 
   const filteredFlights = React.useMemo(() => {
-    let list = all.filter((f) => f.id !== featured?.id);
+    let list = all.filter((f) => !showFeatured || f.id !== featured?.id);
     if (q) list = list.filter((f) => matchesQuery(f, q));
+    list = list.filter(matchesFilter);
     return list;
-  }, [all, featured?.id, q]);
+  }, [all, featured?.id, q, showFeatured, matchesFilter]);
 
-  // Map view respects search too (featured included when it matches)
+  // Map view respects the same search and supported flight filters.
   const mapFlights = React.useMemo(() => {
     let list = all;
     if (q) list = list.filter((f) => matchesQuery(f, q));
+    list = list.filter(matchesFilter);
     return list;
-  }, [all, q]);
+  }, [all, q, matchesFilter]);
 
   const airportCodes = React.useMemo(() => getFlightAirportCodes(mapFlights), [mapFlights]);
   const airportQuery = useQuery({
@@ -389,6 +509,10 @@ export default function DiscoverScreen() {
   });
 
   const onClearSearch = React.useCallback(() => setSearch(''), []);
+  const onResetResults = React.useCallback(() => {
+    setSearch('');
+    setFilter('all');
+  }, []);
   const onRefresh = React.useCallback(async () => {
     const refreshes: Promise<unknown>[] = [refetchFlights()];
     if (view === 'map' && airportCodes.length > 0) refreshes.push(airportQuery.refetch());
@@ -402,6 +526,7 @@ export default function DiscoverScreen() {
       activeOpacity={0.8}
       onPress={() => openFlightDetails(item)}
       accessibilityRole="button"
+      accessibilityLabel={`Flight from ${airportLabel(item.fromAirport, item.fromCity)} to ${airportLabel(item.toAirport, item.toCity)}. ${formatDateTime(item)}`}
     >
       {getFlightImagePresentation(item) === 'unavailable' ? (
         <View style={[styles.cardThumb, styles.cardThumbPlaceholder, { backgroundColor: colors.muted }]}>
@@ -418,24 +543,26 @@ export default function DiscoverScreen() {
         />
       )}
       <View style={styles.cardBody}>
-        <Text style={[styles.cardRoute, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
-          {airportLabel(item.fromAirport, item.fromCity)} → {airportLabel(item.toAirport, item.toCity)}
+        <Text style={[styles.cardRoute, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]} numberOfLines={1}>
+          {airportLabel(item.fromAirport, item.fromCity)} <Text style={{ color: colors.paleBlue }}>→</Text> {airportLabel(item.toAirport, item.toCity)}
         </Text>
-        <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={2}>
-          {item.aircraftType
-            ? `${item.aircraftType} · ${formatDateTime(item)}`
-            : item.source === 'production'
-              ? formatDateTime(item)
-              : `Aircraft details unavailable · ${formatDateTime(item)}`}
+        <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
+          {[item.aircraftType, formatDateTime(item)].filter(Boolean).join(' · ')}
         </Text>
       </View>
+      <Feather name="chevron-right" size={17} color={colors.mutedForeground} />
     </TouchableOpacity>
   );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {isLoading ? (
-        <View style={styles.centered}><ActivityIndicator color={colors.primary} size="large" /></View>
+        <View style={styles.centered}>
+          <View style={[styles.skeletonHero, { backgroundColor: colors.card }]} />
+          <View style={[styles.skeletonLine, { backgroundColor: colors.card }]} />
+          <View style={[styles.skeletonLineShort, { backgroundColor: colors.card }]} />
+          <ActivityIndicator color={colors.primary} size="small" />
+        </View>
       ) : flightsError ? (
         <View style={styles.centered}>
           <Feather name="wifi-off" size={32} color={colors.mutedForeground} />
@@ -472,7 +599,7 @@ export default function DiscoverScreen() {
             <DiscoverHeader
               colors={colors}
               topPad={topPad}
-              userName={user?.name?.split(' ')[0]}
+              userName={user?.name?.trim().split(/\s+/)[0] || undefined}
               allCount={all.length}
               productionReadOnly={!localReadMode}
               featured={showFeatured ? featured : undefined}
@@ -486,9 +613,12 @@ export default function DiscoverScreen() {
               mapLoading={airportQuery.isFetching}
               mapError={airportQuery.isError}
               onMapRetry={() => airportQuery.refetch()}
-              showEmpty={view === 'list' && filteredFlights.length === 0}
+              filter={selectedFilter}
+              filters={filters}
+              onFilterChange={setFilter}
+              showEmpty={view === 'list' && filteredFlights.length === 0 && !showFeatured}
               hasActiveQuery={q.length > 0}
-              onClearSearchFromEmpty={onClearSearch}
+              onClearSearchFromEmpty={onResetResults}
             />
           }
         />
@@ -504,21 +634,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingBottom: 18,
   },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  logoImg: { width: 40, height: 31 },
+  logoImg: { width: 28, height: 24 },
   conciergeBtn: {
     width: 38, height: 38, borderRadius: 19,
     alignItems: 'center', justifyContent: 'center',
   },
-  greeting: { fontSize: 26, letterSpacing: -0.6, paddingHorizontal: 20, paddingBottom: 4 },
+  greeting: { fontSize: 26, letterSpacing: -0.6, paddingHorizontal: 20, paddingTop: 6, paddingBottom: 4 },
   subGreeting: { fontSize: 15, paddingHorizontal: 20, paddingBottom: 18 },
 
   // Featured card
   featuredWrap: { marginHorizontal: 20, marginBottom: 20, borderRadius: 24, overflow: 'hidden' },
   featuredImage: { height: 190, width: '100%', justifyContent: 'flex-end' },
-  featuredOverlay: {
-    ...StyleSheet.absoluteFill, borderRadius: 24,
-    backgroundColor: 'rgba(6,11,31,0.35)',
-  },
+  featuredImageShape: { borderRadius: 24 },
+  featuredOverlay: { ...StyleSheet.absoluteFill, borderRadius: 24 },
   featuredBadge: {
     position: 'absolute', top: 14, left: 14,
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
@@ -536,6 +664,13 @@ const styles = StyleSheet.create({
     marginHorizontal: 20, marginBottom: 16,
   },
   searchInput: { flex: 1, fontSize: 15, padding: 0 },
+
+  filterRow: { paddingHorizontal: 20, gap: 8, paddingBottom: 18 },
+  filterChip: {
+    minHeight: 34, justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderRadius: 999, paddingHorizontal: 14,
+  },
+  filterText: { fontSize: 12 },
 
   // List/Map toggle
   toggleRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 20, paddingBottom: 16 },
@@ -556,6 +691,9 @@ const styles = StyleSheet.create({
 
   // States
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  skeletonHero: { width: '86%', height: 152, borderRadius: 18, opacity: 0.75 },
+  skeletonLine: { width: '72%', height: 14, borderRadius: 8, opacity: 0.75 },
+  skeletonLineShort: { width: '48%', height: 12, borderRadius: 8, opacity: 0.75 },
   mapPlaceholder: { alignItems: 'center', gap: 10, paddingVertical: 40 },
   emptyText: { fontSize: 15 },
   retryBtn: {

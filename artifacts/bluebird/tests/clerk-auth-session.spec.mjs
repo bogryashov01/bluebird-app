@@ -207,6 +207,7 @@ test("both tab bars expose exactly Discover, Trips, Membership, and Profile", ()
   ]);
   const classicScreens = source.slice(source.indexOf("<Tabs\n")).split("<Tabs.Screen");
   const visibleClassicScreens = classicScreens
+    .filter((screen) => !/options=\{\{\s*href:\s*null\s*\}\}/.test(screen))
     .map((screen) => screen.match(/name="([^"]+)"/)?.[1])
     .filter((name) => name && name !== "index");
   assert.deepEqual(visibleClassicScreens, [
@@ -217,7 +218,9 @@ test("both tab bars expose exactly Discover, Trips, Membership, and Profile", ()
   ]);
   assert.match(source, /NativeTabs\.Trigger\.Label>Discover/);
   assert.match(source, /title: 'Discover'/);
-  assert.doesNotMatch(source, /name="connections"/);
+  assert.match(source, /<Tabs\.Screen name="connections" options=\{\{ href: null \}\} \/>/);
+  const profileSource = readFileSync(resolve(projectRoot, "app/(tabs)/profile/index.tsx"), "utf8");
+  assert.match(profileSource, /router\.push\(['"]\/\(tabs\)\/connections/);
   const unreadHookSource = readFileSync(resolve(projectRoot, "hooks/useUnreadNotifications.ts"), "utf8");
   assert.match(unreadHookSource, /authMode === 'legacy' && isLocalFlightReadMode\(\)/);
 });

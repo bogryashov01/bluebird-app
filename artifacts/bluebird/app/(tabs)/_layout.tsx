@@ -81,6 +81,23 @@ function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
         name="discover/index"
         options={{
           title: 'Discover',
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.discoverMutedForeground,
+          tabBarStyle: {
+            position: 'absolute',
+            backgroundColor: isIOS ? 'transparent' : colors.discoverCard,
+            borderTopWidth: 1,
+            borderTopColor: colors.discoverBorder,
+            elevation: 0,
+            ...(isWeb ? { height: 84 } : {}),
+            paddingBottom: isWeb ? 34 : insets.bottom,
+          },
+          tabBarBackground: () =>
+            isIOS ? (
+              <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+            ) : (
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.discoverCard }]} />
+            ),
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="airplane" tintColor={color} size={22} />
@@ -132,6 +149,7 @@ function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
             ),
         }}
       />
+      <Tabs.Screen name="connections" options={{ href: null }} />
     </Tabs>
   );
 }

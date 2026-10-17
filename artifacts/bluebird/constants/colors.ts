@@ -12,6 +12,14 @@ const dark = {
   backgroundMid:  '#0A1128',   // headers, splash, confirmed screen
   card:           '#0D1636',   // elevated cards, discover rows
   cardHigh:       '#0F1B3D',   // modals, detail panels
+  discoverBackground: '#060B1F',
+  discoverCard: '#0D1636',
+  discoverMuted: '#1A2744',
+  discoverForeground: '#FFFFFF',
+  discoverMutedForeground: '#8896B3',
+  discoverBorder: '#1E2D4F',
+  discoverHeroOverlayTop: 'rgba(6,11,31,0)',
+  discoverHeroOverlayBottom: 'rgba(6,11,31,0.92)',
   offWhite:       '#0A1128',   // "settings-style" surface (light in light mode)
   surface:        '#0D1636',   // settings cards / list rows (was hardcoded #fff)
 
@@ -71,6 +79,14 @@ const light: typeof dark = {
   backgroundMid:  '#0A1128',   // brand navy — still used for avatars / hero blocks
   card:           '#FFFFFF',
   cardHigh:       '#FFFFFF',
+  discoverBackground: '#060B1F',
+  discoverCard: '#0D1636',
+  discoverMuted: '#1A2744',
+  discoverForeground: '#FFFFFF',
+  discoverMutedForeground: '#8896B3',
+  discoverBorder: '#1E2D4F',
+  discoverHeroOverlayTop: 'rgba(6,11,31,0)',
+  discoverHeroOverlayBottom: 'rgba(6,11,31,0.92)',
   offWhite:       '#FAFAF8',
   surface:        '#FFFFFF',
 

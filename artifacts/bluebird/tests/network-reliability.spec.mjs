@@ -498,6 +498,42 @@ test("Discover opens the correct SAT and HEF flights from both ends of each card
   expect(flightDetailRequests).toEqual([]);
 });
 
+test("Discover filters only supported flight fields and stays within common phone widths", async ({ page }, testInfo) => {
+  await setupPreview(page, async (route, url) => {
+    if (url.pathname === "/api/empty-legs") return json(route, 200, flights);
+    return json(route, 503, { error: "Unexpected intercepted production request." });
+  });
+
+  for (const width of [375, 393, 430]) {
+    await page.setViewportSize({ width, height: 874 });
+    await page.goto("/discover");
+
+    const firstCard = page.getByTestId("production-flight-card-81001");
+    await expect(firstCard).toBeVisible();
+    await expect(page.getByTestId("discover-filter-week")).toBeVisible();
+    await expect(page.getByTestId("discover-filter-short")).toBeVisible();
+    await expect(page.getByText("Heavy Jet", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Near Me", { exact: true })).toHaveCount(0);
+
+    const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(documentWidth).toBeLessThanOrEqual(width);
+    await page.screenshot({
+      path: testInfo.outputPath(`discover-${width}.png`),
+      fullPage: false,
+    });
+
+    await page.getByTestId("discover-filter-short").click();
+    await expect(firstCard).toBeVisible();
+    for (const id of [81002, 81003, 81004]) {
+      await expect(page.getByTestId(`production-flight-card-${id}`)).toHaveCount(0);
+    }
+    await page.getByTestId("discover-filter-all").click();
+    for (const id of [81001, 81002, 81003, 81004]) {
+      await expect(page.getByTestId(`production-flight-card-${id}`)).toBeVisible();
+    }
+  }
+});
+
 test("Direct Flight Details resolves the current ID from the list while a read is pending", async ({ page }) => {
   let listReadStarted = false;
   const legacyFlightRequests = [];
