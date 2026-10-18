@@ -1,94 +1,148 @@
-# Bluebird iOS build readiness
+# Bluebird iOS development-build readiness
 
-Audited 2026-10-17. This report describes the checked-in Mobile configuration
-and the current Replit workspace only. It does not claim access to the Bluebird
-owner's Expo, Apple Developer, App Store Connect, or EAS-hosted production
-settings.
+Audited 2026-10-18. This report covers checked-in Mobile code/configuration and
+workspace-only automated checks. It does not claim access to the Bluebird
+owner's Expo/EAS or Apple accounts, live Clerk/API services, or EAS-hosted
+environment values.
 
-## Readiness summary
+## Verified working
 
-| Requirement | Status | Evidence |
-| --- | --- | --- |
-| iOS bundle identifier | **MISSING/BLOCKED** | The resolved Expo config has no `ios.bundleIdentifier`; no native iOS project overrides it. The owner must approve the exact unique reverse-DNS identifier controlled by the organization. It must not be inferred from `Bluebird` or `bluebird.co`. |
-| EAS project linkage | **MISSING/BLOCKED** | `expo.extra.eas.projectId` is absent. EAS CLI configuration resolution stopped because the project is not configured. No project was created or linked. |
-| Owner Expo/EAS account access | **MISSING/BLOCKED** | `expo whoami` and EAS CLI `whoami` found a signed-in Replit-managed private account. This is not evidence that the Bluebird owner or organization account is authorized for EAS builds. No owner account was used or verified. |
-| Apple Developer access | **MISSING/BLOCKED — unverified** | No authorized Apple account or signing status check was available. No Apple team, signing credentials, or registered iPhone was verified. |
-| iOS assets | **READY** | The configured app icon exists at 1024×1024 PNG, RGB with no alpha. The configured splash logo exists at 1462×326 PNG with alpha and is set to `contain` on `#0A1128`. |
-| Production environment | **MISSING/BLOCKED — unverified remotely** | The EAS `production` profile selects the `production` environment, but the EAS-hosted variables could not be inspected without the owner account and project link. In the local workspace, the production API URL and production Clerk publishable key are absent, and the API environment selector is not set to production. |
-| First iOS build | **MISSING/BLOCKED** | No build was started. The missing identifier, EAS project link, and owner-authorized EAS account block both simulator and device build requests from this workspace. |
+- Expo resolves the public app configuration. Declared versions are Expo
+  `57.0.30`, Expo CLI `57.0.31`, React `19.2.3`, and React Native `0.86.3`.
+- `CI=1 pnpm exec expo install --check` passes; `pnpm dlx expo-doctor@latest`
+  reports **21/21 checks passed**.
+- The iOS FlightMap bundle resolves the native `react-native-maps` component;
+  the platform-resolution check also confirms the web implementation remains
+  separate.
+- Bluebird's phone-code and Clerk session logic, authenticated-token adapter,
+  route/cache isolation, and API environment guards pass mocked/unit tests.
+  The tests do not establish that a real Clerk instance or Main API accepts a
+  token.
+- Web/Playwright and code-level tests covering Discover presentation, flight
+  reads, queue actions/guards, membership and preview gates, trips/profile
+  navigation, personal information, notifications, payment-method empty
+  states, airport selection, passenger prefill, and native photo-upload request
+  construction pass. These are not iOS Simulator or device tests.
+- The Expo icon and splash references exist. Icon: 1024×1024 RGB PNG without
+  alpha. Splash logo: 1462×326 RGBA PNG; `contain` on `#0A1128`. All four
+  relative asset references in the resolved app config exist.
+- Focused source checks found the membership and queue preview routes gated by
+  `__DEV__`; local flight reads require both `__DEV__` and the explicit local
+  selector. Test-key-shaped strings and example email/host fixtures are
+  confined to test/test-runner files. No private-key block or actual secret
+  value was found in the checked Mobile runtime source. No credential values
+  are included in this report.
 
-## Configuration checked
+## Code/configuration ready but untested on iOS
 
-- Expo SDK `57.0.30`, Expo CLI `57.0.31`, and React Native `0.86.3` are declared by the Mobile package.
-- Resolved app identity: display name `Bluebird`, slug `bluebird`, version `1.0.0`, iOS build number `1`, scheme `bluebird`. `supportsTablet` is `false`.
-- The global icon reference resolves to `./assets/images/icon.png`. The `expo-splash-screen` plugin references `./assets/images/bluebird-logo-white.png`; web splash settings use the same logo and background color.
-- iOS declares the associated domain `applinks:bluebird.co`. No Apple App Site Association file exists under `artifacts/bluebird`; hosting and validity at the live domain were not checked. The app-side declaration does not prove Universal Links are operational.
-- Configured permission behavior: image picker supplies photo-library and camera explanations; microphone permission is explicitly disabled; Calendar supplies its add-flight explanation; notifications are enabled through the Expo Notifications plugin. No separate `ios.infoPlist` values are configured.
-- No root `ios/` native project or alternate `app.config.*` was found to override the checked-in `app.json`.
-- `eas.json` retains the existing `development` internal development-client profile and the `production` profile (`environment: production`, `distribution: store`). The production submit profile remains empty for iOS.
-- A local `development-simulator` profile now extends `development` and sets `ios.simulator: true`. This leaves the production build and submit profiles unchanged.
+- Resolved identity is display name `Bluebird`, slug `bluebird`, version
+  `1.0.0`, build number `1`, and URL scheme `bluebird`; iPad support is off.
+  No alternate Expo config or checked-in native `ios/` project overrides
+  `app.json`.
+- iOS declares `applinks:bluebird.co`. Android declares `/join/` intent
+  handling. The domain's Apple App Site Association hosting/content and actual
+  Universal Link launch behavior were not checked.
+- Permission text is configured for photo library, camera, and Calendar;
+  microphone permission is disabled. Notifications use the Expo Notifications
+  plugin and request permission after sign-in. No runtime location-permission
+  request was found. Native permission prompts/actions were not exercised.
+- Clerk uses `@clerk/expo`'s SecureStore-backed token cache; the adapter fetches
+  a fresh token from the current session for each request. Sign-out delegates
+  to Clerk and clears member query data. Phone sign-in/verification does not
+  use a browser OAuth return flow. Discover has an app-resume listener. These
+  behaviors were reviewed/tested with code or mocks, not by resuming a native
+  app or receiving real SMS.
+- `expo-calendar` is installed and configured for the calendar action; the
+  action requires a development build and was not invoked on iOS. Map rendering,
+  camera/library access, calendar access, push-token registration, and actual
+  native session restoration remain device-runtime checks. Push-token
+  retrieval depends on EAS project linkage (there is no project ID yet); its
+  optional error handling keeps sign-in available, but push registration is
+  not verified.
+- The EAS `development` profile is an internal development-client profile and
+  now explicitly selects the `development` environment. The
+  `development-simulator` profile extends it and sets `ios.simulator: true`.
+  The `production` build and submit profiles are byte-for-byte unchanged from
+  the checked-in baseline.
+- Production/demo safety was checked in source, not against the remote EAS
+  production environment. Development-only preview routes and local flight
+  mode cannot be enabled in release by `__DEV__`-gated code. The `production`
+  profile remains unchanged, but its remotely stored values and the resulting
+  production app behavior were not inspected.
 
-## Simulator versus installable iPhone build
+## Blocked by owner / Apple access
 
-Expo's [iOS Simulator build guide](https://docs.expo.dev/build-reference/simulators/)
-confirms that a simulator build does not require an Apple Developer account.
-It can only be installed on an iOS Simulator, not on an iPhone. The separate
-profile is the documented way to keep simulator and device build settings
-distinct. The [EAS configuration reference](https://docs.expo.dev/eas/json/)
-documents the `extends`, `developmentClient`, `distribution`, and
-`ios.simulator` properties used here.
+- **Bundle identifier:** `ios.bundleIdentifier` is absent. The Bluebird owner
+  must provide the exact organization-approved unique reverse-DNS identifier;
+  none was inferred from the product name or domain.
+- **EAS project and account:** `expo.extra.eas.projectId` is absent. An
+  organization-owned EAS project and an Expo account authorized for it are
+  required before an owner-authorized cloud development build. This workspace
+  did not link or create a project.
+- **Development environment values:** Remote EAS values could not be inspected.
+  The owner must configure and verify the `development` environment:
+  `EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT=development`,
+  `EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL`,
+  `EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY`,
+  `EXPO_PUBLIC_ENABLE_CLERK_AUTH=true`, and
+  `EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER`. The API URL, Clerk
+  Development key, and verified issuer must be the owner's matching pair; no
+  values were accessed or added here.
+- **iPhone-installable build:** Apple Developer signing/provisioning access and
+  registration of each intended test iPhone are required. No Apple team,
+  signing credential, or device registration was verified. A simulator build
+  does not require Apple Developer signing, but still requires the approved
+  EAS project/account and owner approval to use cloud-build resources.
+- The `bluebird.co` association file must be confirmed with the domain owner
+  before Universal Links can be considered operational.
 
-The profile only establishes a local build path; it does not establish that the
-app can be built now. A cloud build still needs the approved bundle identifier,
-an EAS project, and an Expo account authorized for that project. This Replit
-workspace runs Linux and cannot install the resulting app into Apple's
-Simulator. No cloud or local build was run.
+## Safe changes made
 
-An installable iPhone development build is a different path: it requires
-Apple Developer signing access, provisioning, and registering the test iPhone
-for internal/ad hoc distribution. The existing `development` profile is
-preserved for that device path.
+- Set the development EAS profile's environment explicitly to `development`;
+  the simulator profile inherits it. Production build/submit profiles remain
+  unchanged.
+- Updated one stale source assertion in the Clerk session test to match the
+  current membership loader structure.
+- No runtime authentication, backend, Clerk, production, asset, or dependency
+  changes were made.
 
-## Required owner decisions and next actions
-
-1. **Please provide the exact unique reverse-DNS iOS bundle identifier that
-   Bluebird's organization approves and controls.** Set it as
-   `expo.ios.bundleIdentifier` only after that decision. No value has been
-   guessed or added.
-2. Select or create the organization-owned EAS project, then authorize linking
-   this app to that project. Do not use the Replit-managed private account as a
-   substitute for the owner's project.
-3. Sign in through the approved organization Expo account and verify that it
-   can access the selected EAS project.
-4. If a simulator build is desired, separately approve its EAS cloud-build use
-   and any applicable usage charges. Once the identity, project, and account
-   prerequisites are in place, the profile is
-   `development-simulator`. No Apple Developer account is required for that
-   simulator artifact.
-5. Before producing an iPhone-installable development build, provide
-   authorized Apple Developer access, configure signing, and register the
-   intended test iPhone. Use the existing `development` profile, not the
-   simulator profile.
-6. Before a production store build, configure and verify the EAS `production`
-   environment with the three public app-configuration values documented in
-   `RELEASE-CONFIGURATION.md`: `EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT` set to
-   `production`, the canonical Production Main Bluebird API URL, and the
-   matching Production Clerk publishable key. Also verify the owner-approved
-   App Store Connect app and signing access. Supply `ascAppId` if non-interactive
-   submission is required. No production values or submission settings were
-   changed or checked remotely in this audit.
-
-## Checks run
+## Checks and automated tests
 
 | Check | Result |
 | --- | --- |
-| `pnpm exec expo config --type public --json` | **PASS.** Expo resolved the public config, identity, asset references, and plugins. Bundle identifier and EAS project ID were absent. |
-| `pnpm dlx eas-cli@latest config -p ios -e development-simulator --non-interactive --json` | **BLOCKED.** EAS CLI stopped because no EAS project is configured and cannot configure one in non-interactive mode. Its suggested project creation/linking was not performed. |
-| Local `app.json` / `eas.json` parsing and focused readiness assertions | **PASS.** Both are valid JSON; icon dimensions/color mode and splash file were checked; simulator profile inheritance and flag were checked; production build/submit profile values remained unchanged; bundle identifier and EAS project ID remain absent. |
-| `CI=1 pnpm exec expo install --check` | **PASS.** Dependencies are up to date. |
-| `pnpm --filter @workspace/bluebird run typecheck` | **FAIL — pre-existing Mobile typecheck blocker.** TypeScript reports 192 errors across 36 files. Examples include missing generated API-client exports and incompatible shared model/query types. This audit did not change Mobile TypeScript or generated API code. |
-| Read-only account status checks | **Owner access not verified.** The current CLI session is Replit-managed; the account identifier is intentionally omitted. No Apple account or EAS-hosted production environment check was made. |
+| `pnpm exec expo config --type public --json` | **PASS.** Resolved app identity, iOS declarations, plugins, and asset references. No bundle identifier or EAS project ID is configured. |
+| `CI=1 pnpm exec expo install --check` | **PASS.** Dependencies are aligned. |
+| `pnpm dlx expo-doctor@latest` | **PASS.** 21/21 checks passed. |
+| `pnpm exec tsc -b lib/api-client-react` then `pnpm run typecheck` in Bluebird | **PASS.** The first Mobile typecheck had 191 stale shared-client declaration errors; rebuilding the actual composite API-client project cleared them, and the rerun passed. |
+| `test:clerk-session-isolation`, `test:clerk-bridge`, `test:clerk-phone-auth`, `test:clerk-auth-ui` | **PASS.** 9, 6, 17, and 7 tests respectively. |
+| `test:startup-stability` | **PASS.** 8 passed and 2 conditionally skipped in the main run; the two Clerk-specific scenarios then passed in their dedicated runs. |
+| `test:clerk-personal-info-screen`, `test:clerk-notifications-screen`, `test:membership-plans` | **PASS.** 4, 10, and 4 Playwright tests respectively; browser/mobile viewport emulation only. |
+| `test:flight-map-platform`, `test:profile-photo-native` | **PASS.** iOS/web platform-resolution check and native-upload construction test. |
+| Discover, production flight/airport, queue actions/readiness/guards, membership plans/previews, payment methods, airport selection, passenger prefill, and queue preview checks | **PASS.** All invoked checks passed; queue action and guard suites reported 4 and 3 tests, and payment methods reported 2. |
+| EAS/Apple cloud build, iOS Simulator, physical iPhone, live Clerk SMS/API, and live AASA checks | **NOT RUN / NOT AVAILABLE.** Required owner access, identity, or native runtime was unavailable; no build or submission was started. |
 
-The only functional build-configuration change is the separate local simulator
-profile. No bundle identifier, EAS project, credentials, production values,
-build, or submission were created or started.
+## Owner next steps
+
+1. Approve and supply Bluebird's exact iOS bundle identifier.
+2. Select/link the organization-owned EAS project and authorize the account
+   that will run its builds; add the approved project linkage through the
+   owner's process.
+3. Populate and verify the EAS `development` environment variables listed
+   above, including a matching Development API/Clerk issuer pair.
+4. For a simulator-only first build, use `development-simulator` after the
+   owner approves the cloud build. For an iPhone-installable development build,
+   use `development` after Apple signing/provisioning access and test-device
+   registration are ready.
+5. Confirm the `bluebird.co` Apple App Site Association file and then test
+   invitation links, sign-in/session restore, API access, map taps, queue/trip
+   screens, membership, profile photo, notifications, and calendar on the
+   selected iOS runtime.
+
+No EAS build, production build, App Store Connect submission, iOS Simulator
+launch, or physical-device test was performed.
+
+## Files changed
+
+- `artifacts/bluebird/eas.json`
+- `artifacts/bluebird/tests/clerk-auth-session.spec.mjs`
+- `artifacts/bluebird/IOS-BUILD-READINESS.md`

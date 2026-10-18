@@ -352,7 +352,7 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(airportPickerSource, /Loading the saved profile may synchronize phone information/);
   assert.match(airportPickerSource, /Read-only: required profile details are incomplete/);
   assert.match(notificationsSource, /router\.canGoBack\(\) \? router\.back\(\)/);
-  assert.match(membershipSource, /loadClerkBluebirdMembership\(createClerkApi\(\)\.authenticated, signal\)/);
+  assert.match(membershipSource, /const api = createClerkApi\(\)\.authenticated;[\s\S]*?loadClerkBluebirdMembership\(api, signal\)/);
   assert.match(clerkMembership, /membershipState === 'available'/);
   assert.match(clerkMembership, /membershipState === 'conflict'/);
   assert.match(clerkMembership, /membershipState === 'unavailable'/);
