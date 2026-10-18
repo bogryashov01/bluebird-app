@@ -1,0 +1,203 @@
+BLUEBIRD MOBILE — COMPLETE MOBILE-ONLY AUTH INTEGRATION
+
+MODE: BUILD / EXECUTE
+
+PRIORITY: HIGH
+
+PROJECT:
+Bluebird Mobile
+
+GOAL:
+
+Complete as much of the real phone-first
+authentication and onboarding experience
+as possible using existing Clerk and
+Bluebird API capabilities.
+
+ABSOLUTE SCOPE RESTRICTION:
+
+ONLY modify Bluebird Mobile application code.
+
+DO NOT MODIFY:
+
+- Main Bluebird Website
+- Main Bluebird API
+- Shared backend packages
+- Shared country-list package
+- Database or migrations
+- Clerk Dashboard configuration
+- Quo configuration
+- Production environment
+
+Main Website/API source is READ-ONLY.
+
+========================================
+1. PHONE-FIRST AUTH
+========================================
+
+Maintain a unified phone entry experience.
+
+Existing account:
+Phone → Clerk SMS → Verified session
+
+New account:
+Phone → Clerk Sign Up → SMS verification
+→ Verified session
+
+Use Clerk-supported flows.
+
+Only use explicit Clerk error codes
+to distinguish missing accounts.
+
+Never treat generic HTTP 422
+as account-not-found.
+
+Preserve international E.164 support,
+including +380.
+
+========================================
+2. CLERK SESSION
+========================================
+
+After successful Clerk verification:
+
+- Activate the verified session.
+- Retrieve the actual Clerk session token.
+- Use it for authenticated Bluebird API calls.
+- Confirm the API accepts the session.
+
+Do not fabricate or bypass authentication.
+
+========================================
+3. BLUEBIRD ACCOUNT RESOLUTION
+========================================
+
+Use existing documented endpoints:
+
+GET /api/me
+
+GET /api/me/profile
+
+Determine the user's real account state.
+
+Do not assume that an incomplete profile
+means the account is new.
+
+Do not match users by phone number alone.
+
+Do not invent account-linking endpoints.
+
+If the API cannot resolve the identity,
+keep the user in a safe pending state.
+
+========================================
+4. ONBOARDING ROUTING
+========================================
+
+For a resolved authenticated user:
+
+- Follow the existing Bluebird account
+  state and required phone-verification
+  gates.
+
+- Route incomplete profiles to onboarding.
+
+- Route eligible completed profiles
+  to Discover.
+
+- Respect membership and plan-decision
+  requirements.
+
+- Do not bypass required verification.
+
+Never display fake profile completion,
+membership, bookings, or access.
+
+========================================
+5. INTERNATIONAL PHONE HANDLING
+========================================
+
+Keep Mobile-side E.164 support.
+
+Include +380 regression coverage.
+
+IMPORTANT:
+
+The existing Main Bluebird API
+currently rejects +380 in its shared
+phone-verification/profile validation.
+
+Do not modify or bypass that validation.
+
+If a backend operation rejects the
+number, display an accurate,
+user-friendly message.
+
+Do not claim full +380 onboarding
+support without real backend evidence.
+
+========================================
+6. ERROR HANDLING
+========================================
+
+Handle:
+
+- Clerk authentication failures
+- Unsupported phone numbers
+- SMS verification failures
+- Expired codes
+- Rate limits
+- API 401/403
+- API validation errors
+- Unresolved Bluebird identity
+- Network failures
+
+Avoid infinite loading states.
+
+Provide clear retry paths.
+
+========================================
+7. TESTING
+========================================
+
+Add mocked regression tests for:
+
+- Existing-user sign-in
+- New-user sign-up
+- Generic Clerk HTTP 422
+- Explicit account-not-found
+- Successful Clerk verification
+- Unverified signup
+- API identity resolution
+- Incomplete profile routing
+- Completed profile routing
+- Unsupported +380 backend response
+- Network/API failures
+
+No live SMS.
+
+No production writes.
+
+Rebuild shared API declarations
+using existing workspace scripts
+if needed for TypeScript.
+
+========================================
+8. DELIVERY
+========================================
+
+Implement all confirmed Mobile-only fixes.
+
+Report:
+
+1. Files changed
+2. Auth flow implemented
+3. API integration completed
+4. Onboarding routing behavior
+5. +380 limitations
+6. Tests passed
+7. Remaining backend dependencies
+
+Do not modify Main Website or API.
+
+Do not implement speculative endpoints.
