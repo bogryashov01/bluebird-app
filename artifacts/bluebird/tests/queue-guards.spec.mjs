@@ -34,25 +34,19 @@ test("synchronous join lock blocks duplicate taps and permits retry after the re
 
 test("development queue fixtures have named states and are excluded outside development", () => {
   assert.deepEqual(QUEUE_PREVIEW_STATES, [
-    "eligible-flight",
-    "join-loading",
-    "confirmation",
+    "not-joined",
     "waiting",
     "unavailable",
-    "selected",
-    "winner",
+    "pass-non-member",
     "pass-no-pass",
     "pass-unavailable",
     "pass-available",
-    "pass-loading",
-    "pass-success",
-    "pass-failure",
   ]);
   assert.equal(isQueueDevelopmentPreviewEnabled(true), true);
   assert.equal(isQueueDevelopmentPreviewEnabled(false), false);
-  assert.equal(parseQueuePreviewState("winner"), "winner");
-  assert.equal(parseQueuePreviewState("pass-success"), "pass-success");
-  assert.equal(parseQueuePreviewState("unknown"), "eligible-flight");
-  assert.equal(isPassPreviewState("pass-success"), true);
-  assert.equal(isPassPreviewState("eligible-flight"), false);
+  assert.equal(parseQueuePreviewState("waiting"), "waiting");
+  assert.equal(parseQueuePreviewState("eligible-flight"), "not-joined");
+  assert.equal(parseQueuePreviewState("unknown"), "not-joined");
+  assert.equal(isPassPreviewState("pass-available"), true);
+  assert.equal(isPassPreviewState("not-joined"), false);
 });

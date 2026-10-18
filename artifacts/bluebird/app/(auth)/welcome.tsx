@@ -42,6 +42,17 @@ export default function WelcomeScreen() {
             <Text style={[styles.pillText, { color: colors.primaryForeground }]}>Continue with Phone</Text>
           </View>
         </TouchableOpacity>
+        {typeof __DEV__ !== 'undefined' && __DEV__ ? (
+          <TouchableOpacity
+            testID="welcome-development-preview-entry"
+            accessibilityRole="button"
+            onPress={() => router.push('/development-preview' as any)}
+            style={styles.previewEntry}
+          >
+            <Feather name="eye" size={15} color={colors.mutedOnBrand} />
+            <Text style={[styles.previewEntryText, { color: colors.mutedOnBrand }]}>Open development preview</Text>
+          </TouchableOpacity>
+        ) : null}
 
       </View>
 
@@ -77,6 +88,8 @@ const styles = StyleSheet.create({
   },
   pillInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pillText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+  previewEntry: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 15, marginTop: 3 },
+  previewEntryText: { fontFamily: 'Inter_500Medium', fontSize: 12 },
   footerText: {
     fontSize: 12, fontFamily: 'Inter_400Regular',
     textAlign: 'center', lineHeight: 18, paddingHorizontal: 12,

@@ -1,17 +1,11 @@
 export const QUEUE_PREVIEW_STATES = [
-  'eligible-flight',
-  'join-loading',
-  'confirmation',
+  'not-joined',
   'waiting',
   'unavailable',
-  'selected',
-  'winner',
+  'pass-non-member',
   'pass-no-pass',
   'pass-unavailable',
   'pass-available',
-  'pass-loading',
-  'pass-success',
-  'pass-failure',
 ] as const;
 
 export type QueuePreviewState = (typeof QUEUE_PREVIEW_STATES)[number];
@@ -22,9 +16,10 @@ export function isQueueDevelopmentPreviewEnabled(isDev: boolean): boolean {
 }
 
 export function parseQueuePreviewState(value: unknown): QueuePreviewState {
+  if (value === 'eligible-flight') return 'not-joined';
   return typeof value === 'string' && QUEUE_PREVIEW_STATES.includes(value as QueuePreviewState)
     ? value as QueuePreviewState
-    : 'eligible-flight';
+    : 'not-joined';
 }
 
 export function isPassPreviewState(state: QueuePreviewState): state is PassPreviewState {

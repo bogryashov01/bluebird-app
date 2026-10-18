@@ -29,7 +29,7 @@ import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
 import { canAccessClerkProfileOnboardingRoute } from '@/lib/clerkProfileOnboarding';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
-import { isMembershipDevelopmentPreviewRoute } from '@/lib/membershipDevelopmentPreview';
+import { isDevelopmentPreviewRoute } from '@/lib/developmentPreview';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -52,7 +52,7 @@ function RootLayoutNav() {
   const segments = useSegments();
   const { authMode, clerkSignedIn, clerkMemberResolution, memberAccessResolved } = useAuth();
   const clerkSession = useClerkAuthSnapshot();
-  const isMembershipDemoPreview = isMembershipDevelopmentPreviewRoute(
+  const isDevelopmentPreview = isDevelopmentPreviewRoute(
     segments,
     typeof __DEV__ !== 'undefined' && __DEV__,
   );
@@ -76,7 +76,7 @@ function RootLayoutNav() {
   const clerkRouteGuarded =
     authMode === 'clerk' &&
     !incompleteProfileOnboardingRoute &&
-    !isMembershipDemoPreview &&
+    !isDevelopmentPreview &&
     shouldRedirectClerkRoute(segments, memberAccessResolved, registeredHomeReady);
   if (clerkRouteGuarded) {
     return <Redirect href={clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(clerk-auth)/sign-in'} />;
@@ -91,7 +91,7 @@ function RootLayoutNav() {
     <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
     {/* App-wide waiting→confirmed watcher: celebrates a confirmed seat even
         when the member isn't on the Queue Status screen. */}
-    {!isMembershipDemoPreview ? <QueueConfirmationWatcher /> : null}
+    <QueueConfirmationWatcher />
     <Stack
       screenOptions={{
         contentStyle: { backgroundColor: colors.background },
@@ -103,6 +103,9 @@ function RootLayoutNav() {
         <Stack.Screen name="(clerk-auth)" options={{ headerShown: false }} />
       )}
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="development-preview/index" options={{ headerShown: false }} />
+      <Stack.Screen name="development-preview/[screen]" options={{ headerShown: false }} />
+      <Stack.Screen name="development-preview/show" options={{ headerShown: false }} />
       <Stack.Screen name="join/[code]" options={{ headerShown: false }} />
       <Stack.Screen
         name="flight/[id]"
@@ -296,9 +299,7 @@ export default function RootLayout() {
           <QueryClientProvider client={queryClient}>
             <GestureHandlerRootView style={{ flex: 1 }}>
               <KeyboardProvider>
-                <AuthProvider>
-                  <RootLayoutNav />
-                </AuthProvider>
+                <RoutedRoot />
               </KeyboardProvider>
             </GestureHandlerRootView>
           </QueryClientProvider>
@@ -307,7 +308,35 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 
+  return app;
+}
+
+function RoutedRoot() {
+  const segments = useSegments();
+  const isDevelopmentPreview = isDevelopmentPreviewRoute(
+    segments,
+    typeof __DEV__ !== 'undefined' && __DEV__,
+  );
+
+  if (isDevelopmentPreview) {
+    return (
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="development-preview/index" options={{ headerShown: false }} />
+        <Stack.Screen name="development-preview/[screen]" options={{ headerShown: false }} />
+        <Stack.Screen name="development-preview/show" options={{ headerShown: false }} />
+        <Stack.Screen name="queue/dev-preview" options={{ headerShown: false }} />
+        <Stack.Screen name="membership/dev-preview" options={{ headerShown: false }} />
+      </Stack>
+    );
+  }
+
+  const authenticatedApp = (
+    <AuthProvider>
+      <RootLayoutNav />
+    </AuthProvider>
+  );
+
   return CLERK_AUTH_CONFIGURATION.enabled
-    ? <DormantClerkProvider>{app}</DormantClerkProvider>
-    : app;
+    ? <DormantClerkProvider>{authenticatedApp}</DormantClerkProvider>
+    : authenticatedApp;
 }

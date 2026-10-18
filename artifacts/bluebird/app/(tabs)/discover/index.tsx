@@ -219,6 +219,19 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
       </Text>
       {showQueuePreview && (
         <TouchableOpacity
+          testID="discover-development-preview-entry"
+          accessibilityRole="button"
+          style={[styles.queuePreviewEntry, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => router.push('/development-preview' as any)}
+        >
+          <Feather name="eye" size={15} color={colors.primary} />
+          <Text style={[styles.queuePreviewEntryText, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>
+            DEMO · Open development preview hub
+          </Text>
+        </TouchableOpacity>
+      )}
+      {showQueuePreview && (
+        <TouchableOpacity
           testID="discover-queue-demo-preview"
           accessibilityRole="button"
           style={[styles.queuePreviewEntry, { backgroundColor: colors.card, borderColor: colors.border }]}

@@ -53,12 +53,21 @@ export default function MembershipDevelopmentPreviewScreen() {
           <Text style={[styles.title, { color: colors.textOnSurface }]}>Membership preview</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>{LABELS[state]} · DEMO</Text>
         </View>
+        <TouchableOpacity
+          testID="membership-demo-preview-hub"
+          accessibilityRole="button"
+          accessibilityLabel="Back to development preview hub"
+          onPress={() => router.replace('/development-preview' as any)}
+          style={[styles.backButton, { backgroundColor: colors.surface }]}
+        >
+          <Feather name="grid" size={17} color={colors.primary} />
+        </TouchableOpacity>
       </View>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad + 24 }]}>
         <View style={[styles.banner, { backgroundColor: colors.primary + '12', borderColor: colors.primary + '44' }]}>
           <Feather name="alert-triangle" size={17} color={colors.primary} />
           <Text testID="membership-demo-label" style={[styles.bannerText, { color: colors.primary }]}>
-            DEMO PREVIEW · NO ACCOUNT OR MEMBERSHIP CHANGED
+            DEMO / DEVELOPMENT PREVIEW · NO ACCOUNT OR MEMBERSHIP CHANGED
           </Text>
         </View>
         <View style={[styles.stateCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
