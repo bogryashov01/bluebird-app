@@ -33,7 +33,6 @@ import {
   loadClerkBluebirdMembership,
 } from '@/lib/clerkBluebirdProfile';
 import type { ClerkBluebirdMembershipLoadResult } from '@/lib/clerkBluebirdProfile';
-import { isMembershipDevelopmentPreviewEnabled } from '@/lib/membershipDevelopmentPreview';
 
 // ── Tier config ───────────────────────────────────────────────────────────────
 const TIER_META: Record<string, { label: string }> = {
@@ -453,16 +452,6 @@ export default function MembershipScreen() {
           >
             <Text style={[styles.plansLinkText, { color: colors.primary }]}>Compare public plans</Text>
           </TouchableOpacity>
-          {isMembershipDevelopmentPreviewEnabled(typeof __DEV__ !== 'undefined' && __DEV__) ? (
-            <TouchableOpacity
-              testID="membership-demo-preview-entry"
-              accessibilityRole="button"
-              onPress={() => router.push('/membership/dev-preview' as any)}
-              style={styles.plansLink}
-            >
-              <Text style={[styles.plansLinkText, { color: colors.mutedForegroundLight }]}>Open DEMO preview states</Text>
-            </TouchableOpacity>
-          ) : null}
         </ScrollView>
       </View>
     );
@@ -651,16 +640,6 @@ export default function MembershipScreen() {
           >
             <Text style={[styles.plansLinkText, { color: colors.mutedForegroundLight }]}>View full plan comparison</Text>
           </TouchableOpacity>
-          {isMembershipDevelopmentPreviewEnabled(typeof __DEV__ !== 'undefined' && __DEV__) ? (
-            <TouchableOpacity
-              testID="membership-demo-preview-entry"
-              accessibilityRole="button"
-              onPress={() => router.push('/membership/dev-preview' as any)}
-              style={styles.plansLink}
-            >
-              <Text style={[styles.plansLinkText, { color: colors.mutedForegroundLight }]}>Open DEMO preview states</Text>
-            </TouchableOpacity>
-          ) : null}
         </ScrollView>
       </View>
     );
@@ -898,16 +877,6 @@ export default function MembershipScreen() {
         >
           <Text style={[styles.plansLinkText, { color: colors.mutedForegroundLight }]}>Compare all plans</Text>
         </TouchableOpacity>
-        {isMembershipDevelopmentPreviewEnabled(typeof __DEV__ !== 'undefined' && __DEV__) ? (
-          <TouchableOpacity
-            testID="membership-demo-preview-entry"
-            accessibilityRole="button"
-            onPress={() => router.push('/membership/dev-preview' as any)}
-            style={styles.plansLink}
-          >
-            <Text style={[styles.plansLinkText, { color: colors.mutedForegroundLight }]}>Open DEMO preview states</Text>
-          </TouchableOpacity>
-        ) : null}
 
         {/* ── Grouped link list ── */}
         <View style={[styles.linkCard, { backgroundColor: colors.surface }]}>

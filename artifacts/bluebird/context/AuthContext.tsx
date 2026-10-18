@@ -48,32 +48,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const PREVIEW_AUTH_CONTEXT: AuthContextType = {
-  token: null,
-  user: null,
-  isLoading: false,
-  authMode: CLERK_AUTH_CONFIGURATION.enabled ? 'clerk' : 'legacy',
-  clerkSignedIn: false,
-  clerkUserId: null,
-  clerkMemberResolution: { status: 'signed_out' },
-  retryClerkMemberResolution: () => {},
-  confirmClerkProfileCompletion: () => false,
-  memberAccessResolved: false,
-  signIn: async () => {
-    throw new Error('Authentication is unavailable in Development Preview.');
-  },
-  signOut: async () => {
-    throw new Error('Authentication is unavailable in Development Preview.');
-  },
-  updateUser: () => {
-    throw new Error('Authentication is unavailable in Development Preview.');
-  },
-  pendingRegistrationGrant: null,
-  setPendingRegistrationGrant: () => {
-    throw new Error('Authentication is unavailable in Development Preview.');
-  },
-};
-
 // Register the token getter globally so every API request carries the bearer token
 setAuthTokenGetter(createLegacyAuthTokenGetter(
   CLERK_AUTH_CONFIGURATION.enabled,
@@ -86,21 +60,7 @@ setAuthTokenGetter(createLegacyAuthTokenGetter(
   },
 ));
 
-export function AuthProvider({
-  children,
-  previewOnly = false,
-}: {
-  children: ReactNode;
-  previewOnly?: boolean;
-}) {
-  if (previewOnly) {
-    return (
-      <AuthContext.Provider value={PREVIEW_AUTH_CONTEXT}>
-        {children}
-      </AuthContext.Provider>
-    );
-  }
-
+export function AuthProvider({ children }: { children: ReactNode }) {
   return <ActiveAuthProvider>{children}</ActiveAuthProvider>;
 }
 

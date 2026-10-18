@@ -29,7 +29,6 @@ import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
 import { canAccessClerkProfileOnboardingRoute } from '@/lib/clerkProfileOnboarding';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
-import { isDevelopmentPreviewRoute } from '@/lib/developmentPreview';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -52,10 +51,6 @@ function RootLayoutNav() {
   const segments = useSegments();
   const { authMode, clerkSignedIn, clerkMemberResolution, memberAccessResolved } = useAuth();
   const clerkSession = useClerkAuthSnapshot();
-  const isDevelopmentPreview = isDevelopmentPreviewRoute(
-    segments,
-    typeof __DEV__ !== 'undefined' && __DEV__,
-  );
   const isClerkProfileRoute = segments[0] === 'account' && segments[1] === 'bluebird-profile';
   if (isClerkProfileRoute && authMode !== 'clerk') {
     return <Redirect href="/(auth)/welcome" />;
@@ -76,7 +71,6 @@ function RootLayoutNav() {
   const clerkRouteGuarded =
     authMode === 'clerk' &&
     !incompleteProfileOnboardingRoute &&
-    !isDevelopmentPreview &&
     shouldRedirectClerkRoute(segments, memberAccessResolved, registeredHomeReady);
   if (clerkRouteGuarded) {
     return <Redirect href={clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(clerk-auth)/sign-in'} />;
@@ -103,9 +97,6 @@ function RootLayoutNav() {
         <Stack.Screen name="(clerk-auth)" options={{ headerShown: false }} />
       )}
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="development-preview/index" options={{ headerShown: false }} />
-      <Stack.Screen name="development-preview/[screen]" options={{ headerShown: false }} />
-      <Stack.Screen name="development-preview/show" options={{ headerShown: false }} />
       <Stack.Screen name="join/[code]" options={{ headerShown: false }} />
       <Stack.Screen
         name="flight/[id]"
@@ -165,14 +156,6 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="queue/production-unavailable"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="queue/dev-preview"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="membership/dev-preview"
         options={{ headerShown: false }}
       />
       <Stack.Screen
@@ -312,37 +295,13 @@ export default function RootLayout() {
 }
 
 function RoutedRoot() {
-  const segments = useSegments();
-  const isDevelopmentPreview = isDevelopmentPreviewRoute(
-    segments,
-    typeof __DEV__ !== 'undefined' && __DEV__,
-  );
-
   const authenticatedApp = (
     <AuthProvider>
       <RootLayoutNav />
     </AuthProvider>
   );
 
-  return (
-    // Keep an identity-free context mounted across the root navigation switch.
-    // Expo Router may retain an auth route layout for a transition frame after
-    // the active segments change to Preview; that layout calls useAuth() while
-    // its real authenticated subtree is being removed.
-    <AuthProvider previewOnly>
-      {isDevelopmentPreview ? (
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="development-preview/index" options={{ headerShown: false }} />
-          <Stack.Screen name="development-preview/[screen]" options={{ headerShown: false }} />
-          <Stack.Screen name="development-preview/show" options={{ headerShown: false }} />
-          <Stack.Screen name="queue/dev-preview" options={{ headerShown: false }} />
-          <Stack.Screen name="membership/dev-preview" options={{ headerShown: false }} />
-        </Stack>
-      ) : CLERK_AUTH_CONFIGURATION.enabled ? (
-        <DormantClerkProvider>{authenticatedApp}</DormantClerkProvider>
-      ) : (
-        authenticatedApp
-      )}
-    </AuthProvider>
-  );
+  return CLERK_AUTH_CONFIGURATION.enabled
+    ? <DormantClerkProvider>{authenticatedApp}</DormantClerkProvider>
+    : authenticatedApp;
 }

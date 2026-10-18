@@ -203,21 +203,3 @@ test("returning from membership-required details keeps the selected flight conte
   await expect(page).toHaveURL(/\/flight\/98765$/);
   await expect(page).not.toHaveURL(/discover/);
 });
-
-test("Membership DEMO preview states are isolated, labeled, and never issue API requests", async ({ page }) => {
-  const apiRequests = [];
-  page.on("request", (request) => {
-    if (new URL(request.url()).pathname.startsWith("/api/")) apiRequests.push(request.url());
-  });
-
-  await page.goto("/membership/dev-preview?state=non-member");
-  await expect(page.getByTestId("membership-demo-label")).toContainText("DEMO");
-  for (const state of ["non-member", "active-member", "unavailable", "loading", "api-error"]) {
-    await page.getByTestId(`membership-demo-state-${state}`).click();
-    await expect(page.getByTestId("membership-demo-state-title")).toContainText("DEMO");
-    if (state === "loading") {
-      await expect(page.getByTestId("membership-demo-loading")).toBeVisible();
-    }
-  }
-  expect(apiRequests).toEqual([]);
-});

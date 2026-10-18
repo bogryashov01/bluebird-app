@@ -108,6 +108,7 @@ test("fresh signed-out startup reaches Welcome and Sign In, and refresh/back sta
   await page.goto("/welcome");
   await page.reload();
   await expect(page.getByText("Welcome to Bluebird", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("welcome-development-preview-entry")).toHaveCount(0);
   await expect(page.getByTestId("clerk-api-connection-test")).toHaveCount(0);
   await expect(page.getByTestId("main-bluebird-development-config")).toHaveCount(0);
 });
@@ -172,6 +173,7 @@ test("Clerk-enabled Welcome routes the phone journey into Clerk without starting
   await page.getByTestId("welcome-phone-entry").click();
   await expect(page).toHaveURL(/\/sign-in$/);
   await expect(page.getByText("Sign in to Bluebird", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("clerk-development-preview-entry")).toHaveCount(0);
   expect(authApiCalls).toEqual([]);
 
   await page.getByTestId("clerk-go-to-sign-up").click();
@@ -188,6 +190,12 @@ test("Clerk-enabled Welcome routes the phone journey into Clerk without starting
   await page.goto("/discover");
   await expect(page).toHaveURL(/\/sign-in$/);
   await expect(page.getByText("Browse available empty legs", { exact: true })).toHaveCount(0);
+  await page.goto("/development-preview");
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await page.goto("/queue/dev-preview");
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await page.goto("/membership/dev-preview");
+  await expect(page).toHaveURL(/\/sign-in$/);
   await page.goto("/flight/81001");
   await expect(page).toHaveURL(/\/sign-in$/);
   await expect(page.getByText("Flight Details", { exact: false })).toHaveCount(0);

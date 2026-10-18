@@ -11,7 +11,6 @@ import { Feather } from '@expo/vector-icons';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import { isQueueDevelopmentPreviewEnabled } from '@/lib/queueDevelopmentPreview';
 
 function paramValue(value: string | string[] | undefined): string | null {
   return typeof value === 'string' ? value : Array.isArray(value) ? value[0] ?? null : null;
@@ -25,7 +24,6 @@ export default function SkipLinePassDetailsScreen() {
   const flightId = paramValue(rawFlightId);
   const flightRoute = paramValue(rawRoute);
   const flightAvailable = paramValue(rawAvailable) === 'true';
-  const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
   const topPad = Platform.OS === 'web' ? 54 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 28 : insets.bottom;
 
@@ -109,17 +107,6 @@ export default function SkipLinePassDetailsScreen() {
           Purchasing will be available soon.
         </Text>
 
-        {isQueueDevelopmentPreviewEnabled(isDev) && (
-          <TouchableOpacity
-            testID="skip-line-demo-preview-entry"
-            accessibilityRole="button"
-            onPress={() => router.push({ pathname: '/queue/dev-preview', params: { state: 'pass-no-pass' } } as any)}
-            style={[styles.previewButton, { borderColor: colors.separator, backgroundColor: colors.surface }]}
-          >
-            <Feather name="eye" size={17} color={colors.primary} />
-            <Text style={[styles.previewButtonText, { color: colors.textOnSurface }]}>Open DEMO preview</Text>
-          </TouchableOpacity>
-        )}
       </ScrollView>
     </View>
   );
@@ -145,6 +132,4 @@ const styles = StyleSheet.create({
   noticeTitle: { fontFamily: 'Inter_700Bold', fontSize: 16, textAlign: 'center' },
   noticeBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 7 },
   purchaseNotice: { fontFamily: 'Inter_600SemiBold', fontSize: 14, textAlign: 'center', marginTop: 18 },
-  previewButton: { minHeight: 48, borderWidth: 1, borderRadius: 14, marginTop: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
-  previewButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
 });

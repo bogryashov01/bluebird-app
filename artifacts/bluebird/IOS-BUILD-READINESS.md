@@ -1,6 +1,7 @@
 # Bluebird iOS development-build readiness
 
-Audited 2026-10-18. This report covers checked-in Mobile code/configuration and
+Audited 2026-10-18 after removal of Bluebird's temporary unauthenticated
+Development Preview. This report covers checked-in Mobile code/configuration and
 workspace-only automated checks. It does not claim access to the Bluebird
 owner's Expo/EAS or Apple accounts, live Clerk/API services, or EAS-hosted
 environment values.
@@ -14,20 +15,23 @@ environment values.
 - The iOS FlightMap bundle resolves the native `react-native-maps` component;
   the platform-resolution check also confirms the web implementation remains
   separate.
-- Bluebird's phone-code and Clerk session logic, authenticated-token adapter,
+- Bluebird's normal phone-code/Clerk session flow, authenticated-token adapter,
   route/cache isolation, and API environment guards pass mocked/unit tests.
   The tests do not establish that a real Clerk instance or Main API accepts a
   token.
-- Web/Playwright and code-level tests covering Discover presentation, flight
-  reads, queue actions/guards, membership and preview gates, trips/profile
-  navigation, personal information, notifications, payment-method empty
-  states, airport selection, passenger prefill, and native photo-upload request
-  construction pass. These are not iOS Simulator or device tests.
+- Automated web and code-level tests cover normal signed-out routing, protected
+  routes, Discover and Flight Details, queue actions, Membership, Trips/Profile
+  navigation, personal information, notifications, and Payment Methods. The
+  signed-out Clerk route protection and Welcome-to-Clerk sign-in route pass.
+  These are not iOS Simulator or device tests.
 - The Expo icon and splash references exist. Icon: 1024×1024 RGB PNG without
   alpha. Splash logo: 1462×326 RGBA PNG; `contain` on `#0A1128`. All four
   relative asset references in the resolved app config exist.
-- Focused source checks found the membership and queue preview routes gated by
-  `__DEV__`; local flight reads require both `__DEV__` and the explicit local
+- The unauthenticated Development Preview route tree, navigation entries,
+  preview-only auth context, state fixtures, and runtime helpers are removed.
+  A focused source test verifies the old route files are absent, named feature
+  screens remain, and app/auth/navigation sources have no preview branches.
+  Local flight reads still require both `__DEV__` and the explicit local
   selector. Test-key-shaped strings and example email/host fixtures are
   confined to test/test-runner files. No private-key block or actual secret
   value was found in the checked Mobile runtime source. No credential values
@@ -65,10 +69,10 @@ environment values.
   The `production` build and submit profiles are byte-for-byte unchanged from
   the checked-in baseline.
 - Production/demo safety was checked in source, not against the remote EAS
-  production environment. Development-only preview routes and local flight
-  mode cannot be enabled in release by `__DEV__`-gated code. The `production`
-  profile remains unchanged, but its remotely stored values and the resulting
-  production app behavior were not inspected.
+  production environment. Development Preview routes no longer exist, and
+  local flight mode cannot be enabled in release by `__DEV__`-gated code. The
+  `production` profile remains unchanged, but its remotely stored values and the
+  resulting production app behavior were not inspected.
 
 ## Blocked by owner / Apple access
 
@@ -96,30 +100,35 @@ environment values.
 - The `bluebird.co` association file must be confirmed with the domain owner
   before Universal Links can be considered operational.
 
-## Safe changes made
+## Changes in this cleanup
 
-- Set the development EAS profile's environment explicitly to `development`;
-  the simulator profile inherits it. Production build/submit profiles remain
-  unchanged.
-- Updated one stale source assertion in the Clerk session test to match the
-  current membership loader structure.
-- No runtime authentication, backend, Clerk, production, asset, or dependency
-  changes were made.
+- Removed the unauthenticated preview screens, route registrations,
+  user-facing preview links, preview-only AuthContext branch, runtime helpers,
+  and preview-only tests. Normal Clerk auth and real feature screens remain.
+- Added checks for preview route/entry removal and protection of the old paths.
+  Queue guard tests now cover queue behavior without preview state utilities.
+- No Expo/EAS settings, dependencies, SMS configuration, session persistence,
+  logout behavior, API access policy, backend, database, or Clerk configuration
+  were changed. Existing development EAS and simulator profiles, and production
+  build/submit profiles remain unchanged.
 
 ## Checks and automated tests
 
 | Check | Result |
 | --- | --- |
-| `pnpm exec expo config --type public --json` | **PASS.** Resolved app identity, iOS declarations, plugins, and asset references. No bundle identifier or EAS project ID is configured. |
-| `CI=1 pnpm exec expo install --check` | **PASS.** Dependencies are aligned. |
-| `pnpm dlx expo-doctor@latest` | **PASS.** 21/21 checks passed. |
-| `pnpm exec tsc -b lib/api-client-react` then `pnpm run typecheck` in Bluebird | **PASS.** The first Mobile typecheck had 191 stale shared-client declaration errors; rebuilding the actual composite API-client project cleared them, and the rerun passed. |
-| `test:clerk-session-isolation`, `test:clerk-bridge`, `test:clerk-phone-auth`, `test:clerk-auth-ui` | **PASS.** 9, 6, 17, and 7 tests respectively. |
-| `test:startup-stability` | **PASS.** 8 passed and 2 conditionally skipped in the main run; the two Clerk-specific scenarios then passed in their dedicated runs. |
-| `test:clerk-personal-info-screen`, `test:clerk-notifications-screen`, `test:membership-plans` | **PASS.** 4, 10, and 4 Playwright tests respectively; browser/mobile viewport emulation only. |
-| `test:flight-map-platform`, `test:profile-photo-native` | **PASS.** iOS/web platform-resolution check and native-upload construction test. |
-| Discover, production flight/airport, queue actions/readiness/guards, membership plans/previews, payment methods, airport selection, passenger prefill, and queue preview checks | **PASS.** All invoked checks passed; queue action and guard suites reported 4 and 3 tests, and payment methods reported 2. |
-| EAS/Apple cloud build, iOS Simulator, physical iPhone, live Clerk SMS/API, and live AASA checks | **NOT RUN / NOT AVAILABLE.** Required owner access, identity, or native runtime was unavailable; no build or submission was started. |
+| `expo config --type public --json` | **PASS.** Bluebird `1.0.0`, scheme `bluebird`, build number `1`, and `applinks:bluebird.co` resolve. `ios.bundleIdentifier` and `extra.eas.projectId` are absent. Existing plugins and assets resolve. |
+| `CI=1 expo install --check` | **PASS.** Dependencies are aligned. |
+| `expo-doctor@latest` | **PASS.** 21/21 checks passed. |
+| Expo Web `/welcome` smoke check | **PASS.** Signed-out Welcome and the ordinary phone sign-in entry render; the deleted preview button is absent. |
+| Shared API-client build and Bluebird Mobile TypeScript | **PASS.** `tsc -b lib/api-client-react` and Bluebird `tsc --noEmit` complete successfully. |
+| Preview-removal source guard and old-path auth checks | **PASS.** Deleted routes/helpers are absent, named feature screens remain, and old preview URLs route signed-out Clerk users to sign-in. |
+| `test:startup-stability` | **PASS.** 8 passed and 2 conditionally skipped in the default run; Clerk-enabled and missing-key scenarios passed separately (1 each). |
+| Clerk auth/session/phone/profile unit checks | **PASS.** Session isolation 9, token bridge 6, phone auth 17, auth configuration 7, member resolution 14, Bluebird profile 45. |
+| Personal Information, Notifications, Membership, Home Airport, and Payment Methods | **PASS.** Personal Information 4, Notifications 10, Membership MVP 7, public plan surfaces 4, Home Airport selection checks, Payment Methods 2. |
+| Queue actions/guards, membership plan parsing, and flight-map platform resolution | **PASS.** Queue actions 4, queue guards 2, production membership plan tests passed, iOS/web platform bundle check passed. |
+| `test:network-reliability` | **PARTIAL.** 23/24 passed. Flight Details failed one 375×812 viewport assertion: airport-details bottom was 761px against a `<702px` limit. That screen was not changed by this cleanup; it needs separate triage. |
+| `test:production-queue-readiness` | **PARTIAL.** 5/6 passed. The public Airport Search test did not observe its expected production search response within 30 seconds; the browser showed DAL selected and disabled as a home-airport option. This production-data-dependent check remains unverified. |
+| EAS/Apple cloud build, iOS Simulator, physical iPhone, live Clerk SMS/API, and live AASA checks | **NOT RUN / NOT AVAILABLE.** Owner access, identifiers, or native runtime were unavailable. No build or submission was started. |
 
 ## Owner next steps
 
@@ -134,7 +143,7 @@ environment values.
    use `development` after Apple signing/provisioning access and test-device
    registration are ready.
 5. Confirm the `bluebird.co` Apple App Site Association file and then test
-   invitation links, sign-in/session restore, API access, map taps, queue/trip
+   invitation links, SMS sign-in/session restore, API access, map taps, queue/trip
    screens, membership, profile photo, notifications, and calendar on the
    selected iOS runtime.
 
@@ -143,6 +152,11 @@ launch, or physical-device test was performed.
 
 ## Files changed
 
-- `artifacts/bluebird/eas.json`
-- `artifacts/bluebird/tests/clerk-auth-session.spec.mjs`
+- `artifacts/bluebird/DEVELOPMENT-API-CONNECTION.md`
+- `artifacts/bluebird/app/_layout.tsx`
+- `artifacts/bluebird/context/AuthContext.tsx`
+- Preview-only screen/helper/test removals under `artifacts/bluebird`
+- `artifacts/bluebird/tests/startup-stability.spec.mjs`
+- `artifacts/bluebird/tests/development-preview-removal.spec.mjs`
+- `artifacts/bluebird/package.json`
 - `artifacts/bluebird/IOS-BUILD-READINESS.md`

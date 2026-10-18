@@ -17,7 +17,6 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { isLegacyMemberQueryEnabled, shouldUseLocalFlightReadMode } from '@/lib/clerkAuthSession';
 import { getGreetingForHour, reconcileFeaturedFlightId } from '@/lib/discoverPresentation';
-import { isQueueDevelopmentPreviewEnabled } from '@/lib/queueDevelopmentPreview';
 import FlightMapView from '@/components/FlightMap';
 import {
   fetchProductionAirports,
@@ -144,7 +143,6 @@ interface HeaderProps {
   userName?: string;
   allCount: number;
   productionReadOnly: boolean;
-  showQueuePreview: boolean;
   featured?: FlightView;
   search: string;
   onSearchChange: (t: string) => void;
@@ -170,7 +168,7 @@ interface HeaderProps {
  * search input focused while typing.
  */
 const DiscoverHeader = React.memo(function DiscoverHeader({
-  colors, topPad, greetingText, userName, allCount, productionReadOnly, showQueuePreview, featured, search, onSearchChange, onClearSearch,
+  colors, topPad, greetingText, userName, allCount, productionReadOnly, featured, search, onSearchChange, onClearSearch,
   view, onViewChange, mapFlights, mapAirports, mapLoading, mapError, onMapRetry,
   filter, filters, onFilterChange, showEmpty, hasActiveQuery, onClearSearchFromEmpty,
 }: HeaderProps) {
@@ -217,33 +215,6 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
             : `${allCount} empty legs available`
           : productionReadOnly ? 'Browse available flights' : 'Browse available empty legs'}
       </Text>
-      {showQueuePreview && (
-        <TouchableOpacity
-          testID="discover-development-preview-entry"
-          accessibilityRole="button"
-          style={[styles.queuePreviewEntry, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={() => router.push('/development-preview' as any)}
-        >
-          <Feather name="eye" size={15} color={colors.primary} />
-          <Text style={[styles.queuePreviewEntryText, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>
-            DEMO · Open development preview hub
-          </Text>
-        </TouchableOpacity>
-      )}
-      {showQueuePreview && (
-        <TouchableOpacity
-          testID="discover-queue-demo-preview"
-          accessibilityRole="button"
-          style={[styles.queuePreviewEntry, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={() => router.push({ pathname: '/queue/dev-preview', params: { state: 'eligible-flight' } } as any)}
-        >
-          <Feather name="eye" size={15} color={colors.primary} />
-          <Text style={[styles.queuePreviewEntryText, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>
-            DEMO · Preview queue states
-          </Text>
-        </TouchableOpacity>
-      )}
-
       {/* Featured empty leg stays independent of the active search and filters. */}
       {featured && (
         <TouchableOpacity
@@ -672,9 +643,6 @@ export default function DiscoverScreen() {
               userName={user?.name?.trim().split(/\s+/)[0] || undefined}
               allCount={all.length}
               productionReadOnly={!localReadMode}
-              showQueuePreview={isQueueDevelopmentPreviewEnabled(
-                typeof __DEV__ !== 'undefined' && __DEV__,
-              )}
               featured={featured}
               search={search}
               onSearchChange={setSearch}
@@ -714,13 +682,6 @@ const styles = StyleSheet.create({
   },
   greeting: { fontSize: 26, letterSpacing: -0.6, paddingHorizontal: 20, paddingTop: 6, paddingBottom: 4 },
   subGreeting: { fontSize: 15, paddingHorizontal: 20, paddingBottom: 18 },
-  queuePreviewEntry: {
-    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 8,
-    marginHorizontal: 20, marginTop: -8, marginBottom: 16, paddingHorizontal: 13,
-    paddingVertical: 9, borderRadius: 999, borderWidth: 1,
-  },
-  queuePreviewEntryText: { fontSize: 12 },
-
   // Featured card
   featuredWrap: { marginHorizontal: 20, marginBottom: 20, borderRadius: 24, overflow: 'hidden' },
   featuredImage: { height: 150, width: '100%', justifyContent: 'flex-end' },
