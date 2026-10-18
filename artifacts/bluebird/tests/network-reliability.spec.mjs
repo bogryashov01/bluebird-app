@@ -431,11 +431,26 @@ test("Discover cards load their selected detail and preserve search when returni
   await expect(page.getByText("Range", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Price", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("flight-detail-photo-unavailable")).toBeVisible();
-  await page.setViewportSize({ width: 375, height: 812 });
-  const arrivalAirportBox = await page.getByTestId("flight-airport-arrival").boundingBox();
-  expect(arrivalAirportBox).not.toBeNull();
-  expect(arrivalAirportBox.y + arrivalAirportBox.height).toBeLessThan(812 - 110);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  const arrivalDirections = page.getByTestId("arrival-airport-directions");
+  for (const viewport of [
+    { width: 375, height: 812 },
+    { width: 320, height: 568 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await arrivalDirections.scrollIntoViewIfNeeded();
+    await expect(arrivalDirections).toBeInViewport();
+    const arrivalAirportBox = await arrivalDirections.boundingBox();
+    expect(arrivalAirportBox).not.toBeNull();
+    expect(arrivalAirportBox.x).toBeGreaterThanOrEqual(0);
+    expect(arrivalAirportBox.x + arrivalAirportBox.width).toBeLessThanOrEqual(viewport.width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+
+    // Check the actual airport action is usable after scrolling, rather than
+    // requiring all detail content to fit above an arbitrary viewport cutoff.
+    await arrivalDirections.click();
+    await expect(page.getByText("Directions to San Francisco International (SFO)", { exact: true })).toBeVisible();
+    await page.getByLabel("Close directions choices").click();
+  }
 
   await page.goBack();
   await expect(dallasFlight).toBeVisible();

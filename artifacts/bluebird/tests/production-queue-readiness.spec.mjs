@@ -247,17 +247,21 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   expect(blockedRequests).toEqual([]);
 });
 
-test("production plans and Airport Search remain public read-only flows", async ({ page, baseURL }) => {
+test("production plans and configured public Airport Search remain read-only flows", async ({ page, baseURL }) => {
+  const airportSearchRequests = [];
   const airportSearchResponses = [];
   const blockedRequests = [];
   await installSyntheticLocalShellSession(page);
   page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/airports/search") {
+      airportSearchRequests.push(request);
+    }
     if (isQueueOrAccountStateRequest(request.url())) {
       blockedRequests.push(`${request.method()} ${request.url()}`);
     }
   });
   page.on("response", (response) => {
-    if (/^https:\/\/bluebirdjets\.com\/api\/airports\/search(?:\?|$)/.test(response.url())) {
+    if (new URL(response.url()).pathname === "/api/airports/search") {
       airportSearchResponses.push(response);
     }
   });
@@ -274,11 +278,19 @@ test("production plans and Airport Search remain public read-only flows", async 
   const airportSearch = page.getByTestId("airport-search-input");
   await expect(airportSearch).toBeVisible({ timeout: 60_000 });
   await airportSearch.fill("Dallas");
+  await expect.poll(() => airportSearchRequests.length, { timeout: 10_000 }).toBeGreaterThan(0);
+  const airportSearchUrl = new URL(airportSearchRequests[0].url());
+  // This test's Expo server selects the Development Main API fixture. The
+  // production flight-read mode does not retarget airport search.
+  expect(airportSearchUrl.origin).toBe("https://main-api-development.example.test");
+  expect(airportSearchUrl.pathname).toBe("/api/airports/search");
+  expect(airportSearchUrl.searchParams.get("q")).toBe("Dallas");
   await expect.poll(() => airportSearchResponses.length, { timeout: 30_000 }).toBeGreaterThan(0);
   expect(airportSearchResponses[0].status()).toBe(200);
   const airports = await airportSearchResponses[0].json();
   expect(airports).toEqual(expect.any(Array));
   expect(airports.length).toBeGreaterThan(0);
+  expect(await airportSearchRequests[0].allHeaders()).not.toHaveProperty("authorization");
   expect(blockedRequests).toEqual([]);
 });
 
