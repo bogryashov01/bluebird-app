@@ -1,0 +1,198 @@
+BLUEBIRD MOBILE — iOS RELEASE READINESS
+
+PRIORITY: HIGH
+MODE: BUILD / EXECUTE
+
+GOAL:
+
+Prepare the existing Bluebird Mobile application
+for its first real iOS development/TestFlight build.
+
+Do not publish the application.
+
+Do not create a production release.
+
+SCOPE:
+
+Bluebird Mobile ONLY.
+
+Project:
+artifacts/bluebird
+
+Do not modify Main Bluebird Website,
+Main API, database, Clerk backend,
+or production settings.
+
+==================================================
+1. EXPO CONFIGURATION
+==================================================
+
+Inspect the existing Expo configuration.
+
+Verify:
+
+- Expo SDK compatibility
+- React Native version compatibility
+- iOS app configuration
+- App display name
+- App icon
+- Splash screen
+- iOS permissions
+- Deep linking configuration
+- Clerk authentication compatibility
+- Environment variable handling
+
+Do not invent a final iOS Bundle Identifier.
+
+If the Bundle Identifier requires
+confirmation from the Apple account owner,
+report it as a blocker.
+
+==================================================
+2. DEPENDENCY HEALTH
+==================================================
+
+Run:
+
+- Expo dependency validation
+- Mobile TypeScript check
+- Relevant automated tests
+
+Identify:
+
+- Incompatible packages
+- Missing native dependencies
+- Incorrect imports
+- Unsupported native modules
+- Build configuration problems
+
+Fix safe Mobile-only issues.
+
+Avoid unnecessary package upgrades.
+
+==================================================
+3. NATIVE IOS COMPATIBILITY
+==================================================
+
+Review critical flows for iOS compatibility:
+
+- Clerk sign-in
+- SMS verification
+- Discover
+- Flight Details
+- Join Queue
+- Queue Status
+- Trips
+- Membership
+- Skip the Line Pass
+- Notifications
+- Personal Information
+- Payment Methods
+- Home Airport
+
+Check for browser-only APIs,
+unsupported native behavior,
+and platform-specific navigation issues.
+
+Do not claim physical-device testing
+unless it was actually performed.
+
+==================================================
+4. AUTHENTICATION
+==================================================
+
+Verify the existing Clerk integration
+is configured appropriately for iOS.
+
+Check:
+
+- Token handling
+- Session persistence
+- Authenticated API requests
+- Logout
+- Deep links
+- App resume behavior
+
+Do not change Clerk backend settings.
+
+Do not expose credentials.
+
+==================================================
+5. EAS BUILD READINESS
+==================================================
+
+Inspect existing EAS configuration.
+
+Prepare a safe development build profile
+if it does not already exist.
+
+Do not run a signed production build.
+
+Do not submit to App Store Connect.
+
+Do not create Apple credentials.
+
+Do not guess Apple Team ID.
+
+Do not guess Bundle Identifier.
+
+Clearly document what information
+must come from the Apple account owner.
+
+==================================================
+6. IOS APP ASSETS
+==================================================
+
+Verify:
+
+- App icon
+- Splash screen
+- Brand assets
+- Image dimensions
+- Asset references
+
+Reuse existing approved Bluebird assets.
+
+Do not replace approved branding
+with generated placeholder graphics.
+
+==================================================
+7. SECURITY
+==================================================
+
+Check that:
+
+- No API secrets are bundled
+- No private keys are committed
+- No test credentials are exposed
+- No demo bookings appear in production
+- No development-only controls leak
+  into release builds
+
+Do not modify backend security settings.
+
+==================================================
+8. DELIVERABLE
+==================================================
+
+Implement safe Mobile-only fixes.
+
+Provide a concise report:
+
+1. Current iOS readiness status
+2. Issues fixed
+3. Tests passed
+4. Remaining native risks
+5. Missing Apple Developer requirements
+6. Exact next steps for first EAS build
+7. Files changed
+
+Separate:
+
+- Verified working
+- Code/configuration ready but untested
+- Blocked by Apple access
+
+Do not stop at an audit.
+
+Do not modify Main Bluebird.
