@@ -1,0 +1,176 @@
+BLUEBIRD MOBILE — FIX PHONE-FIRST AUTH FLOW
+
+PRIORITY: CRITICAL
+MODE: BUILD / EXECUTE
+
+PROJECT:
+artifacts/bluebird
+
+GOAL:
+
+Implement the correct phone-first
+authentication experience.
+
+The user enters a phone number once.
+
+If the account exists:
+Continue with Sign In.
+
+If the account does not exist:
+Continue with Sign Up and onboarding.
+
+Support international E.164 numbers,
+including +380.
+
+SCOPE:
+
+Bluebird Mobile ONLY.
+
+Do not modify Main Bluebird,
+Clerk backend, database, or production.
+
+========================================
+1. INVESTIGATE CURRENT FLOW
+========================================
+
+Inspect:
+
+- Phone input
+- Clerk sign-in implementation
+- Clerk sign-up implementation
+- Error handling
+- Existing onboarding
+- Session activation
+
+Determine why HTTP 422 currently
+results in a generic error.
+
+Inspect actual Clerk error codes.
+
+Do not assume every HTTP 422 means
+the account does not exist.
+
+========================================
+2. PHONE-FIRST AUTHENTICATION
+========================================
+
+Implement the intended behavior:
+
+Existing account:
+Phone → SMS verification → Sign In
+
+New account:
+Phone → Sign Up → SMS verification
+→ Onboarding → Discover
+
+Use Clerk-supported methods and
+documented error responses.
+
+Only transition to Sign Up when
+Clerk explicitly identifies the
+account as not found or when another
+documented supported flow confirms
+that Sign Up is appropriate.
+
+Never interpret a generic 422
+as proof that an account is missing.
+
+Do not introduce an unauthenticated
+user-existence lookup endpoint.
+
+========================================
+3. INTERNATIONAL NUMBERS
+========================================
+
+Preserve support for:
+
++1 US numbers
++380 Ukrainian numbers
+Other valid E.164 numbers
+
+Normalize phone numbers correctly.
+
+Do not force +1 onto international
+numbers.
+
+Do not add a US-only restriction.
+
+========================================
+4. ERROR HANDLING
+========================================
+
+Handle actual Clerk errors:
+
+- Account not found
+- Invalid phone number
+- Unsupported country
+- SMS unavailable
+- Rate limiting
+- Unexpected authentication failure
+
+Use real Clerk error codes.
+
+Show useful user-facing messages.
+
+Do not expose internal credentials,
+tokens, or sensitive response data.
+
+========================================
+5. SECURITY
+========================================
+
+Preserve Clerk verification requirements.
+
+Never activate a session before
+successful SMS verification.
+
+Never bypass authentication.
+
+Never fabricate a Clerk session.
+
+Avoid introducing account-enumeration
+behavior beyond the existing
+Clerk-supported authentication flow.
+
+========================================
+6. TESTING
+========================================
+
+Test:
+
+Existing +1 account
+New +1 account
+Existing +380 account
+New +380 account
+Invalid phone
+Unsupported phone
+Clerk 422 error
+Rate limiting
+SMS verification failure
+Successful verification
+
+Use mocks for automated tests.
+
+Do not send real SMS during tests.
+
+Run Mobile TypeScript and Clerk tests.
+
+========================================
+7. DELIVERY
+========================================
+
+Implement confirmed Mobile-only fixes.
+
+Report:
+
+1. Root cause of current HTTP 422
+2. Exact Clerk error codes handled
+3. Existing-user flow
+4. New-user flow
+5. International phone handling
+6. Tests passed
+7. What still requires live SMS testing
+
+Do not modify Main Bluebird.
+
+Do not restore Development Preview.
