@@ -98,7 +98,7 @@ test("phone normalization accepts US and international synthetic numbers only", 
   assert.equal(normalizeClerkPhoneNumber("1 555 555 0199"), "+15555550199");
   assert.equal(normalizeClerkPhoneNumber("+44 20 7946 0958"), "+442079460958");
   assert.equal(normalizeClerkPhoneNumber("+380 99 000 00 00"), "+380990000000");
-  for (const invalid of ["", "55512", "55555501999", "+0123456789", "+1234567"]) {
+  for (const invalid of ["", "55512", "55555501999", "+0123456789", "+1234567", "+44abc2079460958", "++442079460958"]) {
     assert.equal(normalizeClerkPhoneNumber(invalid), null);
   }
 });
@@ -237,7 +237,7 @@ test("missing phone-code factors fail during preparation without opening code en
 
   assert.equal(started.ok, false);
   assert.equal(started.stage, "code-preparation");
-  assert.match(started.message, /could not prepare the verification code/i);
+  assert.match(started.message, /does not offer SMS verification/i);
   assert.deepEqual(fixture.calls, [
     ["create-sign-in", { identifier: "+15555550199" }],
   ]);
@@ -279,7 +279,7 @@ test("existing Clerk accounts get a sign-in recovery message without echoing pho
   assert.equal(result.message.includes("+15555550199"), false);
 });
 
-test("only Clerk's explicit account-not-found response identifies a missing sign-in account", async () => {
+test("only Clerk's explicit account-not-found response starts sign-up and requests its code", async () => {
   const missingAccountFixture = makeResources({
     createSignInError: {
       status: 422,
@@ -291,9 +291,48 @@ test("only Clerk's explicit account-not-found response identifies a missing sign
     "+15555550199",
     missingAccountFixture.actions,
   );
-  assert.equal(missingAccount.ok, false);
-  assert.match(missingAccount.message, /No Clerk account was found/);
-  assert.deepEqual(missingAccountFixture.calls.map(([name]) => name), ["create-sign-in"]);
+  assert.deepEqual(missingAccount, {
+    ok: true,
+    nextStep: "code",
+    mode: "sign-up",
+    phoneNumber: "+15555550199",
+  });
+  const fallbackVerified = await verifyClerkPhoneCode(
+    missingAccount.mode,
+    "654321",
+    missingAccountFixture.actions,
+  );
+  assert.deepEqual(fallbackVerified, { ok: true });
+  assert.deepEqual(missingAccountFixture.calls, [
+    ["create-sign-in", { identifier: "+15555550199" }],
+    ["create-sign-up", { phoneNumber: "+15555550199" }],
+    ["prepare-sign-up-code", { strategy: "phone_code" }],
+    ["attempt-sign-up-code", { code: "654321" }],
+    ["set-active", { session: "mock-session-id" }],
+  ]);
+
+  const signupRateLimitFixture = makeResources({
+    createSignInError: {
+      errors: [{ code: "form_identifier_not_found" }],
+    },
+    prepareSignUpError: {
+      status: 429,
+      errors: [{ code: "verification_code_too_many_requests" }],
+    },
+  });
+  const signupRateLimit = await beginClerkPhoneAuth(
+    "sign-in",
+    "+15555550199",
+    signupRateLimitFixture.actions,
+  );
+  assert.equal(signupRateLimit.ok, false);
+  assert.equal(signupRateLimit.stage, "code-preparation");
+  assert.match(signupRateLimit.message, /limiting verification requests/i);
+  assert.deepEqual(signupRateLimitFixture.calls.map(([name]) => name), [
+    "create-sign-in",
+    "create-sign-up",
+    "prepare-sign-up-code",
+  ]);
 
   const other422Fixture = makeResources({
     createSignInError: {
@@ -307,9 +346,20 @@ test("only Clerk's explicit account-not-found response identifies a missing sign
     other422Fixture.actions,
   );
   assert.equal(other422.ok, false);
-  assert.match(other422.message, /could not start sign-in/i);
+  assert.match(other422.message, /could not start authentication/i);
   assert.doesNotMatch(other422.message, /No Clerk account was found/);
   assert.deepEqual(other422Fixture.calls.map(([name]) => name), ["create-sign-in"]);
+
+  const topLevelCodeFixture = makeResources({
+    createSignInError: { status: 422, code: "form_identifier_not_found" },
+  });
+  const topLevelCode = await beginClerkPhoneAuth(
+    "sign-in",
+    "+15555550199",
+    topLevelCodeFixture.actions,
+  );
+  assert.equal(topLevelCode.ok, false);
+  assert.deepEqual(topLevelCodeFixture.calls.map(([name]) => name), ["create-sign-in"]);
 });
 
 test("incorrect and expired codes are recoverable; resend and retry use mocked resources", async () => {
@@ -358,7 +408,7 @@ test("create, code-preparation, and verification failures report their lifecycle
   const createFailure = await beginClerkPhoneAuth("sign-in", "+15555550199", createFixture.actions);
   assert.equal(createFailure.ok, false);
   assert.equal(createFailure.stage, "create");
-  assert.match(createFailure.message, /could not start sign-in/i);
+  assert.match(createFailure.message, /could not start authentication/i);
 
   const prepareFixture = makeResources({ prepareSignInError: { code: "clerk_api_error" } });
   const prepareFailure = await beginClerkPhoneAuth("sign-in", "+15555550199", prepareFixture.actions);
@@ -376,18 +426,6 @@ test("create, code-preparation, and verification failures report their lifecycle
   assert.equal(createFixture.getActivationCalls(), 0);
   assert.equal(prepareFixture.getActivationCalls(), 0);
   assert.equal(verifyFixture.getActivationCalls(), 0);
-
-  const missingAccountFixture = makeResources({
-    createSignInError: { errors: [{ code: "form_identifier_not_found" }] },
-  });
-  const missingAccount = await beginClerkPhoneAuth(
-    "sign-in",
-    "+15555550199",
-    missingAccountFixture.actions,
-  );
-  assert.equal(missingAccount.ok, false);
-  assert.equal(missingAccount.stage, "create");
-  assert.match(missingAccount.message, /No Clerk account was found/);
 
   const unexpectedResponseFixture = makeResources({
     preparedSignInResult: {
@@ -487,6 +525,19 @@ test("lifecycle tests only use injected Clerk resources and never call fetch", a
         ["resend-sign-in-code", { strategy: "phone_code", phoneNumberId: "mock-phone-number-id" }],
       ],
     );
+
+    const signUpFixture = makeResources();
+    await beginClerkPhoneAuth("sign-up", "+380 99 000 00 00", signUpFixture.actions);
+    await resendClerkPhoneCode("sign-up", signUpFixture.actions);
+    const signUpVerified = await verifyClerkPhoneCode("sign-up", "654321", signUpFixture.actions);
+    assert.deepEqual(signUpVerified, { ok: true });
+    assert.deepEqual(signUpFixture.calls.map(([name]) => name), [
+      "create-sign-up",
+      "prepare-sign-up-code",
+      "resend-sign-up-code",
+      "attempt-sign-up-code",
+      "set-active",
+    ]);
     assert.equal(fetchCalls, 0);
   } finally {
     globalThis.fetch = previousFetch;
@@ -577,6 +628,17 @@ test("rate limits provide a wait message and safe Development diagnostics", asyn
   );
   assert.equal(noDuration.ok, false);
   assert.match(noDuration.message, /Wait a few minutes before requesting another code/);
+
+  const statusOnlyFixture = makeResources({
+    prepareSignInError: { status: 429, errors: [{ code: "request_throttled" }] },
+  });
+  const statusOnly = await beginClerkPhoneAuth(
+    "sign-in",
+    phoneNumber,
+    statusOnlyFixture.actions,
+  );
+  assert.equal(statusOnly.ok, false);
+  assert.match(statusOnly.message, /limiting verification requests/i);
 });
 
 test("delayed SMS delivery does not block Clerk-confirmed code entry or treat delivery as acceptance", async () => {

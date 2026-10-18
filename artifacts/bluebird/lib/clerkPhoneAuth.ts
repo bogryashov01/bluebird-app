@@ -133,20 +133,11 @@ export function createClerkPhoneAuthActions(input: {
         () => input.signUp.create({ phoneNumber }),
         input.diagnostics,
       );
-      try {
-        await runClerkRequest(
-          'code-preparation',
-          () => attempt.preparePhoneNumberVerification({ strategy: 'phone_code' }),
-          input.diagnostics,
-        );
-      } catch (error) {
-        if (isClerkNetworkFailure(error)) {
-          throw new ClerkPhoneAuthStageError('code-preparation', error);
-        }
-        throw new ClerkPhoneAuthStageError('code-preparation', {
-          code: 'signup_phone_verification_unavailable',
-        });
-      }
+      await runClerkRequest(
+        'code-preparation',
+        () => attempt.preparePhoneNumberVerification({ strategy: 'phone_code' }),
+        input.diagnostics,
+      );
     },
     resendSignIn: async () => {
       const phoneNumberId = getRequiredPhoneNumberId(input.signIn.supportedFirstFactors);
@@ -220,7 +211,13 @@ export type ClerkPhoneAuthFailure = {
 
 export type ClerkPhoneAuthStartResult =
   | ClerkPhoneAuthFailure
-  | { ok: true; nextStep: 'code'; phoneNumber?: string; verificationPending?: boolean };
+  | {
+      ok: true;
+      nextStep: 'code';
+      mode?: ClerkPhoneAuthMode;
+      phoneNumber: string;
+      verificationPending?: boolean;
+    };
 
 export type ClerkPhoneAuthResult = ClerkPhoneAuthFailure | { ok: true };
 
@@ -296,6 +293,7 @@ function getFailureStage(
 
 export function normalizeClerkPhoneNumber(input: string): string | null {
   const trimmed = input.trim();
+  if (!/^\+?[\d\s().-]+$/.test(trimmed)) return null;
   const digits = trimmed.replace(/\D/g, '');
 
   if (trimmed.startsWith('+')) {
@@ -320,7 +318,7 @@ export function getClerkAuthErrorMessage(
   if (code === 'form_identifier_exists' || code === 'identifier_exists' || code === 'form_phone_number_exists') {
     return 'That phone number already has a Clerk account. Sign in instead.';
   }
-  if (code === 'form_identifier_not_found' || code === 'identifier_not_found') {
+  if (code === 'form_identifier_not_found' && isExplicitMissingIdentifierError(originalError)) {
     return mode === 'sign-up'
       ? 'Clerk could not start an account with that number. Check the number and try again.'
       : 'No Clerk account was found for that number. Check it or create an account.';
@@ -347,6 +345,15 @@ export function getClerkAuthErrorMessage(
     return 'Clerk did not allow phone-code verification for sign-up. You remain signed out. Ask the app owner to enable phone verification before trying again.';
   }
   if (
+    code === 'phone_code_factor_unavailable'
+  ) {
+    return 'Clerk does not offer SMS verification for this account. Ask the app owner to enable phone-code sign-in before trying again.';
+  }
+  if (
+    (typeof originalError === 'object' &&
+      originalError !== null &&
+      'status' in originalError &&
+      originalError.status === 429) ||
     code === 'verification_code_too_many_requests' ||
     code === 'verification_attempts_exceeded' ||
     code === 'too_many_attempts' ||
@@ -362,7 +369,7 @@ export function getClerkAuthErrorMessage(
   }
 
   if (stage === 'create') {
-    return 'Clerk could not start sign-in. Check the phone number and try again.';
+    return 'Clerk could not start authentication. Check the phone number and try again.';
   }
   if (stage === 'code-preparation') {
     return 'Clerk could not prepare the verification code. Try sending the code again.';
@@ -421,7 +428,14 @@ export async function beginClerkPhoneAuth(
 
   try {
     if (mode === 'sign-in') {
-      const attempt = await actions.startSignIn(phoneNumber);
+      let attempt: ClerkPhoneAuthAttempt;
+      try {
+        attempt = await actions.startSignIn(phoneNumber);
+      } catch (error) {
+        if (!isExplicitMissingIdentifierError(error)) throw error;
+        await actions.startSignUp(phoneNumber);
+        return { ok: true, nextStep: 'code', mode: 'sign-up', phoneNumber };
+      }
       const verificationPending =
         attempt.status === 'needs_first_factor' &&
         attempt.phoneVerificationStatus === 'unverified';
@@ -448,6 +462,24 @@ export async function beginClerkPhoneAuth(
       message: getClerkAuthErrorMessage(error, mode, 'create'),
     };
   }
+}
+
+/**
+ * Clerk documents form_identifier_not_found in the sign-in-or-up flow as the
+ * signal to begin sign-up. Do not infer a missing account from an HTTP status.
+ */
+function isExplicitMissingIdentifierError(error: unknown): boolean {
+  error = unwrapStageError(error);
+  if (typeof error !== 'object' || error === null || !('errors' in error) || !Array.isArray(error.errors)) {
+    return false;
+  }
+  const firstError: unknown = error.errors[0];
+  return (
+    typeof firstError === 'object' &&
+    firstError !== null &&
+    'code' in firstError &&
+    firstError.code === 'form_identifier_not_found'
+  );
 }
 
 export async function resendClerkPhoneCode(

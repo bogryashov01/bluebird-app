@@ -1,6 +1,5 @@
 import React from 'react';
 import { Redirect } from 'expo-router';
-import { ClerkAuthPanel } from '@/components/ClerkAuthPanel';
 import { ClerkAuthConfigurationError } from '@/components/ClerkAuthConfigurationError';
 import {
   canAccessClerkAuthRoutes,
@@ -14,5 +13,5 @@ export default function ClerkSignUpScreen() {
   if (!canAccessClerkAuthRoutes(CLERK_AUTH_CONFIGURATION)) {
     return <ClerkAuthConfigurationError />;
   }
-  return <ClerkAuthPanel mode="sign-up" />;
+  return <Redirect href="/(clerk-auth)/sign-in" />;
 }

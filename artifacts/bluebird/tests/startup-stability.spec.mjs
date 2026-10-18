@@ -172,19 +172,15 @@ test("Clerk-enabled Welcome routes the phone journey into Clerk without starting
 
   await page.getByTestId("welcome-phone-entry").click();
   await expect(page).toHaveURL(/\/sign-in$/);
-  await expect(page.getByText("Sign in to Bluebird", { exact: true })).toBeVisible();
+  await expect(page.getByText("Continue with your phone", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("clerk-phone-input")).toBeVisible();
+  await expect(page.getByTestId("clerk-go-to-sign-up")).toHaveCount(0);
   await expect(page.getByTestId("clerk-development-preview-entry")).toHaveCount(0);
   expect(authApiCalls).toEqual([]);
 
-  await page.getByTestId("clerk-go-to-sign-up").click();
-  await expect(page).toHaveURL(/\/sign-up$/);
-  await expect(page.getByText("Create your Bluebird account", { exact: true })).toBeVisible();
-  await page.getByTestId("clerk-go-to-sign-in").click();
-  await expect(page).toHaveURL(/\/sign-in$/);
-  expect(authApiCalls).toEqual([]);
-
   await page.goto("/sign-up");
-  await expect(page.getByText("Create your Bluebird account", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByText("Continue with your phone", { exact: true })).toBeVisible();
   expect(authApiCalls).toEqual([]);
 
   await page.goto("/discover");

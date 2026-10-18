@@ -14,7 +14,7 @@ export default function ClerkSignInScreen() {
   }
   return (
     <View style={{ flex: 1 }}>
-      <ClerkAuthPanel mode="sign-in" />
+      <ClerkAuthPanel />
     </View>
   );
 }

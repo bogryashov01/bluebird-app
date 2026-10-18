@@ -31,7 +31,7 @@ import {
 
 type FormStep = 'phone' | 'code';
 
-export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
+export function ClerkAuthPanel() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { isLoaded, isSignedIn } = useAuth();
@@ -39,6 +39,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
   const signUpResource = useSignUp();
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
+  const [flowMode, setFlowMode] = useState<ClerkPhoneAuthMode>('sign-in');
   const [step, setStep] = useState<FormStep>('phone');
   const [busyAction, setBusyAction] = useState<'request' | 'verify' | 'resend' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +47,6 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
   const requestCount = useRef(0);
   const actionGuard = useRef<ReturnType<typeof createClerkAuthActionGuard> | null>(null);
   if (!actionGuard.current) actionGuard.current = createClerkAuthActionGuard(setBusyAction);
-  const isSignIn = mode === 'sign-in';
   const resourcesLoaded =
     signInResource.isLoaded &&
     signUpResource.isLoaded &&
@@ -88,7 +88,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
       requestCount.current = 0;
       setError(null);
       setErrorStage(null);
-      return beginClerkPhoneAuth(mode, phone, actions);
+      return beginClerkPhoneAuth('sign-in', phone, actions);
     });
     if (!guarded.accepted) return;
     const result = guarded.value;
@@ -98,6 +98,8 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
       return;
     }
     setCode('');
+    setPhone(result.phoneNumber);
+    setFlowMode(result.mode ?? 'sign-in');
     setStep(result.nextStep);
   };
 
@@ -106,7 +108,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
     const guarded = await actionGuard.current!.run('verify', async () => {
       setError(null);
       setErrorStage(null);
-      return verifyClerkPhoneCode(mode, code, actions);
+      return verifyClerkPhoneCode(flowMode, code, actions);
     });
     if (!guarded.accepted) return;
     const result = guarded.value;
@@ -126,7 +128,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
     const guarded = await actionGuard.current!.run('resend', async () => {
       setError(null);
       setErrorStage(null);
-      return resendClerkPhoneCode(mode, actions);
+      return resendClerkPhoneCode(flowMode, actions);
     });
     if (!guarded.accepted) return;
     const result = guarded.value;
@@ -140,7 +142,11 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
   const pending = busyAction !== null;
-  const title = isSignIn ? 'Sign in to Bluebird' : 'Create your Bluebird account';
+  const title = step === 'phone'
+    ? 'Continue with your phone'
+    : flowMode === 'sign-in'
+      ? 'Sign in to Bluebird'
+      : 'Verify your phone';
 
   return (
     <View
@@ -169,9 +175,11 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
           <Text style={[styles.eyebrow, { color: colors.paleBlue }]}>BLUEBIRD ACCOUNT</Text>
           <Text style={[styles.title, { color: colors.textOnBrand }]}>{title}</Text>
           <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>
-            {isSignIn
-              ? 'Enter your phone number to receive a sign-in code.'
-              : 'Create an account with your phone. Bluebird member access is confirmed separately after sign-in.'}
+            {step === 'phone'
+              ? 'We’ll look for your account first, then send a code to sign in or create an account.'
+              : flowMode === 'sign-in'
+                ? `Enter the code sent to ${phone}.`
+                : `This number isn’t linked to an account yet. Verify ${phone} to create one. Bluebird member access is confirmed separately after sign-in.`}
           </Text>
 
           {(!isLoaded || !resourcesLoaded) && (
@@ -195,6 +203,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
                     keyboardType="phone-pad"
                     onChangeText={(value) => {
                       setPhone(value);
+                      setFlowMode('sign-in');
                       setError(null);
                     }}
                     onSubmitEditing={handleRequestCode}
@@ -299,6 +308,7 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
                     onPress={() => {
                       setStep('phone');
                       setCode('');
+                      setFlowMode('sign-in');
                       setError(null);
                       setErrorStage(null);
                     }}
@@ -340,20 +350,6 @@ export function ClerkAuthPanel({ mode }: { mode: ClerkPhoneAuthMode }) {
           )}
         </View>
 
-        <View style={styles.links}>
-          <Text style={[styles.footerText, { color: colors.mutedOnBrand }]}>
-            {isSignIn ? 'New to Bluebird?' : 'Already have a Bluebird account?'}
-          </Text>
-          <Pressable
-            accessibilityRole="link"
-            onPress={() => router.replace(isSignIn ? '/(clerk-auth)/sign-up' : '/(clerk-auth)/sign-in')}
-            testID={isSignIn ? 'clerk-go-to-sign-up' : 'clerk-go-to-sign-in'}
-          >
-            <Text style={[styles.linkText, { color: colors.paleBlue }]}>
-              {isSignIn ? 'Create account' : 'Sign in'}
-            </Text>
-          </Pressable>
-        </View>
       </KeyboardAwareScrollViewCompat>
     </View>
   );
@@ -380,8 +376,6 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.55 },
   codeActions: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 20, marginTop: 20 },
   secondaryAction: { minHeight: 42, justifyContent: 'center' },
-  links: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, paddingVertical: 18 },
-  footerText: { fontSize: 13, fontFamily: 'Inter_400Regular' },
   linkText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
 });
 
