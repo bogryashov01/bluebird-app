@@ -1,0 +1,108 @@
+BLUEBIRD MOBILE — FIX REMAINING IOS READINESS ISSUES
+
+PRIORITY: HIGH
+MODE: BUILD / EXECUTE
+
+PROJECT:
+artifacts/bluebird
+
+GOAL:
+
+Investigate and resolve the two remaining
+verification issues from Task #602.
+
+Do not repeat the full iOS readiness audit.
+
+Read:
+IOS-BUILD-READINESS.md
+
+SCOPE:
+Bluebird Mobile ONLY.
+
+Main Bluebird Website/API is READ-ONLY.
+
+Do not modify production infrastructure.
+
+========================================
+1. FLIGHT DETAILS VIEWPORT
+========================================
+
+Investigate the failing compact
+Flight Details viewport assertion.
+
+Determine whether this is:
+
+- A real responsive layout defect
+- A browser viewport limitation
+- A stale test assertion
+- A test environment issue
+
+If a real UI issue exists, fix it.
+
+Preserve the approved Bluebird design.
+
+Verify compact iPhone-sized layouts.
+
+Do not redesign Flight Details.
+
+========================================
+2. AIRPORT SEARCH
+========================================
+
+Investigate the production Airport
+Search verification failure.
+
+Determine whether:
+
+- The request was not sent
+- Authentication was missing
+- The response was blocked
+- The API returned an error
+- The test timed out
+- The assertion was incorrect
+
+Do not modify the backend.
+
+Do not invent airport search results.
+
+Fix Mobile-only issues if confirmed.
+
+If live verification requires
+authenticated access, document it
+as blocked rather than failed.
+
+========================================
+3. REGRESSION CHECKS
+========================================
+
+Verify:
+
+- Clerk startup navigation
+- Flight Details navigation
+- Home Airport selection
+- Profile navigation
+- Queue
+- Membership
+
+Run relevant tests and TypeScript.
+
+========================================
+4. DELIVERY
+========================================
+
+Implement confirmed Mobile-only fixes.
+
+Report:
+
+1. Root cause of each issue
+2. Fixes applied
+3. Tests passed
+4. Remaining limitations
+5. Files changed
+
+Do not modify Expo/EAS configuration
+unless directly required.
+
+Do not restore Development Preview.
+
+Do not modify Main Bluebird.
