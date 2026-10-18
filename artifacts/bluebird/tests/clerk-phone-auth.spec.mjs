@@ -279,6 +279,39 @@ test("existing Clerk accounts get a sign-in recovery message without echoing pho
   assert.equal(result.message.includes("+15555550199"), false);
 });
 
+test("only Clerk's explicit account-not-found response identifies a missing sign-in account", async () => {
+  const missingAccountFixture = makeResources({
+    createSignInError: {
+      status: 422,
+      errors: [{ code: "form_identifier_not_found" }],
+    },
+  });
+  const missingAccount = await beginClerkPhoneAuth(
+    "sign-in",
+    "+15555550199",
+    missingAccountFixture.actions,
+  );
+  assert.equal(missingAccount.ok, false);
+  assert.match(missingAccount.message, /No Clerk account was found/);
+  assert.deepEqual(missingAccountFixture.calls.map(([name]) => name), ["create-sign-in"]);
+
+  const other422Fixture = makeResources({
+    createSignInError: {
+      status: 422,
+      errors: [{ code: "unprocessable_entity" }],
+    },
+  });
+  const other422 = await beginClerkPhoneAuth(
+    "sign-in",
+    "+15555550199",
+    other422Fixture.actions,
+  );
+  assert.equal(other422.ok, false);
+  assert.match(other422.message, /could not start sign-in/i);
+  assert.doesNotMatch(other422.message, /No Clerk account was found/);
+  assert.deepEqual(other422Fixture.calls.map(([name]) => name), ["create-sign-in"]);
+});
+
 test("incorrect and expired codes are recoverable; resend and retry use mocked resources", async () => {
   const fixture = makeResources({
     signInAttempts: [
@@ -374,31 +407,53 @@ test("create, code-preparation, and verification failures report their lifecycle
   assert.equal(unexpectedResponseFixture.calls.some(([name]) => name === "attempt-sign-in-code"), false);
 });
 
-test("unverified and incomplete sign-up results stay signed out even if Clerk returns a session id", async () => {
-  const unverifiedFixture = makeResources({
-    signUpAttempts: [{
-      status: "complete",
-      createdSessionId: "mock-session-id",
-      verifications: { phoneNumber: { status: "unverified" } },
-    }],
-  });
-  const unverified = await verifyClerkPhoneCode("sign-up", "123456", unverifiedFixture.actions);
-  assert.equal(unverified.ok, false);
-  assert.match(unverified.message, /has not confirmed this phone number/);
-  assert.equal(unverifiedFixture.getActivationCalls(), 0);
+test("unverified and incomplete sign-up results stay signed out without sending SMS", async () => {
+  let fetchCalls = 0;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    throw new Error("unexpected network request");
+  };
+  try {
+    const unverifiedFixture = makeResources({
+      signUpAttempts: [{
+        status: "complete",
+        createdSessionId: "mock-session-id",
+        verifications: { phoneNumber: { status: "unverified" } },
+      }],
+    });
+    const started = await beginClerkPhoneAuth(
+      "sign-up",
+      "+15555550199",
+      unverifiedFixture.actions,
+    );
+    assert.equal(started.ok, true);
+    const unverified = await verifyClerkPhoneCode("sign-up", "123456", unverifiedFixture.actions);
+    assert.equal(unverified.ok, false);
+    assert.match(unverified.message, /has not confirmed this phone number/);
+    assert.equal(unverifiedFixture.getActivationCalls(), 0);
+    assert.deepEqual(unverifiedFixture.calls.map(([name]) => name), [
+      "create-sign-up",
+      "prepare-sign-up-code",
+      "attempt-sign-up-code",
+    ]);
 
-  const incompleteFixture = makeResources({
-    signUpAttempts: [{
-      status: "missing_requirements",
-      createdSessionId: "mock-session-id",
-      verifications: { phoneNumber: { status: "verified" } },
-    }],
-  });
-  const incomplete = await verifyClerkPhoneCode("sign-up", "123456", incompleteFixture.actions);
-  assert.equal(incomplete.ok, false);
-  assert.equal(incomplete.stage, "verification");
-  assert.match(incomplete.message, /additional sign-up information/);
-  assert.equal(incompleteFixture.getActivationCalls(), 0);
+    const incompleteFixture = makeResources({
+      signUpAttempts: [{
+        status: "missing_requirements",
+        createdSessionId: "mock-session-id",
+        verifications: { phoneNumber: { status: "verified" } },
+      }],
+    });
+    const incomplete = await verifyClerkPhoneCode("sign-up", "123456", incompleteFixture.actions);
+    assert.equal(incomplete.ok, false);
+    assert.equal(incomplete.stage, "verification");
+    assert.match(incomplete.message, /additional sign-up information/);
+    assert.equal(incompleteFixture.getActivationCalls(), 0);
+    assert.equal(fetchCalls, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
 });
 
 test("failed session activation can be retried without exposing the session id", async () => {

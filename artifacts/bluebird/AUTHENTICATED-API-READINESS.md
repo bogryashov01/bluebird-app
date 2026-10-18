@@ -491,14 +491,20 @@ typecheck, lockfile, or Metro export cannot substitute for it.
 
 ### Verification policy and API identity blockers
 
-- The supplied Development setting says sign-up verification is disabled. Its
-  security meaning is unresolved: product/security owners must decide whether
-  accounts may be created and sessions activated before phone ownership is
-  proven. Do not call a phone verified based on a submitted number, a code
-  screen being shown, a session being active, or sign-up completion. Require
-  Clerk's actual returned phone verification state and an approved policy.
-  This assessment did not independently inspect Clerk settings or test their
-  effect.
+- **Expected Development policy:** require phone verification at sign-up. The
+  user must prove control of the number with a successful phone-code challenge
+  before the new account can become active. The last supplied settings report
+  says this requirement is disabled; it has not been confirmed in the live
+  Dashboard. Until the Development owner confirms the current setting, do not
+  perform a live sign-up or treat the policy as verified. If the setting is
+  disabled, keep that as a security/configuration blocker rather than relaxing
+  the app's check.
+- Independently of the Dashboard setting, the app must not activate a new
+  sign-up session based on a submitted number, code-entry screen, session ID,
+  or completed sign-up alone. Require Clerk's returned phone verification
+  status to be `verified` and the sign-up status to be `complete`; the mocked
+  regression test checks that an unverified session remains signed out without
+  making network requests or sending SMS.
 - The checked-in API server at
   `artifacts/api-server/src/middlewares/auth.ts` signs `{ userId }` with its
   own `JWT_SECRET`/`SESSION_SECRET` and verifies bearer JWTs using that same

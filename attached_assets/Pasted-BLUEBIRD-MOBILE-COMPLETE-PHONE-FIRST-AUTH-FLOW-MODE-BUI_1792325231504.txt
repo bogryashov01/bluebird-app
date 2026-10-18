@@ -1,0 +1,104 @@
+BLUEBIRD MOBILE — COMPLETE PHONE-FIRST AUTH FLOW
+
+MODE: BUILD / EXECUTE
+
+CLARIFICATION:
+
+Bluebird's intended authentication flow
+requires SMS phone verification for both
+new user registration and existing user login.
+
+This is a product requirement.
+
+Do not interpret this as confirmation
+of the Development Clerk Dashboard settings.
+
+We do not need to wait for the Clerk owner
+to implement the Mobile-side flow.
+
+EXPECTED BEHAVIOR:
+
+NEW USER:
+
+1. Enter phone number.
+2. Start Clerk sign-up.
+3. Send SMS verification code.
+4. Verify SMS code.
+5. Activate session only after Clerk
+   confirms phone verification.
+6. Continue to existing onboarding.
+7. Open Discover after onboarding.
+
+EXISTING USER:
+
+1. Enter phone number.
+2. Start Clerk sign-in.
+3. Send SMS verification code.
+4. Verify SMS code.
+5. Activate verified session.
+6. Open Discover or existing
+   required onboarding.
+
+PHONE-FIRST UX:
+
+Use a unified phone entry screen.
+
+If Clerk explicitly confirms that
+the account does not exist,
+transition to the supported sign-up flow.
+
+Do not treat all HTTP 422 errors
+as account-not-found errors.
+
+If Clerk cannot safely distinguish
+the two states, provide a clear
+sign-up transition.
+
+INTERNATIONAL NUMBERS:
+
+Support valid E.164 numbers,
+including +1 and +380.
+
+Do not introduce US-only validation.
+
+SECURITY:
+
+Never activate an unverified session.
+
+Never bypass Clerk SMS verification.
+
+Never create fake authentication tokens.
+
+Never change Clerk backend settings.
+
+Do not perform live SMS tests automatically.
+
+SCOPE:
+
+Bluebird Mobile ONLY.
+
+Do not modify Main Bluebird Website,
+Main API, database, or Clerk backend.
+
+IMPLEMENTATION:
+
+Inspect the existing authentication code.
+
+Implement the supported Mobile-side flow.
+
+Do not stop the entire task because
+the Development Clerk Dashboard policy
+has not been independently confirmed.
+
+Document any remaining backend-dependent
+limitations separately.
+
+TESTING:
+
+Run focused Clerk authentication tests.
+
+Rebuild stale shared API-client declarations
+before running Mobile TypeScript.
+
+Report what was implemented and what
+still requires a real SMS verification test.
