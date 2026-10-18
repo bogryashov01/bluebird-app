@@ -97,8 +97,58 @@ test("phone normalization accepts US and international synthetic numbers only", 
   assert.equal(normalizeClerkPhoneNumber("(555) 555-0199"), "+15555550199");
   assert.equal(normalizeClerkPhoneNumber("1 555 555 0199"), "+15555550199");
   assert.equal(normalizeClerkPhoneNumber("+44 20 7946 0958"), "+442079460958");
+  assert.equal(normalizeClerkPhoneNumber("+380 99 000 00 00"), "+380990000000");
   for (const invalid of ["", "55512", "55555501999", "+0123456789", "+1234567"]) {
     assert.equal(normalizeClerkPhoneNumber(invalid), null);
+  }
+});
+
+test("Ukrainian E.164 input reaches mocked Clerk sign-in and sign-up unchanged without network calls", async () => {
+  const phoneNumber = "+380990000000";
+  let fetchCalls = 0;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    throw new Error("unexpected network request");
+  };
+  try {
+    const signInFixture = makeResources();
+    const signInStarted = await beginClerkPhoneAuth(
+      "sign-in",
+      "+380 99 000 00 00",
+      signInFixture.actions,
+    );
+    assert.deepEqual(signInStarted, {
+      ok: true,
+      nextStep: "code",
+      phoneNumber,
+      verificationPending: true,
+    });
+    assert.deepEqual(signInFixture.calls, [
+      ["create-sign-in", { identifier: phoneNumber }],
+      ["prepare-sign-in-code", { strategy: "phone_code", phoneNumberId: "mock-phone-number-id" }],
+    ]);
+    assert.equal(signInFixture.getActivationCalls(), 0);
+
+    const signUpFixture = makeResources();
+    const signUpStarted = await beginClerkPhoneAuth(
+      "sign-up",
+      "+380 99 000 00 00",
+      signUpFixture.actions,
+    );
+    assert.deepEqual(signUpStarted, {
+      ok: true,
+      nextStep: "code",
+      phoneNumber,
+    });
+    assert.deepEqual(signUpFixture.calls, [
+      ["create-sign-up", { phoneNumber }],
+      ["prepare-sign-up-code", { strategy: "phone_code" }],
+    ]);
+    assert.equal(signUpFixture.getActivationCalls(), 0);
+    assert.equal(fetchCalls, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
   }
 });
 
