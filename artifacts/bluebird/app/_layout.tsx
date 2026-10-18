@@ -318,25 +318,31 @@ function RoutedRoot() {
     typeof __DEV__ !== 'undefined' && __DEV__,
   );
 
-  if (isDevelopmentPreview) {
-    return (
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="development-preview/index" options={{ headerShown: false }} />
-        <Stack.Screen name="development-preview/[screen]" options={{ headerShown: false }} />
-        <Stack.Screen name="development-preview/show" options={{ headerShown: false }} />
-        <Stack.Screen name="queue/dev-preview" options={{ headerShown: false }} />
-        <Stack.Screen name="membership/dev-preview" options={{ headerShown: false }} />
-      </Stack>
-    );
-  }
-
   const authenticatedApp = (
     <AuthProvider>
       <RootLayoutNav />
     </AuthProvider>
   );
 
-  return CLERK_AUTH_CONFIGURATION.enabled
-    ? <DormantClerkProvider>{authenticatedApp}</DormantClerkProvider>
-    : authenticatedApp;
+  return (
+    // Keep an identity-free context mounted across the root navigation switch.
+    // Expo Router may retain an auth route layout for a transition frame after
+    // the active segments change to Preview; that layout calls useAuth() while
+    // its real authenticated subtree is being removed.
+    <AuthProvider previewOnly>
+      {isDevelopmentPreview ? (
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="development-preview/index" options={{ headerShown: false }} />
+          <Stack.Screen name="development-preview/[screen]" options={{ headerShown: false }} />
+          <Stack.Screen name="development-preview/show" options={{ headerShown: false }} />
+          <Stack.Screen name="queue/dev-preview" options={{ headerShown: false }} />
+          <Stack.Screen name="membership/dev-preview" options={{ headerShown: false }} />
+        </Stack>
+      ) : CLERK_AUTH_CONFIGURATION.enabled ? (
+        <DormantClerkProvider>{authenticatedApp}</DormantClerkProvider>
+      ) : (
+        authenticatedApp
+      )}
+    </AuthProvider>
+  );
 }

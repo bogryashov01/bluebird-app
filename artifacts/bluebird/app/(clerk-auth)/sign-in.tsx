@@ -21,7 +21,7 @@ export default function ClerkSignInScreen() {
         <TouchableOpacity
           testID="clerk-development-preview-entry"
           accessibilityRole="button"
-          onPress={() => router.push('/development-preview' as any)}
+          onPress={() => router.replace('/development-preview' as any)}
           style={{ position: 'absolute', bottom: 18, alignSelf: 'center', padding: 12 }}
         >
           <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold', fontSize: 12 }}>
