@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  avatarLogo: { width: 30, height: 30 },
+  avatarLogo: { width: 28, height: 30 },
   titleBlock: { flex: 1, justifyContent: 'center' },
   title: {
     fontFamily: 'Inter_600SemiBold',

@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', alignSelf: 'center',
     marginBottom: 20,
   },
-  logoMark: { width: 48, height: 48 },
+  logoMark: { width: 44, height: 48 },
   title: {
     fontSize: 26, fontFamily: 'Inter_700Bold',
     textAlign: 'center', letterSpacing: -0.4,

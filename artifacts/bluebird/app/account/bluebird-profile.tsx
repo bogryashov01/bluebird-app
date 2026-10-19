@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 12 },
   refreshingRow: { minHeight: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   refreshingMark: { width: 18, height: 18 },
-  loadingMark: { width: 48, height: 48 },
+  loadingMark: { width: 44, height: 48 },
   backLink: { alignSelf: 'flex-start', paddingVertical: 8, paddingRight: 16 },
   linkText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
   title: { fontSize: 26, lineHeight: 32, fontFamily: 'Inter_700Bold', letterSpacing: -0.4 },

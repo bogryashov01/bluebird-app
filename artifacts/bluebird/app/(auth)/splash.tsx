@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
   },
   logo: {
     width: 220,
-    height: 50,
+    height: 49,
   },
   tagline: {
     fontSize: 16,

@@ -183,7 +183,7 @@ export default function FlightConfirmedScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { paddingHorizontal: 24, alignItems: 'center', gap: 26 },
-  birdMark: { width: 76, height: 59 },
+  birdMark: { width: 55, height: 60 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 28, textAlign: 'center' },
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, textAlign: 'center' },
   timeline: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 16 },

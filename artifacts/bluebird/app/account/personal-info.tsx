@@ -1097,7 +1097,7 @@ const styles = StyleSheet.create({
   clerkInfoField: { gap: 6 },
   clerkInfoCard: { padding: 16, borderRadius: 16, gap: 12 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 12 },
-  loadingMark: { width: 48, height: 48 },
+  loadingMark: { width: 44, height: 48 },
   refreshingRow: { height: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   refreshingMark: { width: 18, height: 18 },
   inlineLoadError: { padding: 12, borderRadius: 12, gap: 8 },

@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     width: 38, height: 38, borderRadius: 19, borderWidth: 1,
     justifyContent: 'center', alignItems: 'center',
   },
-  headerLogo: { position: 'absolute', left: '50%', bottom: 15, width: 100, height: 22, marginLeft: -50 },
+  headerLogo: { position: 'absolute', left: '50%', bottom: 15, width: 99, height: 22, marginLeft: -49.5 },
   changeText: { fontSize: 14, fontFamily: 'Inter_500Medium' },
   headline: { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 20 },
   overline: {

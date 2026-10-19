@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   glow: {
     position: 'absolute', width: 140, height: 140, borderRadius: 70,
   },
-  bird: { width: 92, height: 92 },
+  bird: { width: 85, height: 92 },
   textBlock: { alignItems: 'center', gap: 10 },
   headline: { fontFamily: 'Inter_700Bold', fontSize: 32, textAlign: 'center', letterSpacing: 0.3 },
   subheadline: { fontFamily: 'Inter_400Regular', fontSize: 15, lineHeight: 22, textAlign: 'center' },

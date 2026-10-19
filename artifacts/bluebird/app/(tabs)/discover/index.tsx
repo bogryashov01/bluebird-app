@@ -675,7 +675,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingBottom: 18,
   },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  logoImg: { width: 28, height: 24 },
+  logoImg: { width: 22, height: 24 },
   conciergeBtn: {
     width: 38, height: 38, borderRadius: 19,
     alignItems: 'center', justifyContent: 'center',

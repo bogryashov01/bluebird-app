@@ -577,7 +577,7 @@ const styles = StyleSheet.create({
   clerkProfileLoading: {
     flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10,
   },
-  clerkProfileLoadingMark: { width: 48, height: 48 },
+  clerkProfileLoadingMark: { width: 44, height: 48 },
   clerkProfileRefreshing: {
     height: 24, flexDirection: 'row', alignItems: 'center', gap: 8,
   },
