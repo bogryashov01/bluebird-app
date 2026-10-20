@@ -58,6 +58,12 @@
       ],
       "expo-font",
       "expo-web-browser",
+      [
+        "@clerk/expo",
+        {
+          "appleSignIn": false
+        }
+      ],
       "expo-notifications",
       [
         "expo-image-picker",
