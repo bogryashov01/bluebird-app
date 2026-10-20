@@ -63,6 +63,69 @@
 | Production flight/API environment tests | **PASS.** Production flight and airport read tests passed; local fixtures remain limited to Development. |
 | Live signed-in Development diagnostic, remote EAS inspection, iOS Simulator/device, EAS build, TestFlight upload/submission | **NOT RUN.** No signed-in diagnostic result or owner/Apple account access was available; no request/build/upload/submission was initiated. |
 
+## iOS Metro transformer error and archive-log audit (2026-10-20)
+
+- **Resolved local versions:** Expo `57.0.30`, Expo CLI `57.0.31`,
+  `@expo/metro-config` `57.0.13`, `@expo/metro` `56.0.2`, Metro
+  `0.84.5`, `metro-transform-worker` `0.84.5`, and React Native `0.86.3`.
+  The workspace Node runtime was `v24.13.0`; this does not establish the Node
+  version used by EAS. These values describe this checkout's installed
+  dependency graph, not necessarily the archived build's graph.
+- **Metro setup:** `metro.config.js` returns Expo's `getDefaultConfig`, with
+  no custom transformer. The resolved default `transformerPath` is Expo's
+  `@expo/metro-config/build/transform-worker/transform-worker.js`; the Babel
+  transformer is `@expo/metro-config/build/babel-transformer.js`. The Babel
+  config uses `babel-preset-expo` with `unstable_transformImportMeta`.
+- **Why the reported message can be secondary:** Metro `Bundler` catches an
+  exception while initializing its dependency graph/transformer, writes
+  `Failed to construct transformer:` and the original error object to stderr,
+  then records `transformer_load_failed` without rejecting its ready promise.
+  A later bundle request reaches `this._transformer.transformFile(...)` while
+  `_transformer` is still unset, producing the secondary
+  `Cannot read properties of undefined (reading 'transformFile')` error.
+- **Forwarding:** the resolved Expo `react-native-xcode.sh` enables shell
+  tracing (`set -x`) and invokes the Node CLI directly; it does not pipe or
+  redirect the bundle command's stdout/stderr. Expo CLI's Xcode formatter
+  intentionally emits only the error's first line as an Xcode diagnostic, then
+  rethrows it. Its top-level command handler prints the error stack for ordinary
+  errors. Metro's earlier `console.error` of the initialization error is not
+  filtered by this script. Thus the source path does not show that Metro
+  suppresses the first exception; the EAS build-details page is the known
+  truncation point.
+- **Exit-status caveat:** the Expo shell script uses `set -x`, not `set -e`.
+  After the Node bundle command fails it still runs the Hermes or copy steps,
+  then only checks for a missing final bundle. If an old bundle is already
+  present at the checked path, later successful commands can mask the Node
+  command's nonzero status. This can affect phase success/failure reporting,
+  but it does not remove the earlier stderr lines from the raw log.
+- **What could not be confirmed:** this checkout has no generated `ios/`
+  project, `.xcresult`, archive, or EAS phase log. Therefore the exact
+  `BUNDLE_COMMAND` and environment chosen by the owner's archived project, and
+  whether that archive's UI preview clipped the earlier stderr, remain
+  unverified. The checked-in `app.json`/`eas.json` do not define a custom
+  transformer or replace the standard Expo Xcode script.
+- **No diagnostic code was added:** source inspection shows the original
+  initialization error and stack are emitted in the raw build stream. Adding
+  a Metro hook would duplicate this behavior and alter bundler configuration
+  without evidence that raw output is missing it. No dependency, transform
+  behavior, build profile, auth setting, app identity, signing, backend, or
+  website was changed, and no EAS build was started.
+- **Expected lines in the next raw iOS phase log:** first, Metro's
+  `Failed to construct transformer:` line followed by the original exception
+  name/message and Node-formatted stack; later, the Xcode-formatted
+  `error: Cannot read properties of undefined (reading 'transformFile')`
+  line and the CLI-rethrown stack. The first exception's stack is the useful
+  evidence; no new tagged diagnostic fields or version banner are added.
+- **Retrieve the complete log:** in the completed EAS build details page,
+  scroll to the bottom and choose the full Xcode log's view/download action;
+  Expo documents that the normal iOS details page is abridged. If the preview
+  is clipped, the build owner can download all artifacts and Xcode logs with
+  `eas build:download --build-id <BUILD_ID> --all-artifacts`, then search the
+  downloaded Xcode log for `Failed to construct transformer` and
+  `transformFile`. The next owner-run archive is required to confirm whether
+  those lines are present and whether the script's later commands masked the
+  bundle command's exit status.
+
 Audited 2026-10-18 after removal of Bluebird's temporary unauthenticated
 Development Preview. This report covers checked-in Mobile code/configuration and
 workspace-only automated checks. It does not claim access to the Bluebird
