@@ -96,9 +96,14 @@ async function isBluebirdPreviewProcess(pid, port, procRoot, projectRoot) {
   }
 }
 
-function launchExpo(port) {
+export function launchExpo(port, {
+  spawnProcess = spawn,
+  signalSource = process,
+  killProcess = process.kill.bind(process),
+  environment = process.env,
+} = {}) {
   return new Promise((resolveExit, reject) => {
-    const child = spawn(
+    const child = spawnProcess(
       "pnpm",
       [
         "exec",
@@ -112,13 +117,59 @@ function launchExpo(port) {
         String(port),
       ],
       {
-        env: { ...process.env, PORT: String(port), CI: "1" },
+        env: {
+          ...environment,
+          PORT: String(port),
+          CI: "1",
+          EXPO_UNSTABLE_HEADLESS: "1",
+        },
         stdio: "inherit",
+        detached: true,
       },
     );
-    child.once("error", reject);
+
+    const signals = ["SIGINT", "SIGTERM", "SIGHUP"];
+    let finished = false;
+    let requestedSignal = false;
+    const signalHandlers = new Map(
+      signals.map((signal) => [signal, () => onSignal(signal)]),
+    );
+    const cleanup = () => {
+      for (const [signal, handler] of signalHandlers) {
+        signalSource.removeListener(signal, handler);
+      }
+    };
+    const settle = (callback, value) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      callback(value);
+    };
+    const onSignal = (signal) => {
+      if (requestedSignal) return;
+      requestedSignal = signal;
+      try {
+        if (child.pid) {
+          killProcess(-child.pid, signal);
+        } else {
+          child.kill(signal);
+        }
+      } catch (error) {
+        if (error.code !== "ESRCH") {
+          // The launcher still waits for the child before returning. Its exit
+          // status remains authoritative if forwarding raced with shutdown.
+        }
+      }
+    };
+
+    for (const [signal, handler] of signalHandlers) {
+      signalSource.on(signal, handler);
+    }
+    child.once("error", (error) => settle(reject, error));
     child.once("exit", (code, signal) => {
-      resolveExit(code ?? (signal ? 1 : 0));
+      const exitCode =
+        code ?? (signal ? (requestedSignal === signal ? 0 : 1) : 0);
+      settle(resolveExit, exitCode);
     });
   });
 }

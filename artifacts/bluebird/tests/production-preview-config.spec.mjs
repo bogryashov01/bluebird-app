@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { spawnSync } from "node:child_process";
 import {
   chmod,
@@ -12,7 +13,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { runPreviewLauncher } from "../scripts/production-preview-launcher.mjs";
+import {
+  launchExpo,
+  runPreviewLauncher,
+} from "../scripts/production-preview-launcher.mjs";
 
 const packageJson = JSON.parse(
   await readFile(new URL("../package.json", import.meta.url), "utf8"),
@@ -93,12 +97,121 @@ test("Production Preview retains production API reads and the current production
     /"start",\s*"--no-dev",\s*"--minify",\s*"--web",\s*"--localhost",\s*"--port"/,
   );
   assert.match(launcherSource, /CI: "1"/);
+  assert.match(launcherSource, /EXPO_UNSTABLE_HEADLESS: "1"/);
   assert.doesNotMatch(command, /EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL=/);
   assert.doesNotMatch(command, /EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY=/);
   assert.match(artifactConfig, /previewPath = "\/bluebird\/"/);
   assert.match(artifactConfig, /paths = \[ "\/bluebird\/" \]/);
   assert.match(artifactConfig, /localPort = 20104/);
   assert.match(artifactConfig, /PORT = "20104"/);
+});
+
+test("Expo launches headlessly with inherited Production environment and managed PORT intact", async () => {
+  const child = new EventEmitter();
+  child.pid = 81234;
+  let observed;
+  const environment = {
+    EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH: "true",
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL: "https://api.example.invalid",
+    EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: "production",
+    PORT: "incorrect-inherited-port",
+    KEEP_ME: "inherited",
+    EXPO_UNSTABLE_HEADLESS: "0",
+  };
+  const originalEnvironment = { ...environment };
+  const signals = new EventEmitter();
+  const launch = launchExpo(43130, {
+    environment,
+    signalSource: signals,
+    spawnProcess: (...args) => {
+      observed = args;
+      return child;
+    },
+  });
+
+  assert.equal(observed[0], "pnpm");
+  assert.deepEqual(observed[1], [
+    "exec",
+    "expo",
+    "start",
+    "--no-dev",
+    "--minify",
+    "--web",
+    "--localhost",
+    "--port",
+    "43130",
+  ]);
+  assert.equal(observed[2].env.PORT, "43130");
+  assert.equal(observed[2].env.CI, "1");
+  assert.equal(observed[2].env.EXPO_UNSTABLE_HEADLESS, "1");
+  assert.equal(observed[2].env.EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH, "true");
+  assert.equal(
+    observed[2].env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL,
+    "https://api.example.invalid",
+  );
+  assert.equal(observed[2].env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT, "production");
+  assert.equal(observed[2].env.KEEP_ME, "inherited");
+  assert.deepEqual(environment, originalEnvironment, "launch must not mutate inherited variables");
+  assert.equal(observed[2].detached, true);
+
+  child.emit("exit", 0, null);
+  assert.equal(await launch, 0);
+});
+
+test("Expo launcher forwards termination to the process group and waits for child shutdown", async () => {
+  const child = new EventEmitter();
+  child.pid = 81235;
+  const signals = new EventEmitter();
+  const forwardedSignals = [];
+  let settled = false;
+  const launch = launchExpo(43131, {
+    signalSource: signals,
+    spawnProcess: () => child,
+    killProcess: (...args) => forwardedSignals.push(args),
+    environment: {},
+  }).then((code) => {
+    settled = true;
+    return code;
+  });
+
+  assert.equal(settled, false, "the launcher stays attached while Expo is serving");
+  signals.emit("SIGTERM");
+  assert.deepEqual(forwardedSignals, [[-child.pid, "SIGTERM"]]);
+  assert.equal(settled, false, "signal forwarding must not resolve before Expo exits");
+
+  child.emit("exit", null, "SIGTERM");
+  assert.equal(await launch, 0, "the signal forwarded by Replit is a clean stop");
+  assert.equal(settled, true);
+  assert.equal(signals.listenerCount("SIGTERM"), 0);
+  assert.equal(signals.listenerCount("SIGINT"), 0);
+  assert.equal(signals.listenerCount("SIGHUP"), 0);
+});
+
+test("repeated Expo launches remove signal handlers and preserve each child's failure status", async () => {
+  const signals = new EventEmitter();
+  const children = [];
+  const launchOnce = () => {
+    const child = new EventEmitter();
+    child.pid = 81236 + children.length;
+    children.push(child);
+    return launchExpo(43132, {
+      signalSource: signals,
+      spawnProcess: () => child,
+      environment: {},
+    });
+  };
+
+  const firstLaunch = launchOnce();
+  assert.equal(signals.listenerCount("SIGTERM"), 1);
+  children[0].emit("exit", 7, null);
+  assert.equal(await firstLaunch, 7);
+  assert.equal(signals.listenerCount("SIGTERM"), 0);
+
+  const secondLaunch = launchOnce();
+  assert.equal(signals.listenerCount("SIGTERM"), 1);
+  children[1].emit("exit", 0, null);
+  assert.equal(await secondLaunch, 0);
+  assert.equal(signals.listenerCount("SIGTERM"), 0);
 });
 
 async function createProcFixture({ port, pid, inode, commandLine, projectRoot }) {
