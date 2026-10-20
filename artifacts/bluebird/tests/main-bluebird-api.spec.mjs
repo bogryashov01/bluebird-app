@@ -83,6 +83,16 @@ test("the explicit selector resolves matching Development and Production API/Cle
       productionApiBaseUrl: "https://other.example.test/api",
       productionClerkPublishableKey: "pk_live_Y2xlcmsuZXhhbXBsZS5jb20k",
     },
+    {
+      environment: "production",
+      productionApiBaseUrl: "https://bluebird-preview.replit.dev/api",
+      productionClerkPublishableKey: "pk_live_Y2xlcmsuZXhhbXBsZS5jb20k",
+    },
+    {
+      environment: "production",
+      productionApiBaseUrl: "https://bluebirdjets.com/api",
+      productionClerkPublishableKey: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k",
+    },
   ]) {
     assert.throws(
       () => resolveMainBluebirdApiConfiguration(invalid),
@@ -109,6 +119,8 @@ test("configuration never infers a selected pair or falls back to legacy values"
     process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k";
     assert.throws(() => getMainBluebirdApiConfiguration(), MainBluebirdApiConfigurationError);
     process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "development";
+    assert.throws(() => getMainBluebirdApiConfiguration(), MainBluebirdApiConfigurationError);
+    process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT = "production";
     assert.throws(() => getMainBluebirdApiConfiguration(), MainBluebirdApiConfigurationError);
   } finally {
     for (const name of variableNames) {

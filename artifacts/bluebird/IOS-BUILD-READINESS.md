@@ -1,5 +1,68 @@
 # Bluebird iOS development-build readiness
 
+## TestFlight production configuration audit (2026-10-20)
+
+- **EAS profile:** `production` explicitly selects EAS `production` and store
+  distribution; Development profiles select `development`. Remote EAS values
+  were not accessible from this workspace. The production environment selector
+  is verified in checked-in configuration; its actual API, Clerk, and legacy
+  `EXPO_PUBLIC_DOMAIN` values are not verified.
+- **Production inputs:** the connected Replit environment has no configured
+  production values for the Main API selector, API base URL, or Clerk
+  publishable key. Available Replit secret-presence metadata contains
+  Development Clerk inputs only. This does not reveal or establish the remote
+  Expo/EAS production environment. No production endpoint was contacted and no
+  credential value was printed or recorded.
+- **Current Development setup:** the connected Replit environment reports a
+  Development selector and API base URL, plus Development Clerk key/issuer
+  secret entries. Presence alone does not verify the current API/Clerk pairing
+  or establish that the current Preview origin matches the saved preflight
+  observation; credential contents were not retrieved.
+- **Fail-closed behavior:** Main API config requires an explicit environment
+  and the selected matching API/key pair. Production accepts only the
+  code-approved canonical HTTPS `/api` endpoint and a live-format Clerk key;
+  Development and Replit Preview endpoints, wrong key type, missing values,
+  and legacy-variable-only configuration do not resolve. Production flight
+  reads cannot select local fixtures outside `__DEV__`.
+- **Production authentication:** current Clerk mounting and sign-in are
+  Development-only. Production authentication is therefore not ready or
+  enabled; supplying a live publishable key does not silently activate it.
+  Keep this as a blocker until separately approved and implemented.
+- **iOS identity:** name/slug are `Bluebird`/`bluebird`; version/build are
+  `1.0.0`/`1`; icon and splash files resolve; photo-library, camera, and
+  Calendar permission copy is configured, microphone permission is disabled,
+  and iPad support is off. The exact bundle identifier, EAS project ID,
+  App Store Connect app ID, Apple team/signing credentials, and test-device
+  registrations remain owner/Apple-controlled blockers. No native iOS runtime
+  was exercised.
+- **Development `/api/me`:** the stored evidence records that the Fetch
+  receiver fix uses `globalThis`, a credential-free Preview preflight
+  succeeded, and a browser request with a test bearer received HTTP 200 with
+  an anonymous projection. The preflight/request did not establish receipt or
+  authentication for the user's signed-in Clerk request; Development API
+  access logs and a current signed-in diagnostic result are unavailable here.
+  No new request was sent, so the reported failure remains ambiguous: an
+  earlier Fetch invocation is not proof of an HTTP response or root cause.
+  There is no reproducible Mobile defect supporting a further transport
+  change.
+- **Owner next steps:** verify the remote EAS Production variables (including
+  `EXPO_PUBLIC_DOMAIN`) and API/Clerk pairing; approve/supply the bundle ID
+  and EAS project linkage; complete an explicitly approved Production Clerk
+  implementation; then authorize Apple signing/device setup and a later
+  TestFlight build. See `RELEASE-CONFIGURATION.md`.
+
+### Focused checks run for this audit
+
+| Check | Result |
+| --- | --- |
+| Shared library build and Bluebird Mobile TypeScript | **PASS.** `pnpm run typecheck:libs` followed by `pnpm --filter @workspace/bluebird run typecheck`. |
+| Main API configuration/environment tests | **PASS.** 11/11, including missing/legacy-only configuration rejection, Replit Preview host rejection, and Production key-type mismatch. |
+| Clerk auth configuration tests | **PASS.** 7/7. Production Clerk remains intentionally disabled by the current Development-only auth gate. |
+| `/api/me` diagnostic and transport tests | **PASS.** 12/12; Fetch invocation, HTTP status, sanitized ambiguous failures, and confirmation gates remain distinct. |
+| Authenticated API and transport tests | **PASS.** 23/23, including the global Fetch receiver and explicit-request-only behavior. |
+| Production flight/API environment tests | **PASS.** Production flight and airport read tests passed; local fixtures remain limited to Development. |
+| Live signed-in Development diagnostic, remote EAS inspection, iOS Simulator/device, EAS build, TestFlight upload/submission | **NOT RUN.** No signed-in diagnostic result or owner/Apple account access was available; no request/build/upload/submission was initiated. |
+
 Audited 2026-10-18 after removal of Bluebird's temporary unauthenticated
 Development Preview. This report covers checked-in Mobile code/configuration and
 workspace-only automated checks. It does not claim access to the Bluebird
