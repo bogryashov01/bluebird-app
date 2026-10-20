@@ -57,6 +57,24 @@ This note records Bluebird's owner-confirmed Expo/EAS identity and the remaining
   Development or Replit Preview service. This is an external configuration
   verification blocker, not evidence that such a value is currently set.
 
+## Local Production web Preview
+
+The existing Bluebird artifact Preview continues to use the `dev` script and
+Development workflow. For an isolated local web Preview that evaluates
+runtime-based Production configuration, run:
+
+```sh
+pnpm --filter @workspace/bluebird run preview:production-web
+```
+
+This Mobile-only command uses Expo's `--no-dev --minify` web mode, selects the
+Production Main API environment and Production flight reads, and inherits
+`EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL` rather than replacing the
+canonical URL. It removes the Production Clerk approval variable only from
+this launcher process, so this Preview cannot enable Production Clerk auth.
+The command uses the assigned `PORT` and localhost host mode; it does not
+change the artifact Preview wiring. No EAS build or deployment is required.
+
 ## Production EAS environment
 
 Configure the named EAS `production` environment with these public app-configuration variables:
