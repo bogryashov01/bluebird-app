@@ -1,0 +1,916 @@
+Successfully loaded '/Users/expo/workingdir/build/artifacts/bluebird/ios/Gymfile' 📄
++---------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                                                                  Detected Values from './Gymfile'                                                                   |
++-----------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+| suppress_xcode_output | true                                                                                                                                        |
+| clean                 | false                                                                                                                                       |
+| scheme                | Bluebird                                                                                                                                    |
+| configuration         | Release                                                                                                                                     |
+| export_options        |                                                                                                                                             |
+| export_xcargs         | OTHER_CODE_SIGN_FLAGS="--keychain /var/folders/30/t4k1d_016_zd82ctc7xgs9_h0000gn/T/eas-build-9275a858-cea1-49da-9332-84a0db65a366.keychain" |
+| disable_xcpretty      | true                                                                                                                                        |
+| buildlog_path         | /Users/expo/workingdir/logs                                                                                                                 |
+| derived_data_path     | ./build                                                                                                                                     |
+| result_bundle         | true                                                                                                                                        |
+| result_bundle_path    | /var/folders/30/t4k1d_016_zd82ctc7xgs9_h0000gn/T/result-bundle-1792518233062.xcresult                                                       |
+| output_directory      | ./build                                                                                                                                     |
++-----------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+Resolving Swift Package Manager dependencies...
+$ xcodebuild -resolvePackageDependencies -workspace ./Bluebird.xcworkspace -scheme Bluebird -configuration Release -derivedDataPath ./build
+▸ Command line invocation:
+▸     /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -resolvePackageDependencies -workspace ./Bluebird.xcworkspace -scheme Bluebird -configuration Release -derivedDataPath ./build
+▸ Resolve Package Graph
+▸ Fetching from https://github.com/clerk/clerk-ios.git
+▸ Fetching from https://github.com/kean/Nuke
+▸ Fetching from https://github.com/PhoneNumberKit/PhoneNumberKit
+▸ Creating working copy of package ‘clerk-ios’
+▸ Checking out 1.6.1 of package ‘clerk-ios’
+▸ Creating working copy of package ‘PhoneNumberKit’
+▸ Checking out 5.0.12 of package ‘PhoneNumberKit’
+▸ Creating working copy of package ‘Nuke’
+▸ Checking out 13.2.0 of package ‘Nuke’
+▸ Resolved source packages:
+▸   Nuke: https://github.com/kean/Nuke @ 13.2.0
+▸   Clerk: https://github.com/clerk/clerk-ios.git @ 1.6.1
+▸   PhoneNumberKit: https://github.com/PhoneNumberKit/PhoneNumberKit @ 5.0.12
+▸ resolved source packages: Nuke, Clerk, PhoneNumberKit
+$ xcodebuild -showBuildSettings -workspace ./Bluebird.xcworkspace -scheme Bluebird -configuration Release -derivedDataPath ./build 2>&1
+Detected provisioning profile mapping: {:"com.bluebirdjets.app"=>"8b495e68-9514-4636-bf50-cc48e1298300"}
+
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                                                                                        Summary for gym 2.233.1                                                                                         |
++----------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+| workspace                                                | ./Bluebird.xcworkspace                                                                                                                      |
+| scheme                                                   | Bluebird                                                                                                                                    |
+| clean                                                    | false                                                                                                                                       |
+| output_directory                                         | ./build                                                                                                                                     |
+| output_name                                              | Bluebird                                                                                                                                    |
+| configuration                                            | Release                                                                                                                                     |
+| silent                                                   | false                                                                                                                                       |
+| skip_package_ipa                                         | false                                                                                                                                       |
+| skip_package_pkg                                         | false                                                                                                                                       |
+| export_options.method                                    | app-store                                                                                                                                   |
+| export_options.provisioningProfiles.com.bluebirdjets.app | 8b495e68-9514-4636-bf50-cc48e1298300                                                                                                        |
+| export_xcargs                                            | OTHER_CODE_SIGN_FLAGS="--keychain /var/folders/30/t4k1d_016_zd82ctc7xgs9_h0000gn/T/eas-build-9275a858-cea1-49da-9332-84a0db65a366.keychain" |
+| build_path                                               | /Users/expo/Library/Developer/Xcode/Archives/2026-10-20                                                                                     |
+| derived_data_path                                        | ./build                                                                                                                                     |
+| result_bundle                                            | true                                                                                                                                        |
+| result_bundle_path                                       | /var/folders/30/t4k1d_016_zd82ctc7xgs9_h0000gn/T/result-bundle-1792518233062.xcresult                                                       |
+| buildlog_path                                            | /Users/expo/workingdir/logs                                                                                                                 |
+| destination                                              | generic/platform=iOS                                                                                                                        |
+| suppress_xcode_output                                    | true                                                                                                                                        |
+| xcodebuild_formatter                                     | xcpretty                                                                                                                                    |
+| build_timing_summary                                     | false                                                                                                                                       |
+| disable_xcpretty                                         | true                                                                                                                                        |
+| skip_profile_detection                                   | false                                                                                                                                       |
+| xcodebuild_command                                       | xcodebuild                                                                                                                                  |
+| skip_package_dependencies_resolution                     | false                                                                                                                                       |
+| disable_package_automatic_updates                        | false                                                                                                                                       |
+| skip_package_repository_fetches                          | false                                                                                                                                       |
+| use_system_scm                                           | false                                                                                                                                       |
+| generate_appstore_info                                   | false                                                                                                                                       |
+| xcode_path                                               | /Applications/Xcode.app                                                                                                                     |
++----------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+$ set -o pipefail && xcodebuild -workspace ./Bluebird.xcworkspace -scheme Bluebird -configuration Release -derivedDataPath ./build -destination 'generic/platform=iOS' -archivePath /Users/expo/Library/Developer/Xcode/Archives/2026-10-20/Bluebird\ 2026-10-20\ 10.44.45.xcarchive -resultBundlePath '/var/folders/30/t4k1d_016_zd82ctc7xgs9_h0000gn/T/result-bundle-1792518233062.xcresult' archive | tee /Users/expo/workingdir/logs/Bluebird-Bluebird.log > /dev/null
+› Executing react-native Pods/hermes-engine » [CP-User] [Hermes] Replace Hermes for the right configuration, if needed
+› Executing react-native Pods/ReactNativeDependencies » [CP-User] [RNDeps] Replace React Native Dependencies for the right configuration, if needed
+› Executing react-native Pods/hermes-engine » [CP] Copy XCFrameworks
+› Preparing Pods/React-timing-React-timing_privacy » ResourceBundle-React-timing_privacy-React-timing-Info.plist
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/React-timing_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/.pnpm/react-native@0.86.3_@babel+core@7.29.7_@react-native+metro-config@0.86.3_@babel+core@7._f25388fd9272b39583608620266ea78d/node_modules/react-native/ReactCommon/react/timing/PrivacyInfo.xcprivacy
+› Preparing Pods/React-Core-React-Core_privacy » ResourceBundle-React-Core_privacy-React-Core-Info.plist
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/React-Core_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/.pnpm/react-native@0.86.3_@babel+core@7.29.7_@react-native+metro-config@0.86.3_@babel+core@7._f25388fd9272b39583608620266ea78d/node_modules/react-native/React/Resources/PrivacyInfo.xcprivacy
+› Preparing Pods/React-cxxreact-React-cxxreact_privacy » ResourceBundle-React-cxxreact_privacy-React-cxxreact-Info.plist
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/React-cxxreact_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/.pnpm/react-native@0.86.3_@babel+core@7.29.7_@react-native+metro-config@0.86.3_@babel+core@7._f25388fd9272b39583608620266ea78d/node_modules/react-native/ReactCommon/cxxreact/PrivacyInfo.xcprivacy
+› Creating  Pods/React-timing-React-timing_privacy » React-timing_privacy.bundle
+› Creating  Pods/React-cxxreact-React-cxxreact_privacy » React-cxxreact_privacy.bundle
+› Preparing Pods/RNSVG-RNSVGFilters » ResourceBundle-RNSVGFilters-RNSVG-Info.plist
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/RNSVGFilters.bundle/RNSVGCompositeXor.iphoneos.metallib ➜ ../../../Users/expo/workingdir/build/node_modules/.pnpm/react-native-svg@15.15.4_react-native@0.86.3_@babel+core@7.29.7_@react-native+metro-con_6540d8f6e67fda68efc531f4f753bcee/node_modules/react-native-svg/apple/Filters/MetalCI/RNSVGCompositeXor.iphoneos.metallib
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/RNSVGFilters.bundle/RNSVGArithmeticFilter.iphoneos.metallib ➜ ../../../Users/expo/workingdir/build/node_modules/.pnpm/react-native-svg@15.15.4_react-native@0.86.3_@babel+core@7.29.7_@react-native+metro-con_6540d8f6e67fda68efc531f4f753bcee/node_modules/react-native-svg/apple/Filters/MetalCI/RNSVGArithmeticFilter.iphoneos.metallib
+› Preparing Pods/RNCAsyncStorage-RNCAsyncStorage_resources » ResourceBundle-RNCAsyncStorage_resources-RNCAsyncStorage-Info.plist
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/RNCAsyncStorage_resources.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/.pnpm/@react-native-async-storage+async-storage@2.2.0_react-native@0.86.3_@babel+core@7.29.7__67247de18de49313923c659e7999ad86/node_modules/@react-native-async-storage/async-storage/ios/PrivacyInfo.xcprivacy
+› Creating  Pods/React-Core-React-Core_privacy » React-Core_privacy.bundle
+› Creating  Pods/RNSVG-RNSVGFilters » RNSVGFilters.bundle
+› Preparing PhoneNumberKit/PhoneNumberKit_PhoneNumberKit » empty-PhoneNumberKit_PhoneNumberKit.plist
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/PhoneNumberKit_PhoneNumberKit.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/SourcePackages/checkouts/PhoneNumberKit/Sources/PhoneNumberKit/Resources/PrivacyInfo.xcprivacy
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/PhoneNumberKit_PhoneNumberKit.bundle/PhoneNumberMetadata.json ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/SourcePackages/checkouts/PhoneNumberKit/Sources/PhoneNumberKit/Resources/PhoneNumberMetadata.json
+› Creating  Pods/RNCAsyncStorage-RNCAsyncStorage_resources » RNCAsyncStorage_resources.bundle
+› Preparing Pods/ExpoSystemUI-ExpoSystemUI_privacy » ResourceBundle-ExpoSystemUI_privacy-ExpoSystemUI-Info.plist
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/ExpoSystemUI_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/.pnpm/expo-system-ui@57.0.4_expo@57.0.30_react-native-web@0.21.2_react-dom@19.2.3_react@19.2._f6abad12eeb52764889a727cf2d2297b/node_modules/expo-system-ui/ios/PrivacyInfo.xcprivacy
+› Preparing Pods/ExpoNotifications-ExpoNotifications_privacy » ResourceBundle-ExpoNotifications_privacy-ExpoNotifications-Info.plist
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/ExpoNotifications_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/.pnpm/expo-notifications@57.0.23_expo@57.0.30_react-native@0.86.3_@babel+core@7.29.7_@react-n_05ed7416e7aaf1ca034acbab2ea9a352/node_modules/expo-notifications/ios/PrivacyInfo.xcprivacy
+› Preparing Pods/ExpoFileSystem-ExpoFileSystem_privacy » ResourceBundle-ExpoFileSystem_privacy-ExpoFileSystem-Info.plist
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/SourcePackages/checkouts/clerk-ios/Sources/ClerkKitUI/Resources/PrivacyInfo.xcprivacy
+› Preparing Clerk/Clerk_ClerkKit » empty-Clerk_ClerkKit.plist
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/zh-Hans.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/zh-Hans.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/uk.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/uk.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/tr.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/tr.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/ru.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/ru.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/ro.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/ro.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/pt.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/pt.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/pl.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/pl.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/ko.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/ko.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/ja.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/ja.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/it.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/it.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/hi.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/hi.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/fr.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/fr.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/es.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/es.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/en.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/en.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/el.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/el.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/de.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/de.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKitUI.build/ar.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKitUI.bundle/ar.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/SourcePackages/checkouts/clerk-ios/Sources/ClerkKit/Resources/PrivacyInfo.xcprivacy
+› Executing react-native Pods/ReactNativeDependencies » [CP] Copy XCFrameworks
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/zh-Hans.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/zh-Hans.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/uk.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/uk.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/tr.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/tr.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/ru.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/ru.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/ro.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/ro.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/pt.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/pt.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/pl.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/pl.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/ko.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/ko.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/ja.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/ja.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/it.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/it.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/hi.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/hi.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/fr.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/fr.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/es.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/es.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/el.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/el.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/de.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/de.lproj/Localizable.strings
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Clerk.build/Release-iphoneos/Clerk_ClerkKit.build/ar.lproj/Localizable.strings ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/Clerk_ClerkKit.bundle/ar.lproj/Localizable.strings
+› Executing react-native Pods/React-Core-prebuilt » [CP-User] [RNCore] Replace React Native Core for the right configuration, if needed
+› Preparing Pods/EXConstants-ExpoConstants_privacy » ResourceBundle-ExpoConstants_privacy-EXConstants-Info.plist
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/ExpoConstants_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/.pnpm/expo-constants@57.0.22_expo@57.0.30_react-native@0.86.3_@babel+core@7.29.7_@react-nativ_8f3147fa8b1cf5ad8c6f67ef27760ee9/node_modules/expo-constants/ios/PrivacyInfo.xcprivacy
+› Preparing expo-constants Pods/EXConstants-EXConstants » ResourceBundle-EXConstants-EXConstants-Info.plist
+› Preparing Pods/EXApplication-ExpoApplication_privacy » ResourceBundle-ExpoApplication_privacy-EXApplication-Info.plist
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/ExpoApplication_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/.pnpm/expo-application@57.0.3_expo@57.0.30/node_modules/expo-application/ios/PrivacyInfo.xcprivacy
+› Executing react-native Pods/React-Core-prebuilt » [CP] Copy XCFrameworks
+› Preparing Pods/expo-dev-menu-EXDevMenu » ResourceBundle-EXDevMenu-expo-dev-menu-Info.plist
+› Preparing Pods/expo-dev-launcher-EXDevLauncher » ResourceBundle-EXDevLauncher-expo-dev-launcher-Info.plist
+› Preparing Clerk/Clerk_ClerkKitUI » empty-Clerk_ClerkKitUI.plist
+› Creating  PhoneNumberKit/PhoneNumberKit_PhoneNumberKit » PhoneNumberKit_PhoneNumberKit.bundle
+› Creating  Pods/expo-dev-menu-EXDevMenu » EXDevMenu.bundle
+› Linking   PhoneNumberKit » PhoneNumberKit.o
+› Creating  Pods/expo-dev-launcher-EXDevLauncher » EXDevLauncher.bundle
+› Creating  Pods/ExpoSystemUI-ExpoSystemUI_privacy » ExpoSystemUI_privacy.bundle
+› Creating  Pods/ExpoNotifications-ExpoNotifications_privacy » ExpoNotifications_privacy.bundle
+› Creating  Pods/ExpoFileSystem-ExpoFileSystem_privacy » ExpoFileSystem_privacy.bundle
+› Creating  Pods/EXConstants-ExpoConstants_privacy » ExpoConstants_privacy.bundle
+› Creating  expo-constants Pods/EXConstants-EXConstants » EXConstants.bundle
+› Creating  Pods/EXApplication-ExpoApplication_privacy » ExpoApplication_privacy.bundle
+› Creating  Clerk/Clerk_ClerkKitUI » Clerk_ClerkKitUI.bundle
+› Executing expo-modules-jsi Pods/ExpoModulesJSI » [CP-User] Build ExpoModulesJSI xcframework
+› Executing react-native Pods/React-RCTFBReactNativeSpec » [CP-User] [RN]Check FBReactNativeSpec
+› Creating  Clerk/Clerk_ClerkKit » Clerk_ClerkKit.bundle
+› Executing @workspace/bluebird Pods/ReactCodegen » [CP-User] Generate Specs
+› Compiling expo-dev-menu-interface Pods/expo-dev-menu-interface » expo-dev-menu-interface-dummy.m
+› Compiling expo-json-utils Pods/EXJSONUtils » NSDictionary+EXJSONUtils.m
+› Packaging expo-dev-menu-interface Pods/expo-dev-menu-interface » libexpo-dev-menu-interface.a
+› Compiling expo-json-utils Pods/EXJSONUtils » EXJSONUtils-dummy.m
+› Packaging expo-json-utils Pods/EXJSONUtils » libEXJSONUtils.a
+› Executing expo-dev-menu-interface Pods/expo-dev-menu-interface » Copy generated compatibility header
+› Compiling @expo/log-box Pods/ExpoLogBox » ExpoRedBoxSwap.mm
+› Compiling @expo/log-box Pods/ExpoLogBox » ExpoLogBox-dummy.m
+› Executing @workspace/bluebird Pods/ReactCodegen » [Expo] Remove duplicate codegen output
+› Packaging @expo/log-box Pods/ExpoLogBox » libExpoLogBox.a
+› Executing @expo/log-box Pods/ExpoLogBox » Copy generated compatibility header
+› Compiling @workspace/bluebird Pods/ReactCodegen » safeareacontext-generated.mm
+› Compiling @workspace/bluebird Pods/ReactCodegen » rnworklets-generated.mm
+› Compiling @workspace/bluebird Pods/ReactCodegen » rnsvg-generated.mm
+› Compiling @workspace/bluebird Pods/ReactCodegen » rnscreens-generated.mm
+› Compiling @workspace/bluebird Pods/ReactCodegen » rnreanimated-generated.mm
+› Compiling @workspace/bluebird Pods/ReactCodegen » rngesturehandler_codegen-generated.mm
+› Compiling @workspace/bluebird Pods/ReactCodegen » rnasyncstorage-generated.mm
+› Compiling @workspace/bluebird Pods/ReactCodegen » States.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » States.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » States.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » States.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » States.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » States.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » ShadowNodes.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » ShadowNodes.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » ShadowNodes.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » ShadowNodes.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » ShadowNodes.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » ShadowNodes.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » RNKC-generated.mm
+› Compiling @workspace/bluebird Pods/ReactCodegen » RCTUnstableModulesRequiringMainQueueSetupProvider.mm
+› Compiling @workspace/bluebird Pods/ReactCodegen » RCTThirdPartyComponentsProvider.mm
+› Compiling @workspace/bluebird Pods/ReactCodegen » RCTModulesConformingToProtocolsProvider.mm
+› Compiling @workspace/bluebird Pods/ReactCodegen » RCTModuleProviders.mm
+› Compiling @workspace/bluebird Pods/ReactCodegen » Props.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » Props.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » Props.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » Props.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » Props.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » Props.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » EventEmitters.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » EventEmitters.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » EventEmitters.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » EventEmitters.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » EventEmitters.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » EventEmitters.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » ComponentDescriptors.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » ComponentDescriptors.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » ComponentDescriptors.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » ComponentDescriptors.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » ComponentDescriptors.cpp
+› Compiling @workspace/bluebird Pods/ReactCodegen » ComponentDescriptors.cpp
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaViewState.cpp
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaViewShadowNode.cpp
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaViewComponentView.mm
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaProviderComponentView.mm
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaContext.mm
+› Linking   Nuke » Nuke.o
+› Executing expo-modules-jsi Pods/ExpoModulesJSI » [CP] Copy XCFrameworks
+› Compiling @workspace/bluebird Pods/ReactAppDependencyProvider » RCTAppDependencyProvider.mm
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » react-native-safe-area-context-dummy.m
+› Compiling @workspace/bluebird Pods/ReactCodegen » ReactCodegen-dummy.m
+› Packaging @workspace/bluebird Pods/ReactCodegen » libReactCodegen.a
+› Compiling @workspace/bluebird Pods/ReactAppDependencyProvider » ReactAppDependencyProvider-dummy.m
+› Compiling react-native-worklets Pods/RNWorklets » WorkletsVersion.cpp
+› Compiling react-native-worklets Pods/RNWorklets » WorkletsNetworking.mm
+› Compiling react-native-worklets Pods/RNWorklets » WorkletsModuleProxy.cpp
+› Compiling react-native-worklets Pods/RNWorklets » WorkletsModule.mm
+› Compiling react-native-worklets Pods/RNWorklets » WorkletsJSIUtils.cpp
+› Compiling react-native-worklets Pods/RNWorklets » WorkletRuntimeRegistry.cpp
+› Compiling react-native-worklets Pods/RNWorklets » WorkletRuntimeDecorator.cpp
+› Compiling react-native-worklets Pods/RNWorklets » WorkletRuntime.cpp
+› Compiling react-native-worklets Pods/RNWorklets » WorkletHermesRuntime.cpp
+› Compiling react-native-worklets Pods/RNWorklets » WorkletEventHandler.cpp
+› Compiling react-native-worklets Pods/RNWorklets » VersionUtils.cpp
+› Compiling react-native-worklets Pods/RNWorklets » UIScheduler.cpp
+› Compiling react-native-worklets Pods/RNWorklets » UIRuntimeDecorator.cpp
+› Compiling react-native-worklets Pods/RNWorklets » SynchronizableAccess.cpp
+› Compiling react-native-worklets Pods/RNWorklets » Synchronizable.cpp
+› Compiling react-native-worklets Pods/RNWorklets » StableApi.cpp
+› Compiling react-native-worklets Pods/RNWorklets » SlowAnimations.mm
+› Compiling react-native-worklets Pods/RNWorklets » Shareable.cpp
+› Compiling react-native-worklets Pods/RNWorklets » SerializableRemoteFunction.cpp
+› Compiling react-native-worklets Pods/RNWorklets » SerializableFactory.cpp
+› Compiling react-native-worklets Pods/RNWorklets » Serializable.cpp
+› Compiling react-native-worklets Pods/RNWorklets » RuntimeManager.cpp
+› Compiling react-native-worklets Pods/RNWorklets » RNRuntimeWorkletDecorator.cpp
+› Compiling react-native-worklets Pods/RNWorklets » PlatformLogger.mm
+› Compiling react-native-worklets Pods/RNWorklets » MemoryManager.cpp
+› Compiling react-native-worklets Pods/RNWorklets » JSScheduler.cpp
+› Compiling react-native-worklets Pods/RNWorklets » JSLogger.cpp
+› Compiling react-native-worklets Pods/RNWorklets » JSIWorkletsModuleProxy.cpp
+› Compiling react-native-worklets Pods/RNWorklets » JSISerializer.cpp
+› Compiling react-native-worklets Pods/RNWorklets » IOSUIScheduler.mm
+› Compiling react-native-worklets Pods/RNWorklets » HermesProfiling.cpp
+› Compiling react-native-worklets Pods/RNWorklets » FeatureFlags.cpp
+› Compiling react-native-worklets Pods/RNWorklets » EventLoop.cpp
+› Compiling react-native-worklets Pods/RNWorklets » EventHandlerRegistry.cpp
+› Compiling react-native-worklets Pods/RNWorklets » AsyncQueueImpl.cpp
+› Compiling react-native-worklets Pods/RNWorklets » AnimationFrameQueue.mm
+› Compiling react-native-worklets Pods/RNWorklets » AnimationFrameBatchinator.cpp
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » RNKCOverKeyboardViewState.cpp
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » RNKCOverKeyboardViewShadowNode.cpp
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaViewMode.m
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaViewManager.m
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaViewLocalData.m
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaViewEdges.m
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaViewEdgeMode.m
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaView.m
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaUtils.m
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaShadowView.m
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaProviderManager.m
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCSafeAreaProvider.m
+› Compiling react-native-safe-area-context Pods/react-native-safe-area-context » RNCOnInsetsChangeEvent.m
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » RNKCKeyboardToolbarGroupViewShadowNode.cpp
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » RNKCKeyboardGestureAreaShadowNode.cpp
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » RNKCKeyboardExtenderShadowNode.cpp
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » RNKCKeyboardControllerViewShadowNode.cpp
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » RNKCKeyboardBackgroundViewShadowNode.cpp
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » RNKCClippingScrollViewDecoratorViewShadowNode.cpp
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » OverKeyboardViewManager.mm
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » KeyboardToolbarGroupViewManager.mm
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » KeyboardGestureAreaManager.mm
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » KeyboardExtenderManager.mm
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » KeyboardControllerViewManager.mm
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » KeyboardControllerView.mm
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » KeyboardControllerModule.mm
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » KeyboardBackgroundViewManager.mm
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » ClippingScrollViewDecoratorViewManager.mm
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » react-native-keyboard-controller-dummy.m
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » UITextView+DelegateManager.m
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » RCTUIManager+LayoutAnimationManager.m
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » NSObject+SafeKVC.m
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » KeyboardMoveEvent.m
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » FocusedInputTextChangedEvent.m
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » FocusedInputSelectionChangedEvent.m
+› Compiling react-native-keyboard-controller Pods/react-native-keyboard-controller » FocusedInputLayoutChangedEvent.m
+› Linking   Clerk/ClerkKit » ClerkKit.o
+› Packaging react-native-safe-area-context Pods/react-native-safe-area-context » libreact-native-safe-area-context.a
+› Executing react-native-maps Pods/react-native-maps » [CP-User] react-native-maps patches
+› Packaging @workspace/bluebird Pods/ReactAppDependencyProvider » libReactAppDependencyProvider.a
+› Executing expo-modules-core Pods/ExpoModulesCore » [CP-User] [Expo] Resolve ExpoModulesCore dSYM source maps
+› Compiling react-native-maps Pods/react-native-maps » States.cpp
+› Compiling react-native-maps Pods/react-native-maps » ShadowNodes.cpp
+› Compiling react-native-maps Pods/react-native-maps » RNMapsSpecsJSI-generated.cpp
+› Compiling react-native-maps Pods/react-native-maps » RNMapsSpecs-generated.mm
+› Compiling react-native-maps Pods/react-native-maps » RNMapsMarkerViewManager.mm
+› Packaging react-native-keyboard-controller Pods/react-native-keyboard-controller » libreact-native-keyboard-controller.a
+› Compiling react-native-maps Pods/react-native-maps » RNMapsMarkerView.mm
+› Compiling react-native-maps Pods/react-native-maps » RNMapsMapViewManager.mm
+› Compiling react-native-maps Pods/react-native-maps » RNMapsMapView.mm
+› Compiling react-native-maps Pods/react-native-maps » RNMapsAirModule.mm
+› Compiling react-native-maps Pods/react-native-maps » Props.cpp
+› Compiling react-native-maps Pods/react-native-maps » PlaceHolderPolygonView.mm
+› Compiling react-native-maps Pods/react-native-maps » PlaceHolderGoogleMapView.mm
+› Compiling react-native-maps Pods/react-native-maps » EventEmitters.cpp
+› Compiling react-native-maps Pods/react-native-maps » ComponentDescriptors.cpp
+› Compiling react-native-maps Pods/react-native-maps » AIRMap.mm
+› Compiling react-native-worklets Pods/RNWorklets » RNWorklets-dummy.m
+› Compiling react-native-maps Pods/react-native-maps » react-native-maps-dummy.m
+› Packaging react-native-worklets Pods/RNWorklets » libRNWorklets.a
+› Executing react-native-keyboard-controller Pods/react-native-keyboard-controller » Copy generated compatibility header
+› Compiling react-native-screens Pods/RNScreens » UIWindow+RNScreens.mm
+› Compiling react-native-screens Pods/RNScreens » UIViewController+RNScreens.mm
+› Compiling react-native-screens Pods/RNScreens » UIView+RNSUtility.mm
+› Compiling react-native-screens Pods/RNScreens » UIScrollView+RNScreens.mm
+› Compiling react-native-screens Pods/RNScreens » UINavigationBar+RNSUtility.mm
+› Compiling react-native-screens Pods/RNScreens » RNScreensTurboModule.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSTabsScreenViewController.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabsScreenEventEmitter.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabsScreenComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabsNavigationStateObserverRegistry.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabsNavigationState.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabsHostState.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSTabsHostShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSTabsHostEventEmitter.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabsHostComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabsHostComponentView+RNSImageLoader.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabsBottomAccessoryShadowStateProxy.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabsBottomAccessoryShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSTabsBottomAccessoryHelper.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabsBottomAccessoryEventEmitter.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabsBottomAccessoryContentComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabsBottomAccessoryComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabBarController.mm
+› Compiling react-native-screens Pods/RNScreens » RNSTabBarAppearanceCoordinator.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackScreenState.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSStackScreenShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSStackScreenHeaderCoordinator.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackScreenController.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackScreenComponentViewManager.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackScreenComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackScreenComponentEventEmitter.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackOperationCoordinator.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackOperation.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackNavigationController.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackNavigationBarCoordinator.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHostComponentViewManager.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHostComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderSubviewState.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderSubviewShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderMenuTrackerRegistry.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderMenuToggleStateTracker.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderMenuMapper.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderMenuData.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderMenuCoordinator.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderItemWrapperView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderItemState.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderItemSpacerComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderItemShadowStateProxy.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderItemShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderItemEventEmitter.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderItemComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderContentFactory.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderConfigState.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderConfigShadowStateProxy.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderConfigShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderConfigEventEmitter.mm
+› Compiling react-native-screens Pods/RNScreens » RNSStackHeaderConfigComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSSplitScreenShadowStateProxy.mm
+› Compiling react-native-screens Pods/RNScreens » RNSSplitScreenShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSSplitScreenComponentViewManager.mm
+› Compiling react-native-screens Pods/RNScreens » RNSSplitScreenComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSSplitScreenComponentEventEmitter.mm
+› Compiling react-native-screens Pods/RNScreens » RNSSplitHostComponentViewManager.mm
+› Compiling react-native-screens Pods/RNScreens » RNSSplitHostComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSSplitHostComponentEventEmitter.mm
+› Compiling react-native-screens Pods/RNScreens » RNSSearchBar.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScrollViewMarkerComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScrollViewHelper.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScrollViewFinder.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScrollEdgeEffectApplicator.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScreenWindowTraits.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScreenViewEvent.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScreenState.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSScreenStackHeaderSubviewState.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSScreenStackHeaderSubviewShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSScreenStackHeaderSubview.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScreenStackHeaderConfigState.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSScreenStackHeaderConfigShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSScreenStackHeaderConfig.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScreenStackAnimator.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScreenStack.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScreenShadowNodeCommitHook.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSScreenShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSScreenRemovalListener.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSScreenNavigationContainer.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScreenFooter.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScreenContentWrapper.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScreenContainer.mm
+› Compiling react-native-screens Pods/RNScreens » RNSScreen.mm
+› Compiling react-native-screens Pods/RNScreens » RNSSafeAreaViewState.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSSafeAreaViewShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSSafeAreaViewComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSReactBaseView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSPresentationSourceProvider.mm
+› Compiling react-native-screens Pods/RNScreens » RNSPercentDrivenInteractiveTransition.mm
+› Compiling react-native-screens Pods/RNScreens » RNSParentContainerItemRegistry.mm
+› Compiling react-native-screens Pods/RNScreens » RNSModule.mm
+› Compiling react-native-screens Pods/RNScreens » RNSModalScreenShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSModalScreen.mm
+› Compiling react-native-screens Pods/RNScreens » RNSImageLoadingHelper.mm
+› Compiling react-native-screens Pods/RNScreens » RNSHeaderHeightChangeEvent.mm
+› Compiling react-native-screens Pods/RNScreens » RNSFullWindowOverlayShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSFullWindowOverlay.mm
+› Compiling react-native-screens Pods/RNScreens » RNSFormSheetUpdateCoordinator.mm
+› Compiling react-native-screens Pods/RNScreens » RNSFormSheetPresentationManager.mm
+› Compiling react-native-screens Pods/RNScreens » RNSFormSheetHostState.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSFormSheetHostShadowStateProxy.mm
+› Compiling react-native-screens Pods/RNScreens » RNSFormSheetHostShadowNode.cpp
+› Compiling react-native-screens Pods/RNScreens » RNSFormSheetHostEventEmitter.mm
+› Compiling react-native-screens Pods/RNScreens » RNSFormSheetHostComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSFormSheetDetentResolver.mm
+› Compiling react-native-screens Pods/RNScreens » RNSFormSheetContentWrapperComponentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSFormSheetContentView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSFormSheetContentController.mm
+› Compiling react-native-screens Pods/RNScreens » RNSFormSheetConfigurationApplicator.mm
+› Compiling react-native-screens Pods/RNScreens » RNSConvert.mm
+› Compiling react-native-screens Pods/RNScreens » RNSConversions.mm
+› Compiling react-native-screens Pods/RNScreens » RNSConversions-Tabs.mm
+› Compiling react-native-screens Pods/RNScreens » RNSConversions-Stack.mm
+› Compiling react-native-screens Pods/RNScreens » RNSConversions-SplitView.mm
+› Compiling react-native-screens Pods/RNScreens » RNSConversions-ScrollViewMarker.mm
+› Compiling react-native-screens Pods/RNScreens » RNSConversions-Fabric.mm
+› Compiling react-native-screens Pods/RNScreens » RNSContainerItemSupport.mm
+› Compiling react-native-screens Pods/RNScreens » RNSContainerHelpers.mm
+› Compiling react-native-screens Pods/RNScreens » RNSBarButtonItem.mm
+› Compiling react-native-screens Pods/RNScreens » RNSBackBarButtonItem.mm
+› Compiling react-native-screens Pods/RNScreens » RCTSurfaceTouchHandler+RNSUtility.mm
+› Compiling react-native-screens Pods/RNScreens » RCTImageComponentView+RNSScreenStackHeaderConfig.mm
+› Compiling react-native-screens Pods/RNScreens » RCTConvert+RNSTabs.mm
+› Compiling react-native-screens Pods/RNScreens » NSString+RNSUtility.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGViewBox.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGUseManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGUse.mm
+› Compiling react-native-screens Pods/RNScreens » RNScreens-dummy.m
+› Compiling react-native-svg Pods/RNSVG » RNSVGTopAlignedLabel.ios.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGTextProperties.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGTextPathManager.mm
+› Packaging react-native-screens Pods/RNScreens » libRNScreens.a
+› Compiling react-native-svg Pods/RNSVG » RNSVGTextPath.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGTextManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGText.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGTSpanManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGTSpan.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGSymbolManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGSymbol.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGSvgViewModule.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGSvgViewManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGSvgView.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGSolidColorBrush.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGShadowNodes.cpp
+› Compiling react-native-svg Pods/RNSVG » RNSVGRenderableModule.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGRenderableManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGRenderable.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGRenderUtils.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGRectManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGRect.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGRadialGradientManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGRadialGradient.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGPropHelper.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGPatternManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGPattern.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGPathParser.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGPathMeasure.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGPathManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGPath.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGPainterBrush.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGPainter.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGNodeManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGNode.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGMaskManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGMask.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGMarkerPosition.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGMarkerManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGMarker.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGLinearGradientManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGLinearGradient.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGLineManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGLine.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGLength.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGLayoutableShadowNode.cpp
+› Compiling react-native-svg Pods/RNSVG » RNSVGImageState.cpp
+› Compiling react-native-svg Pods/RNSVG » RNSVGImageShadowNode.cpp
+› Compiling react-native-svg Pods/RNSVG » RNSVGImageManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGImage.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGGroupManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGGroup.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGGlyphContext.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGForeignObjectManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGForeignObject.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFontData.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFilterRegion.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFilterPrimitiveManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFilterPrimitive.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFilterManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFilter.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeOffsetManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeOffset.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeMergeManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeMerge.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeGaussianBlurManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeGaussianBlur.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeFloodManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeFlood.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeCompositeManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeComposite.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeColorMatrixManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeColorMatrix.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeBlendManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGFeBlend.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGEllipseManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGEllipse.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGDefsManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGDefs.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGCustomFilter.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGConvert.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGContextBrush.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGCompositeXor.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGClipPathManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGClipPath.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGCircleManager.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGCircle.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGBrush.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGBezierElement.mm
+› Compiling react-native-svg Pods/RNSVG » RNSVGArithmeticFilter.mm
+› Compiling react-native-svg Pods/RNSVG » RCTConvert+RNSVG.mm
+› Compiling react-native-maps Pods/react-native-maps » UIView+AirMap.m
+› Executing react-native-screens Pods/RNScreens » Copy generated compatibility header
+› Compiling react-native-maps Pods/react-native-maps » SMCalloutView.m
+› Compiling react-native-maps Pods/react-native-maps » RCTComponentData+Maps.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapCalloutSubviewManager.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapCalloutSubview.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapCallout.m
+› Compiling react-native-maps Pods/react-native-maps » RCTConvert+AirMap.m
+› Compiling react-native-maps Pods/react-native-maps » AIRWeakMapReference.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapWMSTileManager.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapWMSTile.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapUrlTileManager.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapUrlTileCachedOverlay.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapUrlTile.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapPolylineRenderer.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapPolylineManager.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapPolyline.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapPolygonManager.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapPolygon.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapOverlayRenderer.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapOverlayManager.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapOverlay.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapMarkerManager.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapMarker.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapManager.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapLocalTileOverlay.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapLocalTileManager.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapLocalTile.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapCoordinate.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapCircleManager.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapCircle.m
+› Compiling react-native-maps Pods/react-native-maps » AIRMapCalloutManager.m
+› Compiling react-native-reanimated Pods/RNReanimated » vectors.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » translate.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » steps.cpp
+› Packaging react-native-maps Pods/react-native-maps » libreact-native-maps.a
+› Compiling react-native-reanimated Pods/RNReanimated » skew.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » scale.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » rotate.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » props.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » platform.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » perspective.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » matrix.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » linear.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » interpolators.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » cubicBezier.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » common.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » algorithms.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » ViewStylesRepository.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » ValueInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » UpdatesRegistryManager.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » UpdatesRegistry.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » UIRuntimeDecorator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » UIEventHandlerRegistry.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » UIEventHandler.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » TransitionStyleInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » TransitionProgressProvider.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » TransformsStyleInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » TransformOperationInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » TransformOperation.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » TransformOp.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » TransformMatrix3D.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » TransformMatrix2D.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » TransformMatrix.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » SynchronousPropsBufferSerializer.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » StyleOperationInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » StyleOperation.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » StaticPropsRegistry.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » SimpleValueInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » SharedTransitions.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » ShadowTreeCloner.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » SetGestureState.mm
+› Compiling react-native-reanimated Pods/RNReanimated » SVGStrokeDashArray.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » SVGStops.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » SVGPath.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » SVGBrush.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » ResolvableValueInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » RecordPropertiesInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » ReanimatedVersion.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » ReanimatedMountHook.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » ReanimatedModuleProxy.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » ReanimatedModule.mm
+› Compiling react-native-reanimated Pods/RNReanimated » ReanimatedCommitHook.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » RawProgressProvider.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » RNRuntimeDecorator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » REASlowAnimations.mm
+› Compiling react-native-reanimated Pods/RNReanimated » REASharedTransitionBoundaryView.mm
+› Compiling react-native-reanimated Pods/RNReanimated » REASharedTransitionBoundaryShadowNode.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » REAPseudoSelectorObserver.mm
+› Compiling react-native-reanimated Pods/RNReanimated » REAPseudoSelectorAttachQueue.mm
+› Compiling react-native-reanimated Pods/RNReanimated » REANodesManager.mm
+› Compiling react-native-reanimated Pods/RNReanimated » REAKeyboardEventObserver.mm
+› Compiling react-native-reanimated Pods/RNReanimated » REACSSPlatformTransitions.mm
+› Compiling react-native-reanimated Pods/RNReanimated » REACSSPlatformProps.mm
+› Compiling react-native-reanimated Pods/RNReanimated » Quaternion.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » PseudoStylesRegistry.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » PropsDiffer.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » PropertyInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » PropValueProcessor.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » PlatformDepMethodsHolderImpl.mm
+› Compiling react-native-reanimated Pods/RNReanimated » OperationsStyleInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » OperationsLoop.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » NativeProxy.mm
+› Compiling react-native-reanimated Pods/RNReanimated » LayoutAnimationsUtils.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » LayoutAnimationsProxy_Legacy.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » LayoutAnimationsProxy_Experimental.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » LayoutAnimationsProxyCommon.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » LayoutAnimationsManager.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » InterpolatorRegistry.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » InterpolatorFactory.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » GroupPropertiesInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » FilterStyleInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » FilterOperationInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » FilterOperation.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » FilterOp.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » FeatureFlags.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » EasingFunctions.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » EasingConfigs.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSValueVariant.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSTransitionsRegistry.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSTransitionConfig.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSTransition.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSPlatformTransitionProxy.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSNumber.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSLoopTransition.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSLoopAnimation.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSLengthVector.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSLengthArray.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSLength.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSKeyword.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSKeyframesRegistry.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSKeyframesConfig.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSDropShadow.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSDiscreteArray.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSColor.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSBoxShadow.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSBoolean.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSAnimationsRegistry.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSAnimationsGroup.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSAnimationConfig.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSAnimation.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » CSSAngle.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » ArrayPropertiesInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » AnimationStyleInterpolatorFactory.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » AnimationStyleInterpolator.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » AnimationProgressProvider.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » AnimatedSensorModule.cpp
+› Compiling react-native-reanimated Pods/RNReanimated » AnimatedPropsRegistry.cpp
+› Compiling react-native-svg Pods/RNSVG » RNSVG-dummy.m
+› Packaging react-native-svg Pods/RNSVG » libRNSVG.a
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNNativeViewHandler.mm
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNGestureHandlerRootViewComponentView.mm
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNGestureHandlerModule.mm
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNGestureHandlerManager.mm
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNGestureHandlerButtonManager.mm
+› Compiling react-native-reanimated Pods/RNReanimated » ReanimatedSensorContainer.m
+› Compiling react-native-reanimated Pods/RNReanimated » ReanimatedSensor.m
+› Compiling react-native-reanimated Pods/RNReanimated » RCTUIView+Reanimated.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNGestureHandlerButtonComponentView.mm
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNGestureHandlerButton.mm
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNGestureHandler.mm
+› Compiling react-native-reanimated Pods/RNReanimated » RNReanimated-dummy.m
+› Packaging react-native-reanimated Pods/RNReanimated » libRNReanimated.a
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNGestureHandler-dummy.m
+› Compiling @react-native-masked-view/masked-view Pods/RNCMaskedView » RNCMaskedView-dummy.m
+› Compiling @react-native-masked-view/masked-view Pods/RNCMaskedView » RNCMaskedViewManager.m
+› Compiling @react-native-masked-view/masked-view Pods/RNCMaskedView » RNCMaskedView.m
+› Compiling @react-native-async-storage/async-storage Pods/RNCAsyncStorage » RNCAsyncStorage.mm
+› Packaging @react-native-masked-view/masked-view Pods/RNCMaskedView » libRNCMaskedView.a
+› Executing expo-modules-core Pods/ExpoModulesCore » [CP-User] [Expo] Switch ExpoModulesCore XCFramework for build configuration
+› Compiling @react-native-async-storage/async-storage Pods/RNCAsyncStorage » RNCAsyncStorage-dummy.m
+› Executing expo-modules-core Pods/ExpoModulesCore » [CP] Copy XCFrameworks
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNTapHandler.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNRotationHandler.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNRootViewGestureRecognizer.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNPinchHandler.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNPanHandler.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNManualHandler.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNManualActivationRecognizer.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNLongPressHandler.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNHoverHandler.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNGestureHandlerRegistry.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNGestureHandlerPointerTracker.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNGestureHandlerEvents.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNGHVector.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNGHStylusData.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNForceTouchHandler.m
+› Compiling react-native-gesture-handler Pods/RNGestureHandler » RNFlingHandler.m
+› Packaging react-native-gesture-handler Pods/RNGestureHandler » libRNGestureHandler.a
+› Packaging @react-native-async-storage/async-storage Pods/RNCAsyncStorage » libRNCAsyncStorage.a
+› Executing expo-modules-core Pods/ExpoModulesWorklets » [CP-User] [Expo] Resolve ExpoModulesWorklets dSYM source maps
+› Executing expo-location Pods/ExpoLocation » [CP-User] [Expo] Resolve ExpoLocation dSYM source maps
+› Executing expo-image Pods/ExpoImage » [CP-User] [Expo] Resolve ExpoImage dSYM source maps
+› Executing expo-font Pods/ExpoFont » [CP-User] [Expo] Resolve ExpoFont dSYM source maps
+› Executing expo-file-system Pods/ExpoFileSystem » [CP-User] [Expo] Resolve ExpoFileSystem dSYM source maps
+› Linking   Nuke/NukeUI » NukeUI.o
+› Executing expo-location Pods/ExpoLocation » [CP-User] [Expo] Switch ExpoLocation XCFramework for build configuration
+› Executing expo-modules-core Pods/ExpoModulesWorklets » [CP] Copy XCFrameworks
+› Executing expo-location Pods/ExpoLocation » [CP] Copy XCFrameworks
+› Executing expo-image Pods/ExpoImage » [CP-User] [Expo] Switch ExpoImage XCFramework for build configuration
+› Executing expo-font Pods/ExpoFont » [CP-User] [Expo] Switch ExpoFont XCFramework for build configuration
+› Executing expo-file-system Pods/ExpoFileSystem » [CP-User] [Expo] Switch ExpoFileSystem XCFramework for build configuration
+› Compiling expo-web-browser Pods/ExpoWebBrowser » ExpoWebBrowser-dummy.m
+› Packaging expo-web-browser Pods/ExpoWebBrowser » libExpoWebBrowser.a
+› Executing expo-web-browser Pods/ExpoWebBrowser » Copy generated compatibility header
+› Compiling expo-system-ui Pods/ExpoSystemUI » ExpoSystemUI-dummy.m
+› Packaging expo-system-ui Pods/ExpoSystemUI » libExpoSystemUI.a
+› Executing expo-system-ui Pods/ExpoSystemUI » Copy generated compatibility header
+› Compiling expo-symbols Pods/ExpoSymbols » ExpoSymbols-dummy.m
+› Packaging expo-symbols Pods/ExpoSymbols » libExpoSymbols.a
+› Executing expo-symbols Pods/ExpoSymbols » Copy generated compatibility header
+› Compiling expo-secure-store Pods/ExpoSecureStore » ExpoSecureStore-dummy.m
+› Packaging expo-secure-store Pods/ExpoSecureStore » libExpoSecureStore.a
+› Executing expo-secure-store Pods/ExpoSecureStore » Copy generated compatibility header
+› Executing expo-image Pods/ExpoImage » [CP] Copy XCFrameworks
+› Executing expo-font Pods/ExpoFont » [CP] Copy XCFrameworks
+› Executing expo-file-system Pods/ExpoFileSystem » [CP] Copy XCFrameworks
+› Compiling expo-splash-screen Pods/ExpoSplashScreen » ExpoSplashScreen-dummy.m
+› Packaging expo-splash-screen Pods/ExpoSplashScreen » libExpoSplashScreen.a
+› Executing expo-splash-screen Pods/ExpoSplashScreen » Copy generated compatibility header
+› Compiling expo-modules-core Pods/ExpoModulesWorkletsAdapter » ExpoWorkletsBridgeProvider.mm
+› Compiling expo-modules-core Pods/ExpoModulesWorkletsAdapter » ExpoModulesWorkletsAdapter-dummy.m
+› Packaging expo-modules-core Pods/ExpoModulesWorkletsAdapter » libExpoModulesWorkletsAdapter.a
+› Compiling expo-linking Pods/ExpoLinking » ExpoLinking-dummy.m
+› Packaging expo-linking Pods/ExpoLinking » libExpoLinking.a
+› Executing expo-linking Pods/ExpoLinking » Copy generated compatibility header
+› Compiling expo-linear-gradient Pods/ExpoLinearGradient » ExpoLinearGradient-dummy.m
+› Packaging expo-linear-gradient Pods/ExpoLinearGradient » libExpoLinearGradient.a
+› Executing expo-linear-gradient Pods/ExpoLinearGradient » Copy generated compatibility header
+› Compiling expo-keep-awake Pods/ExpoKeepAwake » ExpoKeepAwake-dummy.m
+› Packaging expo-keep-awake Pods/ExpoKeepAwake » libExpoKeepAwake.a
+› Executing expo-keep-awake Pods/ExpoKeepAwake » Copy generated compatibility header
+› Compiling expo-router Pods/ExpoRouter » ExpoRouter-dummy.m
+› Packaging expo-router Pods/ExpoRouter » libExpoRouter.a
+› Executing expo-router Pods/ExpoRouter » Copy generated compatibility header
+› Compiling expo-haptics Pods/ExpoHaptics » ExpoHaptics-dummy.m
+› Packaging expo-haptics Pods/ExpoHaptics » libExpoHaptics.a
+› Executing expo-haptics Pods/ExpoHaptics » Copy generated compatibility header
+› Compiling expo-notifications Pods/ExpoNotifications » ExpoNotifications-dummy.m
+› Packaging expo-notifications Pods/ExpoNotifications » libExpoNotifications.a
+› Compiling expo-glass-effect Pods/ExpoGlassEffect » ExpoGlassEffect-dummy.m
+› Packaging expo-glass-effect Pods/ExpoGlassEffect » libExpoGlassEffect.a
+› Executing expo-notifications Pods/ExpoNotifications » Copy generated compatibility header
+› Executing expo-glass-effect Pods/ExpoGlassEffect » Copy generated compatibility header
+› Compiling @expo/dom-webview Pods/ExpoDomWebView » ExpoDomWebView-dummy.m
+› Packaging @expo/dom-webview Pods/ExpoDomWebView » libExpoDomWebView.a
+› Compiling expo-image-picker Pods/ExpoImagePicker » ExpoImagePicker-dummy.m
+› Packaging expo-image-picker Pods/ExpoImagePicker » libExpoImagePicker.a
+› Executing expo-image-picker Pods/ExpoImagePicker » Copy generated compatibility header
+› Executing @expo/dom-webview Pods/ExpoDomWebView » Copy generated compatibility header
+› Compiling expo-clipboard Pods/ExpoClipboard » ExpoClipboard-dummy.m
+› Packaging expo-clipboard Pods/ExpoClipboard » libExpoClipboard.a
+› Executing expo-clipboard Pods/ExpoClipboard » Copy generated compatibility header
+› Compiling expo-crypto Pods/ExpoCrypto » ExpoCrypto-dummy.m
+› Packaging expo-crypto Pods/ExpoCrypto » libExpoCrypto.a
+› Executing expo-crypto Pods/ExpoCrypto » Copy generated compatibility header
+› Compiling expo-blur Pods/ExpoBlur » ExpoBlur-dummy.m
+› Packaging expo-blur Pods/ExpoBlur » libExpoBlur.a
+› Executing expo-blur Pods/ExpoBlur » Copy generated compatibility header
+› Compiling expo-asset Pods/ExpoAsset » ExpoAsset-dummy.m
+› Packaging expo-asset Pods/ExpoAsset » libExpoAsset.a
+› Executing expo-asset Pods/ExpoAsset » Copy generated compatibility header
+› Executing expo-constants Pods/EXConstants » [CP-User] Generate app.config for prebuilt Constants.manifest
+› Compiling expo-updates-interface Pods/EXUpdatesInterface » noop-file.m
+› Compiling expo-updates-interface Pods/EXUpdatesInterface » EXUpdatesInterface-dummy.m
+› Packaging expo-updates-interface Pods/EXUpdatesInterface » libEXUpdatesInterface.a
+› Executing expo-updates-interface Pods/EXUpdatesInterface » Copy generated compatibility header
+› Compiling expo-calendar Pods/ExpoCalendar » ExpoCalendar-dummy.m
+› Packaging expo-calendar Pods/ExpoCalendar » libExpoCalendar.a
+› Executing expo-calendar Pods/ExpoCalendar » Copy generated compatibility header
+› Compiling expo-manifests Pods/EXManifests » EXManifests-dummy.m
+› Compiling expo-constants Pods/EXConstants » EXConstantsInstallationIdProvider.m
+› Compiling expo-constants Pods/EXConstants » EXConstants-dummy.m
+› Packaging expo-manifests Pods/EXManifests » libEXManifests.a
+› Executing expo-manifests Pods/EXManifests » Copy generated compatibility header
+› Compiling expo-application Pods/EXApplication » EXProvisioningProfile.m
+› Compiling expo-application Pods/EXApplication » EXApplication-dummy.m
+› Packaging expo-application Pods/EXApplication » libEXApplication.a
+› Executing expo-application Pods/EXApplication » Copy generated compatibility header
+› Compiling expo-constants Pods/EXConstants » EXConstantsService.m
+› Packaging expo-constants Pods/EXConstants » libEXConstants.a
+› Executing expo-constants Pods/EXConstants » Copy generated compatibility header
+› Compiling expo Pods/Expo » ExpoReactNativeFactory.mm
+› Compiling expo Pods/Expo » EXReactRootViewFactory.mm
+› Compiling expo Pods/Expo » EXBundleConfiguration.mm
+› Compiling expo Pods/Expo » Expo-dummy.m
+› Compiling @expo/ui Pods/ExpoUI » ExpoUITouchHandlerHelper.mm
+› Compiling @expo/ui Pods/ExpoUI » ExpoUI-dummy.m
+› Packaging @expo/ui Pods/ExpoUI » libExpoUI.a
+› Executing @expo/ui Pods/ExpoUI » Copy generated compatibility header
+› Compiling expo Pods/Expo » EXLegacyAppDelegateWrapper.m
+› Compiling expo Pods/Expo » EXAppDelegatesLoader.m
+› Compiling expo Pods/Expo » EXAppDefinesLoader.m
+› Packaging expo Pods/Expo » libExpo.a
+› Executing expo Pods/Expo » Copy generated compatibility header
+› Compiling expo-dev-menu Pods/expo-dev-menu » RCTKeyCommands.m
+› Compiling expo-dev-menu Pods/expo-dev-menu » expo-dev-menu-dummy.m
+› Compiling expo-dev-menu Pods/expo-dev-menu » EXDevMenuAppInfo.m
+› Packaging expo-dev-menu Pods/expo-dev-menu » libexpo-dev-menu.a
+› Executing expo-dev-menu Pods/expo-dev-menu » Copy generated compatibility header
+› Compiling expo-dev-launcher Pods/expo-dev-launcher » RCTPackagerConnection+EXDevLauncherPackagerConnectionInterceptor.m
+› Compiling expo-dev-launcher Pods/expo-dev-launcher » expo-dev-launcher-dummy.m
+› Compiling expo-dev-launcher Pods/expo-dev-launcher » EXDevLauncherUpdatesHelper.m
+› Compiling expo-dev-launcher Pods/expo-dev-launcher » EXDevLauncherRCTDevSettings.m
+› Compiling expo-dev-launcher Pods/expo-dev-launcher » EXDevLauncherEarlySetup.m
+› Compiling expo-dev-launcher Pods/expo-dev-launcher » EXDevLauncherRedBox.m
+› Compiling expo-dev-launcher Pods/expo-dev-launcher » EXDevLauncherController.m
+› Compiling expo-dev-launcher Pods/expo-dev-launcher » EXDevLauncherManifestParser.m
+› Compiling expo-dev-launcher Pods/expo-dev-launcher » EXDevLauncher.m
+› Packaging expo-dev-launcher Pods/expo-dev-launcher » libexpo-dev-launcher.a
+› Executing expo-dev-launcher Pods/expo-dev-launcher » Copy generated compatibility header
+› Linking   Clerk/ClerkKitUI » ClerkKitUI.o
+› Compiling @clerk/expo Pods/ClerkExpo » ClerkExpo-dummy.m
+› Packaging @clerk/expo Pods/ClerkExpo » libClerkExpo.a
+› Executing @clerk/expo Pods/ClerkExpo » Copy generated compatibility header
+› Compiling Pods/Pods-Bluebird » Pods-Bluebird-dummy.m
+› Packaging Pods/Pods-Bluebird » libPods-Bluebird.a
+› Executing Bluebird » [CP] Check Pods Manifest.lock
+› Executing Bluebird » [Expo] Configure project
+› Copying   ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/InstallationBuildProductsLocation/Applications/Bluebird.app/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/artifacts/bluebird/ios/Bluebird/PrivacyInfo.xcprivacy
+› Copying   ios/Bluebird/Supporting/Expo.plist ➜ ./Expo.plist
+› Compiling Bluebird » SplashScreen.storyboard
+› Preparing Bluebird » Info.plist
+› Compiling Bluebird » Bluebird_vers.c
+› Linking   Bluebird » Bluebird
+
+⚠️  (ios/Bluebird.xcodeproj:)
+
+
+search path '/var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.5.188.0.TI1xWm/Metal.xctoolchain/usr/lib/swift/iphoneos' not found
+(warning truncated)
+
+❌  error: Cannot read properties of undefined (reading 'transformFile')
+
+
+› Generating debug Bluebird » Bluebird.app.dSYM
+⚠️  Script has ambiguous dependencies causing it to run on every build.
+   To fix, go to: Xcode » Bluebird/Bluebird » Build Phases » '[Expo Dev Launcher] Strip Local Network Keys for Release'
+   Either: Uncheck "Based on dependency analysis", or select output files to trigger the script
+
+▸ ** ARCHIVE FAILED **
+▸ The following build commands failed:
+▸ 	PhaseScriptExecution Bundle\ React\ Native\ code\ and\ images /Users/expo/workingdir/build/artifacts/bluebird/ios/build/Build/Intermediates.noindex/ArchiveIntermediates/Bluebird/IntermediateBuildFilesPath/Bluebird.build/Release-iphoneos/Bluebird.build/Script-00DD1BFF1BD5951E006B06BC.sh (in target 'Bluebird' from project 'Bluebird')
+▸ 	Archiving workspace Bluebird with scheme Bluebird
+▸ (2 failures)
+Exit status: 65
+
++---------------------------------------+
+|           Build environment           |
++-------------+-------------------------+
+| xcode_path  | /Applications/Xcode.app |
+| gym_version | 2.233.1                 |
+| sdk         | iPhoneOS26.4.sdk        |
++-------------+-------------------------+
+Looks like fastlane ran into a build/archive error with your project
+It's hard to tell what's causing the error, so we wrote some guides on how
+to troubleshoot build and signing issues: https://docs.fastlane.tools/codesigning/getting-started/
+Before submitting an issue on GitHub, please follow the guide above and make
+sure your project is set up correctly.
+fastlane uses `xcodebuild` commands to generate your binary, you can see the
+the full commands printed out in yellow in the above log.
+Make sure to inspect the output above, as usually you'll find more error information there
+
+[!] Error building the application - see the log above
+fastlane gym exited with non-zero code: 1
