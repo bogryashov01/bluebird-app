@@ -1,8 +1,37 @@
 # Bluebird iOS release configuration
 
-This note records the owner-provided values needed before an iOS production build and App Store submission. No app identity, EAS project, credentials, or production environment values are created here.
+This note records Bluebird's owner-confirmed Expo/EAS identity and the remaining requirements for an iOS production build and App Store submission. No app identity, EAS project, credentials, or production environment values were created here.
 
-## Current readiness audit (2026-10-20)
+## EAS identity verification (2026-10-20)
+
+- **Effective Expo owner:** `replit-private-cd8d8a20-320c-4224-accf-5c9dc7df2ff1`.
+- **Effective EAS project ID:** `7becc11e-ad08-40c7-ab29-317fe74c6ed7`.
+- **Effective slug / iOS bundle identifier:** `bluebird` / `com.bluebirdjets.app`.
+- These exact owner-confirmed values are persisted in `app.json` and were
+  verified in Expo's locally resolved public config. This is local config
+  evidence; no Expo account session, EAS CLI, or local `.eas` linkage metadata
+  was available for a remote account check.
+- The EAS `production` build profile remains configured with
+  `environment: "production"` and `distribution: "store"`. The `@clerk/expo`
+  plugin remains configured with `appleSignIn: false`; production
+  authentication gates and runtime code were not changed.
+- **Apple signing reuse: unverified.** This workspace had no authorized,
+  read-only EAS credential inspection available. Certificate validity,
+  provisioning-profile status, and association with
+  `com.bluebirdjets.app` therefore cannot be established. No signing
+  credentials or provisioning profiles were created or changed.
+- **Another iOS EAS store build attempt is not ready.** Before retrying, the
+  owner must inspect the existing iOS credentials in the authorized Expo/EAS
+  account and confirm that a valid, reusable profile/certificate is associated
+  with `com.bluebirdjets.app`. The production EAS environment values and the
+  separate production-auth approval gate also remain outside this workspace's
+  verification.
+- **Exact changed files:** `artifacts/bluebird/app.json`,
+  `artifacts/bluebird/RELEASE-CONFIGURATION.md`, and
+  `artifacts/bluebird/IOS-BUILD-READINESS.md`.
+- No EAS build or App Store submission was started.
+
+## Current production configuration audit (2026-10-20)
 
 - The checked-in EAS `production` profile explicitly selects the named
   `production` environment and store distribution. It does not extend either
@@ -42,10 +71,9 @@ The API URL, environment selector, and Clerk publishable key are embedded in the
 
 ## Owner inputs required
 
-- Confirm the exact unique reverse-DNS iOS bundle identifier and set `expo.ios.bundleIdentifier` in `app.json`. It is intentionally unset; do not derive it from the app name or website.
+- Confirm that the existing Apple signing credentials are valid and associated with `com.bluebirdjets.app` through an authorized, read-only EAS credential inspection. Do not create or change credentials as part of this verification.
 - Supply the App Store Connect app's numeric Apple ID (`ascAppId`) if submission should be non-interactive. No App Store Connect app ID is available in this project.
 - Provide authorized Apple Developer / App Store Connect access and configure signing/submission credentials through EAS when the owner is ready. Do not commit Apple credentials or add guessed team/account values here.
-- Create or link the EAS project only after the owner approves the app identity and project ownership. No EAS project ID is configured.
 
 The `submit.production` profile intentionally leaves `ios` values empty until those owner inputs are available; EAS Submit can prompt for missing values interactively.
 
@@ -59,9 +87,10 @@ The `submit.production` profile intentionally leaves `ios` values empty until th
 2. Confirm the Production Clerk/API pairing with their authorized owners.
    The checked-in canonical URL and a `pk_live_` prefix are validation rules,
    not proof that the remote Clerk instance or API owner approved that pairing.
-3. Provide and approve the exact iOS bundle identifier and organization-owned
-   EAS project ID. Configure Apple signing and App Store Connect access only
-   through the owner's approved EAS/Apple workflow.
+3. In the authorized Expo/EAS account, inspect existing iOS signing
+   credentials and confirm their validity and association with
+   `com.bluebirdjets.app`. Use the owner's approved EAS/Apple workflow for any
+   later credential changes; this audit made none.
 4. Keep `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH` unset until both API and
    Clerk owners approve the Production pairing, token acceptance, and identity
    mapping. After approval, configure the API-owner-verified issuer and enable

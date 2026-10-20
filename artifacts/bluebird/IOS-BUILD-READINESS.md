@@ -1,5 +1,31 @@
 # Bluebird iOS development-build readiness
 
+## EAS identity verification (2026-10-20, latest)
+
+- **Resolved Expo owner:** `replit-private-cd8d8a20-320c-4224-accf-5c9dc7df2ff1`.
+- **Resolved EAS project ID:** `7becc11e-ad08-40c7-ab29-317fe74c6ed7`.
+- **Resolved slug / iOS bundle identifier:** `bluebird` /
+  `com.bluebirdjets.app`.
+- The values above are persisted in `app.json` and confirmed by
+  `expo config --type public --json`. No local `.eas` linkage metadata or EAS
+  CLI/account session was available, so remote account ownership and project
+  linkage were not independently queried.
+- The `production` EAS profile still selects the `production` environment and
+  `store` distribution. The existing `@clerk/expo` plugin and production
+  authentication gates are unchanged.
+- **Apple signing reuse remains unverified.** A valid certificate/profile and
+  its association with `com.bluebirdjets.app` could not be checked through an
+  authorized, read-only account session. No credentials or profiles were
+  created or modified.
+- **Build retry status: not ready.** An owner with authorized Expo/EAS access
+  must inspect existing iOS credentials read-only and confirm their validity
+  and bundle-ID association before another store build attempt. Remote
+  production environment values and production auth approval also remain
+  unverified. No build or submission was run.
+- **Exact changed files:** `artifacts/bluebird/app.json`,
+  `artifacts/bluebird/RELEASE-CONFIGURATION.md`, and
+  `artifacts/bluebird/IOS-BUILD-READINESS.md`.
+
 ## TestFlight production configuration audit (2026-10-20)
 
 - **EAS profile:** `production` explicitly selects EAS `production` and store
@@ -28,13 +54,14 @@
   Development-only. Production authentication is therefore not ready or
   enabled; supplying a live publishable key does not silently activate it.
   Keep this as a blocker until separately approved and implemented.
-- **iOS identity:** name/slug are `Bluebird`/`bluebird`; version/build are
-  `1.0.0`/`1`; icon and splash files resolve; photo-library, camera, and
-  Calendar permission copy is configured, microphone permission is disabled,
-  and iPad support is off. The exact bundle identifier, EAS project ID,
-  App Store Connect app ID, Apple team/signing credentials, and test-device
-  registrations remain owner/Apple-controlled blockers. No native iOS runtime
-  was exercised.
+- **iOS identity:** name/slug are `Bluebird`/`bluebird`, bundle identifier is
+  `com.bluebirdjets.app`, and EAS project ID is
+  `7becc11e-ad08-40c7-ab29-317fe74c6ed7`; version/build are `1.0.0`/`1`.
+  Icon and splash files resolve; photo-library, camera, and Calendar
+  permission copy is configured, microphone permission is disabled, and iPad
+  support is off. App Store Connect app ID, Apple team/signing credentials, and
+  test-device registrations remain owner/Apple-controlled checks. No native
+  iOS runtime was exercised.
 - **Development `/api/me`:** the stored evidence records that the Fetch
   receiver fix uses `globalThis`, a credential-free Preview preflight
   succeeded, and a browser request with a test bearer received HTTP 200 with
@@ -46,10 +73,11 @@
   There is no reproducible Mobile defect supporting a further transport
   change.
 - **Owner next steps:** verify the remote EAS Production variables (including
-  `EXPO_PUBLIC_DOMAIN`) and API/Clerk pairing; approve/supply the bundle ID
-  and EAS project linkage; complete an explicitly approved Production Clerk
-  implementation; then authorize Apple signing/device setup and a later
-  TestFlight build. See `RELEASE-CONFIGURATION.md`.
+  `EXPO_PUBLIC_DOMAIN`) and API/Clerk pairing; inspect existing signing
+  credentials and confirm their validity and association with
+  `com.bluebirdjets.app`; complete any explicitly approved Production Clerk
+  work; then consider a later TestFlight build. See
+  `RELEASE-CONFIGURATION.md`.
 
 ### Focused checks run for this audit
 
@@ -186,7 +214,8 @@ environment values.
   action requires a development build and was not invoked on iOS. Map rendering,
   camera/library access, calendar access, push-token registration, and actual
   native session restoration remain device-runtime checks. Push-token
-  retrieval depends on EAS project linkage (there is no project ID yet); its
+  retrieval depends on EAS project access; the ID is now present in local
+  configuration, but remote account access has not been checked. Its
   optional error handling keeps sign-in available, but push registration is
   not verified.
 - The EAS `development` profile is an internal development-client profile and
@@ -202,13 +231,10 @@ environment values.
 
 ## Blocked by owner / Apple access
 
-- **Bundle identifier:** `ios.bundleIdentifier` is absent. The Bluebird owner
-  must provide the exact organization-approved unique reverse-DNS identifier;
-  none was inferred from the product name or domain.
-- **EAS project and account:** `expo.extra.eas.projectId` is absent. An
-  organization-owned EAS project and an Expo account authorized for it are
-  required before an owner-authorized cloud development build. This workspace
-  did not link or create a project.
+- **Identity:** the owner-confirmed `com.bluebirdjets.app` bundle identifier
+  and `7becc11e-ad08-40c7-ab29-317fe74c6ed7` EAS project ID are now persisted
+  locally. The Expo account session and project authorization were not
+  independently checked, and no project was created or linked here.
 - **Development environment values:** Remote EAS values could not be inspected.
   The owner must configure and verify the `development` environment:
   `EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT=development`,
@@ -242,7 +268,7 @@ environment values.
 
 | Check | Result |
 | --- | --- |
-| `expo config --type public --json` | **PASS.** Bluebird `1.0.0`, scheme `bluebird`, build number `1`, and `applinks:bluebird.co` resolve. `ios.bundleIdentifier` and `extra.eas.projectId` are absent. Existing plugins and assets resolve. |
+| `expo config --type public --json` (preceding identity audit) | **PASS at that time.** Bluebird `1.0.0`, scheme `bluebird`, build number `1`, and `applinks:bluebird.co` resolved. The bundle identifier and EAS project ID were absent then; they are now present and verified in the latest audit above. Existing plugins and assets resolved. |
 | `CI=1 expo install --check` | **PASS.** Dependencies are aligned. |
 | `expo-doctor@latest` | **PASS.** 21/21 checks passed. |
 | Expo Web `/welcome` smoke check | **PASS.** Signed-out Welcome and the ordinary phone sign-in entry render; the deleted preview button is absent. |
@@ -314,10 +340,11 @@ environment values.
 
 ## Owner next steps
 
-1. Approve and supply Bluebird's exact iOS bundle identifier.
-2. Select/link the organization-owned EAS project and authorize the account
-   that will run its builds; add the approved project linkage through the
-   owner's process.
+1. In the authorized Expo/EAS account, verify access to the existing project
+   and inspect signing credentials read-only for validity and association with
+   `com.bluebirdjets.app`.
+2. Continue to use the existing project and confirmed identifiers; this
+   workspace did not create or relink an Expo project.
 3. Populate and verify the EAS `development` environment variables listed
    above, including a matching Development API/Clerk issuer pair.
 4. For a simulator-only first build, use `development-simulator` after the

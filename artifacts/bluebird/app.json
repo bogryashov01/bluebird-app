@@ -2,12 +2,14 @@
   "expo": {
     "name": "Bluebird",
     "slug": "bluebird",
+    "owner": "replit-private-cd8d8a20-320c-4224-accf-5c9dc7df2ff1",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "bluebird",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.bluebirdjets.app",
       "buildNumber": "1",
       "supportsTablet": false,
       "associatedDomains": [
@@ -83,6 +85,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "7becc11e-ad08-40c7-ab29-317fe74c6ed7"
+      }
     }
   }
 }
