@@ -1,0 +1,83 @@
+FIX CONFIRMED BLUEBIRD iOS EAS BUILD FAILURE
+
+We have retrieved the complete Xcode build log
+from failed EAS build:
+
+Build ID:
+0665a293-bea7-45d4-8924-ebbe28d651fa
+
+The ORIGINAL error is now confirmed:
+
+Failed to construct transformer:
+Error: Cannot find module 'babel-preset-expo'
+
+Error code: MODULE_NOT_FOUND
+
+This occurs during the Xcode phase:
+Bundle React Native code and images
+
+The later error:
+
+Cannot read properties of undefined (reading 'transformFile')
+
+is a secondary Metro error.
+
+TASK:
+
+1. Work ONLY on Bluebird Mobile:
+   artifacts/bluebird/
+
+2. Inspect:
+   - package.json
+   - babel.config.js
+   - metro.config.js
+   - pnpm workspace configuration
+   - pnpm-lock.yaml
+
+3. Determine why babel-preset-expo is not resolvable
+   during EAS production iOS bundling.
+
+4. Ensure babel-preset-expo is declared as a direct
+   dependency of the Bluebird Mobile package.
+
+5. Use the version compatible with the installed
+   Expo SDK 57.
+
+6. Update the appropriate workspace lockfile
+   using pnpm. Do not use npm install.
+
+7. Verify that a clean, production-style installation
+   can resolve babel-preset-expo from the Mobile app.
+
+8. Run production-mode iOS bundling validation
+   using Expo export:embed where feasible.
+
+9. Run:
+   - Bluebird Mobile typecheck
+   - dependency compatibility checks
+   - relevant existing tests
+
+10. Do not upgrade Expo SDK, React Native,
+    Metro, or Babel unnecessarily.
+
+IMPORTANT RESTRICTIONS:
+
+- Do not modify Bluebird Website.
+- Do not modify backend or database.
+- Do not modify Clerk Dashboard.
+- Do not change Apple signing.
+- Do not change EAS project ownership.
+- Preserve bundle identifier com.bluebirdjets.app.
+- Preserve existing Clerk Expo plugin.
+- Preserve production authentication safety gates.
+- Do not enable production Clerk auth.
+- Do not trigger an EAS build or App Store submission.
+
+REPORT:
+
+- Confirmed root cause
+- Exact changed files
+- Installed babel-preset-expo version
+- Clean-install resolution result
+- Production iOS bundling validation result
+- Whether it is safe to retry the iOS build
