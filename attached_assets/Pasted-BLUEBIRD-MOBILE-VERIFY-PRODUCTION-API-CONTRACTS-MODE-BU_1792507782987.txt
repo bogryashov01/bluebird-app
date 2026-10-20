@@ -1,0 +1,104 @@
+BLUEBIRD MOBILE — VERIFY PRODUCTION API CONTRACTS
+
+MODE: BUILD / EXECUTE
+PRIORITY: CRITICAL — TESTFLIGHT
+
+SCOPE: BLUEBIRD MOBILE ONLY
+
+CONFIRMED PRODUCTION ENDPOINTS:
+
+GET https://bluebirdjets.com/api/me
+GET https://bluebirdjets.com/api/membership
+
+Both endpoints returned HTTP 200
+from an authenticated Bluebird Website
+session.
+
+IMPORTANT:
+
+This does not yet prove that Mobile
+Clerk tokens are accepted.
+
+PRODUCTION MEMBERSHIP RESPONSE:
+
+{
+  "isMember": false,
+  "tier": null,
+  "status": null,
+  "currentPeriodStart": null,
+  "currentPeriodEnd": null,
+  "cancelAtPeriodEnd": false,
+  "canceledAt": null,
+  "startedAt": null,
+  "paymentStatus": null,
+  "paymentMethod": null,
+  "scheduledTierChange": null,
+  "lastDiscountPercent": null,
+  "lastPaidAmountCents": null,
+  "metaPurchase": null,
+  "recentEvents": []
+}
+
+The real response contained a recentEvents
+entry; the empty array above is a sanitized
+test fixture, not a verbatim response.
+
+TASKS:
+
+1. Inspect Mobile API configuration.
+
+2. Verify that the production base URL is:
+
+   https://bluebirdjets.com
+
+   if Mobile appends /api/... paths.
+
+3. Verify GET /api/me integration.
+
+4. Verify GET /api/membership integration.
+
+5. Ensure nullable membership fields
+   are handled correctly.
+
+6. Ensure isMember=false is displayed
+   as a non-member state.
+
+7. Ensure tier=null does not cause
+   a rendering error.
+
+8. Verify that membership is resolved
+   from the backend response, not
+   inferred from phone number.
+
+9. Check whether Mobile uses the
+   correct Production Clerk configuration.
+
+10. Preserve fail-closed behavior if
+    production identity is not verified.
+
+11. Add focused regression tests.
+
+12. Run TypeScript checks.
+
+STRICT RESTRICTIONS:
+
+- Modify Bluebird Mobile ONLY.
+- Main Website/API is READ-ONLY.
+- Do not modify production data.
+- Do not create memberships.
+- Do not perform production writes.
+- Do not send SMS.
+- Do not expose credentials.
+- Do not activate Production Sign-in
+  without explicit approval.
+- Do not launch EAS Build yet.
+
+FINAL REPORT:
+
+- Files changed
+- API URL configuration
+- /api/me integration status
+- /api/membership integration status
+- Clerk compatibility status
+- Tests passed
+- Remaining TestFlight blockers

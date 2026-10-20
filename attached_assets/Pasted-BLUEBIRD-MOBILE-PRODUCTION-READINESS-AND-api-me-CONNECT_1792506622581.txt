@@ -1,0 +1,263 @@
+BLUEBIRD MOBILE — PRODUCTION READINESS
+AND /api/me CONNECTION FIX
+
+MODE: BUILD / EXECUTE
+
+PRIORITY: CRITICAL
+
+PROJECT: Bluebird Mobile
+
+GOAL:
+
+Prepare Bluebird Mobile for a real
+iOS TestFlight build using production-ready
+configuration.
+
+At the same time, investigate and fix
+the existing /api/me connection failure.
+
+IMPORTANT:
+
+We are moving toward production.
+
+Do not keep development-only configuration
+as the default for release builds.
+
+However, do not connect to production
+services until their configuration and
+compatibility have been verified.
+
+========================================
+1. ABSOLUTE SCOPE RESTRICTION
+========================================
+
+ONLY modify Bluebird Mobile.
+
+DO NOT MODIFY:
+
+- Main Bluebird Website
+- Main Bluebird API
+- Shared backend packages
+- Database
+- Clerk Dashboard
+- Production environment
+- Production user data
+
+Main Website/API source is READ-ONLY.
+
+========================================
+2. PRODUCTION CONFIGURATION
+========================================
+
+Inspect the existing Mobile configuration:
+
+- Expo app configuration
+- EAS build profiles
+- Environment variables
+- API base URL selection
+- Clerk publishable key selection
+- Authentication feature flags
+
+Identify the existing production values
+without exposing secrets.
+
+Create or correct a clean production
+configuration for iOS TestFlight.
+
+Requirements:
+
+- Production builds must not silently
+  use Development API URLs.
+
+- Production builds must not use
+  Development Clerk instances.
+
+- Production builds must not use
+  Replit Preview URLs as API endpoints.
+
+- Missing production configuration
+  must fail clearly.
+
+- Do not invent production API hosts.
+
+- Do not invent Clerk keys.
+
+- Do not modify production credentials.
+
+========================================
+3. FIX /api/me CONNECTION
+========================================
+
+Current failure:
+
+Clerk session exists: Yes
+Clerk token obtained: Yes
+HTTP response: Unavailable
+Failure: browser transport (ambiguous)
+
+Observed Development URL:
+
+https://8acaa348-10ff-41b3-9d85-c6b4986aa35a-00-2o2pl95c9l6gv.worf.replit.dev/api/me
+
+Investigate:
+
+- Effective API base URL
+- URL construction
+- Incorrect Replit Preview routing
+- Fetch implementation
+- Browser CORS behavior
+- Redirects
+- Network failures
+- Authentication headers
+
+Fix confirmed Mobile-side defects.
+
+Do not assume that HTTP 422,
+401, or transport errors have
+the same root cause.
+
+Do not modify backend CORS settings.
+
+Do not introduce an insecure proxy.
+
+========================================
+4. PRODUCTION CLERK INTEGRATION
+========================================
+
+Inspect the existing production Clerk
+configuration.
+
+Determine:
+
+- Is a production publishable key
+  configured for Mobile?
+
+- Does it correspond to the intended
+  production Clerk instance?
+
+- Does Main Bluebird API accept tokens
+  from that instance?
+
+Use non-secret configuration evidence.
+
+Do not expose session tokens.
+
+Do not activate production sign-up
+or send SMS automatically.
+
+If production Clerk configuration is
+missing or unverified, report BLOCKED.
+
+========================================
+5. PRODUCTION API INTEGRATION
+========================================
+
+Identify the actual production
+Bluebird API base URL from existing
+verified project configuration.
+
+Confirm that Mobile is configured
+to use the intended API host.
+
+Do not guess endpoint URLs.
+
+Do not perform authenticated production
+requests without explicit approval.
+
+Do not create or modify production data.
+
+========================================
+6. TESTFLIGHT CONFIGURATION
+========================================
+
+Inspect:
+
+- ios.bundleIdentifier
+- Expo app name
+- App icon
+- Splash screen
+- EAS build profiles
+- iOS permissions
+- App version
+- Build number
+
+Prepare a release-ready TestFlight
+build configuration.
+
+Do not submit or upload a build yet.
+
+Do not create signing credentials
+without approval.
+
+Do not modify Apple Developer settings.
+
+========================================
+7. ENVIRONMENT SAFETY
+========================================
+
+Maintain a clear separation:
+
+Development:
+Development Clerk + Development API
+
+Production:
+Production Clerk + Production API
+
+Never mix environments.
+
+Never silently fall back from
+production to development.
+
+Never fall back to fake data.
+
+========================================
+8. TESTING
+========================================
+
+Run:
+
+- TypeScript checks
+- Existing authentication tests
+- API configuration tests
+- Production environment selection tests
+- /api/me URL construction tests
+
+Use mocks for tests.
+
+Do not send SMS.
+
+Do not create production users.
+
+Do not perform production writes.
+
+========================================
+9. FINAL REPORT
+========================================
+
+Report:
+
+1. Files changed
+
+2. Development /api/me failure root cause
+
+3. Fix implemented
+
+4. Production API configuration status
+
+5. Production Clerk configuration status
+
+6. Expo / EAS readiness
+
+7. Bundle ID status
+
+8. Tests passed
+
+9. Remaining blockers
+
+10. Exact next steps for TestFlight
+
+Do not claim production readiness
+unless all required configuration
+is actually verified.
+
+Do not deploy or submit anything.
