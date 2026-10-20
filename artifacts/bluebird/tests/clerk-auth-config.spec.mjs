@@ -4,6 +4,7 @@ import {
   canAccessClerkAuthRoutes,
   getClerkAuthErrorMessage,
   getClerkAuthViewState,
+  getProductionAuthPreflightStatus,
   performClerkSignOut,
   resolveClerkAuthConfiguration,
   resolveClerkAuthConfigurationFromEnvironment,
@@ -147,6 +148,48 @@ test("Production builds block legacy fallback when the API environment selector 
   assert.equal(config.enabled, false);
   assert.equal(config.environment, null);
   assert.match(config.configurationError, /must select production/);
+});
+
+test("Production preflight reports only sanitized statuses and keeps absent approval blocked", () => {
+  const local = {
+    EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: "production",
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL: "https://bluebirdjets.com/api",
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY: "pk_live_Y2xlcmsuZXhhbXBsZS5jb20k",
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_CLERK_ISSUER: "https://clerk.example.com",
+  };
+  const result = getProductionAuthPreflightStatus(local);
+  assert.deepEqual(result, {
+    selectedEnvironment: "selected",
+    productionApiUrl: "configured",
+    productionClerkKey: "configured",
+    productionIssuer: "configured",
+    productionKeyFormat: "pk_live valid",
+    issuerHostParity: "matched",
+    issuerOwnerVerification: "not verifiable from Mobile configuration",
+    approvalGate: "disabled",
+    mobileLogin: "blocked",
+  });
+  assert.doesNotMatch(
+    JSON.stringify(result),
+    /https:\/\/bluebirdjets\.com|Y2xlcmsuZXhhbXBsZS5jb20k|clerk\.example\.com/i,
+  );
+});
+
+test("Production preflight distinguishes malformed values and issuer mismatch", () => {
+  const result = getProductionAuthPreflightStatus({
+    EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: "development",
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL: "https://other.example.test/api",
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k",
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_CLERK_ISSUER: "https://other.example.test",
+    EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH: "true",
+  });
+  assert.equal(result.selectedEnvironment, "not selected");
+  assert.equal(result.productionApiUrl, "invalid");
+  assert.equal(result.productionClerkKey, "invalid");
+  assert.equal(result.productionKeyFormat, "invalid");
+  assert.equal(result.productionIssuer, "configured");
+  assert.equal(result.issuerHostParity, "not verifiable");
+  assert.equal(result.mobileLogin, "blocked");
 });
 
 test("Clerk migration is disabled outside Development and rejects live keys", () => {

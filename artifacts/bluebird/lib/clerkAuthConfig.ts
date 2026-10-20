@@ -1,4 +1,7 @@
-import { resolveMainBluebirdApiConfiguration } from './mainBluebirdApiConfig';
+import {
+  resolveMainBluebirdApiConfiguration,
+  validateMainBluebirdApiBaseUrl,
+} from './mainBluebirdApiConfig';
 
 export interface ClerkAuthConfiguration {
   /** Indicates that this build must use Clerk rather than the legacy auth flow. */
@@ -138,6 +141,93 @@ export function resolveClerkAuthConfigurationFromEnvironment(
       'Production sign-in is blocked: configure a valid Production API URL and matching pk_live_ Clerk key.',
     );
   }
+}
+
+export interface ProductionAuthPreflightStatus {
+  selectedEnvironment: 'selected' | 'not selected';
+  productionApiUrl: 'configured' | 'missing' | 'invalid';
+  productionClerkKey: 'configured' | 'missing' | 'invalid';
+  productionIssuer: 'configured' | 'missing' | 'invalid';
+  productionKeyFormat: 'pk_live valid' | 'missing' | 'invalid';
+  issuerHostParity: 'matched' | 'mismatched' | 'not verifiable';
+  issuerOwnerVerification: 'not verifiable from Mobile configuration';
+  approvalGate: 'enabled' | 'disabled';
+  mobileLogin: 'ready' | 'blocked';
+}
+
+/**
+ * Returns only status labels for the local Production configuration. Matching
+ * hostnames establish syntax-level parity only, not API-owner approval.
+ */
+export function getProductionAuthPreflightStatus(
+  environment: Record<string, unknown>,
+): ProductionAuthPreflightStatus {
+  const apiUrl = environment.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL;
+  const publishableKey = environment.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY;
+  const issuer = environment.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_CLERK_ISSUER;
+  const keyIsConfigured = typeof publishableKey === 'string' && !!publishableKey.trim();
+  const issuerIsConfigured = typeof issuer === 'string' && !!issuer.trim();
+
+  let productionApiUrl: ProductionAuthPreflightStatus['productionApiUrl'] = 'invalid';
+  if (typeof apiUrl !== 'string' || !apiUrl.trim()) {
+    productionApiUrl = 'missing';
+  } else {
+    try {
+      validateMainBluebirdApiBaseUrl(apiUrl, 'production');
+      productionApiUrl = 'configured';
+    } catch {
+      productionApiUrl = 'invalid';
+    }
+  }
+
+  const keyHost = getClerkInstanceHost(publishableKey, 'pk_live_');
+  const issuerHost = getVerifiedIssuerHost(issuer);
+  const issuerHostParity: ProductionAuthPreflightStatus['issuerHostParity'] =
+    !keyHost || !issuerHost
+      ? 'not verifiable'
+      : keyHost === issuerHost
+        ? 'matched'
+        : 'mismatched';
+  const productionClerkKey: ProductionAuthPreflightStatus['productionClerkKey'] =
+    !keyIsConfigured
+      ? 'missing'
+      : keyHost
+        ? 'configured'
+        : 'invalid';
+  const productionIssuer: ProductionAuthPreflightStatus['productionIssuer'] =
+    !issuerIsConfigured
+      ? 'missing'
+      : issuerHost
+        ? 'configured'
+        : 'invalid';
+  const approvalGate = environment.EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH === 'true'
+    ? 'enabled'
+    : 'disabled';
+  const selectedEnvironment = environment.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT === 'production'
+    ? 'selected'
+    : 'not selected';
+  const mobileLogin = selectedEnvironment === 'selected' &&
+      productionApiUrl === 'configured' &&
+      productionClerkKey === 'configured' &&
+      productionIssuer === 'configured' &&
+      issuerHostParity === 'matched' &&
+      approvalGate === 'enabled'
+    ? 'ready'
+    : 'blocked';
+
+  return {
+    selectedEnvironment,
+    productionApiUrl,
+    productionClerkKey,
+    productionIssuer,
+    productionKeyFormat: productionClerkKey === 'configured'
+      ? 'pk_live valid'
+      : productionClerkKey,
+    issuerHostParity,
+    issuerOwnerVerification: 'not verifiable from Mobile configuration',
+    approvalGate,
+    mobileLogin,
+  };
 }
 
 function productionConfigurationError(message: string): ClerkAuthConfiguration {
