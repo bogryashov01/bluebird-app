@@ -1,0 +1,83 @@
+BLUEBIRD MOBILE — VERIFY PRODUCTION CLERK + API COMPATIBILITY
+
+GOAL:
+Prepare Bluebird Mobile for real Production authentication
+using the existing Production Clerk and Production API.
+
+Production API:
+https://bluebirdjets.com/api
+
+CURRENT STATUS:
+- Production Preview works.
+- Production API is configured.
+- Production Clerk publishable key and issuer are configured.
+- Production sign-in is blocked by the approval gate.
+- The existing Production website account has an active
+  Base membership.
+
+TASK 1 — VERIFY CLERK CONFIGURATION
+
+Inspect the existing Mobile configuration.
+
+Verify:
+- Production pk_live_ key is selected.
+- Production issuer matches the configured key.
+- Mobile uses Clerk getToken().
+- Authorization header uses Bearer token.
+- No Development Clerk configuration is selected.
+
+Do not print credentials or tokens.
+
+TASK 2 — VERIFY API COMPATIBILITY
+
+Inspect available API authentication contracts,
+documentation, and existing integration code.
+
+Determine whether the Production API accepts
+the default Clerk session token used by Mobile.
+
+Verify the expected identity mapping.
+
+Do not assume compatibility based only on matching
+Clerk hostnames.
+
+Do not modify the backend.
+
+TASK 3 — VERIFY PRODUCTION PREVIEW
+
+Inspect preview:production-web.
+
+Confirm:
+- Production API is selected.
+- --no-dev --minify are preserved.
+- Development Clerk is not selected.
+- The existing approval gate remains intact.
+
+TASK 4 — REPORT BLOCKERS
+
+Provide a concise report:
+
+Production Clerk key: PASS/FAIL
+Production issuer: PASS/FAIL
+Token contract: VERIFIED/UNVERIFIED
+Identity mapping: VERIFIED/UNVERIFIED
+Production API: PASS/FAIL
+Production approval: APPROVED/BLOCKED
+
+If the token contract and identity mapping cannot be
+verified from available evidence, state exactly what
+confirmation is missing.
+
+IMPORTANT:
+Do not enable EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH.
+Do not bypass the approval gate.
+Do not modify backend, website, database, or Clerk Dashboard.
+Do not create fake users or memberships.
+Do not deploy or create an EAS build.
+
+SCOPE:
+Bluebird Mobile only.
+
+EXPECTED RESULT:
+A clear determination of what is needed to safely
+activate Production Clerk authentication.

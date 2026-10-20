@@ -1,0 +1,84 @@
+BLUEBIRD MOBILE — SELF-SERVICE PRODUCTION AUTH VERIFICATION
+
+GOAL:
+Verify Production Clerk authentication compatibility
+without requesting assistance from other developers.
+
+Production API:
+https://bluebirdjets.com/api
+
+CURRENT STATE:
+- Production Preview works.
+- Production Clerk configuration exists.
+- Production authentication is blocked by an approval gate.
+- Production website authentication works.
+- The existing website account has an active Base membership.
+
+TASK 1 — INVESTIGATE AUTHENTICATION
+
+Inspect the available Mobile and Production API
+integration code.
+
+Determine:
+1. Which Clerk instance Mobile uses in Production.
+2. How Mobile obtains the session token.
+3. How the Production API authenticates requests.
+4. How the API resolves the authenticated user.
+5. Whether Mobile and Website use compatible sessions.
+
+Use only authorized, read-only access.
+
+TASK 2 — TEST API COMPATIBILITY
+
+Determine whether a safe authenticated integration
+test can be performed using an existing authorized
+Production session.
+
+Do not extract browser cookies or session tokens.
+Do not print credentials or authentication headers.
+Do not bypass authentication.
+
+If authenticated testing is unavailable, report
+the exact missing access or configuration.
+
+TASK 3 — CHECK PRODUCTION CONFIGURATION
+
+Verify the configured Production environment.
+
+Check:
+- Production API URL
+- Production Clerk publishable key configuration
+- Issuer compatibility
+- Mobile token provider
+- Required Expo environment variables
+
+Report statuses without exposing values.
+
+TASK 4 — PREPARE ACTIVATION
+
+If compatibility can be verified, prepare the
+necessary Mobile-only configuration changes.
+
+Preserve the existing approval gate.
+
+Do not enable Production Clerk unless the required
+approval is already documented.
+
+Do not modify backend, website, database,
+or Clerk Dashboard.
+
+Do not deploy or create an EAS build.
+
+EXPECTED OUTPUT:
+
+Production API: PASS/FAIL
+Production Clerk: PASS/FAIL
+Token acceptance: PASS/FAIL/UNVERIFIED
+Identity mapping: PASS/FAIL/UNVERIFIED
+Mobile login readiness: READY/BLOCKED
+
+For every blocker, provide one concrete action
+that can be performed with our current access.
+
+Do not create another documentation-only task.
+Prioritize executable verification.
