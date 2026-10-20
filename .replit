@@ -32,3 +32,6 @@ EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL = "https://bluebirdjets.com/api"
 
 [userenv.production]
 EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL = "https://bluebirdjets.com/api"
+
+[userenv.shared]
+EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH = "true"
