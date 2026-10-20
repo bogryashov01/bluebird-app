@@ -100,14 +100,18 @@ test("Production Clerk remains blocked until explicit approval and an exact matc
     EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH: "true",
   };
 
-  const missingApproval = resolveClerkAuthConfigurationFromEnvironment({
-    ...production,
-    EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH: undefined,
-  });
-  assert.equal(missingApproval.authExpected, true);
-  assert.equal(missingApproval.enabled, false);
-  assert.equal(missingApproval.publishableKey, null);
-  assert.match(missingApproval.configurationError, /owners approve/);
+  for (const approvalFlag of [undefined, "false"]) {
+    const missingApproval = resolveClerkAuthConfigurationFromEnvironment({
+      ...production,
+      EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH: approvalFlag,
+    });
+    assert.equal(missingApproval.authExpected, true);
+    assert.equal(missingApproval.enabled, false);
+    assert.equal(missingApproval.publishableKey, null);
+    assert.match(missingApproval.configurationError, /owners approve/);
+    assert.equal(shouldMountClerkProvider(missingApproval), false);
+    assert.equal(canAccessClerkAuthRoutes(missingApproval), false);
+  }
 
   for (const invalid of [
     { ...production, EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL: undefined },

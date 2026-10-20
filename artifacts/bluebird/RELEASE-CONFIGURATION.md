@@ -70,10 +70,14 @@ pnpm --filter @workspace/bluebird run preview:production-web
 This Mobile-only command uses Expo's `--no-dev --minify` web mode, selects the
 Production Main API environment and Production flight reads, and inherits
 `EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL` rather than replacing the
-canonical URL. It removes the Production Clerk approval variable only from
-this launcher process, so this Preview cannot enable Production Clerk auth.
-The command uses the assigned `PORT` and localhost host mode; it does not
-change the artifact Preview wiring. No EAS build or deployment is required.
+canonical URL. It also inherits `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH` when
+the caller supplies it; the launcher does not set or fabricate this flag.
+Production Clerk remains blocked unless the existing runtime checks pass,
+including Production API selection, the matching live publishable key and
+API-owner-verified issuer, and the separately documented owner approvals. The
+flag's presence alone is not evidence of owner approval. The command uses the
+assigned `PORT` and localhost host mode; it does not change the artifact Preview
+wiring. No EAS build or deployment is required.
 
 ## Production EAS environment
 
