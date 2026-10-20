@@ -10,12 +10,12 @@ const artifactConfig = await readFile(
   "utf8",
 );
 
-test("Production Preview is isolated from the existing Development launch", () => {
+test("Selected Production Preview preserves the separate Development launch", () => {
   assert.equal(
     packageJson.scripts.dev,
     "sh -c 'if [ -n \"$REPLIT_EXPO_SESSION_SECRET\" ]; then pnpm exec create-launch login --session \"$REPLIT_EXPO_SESSION_SECRET\" || true; fi' && BROWSER=none EXPO_PACKAGER_PROXY_URL=https://$REPLIT_EXPO_DEV_DOMAIN EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE=local EXPO_PUBLIC_REPL_ID=$REPL_ID REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_EXPO_DEV_DOMAIN pnpm exec expo start --dev-client --web --host lan --port $PORT",
   );
-  assert.match(artifactConfig, /\[services\.development\]\s+run = "pnpm --filter @workspace\/bluebird run dev"/);
+  assert.match(artifactConfig, /\[services\.development\]\s+run = "pnpm --filter @workspace\/bluebird run preview:production-web"/);
 });
 
 test("Production Preview selects production reads without changing the canonical API URL or enabling Clerk", () => {

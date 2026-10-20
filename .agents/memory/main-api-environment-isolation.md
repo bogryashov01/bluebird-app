@@ -32,3 +32,9 @@ Reject invalid auth configuration before mounting session-dependent screens.
 **Why:** When Clerk is expected but disabled by a mismatched environment, no provider can ever supply a loaded session. Waiting for session loading hides the configuration error indefinitely.
 
 **How to apply:** Render the configuration blocker outside auth observers; preserve the selected environment and approval gates rather than silently falling back or enabling Production authentication.
+
+The user selected Production preview when asked which environment the Bluebird workspace should run.
+
+**Why:** Restoring Development just to make sign-in appear would contradict the selected preview target.
+
+**How to apply:** Preserve Production preview unless the user requests a switch. Selecting this preview does not constitute approval to enable Production Clerk sign-in.
