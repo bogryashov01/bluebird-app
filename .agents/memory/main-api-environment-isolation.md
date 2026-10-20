@@ -26,3 +26,9 @@ Source evidence from the separate Main Website must stay scoped to the audited s
 **Why:** A newer read-only Main-source audit confirmed those implementation facts while deployment and runtime behavior remained unverified; treating the local legacy API as representative would incorrectly reject the Main contract.
 
 **How to apply:** In Mobile queue readiness reports, distinguish supplied Main-source facts, Mobile client preparation, and authorized runtime checks. Keep queue traffic gated until the selected deployed pair and its live behavior are confirmed.
+
+Reject invalid auth configuration before mounting session-dependent screens.
+
+**Why:** When Clerk is expected but disabled by a mismatched environment, no provider can ever supply a loaded session. Waiting for session loading hides the configuration error indefinitely.
+
+**How to apply:** Render the configuration blocker outside auth observers; preserve the selected environment and approval gates rather than silently falling back or enabling Production authentication.

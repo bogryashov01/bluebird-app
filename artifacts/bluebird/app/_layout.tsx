@@ -21,7 +21,8 @@ import { ThemeProvider } from '@/context/ThemeContext';
 import { useColors } from '@/hooks/useColors';
 import { QueueConfirmationWatcher } from '@/lib/queueCelebration';
 import { DormantClerkProvider } from '@/lib/dormantClerkIntegration';
-import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
+import { CLERK_AUTH_CONFIGURATION, shouldShowClerkConfigurationError } from '@/lib/clerkAuthConfig';
+import { ClerkAuthConfigurationError } from '@/components/ClerkAuthConfigurationError';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '@/context/AuthContext';
 import { shouldRedirectClerkRoute } from '@/lib/clerkAuthSession';
@@ -295,6 +296,12 @@ export default function RootLayout() {
 }
 
 function RoutedRoot() {
+  // A disabled provider cannot finish loading a session. Show the setup
+  // blocker before mounting auth observers or waiting for that session.
+  if (shouldShowClerkConfigurationError(CLERK_AUTH_CONFIGURATION)) {
+    return <ClerkAuthConfigurationError />;
+  }
+
   const authenticatedApp = (
     <AuthProvider>
       <RootLayoutNav />
