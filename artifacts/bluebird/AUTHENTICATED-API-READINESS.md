@@ -522,6 +522,43 @@ typecheck, lockfile, or Metro export cannot substitute for it.
   approved backend change or confirmed backend contract; this assessment makes
   no production/backend change.
 
+### Verification run (2026-10-20)
+
+The production API owner was not available through this workspace, and no
+owner-confirmed issuer or token contract was found. The checked-in API
+middleware was compared directly: it verifies bearer JWTs with the API's
+`JWT_SECRET`/`SESSION_SECRET`, relies on JWT library standard time validation,
+checks the local revocation table, then assigns `payload.userId`. It does not
+validate a Clerk JWKS/signature, `iss`, `aud`, `azp`, or `sub`, and does not map a
+Clerk subject to a Bluebird member. This is evidence about the checked-in local
+API only, not the production backend.
+
+The following Bluebird tests passed using injected/mock resources and fetchers:
+
+- `pnpm --filter @workspace/bluebird run test:production-auth-api` — 23 passed;
+  confirms a token-bearing `/api/me` HTTP 200 with `isAuthenticated: false`
+  stays signed out, HTTP 401 is surfaced as `session_expired`, and missing-token
+  requests do not reach the injected fetcher.
+- `pnpm --filter @workspace/bluebird run test:clerk-bridge` — 6 passed;
+  confirms signed-out/missing sessions do not produce a token and requests use
+  only the mock fetcher.
+- `pnpm --filter @workspace/bluebird run test:clerk-session-isolation` — 9
+  passed; confirms production member-data calls remain unavailable until
+  backend acceptance is confirmed.
+- `pnpm --filter @workspace/bluebird run test:clerk-auth-ui` — 9 passed;
+  confirms production Clerk remains blocked without explicit approval and an
+  exact matching API/issuer pair.
+- `pnpm --filter @workspace/bluebird run test:production-queue-gate` — 2 passed;
+  confirms unresolved runtime evidence remains a gate.
+
+These mocks do not validate JWT issuer, audience/authorized-party, expiry, or
+subject handling at the production backend. No expected claim values were
+invented for a synthetic validator. No production authenticated request, Clerk
+API call, or SMS flow was made, and no API middleware, provider, feature flag,
+or production availability setting was changed. Backend-owner confirmation and
+an approved non-production backend test remain outstanding; Gates 1 and 2 stay
+open and production authentication remains inactive.
+
 ### Blockers and staged implementation sequence
 
 1. **Confirm policy and environment:** product/security owner approves the

@@ -65,6 +65,15 @@ does not prove acceptance of Clerk-issued tokens or production runtime
 behavior. For the full source comparison and evidence, see the
 [readiness report](./AUTHENTICATED-API-READINESS.md).
 
+The 2026-10-20 mock verification passed the Bluebird client/auth-gating suites,
+including signed-out `/api/me` handling and local HTTP 401-to-`session_expired`
+handling. Those tests use injected fetchers; they do not exercise the production
+server or verify Clerk JWT claims. The API owner has not confirmed the intended
+Production Clerk issuer, token/template, audience/authorized-party rules, or
+subject mapping, and no approved non-production backend was available. Gates 1
+and 2 therefore remain open; do not treat the mock results as backend
+acceptance.
+
 ## Gate 1 — Confirm the intended Clerk and token contract
 
 - [ ] Nick/production API owner confirms the exact Clerk instance/environment,
