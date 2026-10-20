@@ -17,12 +17,11 @@ This note records the owner-provided values needed before an iOS production buil
   restricted to the existing canonical HTTPS `/api` endpoint; Development,
   Preview, legacy API, and wrong Clerk-key-type values fail configuration
   validation rather than becoming Main API fallbacks.
-- Production Clerk sign-in is not enabled by the current Mobile auth
-  configuration: the mounted Clerk flow is explicitly Development-only. A
-  configured `pk_live_` value alone would not enable production authentication.
-  Keep production auth unavailable until its separate owner approval and
-  Mobile implementation are completed; do not turn on the Development flag or
-  reuse its key.
+- Production Clerk sign-in is not active by default. The Mobile provider now
+  has a separate Production gate, but it stays blocked until the API and Clerk
+  owners approve the matching pair and the owner-configured production
+  environment explicitly enables it. A `pk_live_` value alone is not approval.
+  Do not turn on the Development flag or reuse its key.
 - The legacy generated API client can also receive `EXPO_PUBLIC_DOMAIN`.
   Because the remote EAS values could not be inspected, the owner must verify
   that the Production EAS environment does not point this legacy base URL at a
@@ -36,6 +35,8 @@ Configure the named EAS `production` environment with these public app-configura
 - `EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT` must select `production`.
 - `EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL` must identify the Production Main Bluebird API. The mobile configuration accepts only its configured canonical HTTPS `/api` endpoint.
 - `EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY` must be the Production Clerk publishable key (`pk_live_…`) for the Clerk instance paired with that API.
+- `EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_CLERK_ISSUER` must be the API-owner-verified Production Clerk issuer and match the instance encoded in the Production publishable key.
+- `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH=true` is the explicit rollout approval gate. Set it only after both API and Clerk owners confirm the Production pairing, token acceptance, and identity mapping; otherwise leave it unset.
 
 The API URL, environment selector, and Clerk publishable key are embedded in the mobile app configuration; they are not server secrets. The publishable key is public by design but must belong to the correct Production Clerk instance. Do not put private keys, API tokens, or other server credentials in `EXPO_PUBLIC_` variables or in this repository. Keep any genuine secrets in an approved secret store.
 
@@ -61,10 +62,12 @@ The `submit.production` profile intentionally leaves `ios` values empty until th
 3. Provide and approve the exact iOS bundle identifier and organization-owned
    EAS project ID. Configure Apple signing and App Store Connect access only
    through the owner's approved EAS/Apple workflow.
-4. Separately approve and implement Production Clerk authentication before
-   expecting sign-in or member data in TestFlight. No Production sign-in,
-   legacy-host fallback, or Development configuration should be enabled as a
-   substitute.
+4. Keep `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH` unset until both API and
+   Clerk owners approve the Production pairing, token acceptance, and identity
+   mapping. After approval, configure the API-owner-verified issuer and enable
+   the separate Production provider. Missing or mismatched settings remain a
+   sign-in blocker; no legacy-host fallback or Development configuration is
+   an acceptable substitute.
 5. Confirm the app version/build number and Universal Link association with
    the owner, then run a future owner-authorized iOS build/device-validation
    task. This audit started no build, upload, or submission.

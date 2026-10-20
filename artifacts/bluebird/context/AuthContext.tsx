@@ -50,7 +50,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 // Register the token getter globally so every API request carries the bearer token
 setAuthTokenGetter(createLegacyAuthTokenGetter(
-  CLERK_AUTH_CONFIGURATION.enabled,
+  CLERK_AUTH_CONFIGURATION.authExpected,
   async () => {
     try {
       return await AsyncStorage.getItem(TOKEN_KEY);
@@ -67,7 +67,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 function ActiveAuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const clerkSession = useClerkAuthSnapshot();
-  const clerkMode = CLERK_AUTH_CONFIGURATION.enabled;
+  // A requested-but-unconfigured Clerk environment remains closed; never
+  // resurrect legacy tokens while showing the Clerk configuration blocker.
+  const clerkMode = CLERK_AUTH_CONFIGURATION.authExpected;
   const clerkApiConfiguration = clerkMode ? getMainBluebirdApiConfigurationOrNull() : null;
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);

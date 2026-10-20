@@ -46,13 +46,23 @@ function ClerkAuthSnapshotBridge({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * The Development migration flow mounts Clerk only behind its explicit flag
- * and a test publishable key. Clerk's SDK owns session persistence.
+ * Clerk mounts only after the selected environment's independent enable gate
+ * and API/Clerk pairing checks pass. Clerk's SDK owns session persistence.
  */
 export function DormantClerkProvider({ children }: { children: React.ReactNode }) {
   const { publishableKey } = CLERK_AUTH_CONFIGURATION;
   if (!shouldMountClerkProvider(CLERK_AUTH_CONFIGURATION) || !publishableKey) {
     return <>{children}</>;
+  }
+  if (CLERK_AUTH_CONFIGURATION.environment === 'production') {
+    const apiConfiguration = getMainBluebirdApiConfigurationOrNull();
+    if (
+      !apiConfiguration ||
+      apiConfiguration.environment !== 'production' ||
+      apiConfiguration.clerkPublishableKey !== publishableKey
+    ) {
+      return <>{children}</>;
+    }
   }
 
   return (
