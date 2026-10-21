@@ -1,0 +1,93 @@
+BLUEBIRD MOBILE — ISOLATED MEMBERSHIP MOCK TEST BRANCH
+
+IMPORTANT:
+This is a temporary development experiment.
+
+DO NOT MERGE ANY MOCK CODE INTO MAIN.
+
+GOAL:
+Create an isolated test environment for developing
+and testing the Bluebird Membership UI using local JSON.
+
+STEP 1 — GIT ISOLATION
+
+1. Check the current Git branch and working tree.
+
+2. Preserve any existing uncommitted changes.
+   Do not discard, overwrite, or reset them.
+
+3. Create and switch to a new branch:
+
+   test/membership-mock
+
+4. Verify the active branch is test/membership-mock.
+
+5. Do not modify or commit anything on main.
+
+STEP 2 — MEMBERSHIP MOCK
+
+1. Inspect the existing Membership API response types.
+
+2. Create a local JSON fixture matching the
+   existing Production /api/membership schema.
+
+3. Use the verified Base / Active membership example.
+
+4. Implement a temporary Membership preview
+   that reads from the local JSON fixture.
+
+5. Allow opening Membership in Replit Preview
+   without Production Clerk authentication.
+
+6. Do not fake Clerk sessions or auth tokens.
+
+7. Do not call protected Production API endpoints
+   from the mock preview.
+
+8. Display a visible "MOCK DATA" badge.
+
+9. Keep all changes inside artifacts/bluebird.
+
+10. Do not modify backend, website, database,
+    or Production Clerk settings.
+
+STEP 3 — SAFETY
+
+1. Mock preview must be development-only.
+
+2. Never enable mock preview in Production builds.
+
+3. Do not modify EAS Production configuration.
+
+4. Do not deploy or submit any build.
+
+5. Do not merge this branch into main.
+
+6. Do not push changes to main.
+
+STEP 4 — VERIFY
+
+1. Membership screen opens in Replit Preview.
+
+2. Base membership displays correctly.
+
+3. Active membership status displays correctly.
+
+4. Navigation works.
+
+5. Existing Production API integration remains intact.
+
+6. Tests pass.
+
+7. Confirm active Git branch is:
+
+   test/membership-mock
+
+8. Confirm main branch was not modified.
+
+EXPECTED RESULT:
+
+A working temporary Membership mock preview
+isolated in test/membership-mock.
+
+The mock code must never be merged into main.
