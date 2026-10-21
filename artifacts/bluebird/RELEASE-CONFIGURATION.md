@@ -57,6 +57,32 @@ This note records Bluebird's owner-confirmed Expo/EAS identity and the remaining
   Development or Replit Preview service. This is an external configuration
   verification blocker, not evidence that such a value is currently set.
 
+
+### Production Clerk pair verification status (2026-10-21)
+
+- **Local Production configuration shape: PASS.** The recorded Production
+  Preview check confirms the canonical Production API endpoint, a live Clerk
+  publishable key, and a configured issuer host matching the host encoded in
+  that key. No values are reproduced here. This is a local consistency check;
+  it does not establish that the issuer is API-owner-verified or that the
+  deployed API accepts tokens from that Clerk instance.
+- **Mobile token construction: CONFIRMED IN SOURCE.** The prepared client calls
+  Clerk `getToken()` without a template argument and sends the result as a
+  Bearer token.
+- **Owner checks: REPORTED COMPLETE.** On 2026-10-21, the project owner
+  confirmed that the API owner verified the Production issuer and token
+  acceptance contract; API and Clerk owners approved the exact pair, identity
+  mapping, and allowed client configuration; and an authorized owner checked
+  the remote Production environment. No environment values or credentials are
+  included here. This records the owner's confirmation; it is not an
+  independent remote inspection from this workspace.
+- **Production sign-in: NOT ENABLED BY THIS TASK.** No approval flag or remote
+  setting was changed here. Production auth still requires the separate exact
+  `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH=true` approval, and the local
+  Production Preview continues to remove that flag. This owner confirmation
+  does not itself activate sign-in or close the remaining native/rollout
+  readiness checks.
+
 ## Local Production web Preview
 
 The existing Bluebird artifact Preview continues to use the `dev` script and

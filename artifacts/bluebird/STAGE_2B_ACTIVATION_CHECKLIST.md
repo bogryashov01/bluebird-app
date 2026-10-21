@@ -65,6 +65,26 @@ does not prove acceptance of Clerk-issued tokens or production runtime
 behavior. For the full source comparison and evidence, see the
 [readiness report](./AUTHENTICATED-API-READINESS.md).
 
+## Production Clerk pair status (2026-10-21)
+
+- **Local configuration shape: PASS.** The recorded Production Preview check
+  found the canonical Production API endpoint and a configured live
+  publishable-key/issuer-host match. This does not verify the issuer with the
+  API owner or prove deployed token acceptance.
+- **Client token format: CONFIRMED IN SOURCE.** Mobile calls Clerk's default
+  `getToken()` without a named template and sends the result as a Bearer token.
+- **Owner checks: REPORTED COMPLETE.** On 2026-10-21, the project owner
+  confirmed the API owner verified the Production issuer and token-acceptance
+  contract; API and Clerk owners approved the exact pair, identity mapping,
+  and allowed client configuration; and an authorized owner checked the
+  remote Production environment. No environment values or credentials are
+  recorded here. This is owner-reported status, not an independent remote
+  inspection from this workspace.
+- **Activation: NOT ENABLED BY THIS TASK.** No approval flag or remote setting
+  was changed. The separate `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH` gate
+  remains required; the local Production Preview removes it. This status does
+  not close the broader native-operation and rollout requirements in Gates 3–4.
+
 The 2026-10-20 mock verification passed the Bluebird client/auth-gating suites,
 including signed-out `/api/me` handling and local HTTP 401-to-`session_expired`
 handling. Those tests use injected fetchers; they do not exercise the production
