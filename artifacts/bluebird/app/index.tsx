@@ -11,11 +11,14 @@ export default function Index() {
     user,
     isLoading,
     authMode,
+    demoMode,
     clerkSignedIn,
     clerkMemberResolution,
     memberAccessResolved,
   } = useAuth();
   const colors = useColors();
+
+  if (demoMode) return <Redirect href="/(tabs)/discover" />;
 
   if (isLoading) {
     return (

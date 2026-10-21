@@ -1,9 +1,10 @@
 import React, { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AppHeader } from '@/components/AppHeader';
 import { ConciergeHeader } from '@/components/ConciergeHeader';
@@ -17,7 +18,7 @@ import {
 import { Redirect, Stack, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { setBaseUrl } from '@workspace/api-client-react';
-import { AuthProvider } from '@/context/AuthContext';
+import { AuthProvider, DemoAuthProvider } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { useColors } from '@/hooks/useColors';
 import { QueueConfirmationWatcher } from '@/lib/queueCelebration';
@@ -35,6 +36,11 @@ import {
   getMembershipDataModeConfiguration,
   isMembershipMockPreviewLocation,
 } from '@/lib/membershipDataMode';
+import {
+  getFullAppDemoConfiguration,
+  isFullAppDemoAllowedRoute,
+  isFullAppDemoRoute,
+} from '@/lib/fullAppDemo';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -307,9 +313,22 @@ function RoutedRoot() {
     ? window.location.pathname
     : '';
   const isMembershipMockPreview = isMembershipMockPreviewLocation(pathname, segments);
+  const fullAppDemo = getFullAppDemoConfiguration();
+
+  // This development-only branch is selected before AuthProvider, Clerk, or
+  // authenticated-data observers can mount.
+  if (fullAppDemo.enabled) {
+    return isFullAppDemoAllowedRoute(pathname, segments)
+      ? <FullAppDemoRoot />
+      : <FullAppDemoUnavailable />;
+  }
+
+  // An explicit demo URL never falls through to ordinary member routes in a
+  // release runtime; the development gate above is required to enter it.
+  if (isFullAppDemoRoute(pathname, segments)) return <FullAppDemoUnavailable />;
 
   // Use the browser URL as well as Expo Router's segments so a direct Replit
-  // Preview load never mounts Clerk or authenticated-data observers first.
+  // Membership Preview load never mounts Clerk or authenticated-data observers first.
   if (isMembershipMockPreview) return <MembershipMockPreviewRoot />;
 
   // A disabled provider cannot finish loading a session. Show the setup
@@ -327,6 +346,65 @@ function RoutedRoot() {
   return CLERK_AUTH_CONFIGURATION.enabled
     ? <DormantClerkProvider>{authenticatedApp}</DormantClerkProvider>
     : authenticatedApp;
+}
+
+function FullAppDemoRoot() {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const headerOptions = {
+    header: (props: React.ComponentProps<typeof AppHeader>) => <AppHeader {...props} />,
+  } as const;
+  return (
+    <DemoAuthProvider>
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
+        <View
+          testID="full-app-demo-banner"
+          accessibilityLabel="DEMO MODE"
+          style={{
+            minHeight: 34 + insets.top,
+            paddingTop: insets.top,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: colors.backgroundMid,
+          }}
+        >
+          <Text style={{ color: colors.textOnBrand, fontFamily: 'Inter_700Bold', fontSize: 11, letterSpacing: 1 }}>
+            DEMO MODE
+          </Text>
+        </View>
+        <Stack screenOptions={{ contentStyle: { backgroundColor: colors.background } }}>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="membership/plans"
+            options={{ headerShown: true, title: 'All Plans', ...headerOptions }}
+          />
+          <Stack.Screen
+            name="membership/mock-preview"
+            options={{ headerShown: true, title: 'Membership', ...headerOptions }}
+          />
+        </Stack>
+      </View>
+    </DemoAuthProvider>
+  );
+}
+
+function FullAppDemoUnavailable() {
+  const colors = useColors();
+  return (
+    <View
+      testID="full-app-demo-denied"
+      style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: colors.background }}
+    >
+      <Text style={{ color: colors.foreground, fontFamily: 'Inter_700Bold', fontSize: 20 }}>
+        Demo unavailable
+      </Text>
+      <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 14, marginTop: 8, textAlign: 'center' }}>
+        The full-app demo is available only in the development Preview.
+      </Text>
+    </View>
+  );
 }
 
 function MembershipMockPreviewRoot() {

@@ -1,0 +1,12 @@
+{
+  "isAuthenticated": true,
+  "isAdmin": true,
+  "isConcierge": true,
+  "isMember": true,
+  "memberTier": "base",
+  "firstName": "Paul",
+  "lastName": "Mulko",
+  "isProfileComplete": true,
+  "needsPlanDecision": false,
+  "needsSignupPhone": false
+}

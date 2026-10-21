@@ -139,6 +139,7 @@ function openFlightDetails(flight: FlightView): void {
 interface HeaderProps {
   colors: ReturnType<typeof useColors>;
   topPad: number;
+  demoMode: boolean;
   greetingText: string;
   userName?: string;
   allCount: number;
@@ -168,7 +169,7 @@ interface HeaderProps {
  * search input focused while typing.
  */
 const DiscoverHeader = React.memo(function DiscoverHeader({
-  colors, topPad, greetingText, userName, allCount, productionReadOnly, featured, search, onSearchChange, onClearSearch,
+  colors, topPad, demoMode, greetingText, userName, allCount, productionReadOnly, featured, search, onSearchChange, onClearSearch,
   view, onViewChange, mapFlights, mapAirports, mapLoading, mapError, onMapRetry,
   filter, filters, onFilterChange, showEmpty, hasActiveQuery, onClearSearchFromEmpty,
 }: HeaderProps) {
@@ -199,6 +200,8 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
         <TouchableOpacity
           style={[styles.conciergeBtn, { backgroundColor: colors.card }]}
           onPress={() => router.push('/concierge')}
+          disabled={demoMode}
+          accessibilityLabel={demoMode ? 'AI Concierge unavailable in demo' : 'AI Concierge'}
         >
           <Feather name="message-circle" size={18} color={colors.foreground} />
         </TouchableOpacity>
@@ -354,7 +357,7 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
           ) : mapError ? (
             <View style={styles.mapPlaceholder}>
               <Feather name="wifi-off" size={28} color={colors.mutedForeground} />
-              <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+      <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
                 Could not load airport locations
               </Text>
               <TouchableOpacity
@@ -389,8 +392,11 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
       {showEmpty && (
         <View style={styles.mapPlaceholder}>
           <Feather name="send" size={28} color={colors.mutedForeground} style={{ transform: [{ rotate: '-45deg' }] }} />
-          <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            No flights match
+          <Text
+            testID={demoMode ? 'full-app-demo-flight-empty' : undefined}
+            style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}
+          >
+            {demoMode ? 'Local demo: flight inventory is not connected.' : 'No flights match'}
           </Text>
           {(hasActiveQuery || filter !== 'all') && (
             <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={onClearSearchFromEmpty}>
@@ -417,7 +423,7 @@ export default function DiscoverScreen() {
     border: activeColors.discoverBorder,
   };
   const insets = useSafeAreaInsets();
-  const { user, isLoading: authLoading, authMode } = useAuth();
+  const { user, isLoading: authLoading, authMode, demoMode } = useAuth();
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
   const [filter, setFilter] = useState<FlightFilter>('all');
@@ -433,31 +439,33 @@ export default function DiscoverScreen() {
     return () => subscription.remove();
   }, []));
 
-  const localReadMode = shouldUseLocalFlightReadMode(authMode, isLocalFlightReadMode());
-  const memberQueryEnabled = isLegacyMemberQueryEnabled({
+  const localReadMode = !demoMode && shouldUseLocalFlightReadMode(authMode, isLocalFlightReadMode());
+  const memberQueryEnabled = !demoMode && isLegacyMemberQueryEnabled({
     authMode,
     localDemoFlow: localReadMode,
     hasLegacyUser: !!user,
   });
   const localFlightsQuery = useListFlights({}, {
-    query: { enabled: localReadMode, queryKey: getListFlightsQueryKey({}) },
+    query: { enabled: !demoMode && localReadMode, queryKey: getListFlightsQueryKey({}) },
   });
   const productionFlightsQuery = useQuery({
     queryKey: PRODUCTION_FLIGHTS_QUERY_KEY,
     queryFn: ({ signal }) => fetchProductionFlights({ signal }),
-    enabled: !localReadMode,
+    enabled: !demoMode && !localReadMode,
     retry: shouldRetryProductionRead,
     retryDelay: productionReadRetryDelay,
   });
   const flights: FlightView[] = React.useMemo(
-    () => localReadMode
+    () => demoMode
+      ? []
+      : localReadMode
       ? (localFlightsQuery.data ?? []).map(mapLocalFlight)
       : productionFlightsQuery.data ?? [],
-    [localReadMode, localFlightsQuery.data, productionFlightsQuery.data],
+    [demoMode, localReadMode, localFlightsQuery.data, productionFlightsQuery.data],
   );
-  const flightsLoading = localReadMode ? localFlightsQuery.isLoading : productionFlightsQuery.isLoading;
-  const flightsError = localReadMode ? localFlightsQuery.isError : productionFlightsQuery.isError;
-  const flightsRefetching = localReadMode ? localFlightsQuery.isRefetching : productionFlightsQuery.isRefetching;
+  const flightsLoading = !demoMode && (localReadMode ? localFlightsQuery.isLoading : productionFlightsQuery.isLoading);
+  const flightsError = !demoMode && (localReadMode ? localFlightsQuery.isError : productionFlightsQuery.isError);
+  const flightsRefetching = !demoMode && (localReadMode ? localFlightsQuery.isRefetching : productionFlightsQuery.isRefetching);
   const refetchFlights = localReadMode ? localFlightsQuery.refetch : productionFlightsQuery.refetch;
 
   // Personalized data: flights the member is already queued for or booked on
@@ -543,7 +551,7 @@ export default function DiscoverScreen() {
   const airportQuery = useQuery({
     queryKey: ['production-airports', airportCodes],
     queryFn: ({ signal }) => fetchProductionAirports(airportCodes, { signal }),
-    enabled: view === 'map' && airportCodes.length > 0,
+    enabled: !demoMode && view === 'map' && airportCodes.length > 0,
     retry: shouldRetryProductionRead,
     retryDelay: productionReadRetryDelay,
   });
@@ -554,10 +562,11 @@ export default function DiscoverScreen() {
     setFilter('all');
   }, []);
   const onRefresh = React.useCallback(async () => {
+    if (demoMode) return;
     const refreshes: Promise<unknown>[] = [refetchFlights()];
     if (view === 'map' && airportCodes.length > 0) refreshes.push(airportQuery.refetch());
     await Promise.all(refreshes);
-  }, [refetchFlights, view, airportCodes, airportQuery.refetch]);
+  }, [demoMode, refetchFlights, view, airportCodes, airportQuery.refetch]);
 
   const renderCard = ({ item }: { item: FlightView }) => (
     <TouchableOpacity
@@ -639,6 +648,7 @@ export default function DiscoverScreen() {
             <DiscoverHeader
               colors={colors}
               topPad={topPad}
+              demoMode={demoMode}
               greetingText={greetingText}
               userName={user?.name?.trim().split(/\s+/)[0] || undefined}
               allCount={all.length}

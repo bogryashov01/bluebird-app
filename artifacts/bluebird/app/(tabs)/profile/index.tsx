@@ -22,6 +22,7 @@ import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConf
 import { getClerkBluebirdProfileEffectDependencies, isClerkBluebirdProfileResultCurrent } from '@/lib/clerkBluebirdProfile';
 import { loadClerkPersonalInfo } from '@/lib/clerkPersonalInfo';
 import type { ProductionUserProfile } from '@/lib/productionAuthApi';
+import { FullAppDemoProfileView } from '@/components/FullAppDemoViews';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; hint: string }[] = [
   { value: 'light',  label: 'Light',  hint: 'Always use the light theme' },
@@ -90,12 +91,12 @@ type ClerkProfileLoadState =
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { user, signOut, authMode, clerkMemberResolution } = useAuth();
+  const { user, signOut, authMode, clerkMemberResolution, demoMode } = useAuth();
   const { preference } = useTheme();
   const clerkSession = useClerkAuthSnapshot();
   const mainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
   const localDemoFlow = isLocalFlightReadMode();
-  const memberQueryEnabled = isLegacyMemberQueryEnabled({
+  const memberQueryEnabled = !demoMode && isLegacyMemberQueryEnabled({
     authMode,
     localDemoFlow,
     hasLegacyUser: !!user,
@@ -207,12 +208,14 @@ export default function ProfileScreen() {
     query: {
       refetchInterval: 15000,
       refetchIntervalInBackground: false,
-      enabled: memberQueryEnabled,
+      enabled: !demoMode && memberQueryEnabled,
     },
   });
   const notifList = (notifications as Notification[]) ?? [];
   const recentActivity = notifList.slice(0, 5);
   const unreadCount = notifList.filter((n) => !n.read).length;
+
+  if (demoMode) return <FullAppDemoProfileView />;
 
   if (authMode === 'clerk') {
     const visibleProfileState = 'clerkUserId' in profileLoadState &&

@@ -131,10 +131,10 @@ export default function TripsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<ActiveTab>('upcoming');
-  const { user, updateUser, authMode } = useAuth();
+  const { user, updateUser, authMode, demoMode } = useAuth();
   const queryClient = useQueryClient();
-  const localDemoFlow = authMode === 'legacy' && isLocalFlightReadMode();
-  const memberQueryEnabled = isLegacyMemberQueryEnabled({
+  const localDemoFlow = !demoMode && authMode === 'legacy' && isLocalFlightReadMode();
+  const memberQueryEnabled = !demoMode && isLegacyMemberQueryEnabled({
     authMode,
     localDemoFlow,
     hasLegacyUser: !!user,
@@ -210,6 +210,20 @@ export default function TripsScreen() {
     { id: 'past', label: 'Past' },
   ];
 
+  if (demoMode) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]} testID="full-app-demo-trips">
+        <View style={[styles.header, { paddingTop: topPad + 24 }]}>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Trips</Text>
+        </View>
+        <TripAvailabilityState
+          title="No demo trips"
+          description="Trip history and bookings are not connected to local demo data."
+          testID="full-app-demo-trips-empty"
+        />
+      </View>
+    );
+  }
   if (authMode === 'clerk') {
     return <ClerkTrips />;
   }

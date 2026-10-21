@@ -25,6 +25,7 @@ import {
   productionPlanPurchaseNotice,
 } from '@/lib/productionMembershipPlans';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { FullAppDemoPlansView } from '@/components/FullAppDemoViews';
 
 type ClerkMembershipState =
   | { kind: 'loading' }
@@ -35,12 +36,12 @@ type ClerkMembershipState =
 export default function AllPlansScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { user, authMode } = useAuth();
+  const { user, authMode, demoMode } = useAuth();
   const clerkSession = useClerkAuthSnapshot();
   const mainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
   const localDemoFlow = isLocalFlightReadMode();
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
-  const legacyMembershipEnabled = isLegacyMemberQueryEnabled({
+  const legacyMembershipEnabled = !demoMode && isLegacyMemberQueryEnabled({
     authMode,
     localDemoFlow,
     hasLegacyUser: !!user,
@@ -132,7 +133,7 @@ export default function AllPlansScreen() {
     void loadClerkMembership(controller.signal);
     return () => controller.abort();
   }, [authMode, loadClerkMembership, ...membershipRequestDependencies]);
-  const plansQuery = useProductionMembershipPlans();
+  const plansQuery = useProductionMembershipPlans({ enabled: !demoMode });
   const visibleClerkState = clerkMembershipState.kind === 'loaded' &&
     clerkMembershipState.clerkUserId !== clerkSession?.userId
     ? { kind: 'loading' as const }
@@ -197,6 +198,8 @@ export default function AllPlansScreen() {
   const clerkMembershipNeedsRetry = visibleClerkState.kind === 'error' ||
     (clerkResult?.kind === 'authenticated' &&
       (clerkResult.membershipState === 'unavailable' || clerkResult.membershipState === 'conflict'));
+
+  if (demoMode) return <FullAppDemoPlansView />;
 
   if (plansQuery.isLoading) {
     return (

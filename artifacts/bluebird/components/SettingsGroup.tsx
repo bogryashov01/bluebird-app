@@ -4,6 +4,7 @@ import { useColors } from '@/hooks/useColors';
 
 export interface SettingsRow {
   label: string;
+  testID?: string;
   hint?: string;
   onPress?: () => void;
   right?: React.ReactNode;
@@ -28,6 +29,7 @@ export function SettingsGroup({ title, rows, compact = false }: SettingsGroupPro
           <React.Fragment key={row.label}>
             {i > 0 && <View style={[styles.sep, { backgroundColor: colors.separator }]} />}
             <TouchableOpacity
+              testID={row.testID}
               style={[styles.row, row.disabled && styles.disabledRow]}
               onPress={row.onPress}
               activeOpacity={row.onPress ? 0.6 : 1}

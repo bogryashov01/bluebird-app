@@ -33,6 +33,7 @@ import {
   loadClerkBluebirdMembership,
 } from '@/lib/clerkBluebirdProfile';
 import type { ClerkBluebirdMembershipLoadResult } from '@/lib/clerkBluebirdProfile';
+import { FullAppDemoMembershipView } from '@/components/FullAppDemoViews';
 
 // ── Tier config ───────────────────────────────────────────────────────────────
 const TIER_META: Record<string, { label: string }> = {
@@ -71,11 +72,11 @@ function formatMembershipDate(value: string | null | undefined): string {
 export default function MembershipScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { user, authMode } = useAuth();
+  const { user, authMode, demoMode } = useAuth();
   const clerkSession = useClerkAuthSnapshot();
   const mainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
   const localDemoFlow = isLocalFlightReadMode();
-  const memberQueryEnabled = isLegacyMemberQueryEnabled({
+  const memberQueryEnabled = !demoMode && isLegacyMemberQueryEnabled({
     authMode,
     localDemoFlow,
     hasLegacyUser: !!user,
@@ -86,7 +87,7 @@ export default function MembershipScreen() {
 
   const { data: membership, isLoading, isFetching: membershipFetching, isError, refetch } = useGetMembership({
     query: {
-      enabled: memberQueryEnabled,
+      enabled: !demoMode && memberQueryEnabled,
       queryKey: ['/api/membership', user?.id ?? 'no-local-account'],
     },
   });
@@ -199,8 +200,10 @@ export default function MembershipScreen() {
     void loadClerkMembership(controller.signal);
     return () => controller.abort();
   }, [authMode, loadClerkMembership, ...membershipRequestDependencies]);
-  const plansQuery = useProductionMembershipPlans();
+  const plansQuery = useProductionMembershipPlans({ enabled: !demoMode });
   const mem = membership;
+
+  if (demoMode) return <FullAppDemoMembershipView />;
 
   if (authMode === 'clerk') {
     const visibleState = 'clerkUserId' in clerkMembershipState &&

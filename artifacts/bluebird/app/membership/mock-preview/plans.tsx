@@ -9,8 +9,11 @@ import { useColors } from '@/hooks/useColors';
 import { useProductionMembershipPlans } from '@/hooks/useProductionMembershipPlans';
 import { formatProductionPlanPrice } from '@/lib/productionMembershipPlans';
 import { getMembershipDataModeConfiguration } from '@/lib/membershipDataMode';
+import { getFullAppDemoConfiguration } from '@/lib/fullAppDemo';
+import { FullAppDemoPlansView } from '@/components/FullAppDemoViews';
 
 export default function MembershipMockPreviewPlansScreen() {
+  if (getFullAppDemoConfiguration().enabled) return <FullAppDemoPlansView />;
   const configuration = getMembershipDataModeConfiguration();
   if (!configuration.mockPreviewAllowed) {
     return <UnavailablePlans message={configuration.error ?? 'Public plans are unavailable in this build.'} />;

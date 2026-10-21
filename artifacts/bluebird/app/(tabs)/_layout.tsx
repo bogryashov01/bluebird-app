@@ -157,12 +157,18 @@ function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
 export default function TabLayout() {
   const { preference } = useTheme();
   const unreadCount = useUnreadNotificationsCount();
-  const { token, isLoading, authMode, clerkSignedIn, clerkMemberResolution } = useAuth();
+  const { token, isLoading, authMode, clerkSignedIn, clerkMemberResolution, demoMode } = useAuth();
   const colors = useColors();
   const registeredHomeReady = isClerkHomeAvailable(
     clerkMemberResolution,
     CLERK_MEMBER_NAVIGATION_READINESS,
   );
+  if (demoMode) {
+    if (isLiquidGlassAvailable() && preference === 'system') {
+      return <NativeTabLayout unreadCount={0} />;
+    }
+    return <ClassicTabLayout unreadCount={0} />;
+  }
   // Do not mount tab screens while the stored demo session is being checked.
   // A direct /discover route otherwise renders Flights briefly before the
   // signed-out redirect runs.

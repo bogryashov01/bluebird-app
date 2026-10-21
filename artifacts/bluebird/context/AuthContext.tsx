@@ -32,6 +32,7 @@ interface AuthContextType {
   token: string | null;
   user: AuthUser | null;
   isLoading: boolean;
+  demoMode: boolean;
   authMode: 'legacy' | 'clerk';
   clerkSignedIn: boolean;
   clerkUserId: string | null;
@@ -62,6 +63,32 @@ setAuthTokenGetter(createLegacyAuthTokenGetter(
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   return <ActiveAuthProvider>{children}</ActiveAuthProvider>;
+}
+
+/**
+ * Identity-free context for the development-only full-app presentation demo.
+ * It deliberately exposes no user, token, session restoration, or auth action.
+ */
+export function DemoAuthProvider({ children }: { children: ReactNode }) {
+  const value: AuthContextType = {
+    token: null,
+    user: null,
+    isLoading: false,
+    demoMode: true,
+    authMode: 'legacy',
+    clerkSignedIn: false,
+    clerkUserId: null,
+    clerkMemberResolution: { status: 'signed_out' },
+    retryClerkMemberResolution: () => {},
+    confirmClerkProfileCompletion: () => false,
+    memberAccessResolved: false,
+    signIn: async () => {},
+    signOut: async () => {},
+    updateUser: () => {},
+    pendingRegistrationGrant: null,
+    setPendingRegistrationGrant: () => {},
+  };
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 function ActiveAuthProvider({ children }: { children: ReactNode }) {
@@ -375,6 +402,7 @@ function ActiveAuthProvider({ children }: { children: ReactNode }) {
       token: clerkMode ? null : token,
       user: clerkMode ? null : user,
       isLoading: clerkMode ? !clerkSession?.isLoaded : isLoading,
+      demoMode: false,
       authMode: clerkMode ? 'clerk' : 'legacy',
       clerkSignedIn: clerkMode && clerkSession?.isLoaded ? clerkSession.isSignedIn === true : false,
       clerkUserId: clerkMode && clerkSession?.isLoaded && clerkSession.isSignedIn === true

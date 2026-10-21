@@ -249,8 +249,7 @@ test("valid local demo session reaches Discover on startup, direct navigation, a
   await expect(plansLink).toBeVisible();
   await plansLink.click();
   await expect(page).toHaveURL(/\/membership\/plans$/);
-  await expect(page.getByText("Plan information unavailable", { exact: true })).toBeVisible();
-  await expect(page.getByText("Try Again", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "View Details" }).first()).toBeVisible();
 
   await page.goto("/profile");
   const personalInformation = page.getByText("Personal Information", { exact: true }).first();

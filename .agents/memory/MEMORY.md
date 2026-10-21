@@ -40,5 +40,5 @@
 - [Fetch global receiver](fetch-global-receiver.md) — invoke a stored browser Fetch function with `globalThis`, not as a property of the options object.
 - [Bluebird browser navigation verification](bluebird-browser-navigation-verification.md) — local mocked card taps do not prove hosted Preview behavior; report Clerk-gated live checks explicitly.
 - [Pnpm release-age exceptions](pnpm-release-age-exceptions.md) — CLI config overrides may not bypass the workspace resolver's minimum release age; use a temporary, narrow workspace allowlist.
-- [Bluebird preview isolation](bluebird-development-preview-isolation.md) — intercept development preview routes before mounting Auth/Clerk providers and shared authenticated-data observers.
+- [Bluebird preview isolation](bluebird-development-preview-isolation.md) — require an explicit dev-only gate and safe route allowlist before mounting local preview UI.
 - [Production Preview Clerk origin](bluebird-production-preview-clerk-origin.md) — local config readiness does not prove a live Clerk key accepts the Replit Preview origin; do not weaken the Production gate.
