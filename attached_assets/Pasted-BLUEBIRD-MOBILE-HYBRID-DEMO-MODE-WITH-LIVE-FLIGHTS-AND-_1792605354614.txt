@@ -1,0 +1,81 @@
+BLUEBIRD MOBILE — HYBRID DEMO MODE WITH LIVE FLIGHTS AND QUEUE
+
+GOAL:
+Keep the full Bluebird Mobile app working inside
+the Replit phone Preview without phone login,
+while using REAL Production API data for Flights
+and Queue wherever authorized access is supported.
+
+CURRENT STATE:
+- Full-app Demo Mode is implemented.
+- Local /api/me fixture represents Paul Mulko.
+- Membership uses local Base / Active JSON.
+- Production API: https://bluebirdjets.com/api
+- Production Clerk blocks Replit browser origin.
+- We need to test actual Flights and Queue behavior.
+
+IMPLEMENTATION:
+
+1. Preserve the existing full-app Demo Mode.
+
+2. Keep local JSON fixtures ONLY for:
+   - Demo user/profile
+   - Membership
+
+3. Flights must use real Production API requests.
+
+4. Queue must use real Production API requests.
+
+5. Inspect existing Flights and Queue API clients
+   and identify their actual endpoints.
+
+6. Use the existing Production API base URL.
+
+7. For endpoints that support public access,
+   make real read-only requests.
+
+8. Do not mock successful Flights or Queue responses
+   when a live public endpoint is available.
+
+9. For endpoints requiring authentication:
+   - Do not fabricate Clerk tokens.
+   - Do not bypass authorization.
+   - Do not use website cookies or credentials.
+   - Show the actual 401/403 state.
+   - Report the exact blocked endpoint.
+
+10. Do not create, update, or cancel real flights,
+    bookings, queue entries, or memberships.
+
+11. Keep all demo-specific changes isolated
+    from Production release behavior.
+
+12. Do not modify backend, website, database,
+    Clerk Dashboard, or EAS configuration.
+
+13. Do not perform Git operations.
+
+14. Do not deploy or create builds.
+
+VERIFY:
+
+- Home opens in Replit phone Preview.
+- Membership displays Base / Active mock data.
+- Flights makes real Production API requests.
+- Queue makes real Production API requests.
+- Public API responses render correctly.
+- Protected endpoints fail safely without auth.
+- No Production write requests occur.
+- Normal Production authentication is unchanged.
+
+DELIVERABLE:
+
+A working Hybrid Demo Mode in Replit phone Preview,
+with mocked user/Membership and live read-only
+Production Flights/Queue wherever access is allowed.
+
+Report which endpoints work and which require
+real Clerk authentication.
+
+Implement and test the actual UI.
+Do not stop at an audit.
