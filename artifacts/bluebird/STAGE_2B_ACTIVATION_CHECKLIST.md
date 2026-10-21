@@ -80,10 +80,41 @@ behavior. For the full source comparison and evidence, see the
   remote Production environment. No environment values or credentials are
   recorded here. This is owner-reported status, not an independent remote
   inspection from this workspace.
-- **Activation: NOT ENABLED BY THIS TASK.** No approval flag or remote setting
-  was changed. The separate `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH` gate
-  remains required; the local Production Preview removes it. This status does
-  not close the broader native-operation and rollout requirements in Gates 3–4.
+- **Activation: NOT ENABLED BY THAT AUDIT.** No approval flag or remote setting
+  was changed there. A later read-only verification found the current workspace
+  Preview inherits an enabled local flag; that does not establish the value in
+  EAS's remote `production` environment. The separate
+  `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH` gate remains required and does not
+  close the broader native-operation and rollout requirements in Gates 3–4.
+
+## Native Production auth verification (2026-10-21)
+
+- The Production web Preview is **blocked** by Clerk's browser response:
+  HTTP 400, `Production Keys are only allowed for domain "bluebirdjets.com"`,
+  and the request-origin restriction. The observed Replit Preview origin was
+  `https://cd8d8a20-320c-4224-accf-5c9dc7df2ff1-00-1ud53d7apx2xl-6jjx16uq.expo.worf.replit.dev`.
+  Clerk management status reported no configured Replit-managed dashboard and
+  dashboard access was unavailable, so an additional allowed-origin setting
+  could not be verified. Do not assume the Preview origin can be added; use a
+  web host on `bluebirdjets.com` or a Clerk-owner-confirmed accepted subdomain.
+- The native path is integrated in source: the gated `@clerk/expo` provider,
+  native SecureStore token cache, phone-code screens, and Main API `/api/me`
+  resolution path are present. The native client does not depend on the
+  Replit browser origin or add a browser `Origin` header. This is not proof of
+  device sign-in, SecureStore restoration, or deployed API token acceptance.
+- The checked-in EAS `production` profile selects the named `production`
+  environment and store distribution. Remote EAS presence is **unverified**
+  for all five required Production auth variables and `EXPO_PUBLIC_DOMAIN`.
+  The workspace-only preflight found the five required variables present;
+  `EXPO_PUBLIC_DOMAIN` was not configured in that preflight process, while
+  the Preview launcher supplies its Preview domain at runtime. The preflight
+  does not inspect the remote EAS environment.
+- **Readiness: BLOCKED / NOT DEVICE-VERIFIED.** The owner must confirm remote
+  variable presence and the legacy API-domain target through authorized
+  Expo access, then use an existing approved Production TestFlight build on an
+  owner-controlled iPhone to test sign-in, app-restart restoration, and
+  sign-out. Any authenticated `/api/me` check must wait for API-owner approval
+  of the controlled test. No EAS build or submission was started for this audit.
 
 The 2026-10-20 mock verification passed the Bluebird client/auth-gating suites,
 including signed-out `/api/me` handling and local HTTP 401-to-`session_expired`

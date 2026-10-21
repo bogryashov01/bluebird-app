@@ -76,12 +76,93 @@ This note records Bluebird's owner-confirmed Expo/EAS identity and the remaining
   the remote Production environment. No environment values or credentials are
   included here. This records the owner's confirmation; it is not an
   independent remote inspection from this workspace.
-- **Production sign-in: NOT ENABLED BY THIS TASK.** No approval flag or remote
-  setting was changed here. Production auth still requires the separate exact
-  `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH=true` approval, and the local
-  Production Preview continues to remove that flag. This owner confirmation
-  does not itself activate sign-in or close the remaining native/rollout
-  readiness checks.
+- **Production sign-in: NOT ENABLED BY THAT AUDIT.** No approval flag or remote
+  setting was changed there. The later read-only verification below records
+  that the current workspace Preview already inherits an enabled local flag;
+  this is not evidence of the value in EAS's remote `production` environment.
+  The flag remains a separate rollout gate and does not close the remaining
+  native/rollout readiness checks.
+
+## Native Production auth verification (2026-10-21)
+
+This is a read-only audit. No Clerk Dashboard or EAS setting, key, URL, approval
+flag, API, or authentication gate was changed. No authenticated Production API
+request, EAS build, or submission was made.
+
+### Production web Preview origin
+
+- **Observed browser result: BLOCKED.** The Bluebird Preview at
+  `https://cd8d8a20-320c-4224-accf-5c9dc7df2ff1-00-1ud53d7apx2xl-6jjx16uq.expo.worf.replit.dev`
+  received HTTP 400 while Clerk initialized. The browser reported:
+  `Clerk: Production Keys are only allowed for domain "bluebirdjets.com". API Error: The Request HTTP Origin header must be equal to or a subdomain of the requesting URL.`
+- This is a Production Clerk domain/origin rejection, not an Expo startup or
+  mobile configuration error. The current Replit Preview host is outside the
+  accepted `bluebirdjets.com` domain, so this web Preview is not supported by
+  the observed Production Clerk configuration.
+- Read-only Clerk management status was `not_configured` with dashboard access
+  unavailable. Therefore the current Clerk Dashboard could not be inspected
+  to confirm whether it offers a separate allowed-origin setting. Do not assume
+  that adding a Replit origin is supported. The domain-compatible way to test
+  the web UI is to serve it from `https://bluebirdjets.com` or a subdomain that
+  the Clerk owner confirms is accepted by this Production instance.
+- The exact Preview hostname above is session/workspace-specific; it is
+  recorded only to identify the origin used for this observation.
+
+### Native path and Production EAS environment
+
+- **Source/configuration: PARTIAL READY.** The existing Expo project is
+  `bluebird` (`com.bluebirdjets.app`) with the existing EAS project ID and a
+  checked-in `production` profile using `environment: "production"` and
+  `distribution: "store"`. `@clerk/expo` is integrated behind the Production
+  configuration gate. Its native token cache uses Expo SecureStore, and the
+  app contains phone-code sign-in/sign-up routes. This is native SDK code, not
+  a browser sign-in embedded at the Replit Preview origin.
+- Native app requests use the Clerk SDK/session and the Main API's bearer-token
+  transport; the application does not add a browser `Origin` header to those
+  requests. Native networking is not subject to browser CORS origin checks.
+  The app also has the `bluebird` URL scheme. SecureStore persistence, session
+  restoration, return routing, and Clerk Production acceptance have not been
+  exercised on a physical iOS device.
+- The Clerk provider, phone-code UI, session bridge, and authenticated `/api/me`
+  member-resolution path are wired in source when the matching Production
+  configuration enables them. This does not verify Clerk token acceptance by
+  the deployed Main API. `PRODUCTION_AUTH_AVAILABILITY` remains `unavailable`
+  for member data pending the recorded token-acceptance and member-identity
+  checks.
+- The named remote EAS `production` environment could not be inspected from
+  this workspace. EAS CLI is not available here, and no authorized read-only
+  EAS environment listing was available. **Remote presence is UNVERIFIED** for
+  each of these variables: `EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT`,
+  `EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL`,
+  `EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY`,
+  `EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_CLERK_ISSUER`,
+  `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH`, and `EXPO_PUBLIC_DOMAIN`.
+- The separate local-workspace preflight reported the first five variables
+  present, Production selected, URL/key/issuer formats valid, key/issuer host
+  parity matched, and the local approval flag present. In that preflight
+  process, `EXPO_PUBLIC_DOMAIN` was not configured; the Preview launcher sets
+  its own Preview domain at runtime. These are workspace-only statuses; they do
+  not establish remote EAS presence or values.
+- **Native Production authentication: BLOCKED / NOT DEVICE-VERIFIED.** The
+  owner must use authorized Expo access to verify the six remote variable
+  presences above without exposing values, confirm any `EXPO_PUBLIC_DOMAIN`
+  target is not a Development or Preview API, and confirm the existing iOS
+  Production build is available for testing. API/Clerk owner approval of the
+  exact pair and token contract is recorded as owner-reported in the earlier
+  audit, not independently rechecked here.
+
+### Next safe native test
+
+After the authorized EAS environment check and owner confirmation that the
+approved API/Clerk pair and rollout gate are correct, use an already available
+Production TestFlight build of `com.bluebirdjets.app` on an owner-controlled
+iPhone. Sign in with an approved test account; verify a fresh session, close
+and reopen the app to check SecureStore restoration, then sign out and confirm
+the session is cleared. Only after the API owner authorizes a controlled
+authenticated request should the tester verify token acceptance at the
+Production `/api/me` endpoint. If no compatible Production binary is already
+available, request a separate owner-approved build/device test; this audit did
+not start one.
 
 ## Local Production web Preview
 
