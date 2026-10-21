@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -30,6 +31,10 @@ import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
 import { canAccessClerkProfileOnboardingRoute } from '@/lib/clerkProfileOnboarding';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
+import {
+  getMembershipDataModeConfiguration,
+  isMembershipMockPreviewLocation,
+} from '@/lib/membershipDataMode';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -98,6 +103,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(clerk-auth)" options={{ headerShown: false }} />
       )}
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="membership/mock-preview" options={{ headerShown: false }} />
       <Stack.Screen name="join/[code]" options={{ headerShown: false }} />
       <Stack.Screen
         name="flight/[id]"
@@ -296,6 +302,16 @@ export default function RootLayout() {
 }
 
 function RoutedRoot() {
+  const segments = useSegments();
+  const pathname = Platform.OS === 'web' && typeof window !== 'undefined'
+    ? window.location.pathname
+    : '';
+  const isMembershipMockPreview = isMembershipMockPreviewLocation(pathname, segments);
+
+  // Use the browser URL as well as Expo Router's segments so a direct Replit
+  // Preview load never mounts Clerk or authenticated-data observers first.
+  if (isMembershipMockPreview) return <MembershipMockPreviewRoot />;
+
   // A disabled provider cannot finish loading a session. Show the setup
   // blocker before mounting auth observers or waiting for that session.
   if (shouldShowClerkConfigurationError(CLERK_AUTH_CONFIGURATION)) {
@@ -311,4 +327,20 @@ function RoutedRoot() {
   return CLERK_AUTH_CONFIGURATION.enabled
     ? <DormantClerkProvider>{authenticatedApp}</DormantClerkProvider>
     : authenticatedApp;
+}
+
+function MembershipMockPreviewRoot() {
+  const colors = useColors();
+  const configuration = getMembershipDataModeConfiguration();
+  return (
+    <>
+      <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
+      <Stack screenOptions={{ contentStyle: { backgroundColor: colors.background } }}>
+        <Stack.Screen
+          name="membership/mock-preview"
+          options={{ headerShown: configuration.mockPreviewAllowed }}
+        />
+      </Stack>
+    </>
+  );
 }

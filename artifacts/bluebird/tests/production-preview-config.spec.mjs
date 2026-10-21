@@ -30,12 +30,25 @@ const launcherSource = await readFile(
   "utf8",
 );
 
-test("Selected Production Preview preserves the separate Development launch", () => {
+test("the artifact's Development Preview uses the isolated Membership mock command", () => {
   assert.equal(
     packageJson.scripts.dev,
     "sh -c 'if [ -n \"$REPLIT_EXPO_SESSION_SECRET\" ]; then pnpm exec create-launch login --session \"$REPLIT_EXPO_SESSION_SECRET\" || true; fi' && BROWSER=none EXPO_PACKAGER_PROXY_URL=https://$REPLIT_EXPO_DEV_DOMAIN EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE=local EXPO_PUBLIC_REPL_ID=$REPL_ID REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_EXPO_DEV_DOMAIN pnpm exec expo start --dev-client --web --host lan --port $PORT",
   );
-  assert.match(artifactConfig, /\[services\.development\]\s+run = "pnpm --filter @workspace\/bluebird run preview:production-web-managed"/);
+  assert.match(
+    artifactConfig,
+    /\[services\.development\]\s+run = "pnpm --filter @workspace\/bluebird run preview:membership-mock-web"/,
+  );
+  assert.match(
+    packageJson.scripts["preview:membership-mock-web"],
+    /EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE=mock/,
+  );
+  assert.doesNotMatch(packageJson.scripts["preview:membership-mock-web"], /--no-dev|--minify/);
+  assert.match(artifactConfig, /\[services\.production\]\s+build = \[ "pnpm", "--filter", "@workspace\/bluebird", "run", "build" \]/);
+  assert.match(
+    artifactConfig,
+    /\[services\.production\][\s\S]*?run = \[ "pnpm", "--filter", "@workspace\/bluebird", "run", "serve" \]/,
+  );
 });
 
 test("Production Preview inherits the Production Clerk gate without setting or removing it", () => {
