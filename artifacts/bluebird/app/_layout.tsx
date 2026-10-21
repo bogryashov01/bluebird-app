@@ -41,6 +41,7 @@ import {
   isFullAppDemoAllowedRoute,
   isFullAppDemoRoute,
 } from '@/lib/fullAppDemo';
+import { FullAppDemoQueueProvider } from '@/lib/fullAppDemoQueue';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -356,40 +357,42 @@ function FullAppDemoRoot() {
   } as const;
   return (
     <DemoAuthProvider>
-      <View style={{ flex: 1, backgroundColor: colors.background }}>
-        <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
-        <View
-          testID="full-app-demo-banner"
-          accessibilityLabel="DEMO MODE"
-          style={{
-            minHeight: 34 + insets.top,
-            paddingTop: insets.top,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: colors.backgroundMid,
-          }}
-        >
-          <Text style={{ color: colors.textOnBrand, fontFamily: 'Inter_700Bold', fontSize: 11, letterSpacing: 1 }}>
-            DEMO MODE
-          </Text>
+      <FullAppDemoQueueProvider>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
+          <View
+            testID="full-app-demo-banner"
+            accessibilityLabel="DEMO MODE"
+            style={{
+              minHeight: 34 + insets.top,
+              paddingTop: insets.top,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: colors.backgroundMid,
+            }}
+          >
+            <Text style={{ color: colors.textOnBrand, fontFamily: 'Inter_700Bold', fontSize: 11, letterSpacing: 1 }}>
+              DEMO MODE
+            </Text>
+          </View>
+          <Stack screenOptions={{ contentStyle: { backgroundColor: colors.background } }}>
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="membership/plans"
+              options={{ headerShown: true, title: 'All Plans', ...headerOptions }}
+            />
+            <Stack.Screen
+              name="membership/mock-preview"
+              options={{ headerShown: true, title: 'Membership', ...headerOptions }}
+            />
+            <Stack.Screen
+              name="demo/flight/[id]"
+              options={{ headerShown: false }}
+            />
+          </Stack>
         </View>
-        <Stack screenOptions={{ contentStyle: { backgroundColor: colors.background } }}>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="membership/plans"
-            options={{ headerShown: true, title: 'All Plans', ...headerOptions }}
-          />
-          <Stack.Screen
-            name="membership/mock-preview"
-            options={{ headerShown: true, title: 'Membership', ...headerOptions }}
-          />
-          <Stack.Screen
-            name="demo/flight/[id]"
-            options={{ headerShown: false }}
-          />
-        </Stack>
-      </View>
+      </FullAppDemoQueueProvider>
     </DemoAuthProvider>
   );
 }

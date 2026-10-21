@@ -1,10 +1,11 @@
 import React from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { SettingsGroup } from '@/components/SettingsGroup';
 import { getFullAppDemoMembership, getFullAppDemoProfile } from '@/lib/fullAppDemo';
+import { useFullAppDemoQueue } from '@/lib/fullAppDemoQueue';
 
 export function FullAppDemoMembershipView() {
   const colors = useColors();
@@ -123,6 +124,89 @@ export function FullAppDemoProfileView() {
   );
 }
 
+export function FullAppDemoMyQueueView() {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const { entries, hydrated, storageError } = useFullAppDemoQueue();
+  return (
+    <ScrollView
+      style={[styles.root, { backgroundColor: colors.background }]}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: Platform.OS === 'web' ? 67 : insets.top + 16, paddingBottom: insets.bottom + 100 },
+      ]}
+      testID="full-app-demo-trips"
+    >
+      <Text style={[styles.eyebrow, { color: colors.mutedForeground }]}>DEMO MODE · LOCAL ONLY</Text>
+      <Text style={[styles.title, { color: colors.foreground }]}>My Queue</Text>
+      <Text style={[styles.notice, { color: colors.mutedForeground }]}>
+        These simulated entries use live Production flight details. They are not bookings and do not change a real queue.
+      </Text>
+      {storageError && (
+        <Text testID="full-app-demo-queue-storage-error" style={[styles.notice, { color: colors.mutedForeground }]}>
+          {storageError}
+        </Text>
+      )}
+      {!hydrated ? (
+        <View testID="full-app-demo-my-queue-loading" style={[styles.queueState, { backgroundColor: colors.card }]}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={[styles.notice, { color: colors.mutedForeground }]}>Loading local demo queue…</Text>
+        </View>
+      ) : entries.length ? (
+        <View style={styles.queueList}>
+          {entries.map(({ flightId, flight }) => {
+            const route = `${flight.fromAirport || flight.fromCity || '—'} → ${flight.toAirport || flight.toCity || '—'}`;
+            const detail = [
+              flight.aircraftTypeName || flight.aircraftType || flight.aircraftTypeCode,
+              formatDemoFlightDate(flight.departureDate, flight.departureTime, flight.departureTimeZone),
+            ].filter(Boolean).join(' · ');
+            return (
+              <TouchableOpacity
+                key={flightId}
+                testID={`full-app-demo-queue-flight-${flightId}`}
+                accessibilityRole="button"
+                onPress={() => router.push({ pathname: '/demo/flight/[id]' as any, params: { id: flightId } })}
+                style={[styles.queueFlightCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+              >
+                <View style={[styles.simulatedBadge, { backgroundColor: colors.secondary }]}>
+                  <Text style={[styles.simulatedBadgeText, { color: colors.secondaryForeground }]}>SIMULATED QUEUE</Text>
+                </View>
+                <Text style={[styles.queueFlightRoute, { color: colors.foreground }]}>{route}</Text>
+                <Text style={[styles.queueFlightMeta, { color: colors.mutedForeground }]}>{detail || 'Flight details unavailable'}</Text>
+                <Text style={[styles.queueFlightMeta, { color: colors.mutedForeground }]}>Live flight #{flightId} · Local demo only</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ) : (
+        <View testID="full-app-demo-my-queue-empty" style={[styles.queueState, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>No simulated flights yet</Text>
+          <Text style={[styles.notice, { color: colors.mutedForeground }]}>
+            Open a live flight in Discover and join its simulated queue to see it here.
+          </Text>
+          <TouchableOpacity
+            testID="full-app-demo-my-queue-discover"
+            accessibilityRole="button"
+            onPress={() => router.replace('/(tabs)/discover')}
+            style={[styles.plansButton, { backgroundColor: colors.primary }]}
+          >
+            <Text style={[styles.plansButtonText, { color: colors.primaryForeground }]}>Browse live flights</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+function formatDemoFlightDate(date: string | null, time: string | null, timeZone: string | null): string {
+  const dateLabel = date && /^\d{4}-\d{2}-\d{2}$/.test(date)
+    ? new Date(`${date}T12:00:00`).toLocaleDateString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric',
+      })
+    : '';
+  return [dateLabel, time, timeZone].filter(Boolean).join(' · ');
+}
+
 function DemoDetail({ label, value, last = false }: { label: string; value: string; last?: boolean }) {
   const colors = useColors();
   return (
@@ -156,4 +240,11 @@ const styles = StyleSheet.create({
   avatarText: { fontFamily: 'Inter_700Bold', fontSize: 20 },
   profileCopy: { flex: 1, gap: 3 },
   profileName: { fontFamily: 'Inter_700Bold', fontSize: 20 },
+  queueState: { borderRadius: 18, padding: 20, gap: 10, alignItems: 'flex-start' },
+  queueList: { gap: 12 },
+  queueFlightCard: { borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, padding: 16, gap: 8 },
+  simulatedBadge: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  simulatedBadgeText: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 0.5 },
+  queueFlightRoute: { fontFamily: 'Inter_700Bold', fontSize: 18 },
+  queueFlightMeta: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18 },
 });

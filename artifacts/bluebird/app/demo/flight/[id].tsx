@@ -15,6 +15,7 @@ import {
   productionReadRetryDelay,
   shouldRetryProductionRead,
 } from '@/lib/productionFlights';
+import { useFullAppDemoQueue } from '@/lib/fullAppDemoQueue';
 
 function formatDate(value: string | null): string | null {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -38,9 +39,13 @@ function describeEndpointError(error: unknown, endpoint: string): string {
 export default function FullAppDemoFlightDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { entries, hydrated, storageError, joinFlight, leaveFlight } = useFullAppDemoQueue();
   const { id: rawId } = useLocalSearchParams<{ id: string }>();
   const flightId = parseProductionFlightId(rawId);
   const endpointPrefix = flightId === null ? null : `/api/empty-legs/${flightId}`;
+  const isLocallyQueued = flightId !== null &&
+    entries.some((entry) => entry.flightId === String(flightId));
+  const [queueActionError, setQueueActionError] = React.useState<string | null>(null);
 
   const flightQuery = useQuery({
     queryKey: ['full-app-demo-flight', flightId],
@@ -71,7 +76,7 @@ export default function FullAppDemoFlightDetailScreen() {
       </TouchableOpacity>
 
       <View style={styles.heading}>
-        <Text style={[styles.eyebrow, { color: colors.mutedForeground }]}>LIVE FLIGHT · READ ONLY</Text>
+        <Text style={[styles.eyebrow, { color: colors.mutedForeground }]}>LIVE PRODUCTION FLIGHT</Text>
         <Text style={[styles.title, { color: colors.foreground }]}>Flight details</Text>
       </View>
 
@@ -117,9 +122,9 @@ export default function FullAppDemoFlightDetailScreen() {
       )}
 
       <View style={styles.heading}>
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Queue</Text>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Public queue</Text>
         <Text style={[styles.body, { color: colors.mutedForeground }]}>
-          Public queue view. This demo profile is not a queue participant.
+          Live public queue view. The demo profile is not a real queue participant.
         </Text>
       </View>
       {flightId === null ? null : queueQuery.isLoading ? (
@@ -164,8 +169,60 @@ export default function FullAppDemoFlightDetailScreen() {
           )}
         </View>
       )}
+
+      {flightId !== null && flightQuery.data && (
+        <View testID="full-app-demo-local-queue" style={[styles.localQueueCard, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Your simulated queue</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>
+            {isLocallyQueued
+              ? `Simulated locally for live flight #${flightId}. This is not a booking.`
+              : 'Join this live flight in a local-only demo simulation.'}
+          </Text>
+          {storageError && (
+            <Text testID="full-app-demo-queue-storage-error" style={[styles.body, { color: colors.mutedForeground }]}>
+              {storageError}
+            </Text>
+          )}
+          {queueActionError && (
+            <Text testID="full-app-demo-queue-action-error" style={[styles.body, { color: colors.mutedForeground }]}>
+              {queueActionError}
+            </Text>
+          )}
+          <TouchableOpacity
+            testID={isLocallyQueued ? 'full-app-demo-leave-queue' : 'full-app-demo-join-queue'}
+            accessibilityRole="button"
+            disabled={!hydrated || !!storageError}
+            onPress={async () => {
+              setQueueActionError(null);
+              try {
+                if (isLocallyQueued) await leaveFlight(flightId);
+                else await joinFlight(flightQuery.data!);
+              } catch (error) {
+                setQueueActionError(error instanceof Error ? error.message : 'Queue update failed.');
+              }
+            }}
+            style={[
+              styles.queueActionButton,
+              { backgroundColor: isLocallyQueued ? colors.secondary : colors.primary },
+              (!hydrated || !!storageError) && styles.disabledButton,
+            ]}
+          >
+            {!hydrated ? (
+              <ActivityIndicator color={colors.primaryForeground} />
+            ) : (
+              <Text style={[
+                styles.queueActionText,
+                { color: isLocallyQueued ? colors.secondaryForeground : colors.primaryForeground },
+              ]}>
+                {isLocallyQueued ? 'Leave simulated queue' : 'Join simulated queue'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+
       <Text style={[styles.disclaimer, { color: colors.mutedForeground }]}>
-        Read-only demo. No booking, queue, pass, payment, or membership actions are available.
+        Queue participation is simulated on this device only. It is not a booking or membership and sends no queue, booking, pass, payment, or membership changes.
       </Text>
     </ScrollView>
   );
@@ -217,12 +274,16 @@ const styles = StyleSheet.create({
   route: { fontFamily: 'Inter_700Bold', fontSize: 22 },
   body: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },
   queueCard: { borderRadius: 18, paddingHorizontal: 16, paddingVertical: 6 },
+  localQueueCard: { borderRadius: 18, padding: 18, gap: 10, borderWidth: StyleSheet.hairlineWidth },
   queueEntry: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth },
   initials: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   initialsText: { fontFamily: 'Inter_700Bold', fontSize: 12 },
   queueCopy: { flex: 1, gap: 2 },
   queuePosition: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   disclaimer: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18 },
+  queueActionButton: { minHeight: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, marginTop: 2 },
+  queueActionText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  disabledButton: { opacity: 0.55 },
   retryButton: { minHeight: 42, alignSelf: 'flex-start', minWidth: 120, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, marginTop: 6 },
   retryText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
 });

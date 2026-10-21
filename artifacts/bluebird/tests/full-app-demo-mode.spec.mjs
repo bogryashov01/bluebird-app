@@ -62,6 +62,7 @@ test("the demo provider is identity-free and privileged sample controls stay dis
   const viewsSource = readFileSync(new URL("../components/FullAppDemoViews.tsx", import.meta.url), "utf8");
   const demoFlightSource = readFileSync(new URL("../app/demo/flight/[id].tsx", import.meta.url), "utf8");
   const layoutSource = readFileSync(new URL("../app/_layout.tsx", import.meta.url), "utf8");
+  const queueStoreSource = readFileSync(new URL("../lib/fullAppDemoQueue.tsx", import.meta.url), "utf8");
   assert.match(authSource, /export function DemoAuthProvider/);
   assert.match(authSource, /token: null,\s+user: null,\s+isLoading: false,\s+demoMode: true/);
   assert.match(authSource, /confirmClerkProfileCompletion: \(\) => false/);
@@ -69,6 +70,11 @@ test("the demo provider is identity-free and privileged sample controls stay dis
   assert.match(viewsSource, /label: 'Concierge flag', hint: String\(profile\.isConcierge\), disabled: true/);
   assert.doesNotMatch(demoFlightSource, /useCancelQueueEntry|useCancelTrip|useCreateNetworkingRequest|useMutation|joinEmptyLegQueue|leaveEmptyLegQueue/);
   assert.match(layoutSource, /name="demo\/flight\/\[id\]"/);
+  assert.match(layoutSource, /<FullAppDemoQueueProvider>/);
+  assert.match(queueStoreSource, /FULL_APP_DEMO_QUEUE_STORAGE_KEY/);
+  assert.doesNotMatch(queueStoreSource, /useMutation|joinEmptyLegQueue|leaveEmptyLegQueue|useCancelQueueEntry/);
+  assert.match(viewsSource, /SIMULATED QUEUE/);
+  assert.match(viewsSource, /not bookings/);
 });
 
 test("the full-app demo root precedes ordinary auth and Clerk mounts", () => {

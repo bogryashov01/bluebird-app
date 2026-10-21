@@ -14,6 +14,7 @@ import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { TripAvailabilityState } from '@/components/TripAvailabilityState';
 import { PRODUCTION_AUTH_UNAVAILABLE_MESSAGE } from '@/lib/productionAuthState';
 import { ClerkTrips } from '@/components/ClerkTrips';
+import { FullAppDemoMyQueueView } from '@/components/FullAppDemoViews';
 
 // ─── Aircraft images (same matching logic as Discover) ────────────────────────
 import { useAuth } from '@/context/AuthContext';
@@ -211,18 +212,7 @@ export default function TripsScreen() {
   ];
 
   if (demoMode) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]} testID="full-app-demo-trips">
-        <View style={[styles.header, { paddingTop: topPad + 24 }]}>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Trips</Text>
-        </View>
-        <TripAvailabilityState
-          title="No demo trips"
-          description="Trip history and bookings are not connected to local demo data."
-          testID="full-app-demo-trips-empty"
-        />
-      </View>
-    );
+    return <FullAppDemoMyQueueView />;
   }
   if (authMode === 'clerk') {
     return <ClerkTrips />;

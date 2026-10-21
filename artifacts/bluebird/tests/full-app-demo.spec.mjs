@@ -97,7 +97,7 @@ test("demo preserves its local identity fixtures while opening live flights read
   await expect(page.getByTestId("production-flight-card-98765")).toBeVisible();
 
   await page.getByRole("tab", { name: /Trips/ }).click();
-  await expect(page.getByTestId("full-app-demo-trips-empty")).toContainText("not connected");
+  await expect(page.getByTestId("full-app-demo-my-queue-empty")).toContainText("No simulated flights yet");
   await expect(page.getByTestId("full-app-demo-banner")).toBeVisible();
 
   await page.goto("/concierge");
@@ -113,6 +113,66 @@ test("demo preserves its local identity fixtures while opening live flights read
     "GET /api/empty-legs/98765",
     "GET /api/empty-legs/98765/queue",
   ]);
+  expect(requests.every((request) =>
+    request.method === "GET" && !request.hasAuthorization && !request.hasCookie,
+  )).toBe(true);
+  expect(externalWrites).toEqual([]);
+});
+
+test("demo queue is local, persists the live flight projection, and never sends a mutation", async ({ page }) => {
+  const requests = trackProductionRequests(page);
+  const externalWrites = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() !== "GET" && !["127.0.0.1", "localhost"].includes(url.hostname)) {
+      externalWrites.push(`${request.method()} ${url.hostname}${url.pathname}`);
+    }
+  });
+  await routeProductionApi(page, async ({ path, method }) => {
+    if (method !== "GET") return { status: 405, body: { error: "read only" } };
+    if (path === "/api/empty-legs") return { body: [demoFlight] };
+    if (path === "/api/empty-legs/98765") return { body: demoFlight };
+    if (path === "/api/empty-legs/98765/queue") return { body: [] };
+    return { status: 404, body: { error: "not found" } };
+  });
+
+  await page.goto("/");
+  await page.getByTestId("production-flight-card-98765").click();
+  await expect(page.getByTestId("full-app-demo-flight-summary")).toContainText("SEA → SFO");
+  await expect(page.getByTestId("full-app-demo-join-queue")).toBeEnabled();
+  await page.getByTestId("full-app-demo-join-queue").click();
+  await expect(page.getByTestId("full-app-demo-leave-queue")).toBeVisible();
+  await expect(page.getByTestId("full-app-demo-local-queue"))
+    .toContainText("Simulated locally for live flight #98765");
+  await expect(page.getByTestId("full-app-demo-local-queue")).toContainText("not a booking");
+
+  await page.reload();
+  await expect(page.getByTestId("full-app-demo-flight-summary")).toContainText("SEA → SFO");
+  await expect(page.getByTestId("full-app-demo-leave-queue")).toBeVisible();
+
+  await page.goto("/");
+  await page.getByRole("tab", { name: /Trips/ }).click();
+  const queueFlight = page.getByTestId("full-app-demo-queue-flight-98765");
+  await expect(queueFlight).toContainText("SIMULATED QUEUE");
+  await expect(queueFlight).toContainText("SEA → SFO");
+  await expect(queueFlight).toContainText("Live flight #98765");
+  await queueFlight.click();
+  await expect(page.getByTestId("full-app-demo-leave-queue")).toBeVisible();
+
+  await page.getByTestId("full-app-demo-leave-queue").click();
+  await expect(page.getByTestId("full-app-demo-join-queue")).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId("full-app-demo-join-queue")).toBeVisible();
+  await page.goto("/");
+  await page.getByRole("tab", { name: /Trips/ }).click();
+  await expect(page.getByTestId("full-app-demo-my-queue-empty")).toBeVisible();
+
+  expect(requests.length).toBeGreaterThanOrEqual(3);
+  expect(new Set(requests.map((request) => request.path))).toEqual(new Set([
+    "/api/empty-legs",
+    "/api/empty-legs/98765",
+    "/api/empty-legs/98765/queue",
+  ]));
   expect(requests.every((request) =>
     request.method === "GET" && !request.hasAuthorization && !request.hasCookie,
   )).toBe(true);
