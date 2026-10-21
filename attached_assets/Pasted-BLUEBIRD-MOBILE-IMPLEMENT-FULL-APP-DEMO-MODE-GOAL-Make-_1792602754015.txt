@@ -1,0 +1,135 @@
+BLUEBIRD MOBILE — IMPLEMENT FULL APP DEMO MODE
+
+GOAL:
+Make the complete Bluebird Mobile application usable
+inside the existing Replit phone-sized Preview.
+
+This is a TEMPORARY development-only environment.
+
+I want to test the actual application UI and navigation,
+not a standalone Membership mock page.
+
+CURRENT STATE:
+
+- Production Clerk blocks the Replit browser origin.
+- Production auth configuration is already correct.
+- Task #679 implemented an isolated Membership mock.
+- The existing mock may have been merged into main.
+- Do not perform Git operations.
+
+TEST USER:
+
+Use this exact /api/me response as a LOCAL JSON fixture:
+
+{
+  "isAuthenticated": true,
+  "isAdmin": true,
+  "isConcierge": true,
+  "isMember": true,
+  "memberTier": "base",
+  "email": "paul@upliftaero.co",
+  "firstName": "Paul",
+  "lastName": "Mulko",
+  "isProfileComplete": true,
+  "needsPlanDecision": false,
+  "needsSignupPhone": false,
+  "impersonation": null
+}
+
+IMPORTANT:
+This is mock UI data, NOT a real authenticated session.
+The admin/concierge flags must never grant real privileges.
+
+IMPLEMENTATION:
+
+1. Reuse the existing Membership mock from Task #679.
+
+2. Create a local fixture for the provided /api/me JSON.
+
+3. Implement a development-only full-app demo mode
+   for the existing Replit phone Preview.
+
+4. Render the REAL authenticated app layout,
+   Home screen, bottom tabs, Membership, and Profile.
+
+5. Use local fixture data instead of authenticated
+   Production API requests.
+
+6. Do not create fake Clerk sessions or tokens.
+
+7. Do not bypass authentication for real API calls.
+
+8. Do not call protected Production API endpoints.
+
+9. If a screen needs unavailable backend data,
+   use an explicit local empty/demo state.
+
+10. Preserve existing UI components and navigation.
+
+11. Make the normal Replit phone Preview open
+    the full demo app directly.
+
+12. Display a small persistent "DEMO MODE" badge.
+
+13. Allow navigating:
+    Home -> Membership -> Plans -> Back
+    Home -> Profile -> Back
+
+14. Keep existing Production authentication behavior
+    unchanged outside demo mode.
+
+SECURITY:
+
+15. Demo mode must be impossible to activate
+    in EAS Production or optimized release builds.
+
+16. Never enable demo based only on an
+    EXPO_PUBLIC environment variable.
+
+17. Require an explicit development-only runtime
+    guard and a separate demo entry point.
+
+18. Ensure admin/concierge flags cannot unlock
+    real administrative actions.
+
+19. Do not modify backend, website, database,
+    Clerk Dashboard, or EAS Production configuration.
+
+20. Do not deploy or create a build.
+
+GIT SAFETY:
+
+21. Do not merge, push, reset, revert, or checkout.
+
+22. Preserve all existing user changes.
+
+23. Restrict code changes to artifacts/bluebird.
+
+VERIFICATION:
+
+24. Test the actual hosted Replit phone Preview.
+
+25. Verify Home loads without phone login.
+
+26. Verify Paul Mulko is displayed in Profile.
+
+27. Verify Membership displays Base / Active.
+
+28. Verify bottom-tab navigation works.
+
+29. Verify plans and back navigation work.
+
+30. Verify no protected Production API calls occur.
+
+31. Verify normal Production login remains unchanged.
+
+32. Verify demo mode cannot run in release builds.
+
+EXPECTED RESULT:
+
+Opening the normal Replit phone Preview shows
+the complete Bluebird application in DEMO MODE,
+with Paul Mulko and active Base Membership.
+
+Implement and verify the actual working experience.
+Do not stop at an audit or documentation.
