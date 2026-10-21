@@ -20,7 +20,7 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: `CI=1 EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_ENABLE_CLERK_AUTH=false EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT=production EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE=local EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE=mock EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO=true EXPO_PUBLIC_DOMAIN=127.0.0.1 pnpm exec expo start --web --localhost --port ${port}`,
+    command: `CI=1 EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_ENABLE_CLERK_AUTH=false EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT=production EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL=https://bluebirdjets.com/api EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY=pk_live_Y2xlcmsuZXhhbXBsZS5jb20k EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE=local EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE=mock EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO=true EXPO_PUBLIC_DOMAIN=127.0.0.1 pnpm exec expo start --web --localhost --port ${port}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

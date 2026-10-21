@@ -384,6 +384,10 @@ function FullAppDemoRoot() {
             name="membership/mock-preview"
             options={{ headerShown: true, title: 'Membership', ...headerOptions }}
           />
+          <Stack.Screen
+            name="demo/flight/[id]"
+            options={{ headerShown: false }}
+          />
         </Stack>
       </View>
     </DemoAuthProvider>

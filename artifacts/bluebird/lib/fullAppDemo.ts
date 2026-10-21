@@ -40,10 +40,17 @@ export function isFullAppDemoAllowedRoute(pathname: string, segments: readonly s
   if (pathname) {
     return normalizedPath === '/' ||
       /^\/(?:discover|membership|profile|trips)(?:\/index)?$/.test(normalizedPath) ||
+      /^\/demo\/flight\/[1-9]\d*$/.test(normalizedPath) ||
       /^\/membership\/(?:plans|mock-preview(?:\/plans)?)$/.test(normalizedPath);
   }
   const route = segments[0];
   if (route === 'index' || (!route && normalizedPath === '/')) return true;
+  if (
+    route === 'demo' &&
+    segments[1] === 'flight' &&
+    segments.length === 3 &&
+    (segments[2] === '[id]' || /^[1-9]\d*$/.test(segments[2] ?? ''))
+  ) return true;
   if (route === '(tabs)') {
     return ['index', 'discover', 'membership', 'profile', 'trips'].includes(segments[1] ?? '');
   }

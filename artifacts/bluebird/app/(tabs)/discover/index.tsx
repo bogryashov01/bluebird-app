@@ -32,6 +32,8 @@ import {
   type AirportRecord,
   type FlightView,
 } from '@/lib/productionFlights';
+import { fetchFullAppDemoFlights } from '@/lib/fullAppDemoLiveReads';
+import { ProductionReadHttpError } from '@/lib/productionFlights';
 
 const AIRCRAFT_IMAGES: { match: RegExp; source: any }[] = [
   { match: /gulfstream|g280|challenger|falcon/i, source: require('@/assets/images/aircraft-heavy.jpg') },
@@ -121,7 +123,7 @@ function isThisWeek(date: Date): boolean {
   return date >= start && date < end;
 }
 
-function openFlightDetails(flight: FlightView): void {
+function openFlightDetails(flight: FlightView, demoMode = false): void {
   const id = typeof flight.id === 'string' ? flight.id.trim() : '';
   if (!id || (flight.source === 'production' && parseProductionFlightId(id) === null)) {
     const message = 'Flight details are unavailable because this flight has no valid identifier.';
@@ -133,7 +135,9 @@ function openFlightDetails(flight: FlightView): void {
     return;
   }
 
-  router.push({ pathname: '/flight/[id]', params: { id } });
+  router.push(demoMode
+    ? { pathname: '/demo/flight/[id]' as any, params: { id } }
+    : { pathname: '/flight/[id]', params: { id } });
 }
 
 interface HeaderProps {
@@ -224,7 +228,7 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
           testID={`discover-featured-card-${featured.id}`}
           style={styles.featuredWrap}
           activeOpacity={0.85}
-          onPress={() => openFlightDetails(featured)}
+          onPress={() => openFlightDetails(featured, demoMode)}
           accessibilityRole="button"
           accessibilityLabel={`Featured flight from ${airportLabel(featured.fromAirport, featured.fromCity)} to ${airportLabel(featured.toAirport, featured.toCity)}. ${formatDepartureDate(featured)}`}
         >
@@ -334,18 +338,20 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
             { color: view === 'list' ? colors.foreground : colors.mutedForeground },
           ]}>List</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.toggleBtn, view === 'map' && { backgroundColor: colors.card }]}
-          onPress={() => onViewChange('map')}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: view === 'map' }}
-        >
-          <Text style={[
-            styles.toggleText,
-            { fontFamily: 'Inter_600SemiBold' },
-            { color: view === 'map' ? colors.foreground : colors.mutedForeground },
-          ]}>Map</Text>
-        </TouchableOpacity>
+        {!demoMode && (
+          <TouchableOpacity
+            style={[styles.toggleBtn, view === 'map' && { backgroundColor: colors.card }]}
+            onPress={() => onViewChange('map')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: view === 'map' }}
+          >
+            <Text style={[
+              styles.toggleText,
+              { fontFamily: 'Inter_600SemiBold' },
+              { color: view === 'map' ? colors.foreground : colors.mutedForeground },
+            ]}>Map</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {view === 'map' && (
@@ -396,7 +402,11 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
             testID={demoMode ? 'full-app-demo-flight-empty' : undefined}
             style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}
           >
-            {demoMode ? 'Local demo: flight inventory is not connected.' : 'No flights match'}
+            {demoMode
+              ? hasActiveQuery || filter !== 'all'
+                ? 'No flights match your search or filters.'
+                : 'No live flights are currently available.'
+              : 'No flights match'}
           </Text>
           {(hasActiveQuery || filter !== 'all') && (
             <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={onClearSearchFromEmpty}>
@@ -449,23 +459,23 @@ export default function DiscoverScreen() {
     query: { enabled: !demoMode && localReadMode, queryKey: getListFlightsQueryKey({}) },
   });
   const productionFlightsQuery = useQuery({
-    queryKey: PRODUCTION_FLIGHTS_QUERY_KEY,
-    queryFn: ({ signal }) => fetchProductionFlights({ signal }),
-    enabled: !demoMode && !localReadMode,
+    queryKey: demoMode ? ['full-app-demo', ...PRODUCTION_FLIGHTS_QUERY_KEY] : PRODUCTION_FLIGHTS_QUERY_KEY,
+    queryFn: ({ signal }) => demoMode
+      ? fetchFullAppDemoFlights({ signal })
+      : fetchProductionFlights({ signal }),
+    enabled: demoMode || !localReadMode,
     retry: shouldRetryProductionRead,
     retryDelay: productionReadRetryDelay,
   });
   const flights: FlightView[] = React.useMemo(
-    () => demoMode
-      ? []
-      : localReadMode
+    () => localReadMode
       ? (localFlightsQuery.data ?? []).map(mapLocalFlight)
       : productionFlightsQuery.data ?? [],
-    [demoMode, localReadMode, localFlightsQuery.data, productionFlightsQuery.data],
+    [localReadMode, localFlightsQuery.data, productionFlightsQuery.data],
   );
-  const flightsLoading = !demoMode && (localReadMode ? localFlightsQuery.isLoading : productionFlightsQuery.isLoading);
-  const flightsError = !demoMode && (localReadMode ? localFlightsQuery.isError : productionFlightsQuery.isError);
-  const flightsRefetching = !demoMode && (localReadMode ? localFlightsQuery.isRefetching : productionFlightsQuery.isRefetching);
+  const flightsLoading = localReadMode ? localFlightsQuery.isLoading : productionFlightsQuery.isLoading;
+  const flightsError = localReadMode ? localFlightsQuery.isError : productionFlightsQuery.isError;
+  const flightsRefetching = localReadMode ? localFlightsQuery.isRefetching : productionFlightsQuery.isRefetching;
   const refetchFlights = localReadMode ? localFlightsQuery.refetch : productionFlightsQuery.refetch;
 
   // Personalized data: flights the member is already queued for or booked on
@@ -562,18 +572,17 @@ export default function DiscoverScreen() {
     setFilter('all');
   }, []);
   const onRefresh = React.useCallback(async () => {
-    if (demoMode) return;
     const refreshes: Promise<unknown>[] = [refetchFlights()];
     if (view === 'map' && airportCodes.length > 0) refreshes.push(airportQuery.refetch());
     await Promise.all(refreshes);
-  }, [demoMode, refetchFlights, view, airportCodes, airportQuery.refetch]);
+  }, [refetchFlights, view, airportCodes, airportQuery.refetch]);
 
   const renderCard = ({ item }: { item: FlightView }) => (
     <TouchableOpacity
       testID={item.source === 'production' ? `production-flight-card-${item.id}` : undefined}
       style={[styles.card, { backgroundColor: colors.card }]}
       activeOpacity={0.8}
-      onPress={() => openFlightDetails(item)}
+      onPress={() => openFlightDetails(item, demoMode)}
       accessibilityRole="button"
       accessibilityLabel={`Flight from ${airportLabel(item.fromAirport, item.fromCity)} to ${airportLabel(item.toAirport, item.toCity)}. ${formatDateTime(item)}`}
     >
@@ -606,7 +615,7 @@ export default function DiscoverScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {isLoading ? (
-        <View style={styles.centered}>
+        <View testID={demoMode ? 'full-app-demo-discover-loading' : undefined} style={styles.centered}>
           <View style={[styles.skeletonHero, { backgroundColor: colors.card }]} />
           <View style={[styles.skeletonLine, { backgroundColor: colors.card }]} />
           <View style={[styles.skeletonLineShort, { backgroundColor: colors.card }]} />
@@ -616,9 +625,12 @@ export default function DiscoverScreen() {
         <View style={styles.centered}>
           <Feather name="wifi-off" size={32} color={colors.mutedForeground} />
           <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            Could not load flights
+            {demoMode && productionFlightsQuery.error instanceof ProductionReadHttpError
+              ? `Could not load live flights (HTTP ${productionFlightsQuery.error.status}).`
+              : 'Could not load flights'}
           </Text>
           <TouchableOpacity
+            testID={demoMode ? 'discover-flight-retry' : undefined}
             style={[styles.retryBtn, { borderColor: colors.border }]}
             onPress={() => void refetchFlights()}
             disabled={flightsRefetching}
