@@ -1,0 +1,136 @@
+BLUEBIRD MOBILE — TEST REAL UI DESIGN WITH MOCK DATA
+
+IMPORTANT:
+I DO NOT want a separate demo application,
+new mock screens, or simplified UI simulation.
+
+I want to test the ACTUAL Bluebird Mobile design
+inside the existing Replit phone Preview.
+
+PRIMARY GOAL:
+
+Make all existing screens visually functional
+using the REAL application components.
+
+Screens to test:
+
+- Home
+- Flights
+- Flight Details
+- Membership
+- Queue
+- My Flights
+- Profile
+
+DESIGN REQUIREMENTS:
+
+1. Use ONLY the existing Bluebird UI components.
+
+2. Preserve the current design system:
+   - Typography
+   - Colors
+   - Spacing
+   - Cards
+   - Buttons
+   - Icons
+   - Images
+   - Navigation
+   - Animations
+
+3. Do not create separate demo pages.
+
+4. Do not redesign any screens.
+
+5. Do not replace existing screens with
+   simplified mock versions.
+
+6. Keep the existing bottom navigation.
+
+DATA:
+
+7. Use real Production flight data where
+   read-only API access is available.
+
+8. If real data cannot be accessed,
+   use local JSON fixtures matching the
+   existing API response types.
+
+9. Render fixture data through the SAME
+   components used for real API responses.
+
+10. Use realistic flight information
+    sufficient to populate the complete UI.
+
+QUEUE:
+
+11. Keep the existing Queue screen design.
+
+12. Keep the existing Join Queue buttons
+    and interaction patterns.
+
+13. Use a local demo data adapter ONLY
+    for queue state and mutations.
+
+14. When Join Queue is pressed:
+    - Update the existing UI state.
+    - Show the existing joined state.
+    - Display the flight in My Queue.
+
+15. When Leave Queue is pressed:
+    - Update the existing UI.
+    - Remove the flight from My Queue.
+
+16. Use the existing confirmation/status
+    components where supported.
+
+17. Do not invent new Queue screens
+    or booking flows.
+
+AUTH:
+
+18. Keep the existing development-only
+    demo entry if necessary to open the app.
+
+19. Do not require Clerk login for local
+    design testing if browser origin blocks it.
+
+20. Do not create fake Clerk tokens.
+
+SAFETY:
+
+21. No Production queue writes.
+22. No Production bookings.
+23. No real payments.
+24. No backend modifications.
+25. No Clerk Dashboard modifications.
+26. No deployment.
+27. No Git operations.
+
+VERIFICATION:
+
+Open the actual Replit phone Preview.
+
+Verify visually:
+
+- Home renders correctly.
+- Flights cards match the existing design.
+- Flight Details opens correctly.
+- Join Queue works inside the real UI.
+- My Queue displays the selected flight.
+- Leave Queue works.
+- Navigation works between all screens.
+- Layout works at iPhone viewport sizes.
+- No separate mock pages are required.
+
+EXPECTED RESULT:
+
+A visually complete and interactive
+Bluebird Mobile application.
+
+The UI must look and behave like the
+actual production app.
+
+Only the DATA SOURCE may be mocked.
+
+Do not stop at an audit.
+Implement and visually verify the result.
