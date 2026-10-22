@@ -51,6 +51,7 @@ async function seedLocalSession(page, user = localUser, token = "local-demo-sess
 }
 
 async function stubLocalApi(page, authResponse = { status: 200, body: localUser }) {
+  const planCatalogRequests = [];
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -63,7 +64,13 @@ async function stubLocalApi(page, authResponse = { status: 200, body: localUser 
     if (path === "/api/membership") {
       return route.fulfill({ json: { tier: "plus", linePassCount: 0, plans: [] } });
     }
-    if (path === "/api/plans") return route.fulfill({ json: plansCatalog });
+    if (path === "/api/plans") {
+      planCatalogRequests.push({ method: request.method(), url: request.url() });
+      return route.fulfill({
+        json: plansCatalog,
+        headers: { "access-control-allow-origin": "*" },
+      });
+    }
     if (request.method() !== "GET") return route.fulfill({ status: 204, body: "" });
     if (
       path === "/api/notifications" ||
@@ -76,6 +83,7 @@ async function stubLocalApi(page, authResponse = { status: 200, body: localUser 
     }
     return route.fulfill({ json: {} });
   });
+  return planCatalogRequests;
 }
 
 test("phone sign-in screens have a working back destination when opened directly", async ({ page }) => {
@@ -229,7 +237,7 @@ test("valid local demo session reaches Discover on startup, direct navigation, a
     }
   });
   await seedLocalSession(page);
-  await stubLocalApi(page);
+  const planCatalogRequests = await stubLocalApi(page);
 
   await page.goto("/");
   await expect(page.getByText(/Good (morning|afternoon|evening), Preview/)).toBeVisible();
@@ -250,6 +258,14 @@ test("valid local demo session reaches Discover on startup, direct navigation, a
   await plansLink.click();
   await expect(page).toHaveURL(/\/membership\/plans$/);
   await expect(page.getByRole("button", { name: "View Details" }).first()).toBeVisible();
+  expect(planCatalogRequests.length).toBeGreaterThan(0);
+  expect(planCatalogRequests.every(({ method }) => method === "GET")).toBe(true);
+  expect(planCatalogRequests.every(({ url }) => new URL(url).hostname !== "bluebirdjets.com")).toBe(true);
+  await page.getByRole("button", { name: "View Details" }).first().click();
+  await expect(page).toHaveURL(/\/upgrade\/base$/);
+  await expect(page.getByText("PUBLIC PRODUCTION PLAN", { exact: true })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/membership\/plans$/);
 
   await page.goto("/profile");
   const personalInformation = page.getByText("Personal Information", { exact: true }).first();

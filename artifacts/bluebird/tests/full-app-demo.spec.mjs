@@ -115,6 +115,12 @@ test("the regular Bluebird tabs and flight detail work in the identity-free demo
   await expect(page.getByTestId("referral-code")).toHaveText("BB-PAUL2026");
   await page.goBack();
   await expect(page.getByTestId("full-app-demo-membership")).toContainText("Base");
+  await page.getByText("Compare all plans", { exact: true }).click();
+  await expect(page.getByTestId("full-app-demo-plans")).toBeVisible();
+  await expect(page.getByText("This demo does not request public plan data.", { exact: false })).toBeVisible();
+  expect(requests.some((request) => request.path === "/api/plans")).toBe(false);
+  await page.goBack();
+  await expect(page.getByTestId("full-app-demo-membership")).toContainText("Base");
 
   await page.getByRole("tab", { name: /Profile/ }).click();
   await expect(page.getByTestId("full-app-demo-profile")).toContainText("Sample profile");
