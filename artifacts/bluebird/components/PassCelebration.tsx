@@ -169,7 +169,7 @@ export function PassCelebration({ onDone }: Props) {
   if (finished) return null;
 
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, styles.overlay, { backgroundColor: colors.backgroundMid }, overlayStyle]}>
+    <Animated.View testID="pass-celebration" style={[StyleSheet.absoluteFill, styles.overlay, { backgroundColor: colors.backgroundMid }, overlayStyle]}>
       <Pressable style={StyleSheet.absoluteFill} onPress={skip} accessibilityLabel="Skip celebration" />
       {/* Particle origin: center, slightly above middle */}
       <View pointerEvents="none" style={styles.particleOrigin}>

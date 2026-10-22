@@ -267,22 +267,7 @@ export default function TripsScreen() {
                 }}
                 badge="FLIGHT WON · DEMO"
                 badgeBlue
-                onPress={() => router.push({
-                  pathname: '/flight/confirmed',
-                  params: {
-                    flightId,
-                    from: flight.fromAirport ?? '',
-                    to: flight.toAirport ?? '',
-                    fromCity: flight.fromCity ?? '',
-                    toCity: flight.toCity ?? '',
-                    departureDate: flight.departureDate ?? '',
-                    departureTime: flight.departureTime ?? '',
-                    duration: flight.duration ?? '',
-                    aircraftType: flight.aircraftTypeName ?? flight.aircraftType ?? '',
-                    passUsed: '1',
-                    petFeeUsd: '0',
-                  },
-                } as any)}
+                onPress={() => router.push(`/flight/${flightId}` as any)}
               />
             ))}
           </ScrollView>

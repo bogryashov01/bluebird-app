@@ -16,6 +16,7 @@ import { useUseLinePassOnQueueEntry } from '@workspace/api-client-react';
 import { markQueueEntryCelebrated } from '@/lib/queueCelebration';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
+import { markFlightWinCelebration } from '@/lib/flightWinCelebration';
 
 function shortDate(d?: string) {
   if (!d) return '';
@@ -61,9 +62,10 @@ export default function SkipLinePassScreen() {
     if (params.flightId) {
       queryClient.invalidateQueries({ queryKey: [`/api/flights/${params.flightId}/my-status`] });
     }
+    markFlightWinCelebration(params.flightId);
     router.replace({
       pathname: '/flight/confirmed',
-      params: { ...params, passUsed: '1', petFeeUsd: params.bringingPet === '1' ? '500' : '0' },
+      params: { ...params, petFeeUsd: params.bringingPet === '1' ? '500' : '0' },
     });
   };
 

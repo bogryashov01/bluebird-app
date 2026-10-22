@@ -22,6 +22,7 @@ import * as Haptics from 'expo-haptics';
 import { fetchFullAppDemoFlight } from '@/lib/fullAppDemoLiveReads';
 import { parseProductionFlightId } from '@/lib/productionFlights';
 import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
+import { markFlightWinCelebration } from '@/lib/flightWinCelebration';
 
 type PaymentReviewParams = {
   flightId: string;
@@ -96,12 +97,14 @@ export default function InternationalPaymentReviewScreen() {
             pathname: '/flight/confirmed',
             params: {
               ...params,
-              ...(useLinePass ? { passUsed: '1' } : {}),
               petFeeUsd: bringingPet ? '500' : '0',
             },
           });
           if (useLinePass) {
-            pendingNavRef.current = nav;
+            pendingNavRef.current = () => {
+              markFlightWinCelebration(params.flightId);
+              nav();
+            };
             setOverlayPhase('success');
           } else {
             nav();

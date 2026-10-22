@@ -12,6 +12,7 @@ import { PassCelebration } from '@/components/PassCelebration';
 import { addFlightToCalendar } from '@/lib/addToCalendar';
 import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { consumeFlightWinCelebration } from '@/lib/flightWinCelebration';
 
 function computeArrival(departureTime?: string, duration?: string): string {
   if (!departureTime || !duration) return '';
@@ -40,11 +41,12 @@ export default function FlightConfirmedScreen() {
   const params = useLocalSearchParams<{
     from?: string; to?: string; fromCity?: string; toCity?: string;
     departureTime?: string; duration?: string; aircraftType?: string;
-    departureDate?: string; passUsed?: string; flightId?: string; petFeeUsd?: string;
+    departureDate?: string; flightId?: string; petFeeUsd?: string;
   }>();
-  const passUsed = params.passUsed === '1';
   const petFeeApplies = params.petFeeUsd === '500';
-  const [celebrating, setCelebrating] = React.useState(localDemoFlow && passUsed);
+  const [celebrating, setCelebrating] = React.useState(
+    () => localDemoFlow && consumeFlightWinCelebration(params.flightId),
+  );
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 

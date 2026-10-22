@@ -543,10 +543,7 @@ export default function QueueStatusScreen() {
             <PrimaryButton
               label="View Flight Won"
               testID="full-app-demo-view-won"
-              onPress={() => router.replace({
-                pathname: '/flight/confirmed',
-                params: { ...localFlightParams, passUsed: '1', petFeeUsd: '0' },
-              } as any)}
+              onPress={() => router.replace(`/flight/${selected.flightId}` as any)}
               style={styles.fullWidth}
             />
           ) : (

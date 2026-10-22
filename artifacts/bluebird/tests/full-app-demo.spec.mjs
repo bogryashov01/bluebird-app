@@ -185,16 +185,59 @@ test("domestic live-flight queue, local pass purchase, win, and My Flights persi
   await expect(page.getByTestId("full-app-demo-confirm-pass")).toBeVisible();
   await expect(page.getByTestId("full-app-demo-pass-balance-confirmation")).toHaveText("1 pass");
   await page.getByTestId("full-app-demo-confirm-pass").click();
+  await expect(page.getByTestId("pass-celebration")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Flight Secured")).toBeVisible();
   await expect(page.getByText("You're confirmed!")).toBeVisible({ timeout: 10_000 });
+  await page.getByLabel("Skip celebration").click();
+  await expect(page.getByTestId("pass-celebration")).toHaveCount(0);
+
+  // A URL flag is not a win event: reopening the confirmation route cannot replay it.
+  await page.goto("/flight/confirmed?flightId=98765&passUsed=1&from=SEA&to=SFO");
+  await expect(page.getByTestId("pass-celebration")).toHaveCount(0);
+  await expect(page.getByText("You're confirmed!")).toBeVisible();
+
   await page.goto("/queue/status?flightId=98765");
   await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("Flight won");
   await page.getByTestId("full-app-demo-view-won").click();
-  await expect(page.getByText("You're confirmed!")).toBeVisible();
-  await page.getByTestId("full-app-demo-confirmed-my-trips").click();
+  await expect(page).toHaveURL(/\/flight\/98765$/);
+  await expect(page.getByTestId("flight-detail-route")).toContainText("SEA → SFO");
+  await expect(page.getByTestId("pass-celebration")).toHaveCount(0);
+  await page.getByTestId("full-app-demo-view-won-flight").click();
+  await expect(page.getByTestId("flight-detail-route")).toContainText("SEA → SFO");
+  await expect(page.getByTestId("pass-celebration")).toHaveCount(0);
+  await page.goto("/queue/join?flightId=98765");
+  await page.getByTestId("queue-continue-button").click();
+  await expect(page).toHaveURL(/\/flight\/98765$/);
+  await expect(page.getByTestId("flight-detail-route")).toContainText("SEA → SFO");
+  await expect(page.getByTestId("pass-celebration")).toHaveCount(0);
+
+  await page.goto("/trips");
   await expect(page.getByTestId("full-app-demo-trips")).toBeVisible();
+  await expect(page.getByTestId("trip-card-open-details")).toContainText("FLIGHT WON · DEMO");
+  await page.getByTestId("trip-card-open-details").click();
+  await expect(page).toHaveURL(/\/flight\/98765$/);
+  await expect(page.getByTestId("flight-detail-route")).toContainText("SEA → SFO");
+  await expect(page.getByTestId("pass-celebration")).toHaveCount(0);
+  await page.goBack();
+  await expect(page.getByTestId("trip-card-open-details")).toBeVisible();
+  await page.getByTestId("trip-card-open-details").click();
+  await expect(page.getByTestId("flight-detail-route")).toContainText("SEA → SFO");
+  await expect(page.getByTestId("pass-celebration")).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByTestId("flight-detail-route")).toContainText("SEA → SFO");
+  await expect(page.getByTestId("pass-celebration")).toHaveCount(0);
+
+  await page.goto("/trips");
   await expect(page.getByTestId("trip-card-open-details")).toContainText("FLIGHT WON · DEMO");
   await page.reload();
   await expect(page.getByTestId("trip-card-open-details")).toContainText("FLIGHT WON · DEMO");
+  await page.getByTestId("trip-card-open-details").click();
+  await expect(page).toHaveURL(/\/flight\/98765$/);
+  await expect(page.getByTestId("flight-detail-route")).toContainText("SEA → SFO");
+  await expect(page.getByTestId("pass-celebration")).toHaveCount(0);
+
+  await page.goto("/trips");
   await page.getByTestId("full-app-demo-trips-tab-pending").click();
   await expect(page.getByTestId("full-app-demo-my-queue-empty")).toBeVisible();
   await page.goto("/flight/98765");

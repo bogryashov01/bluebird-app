@@ -21,6 +21,7 @@ import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { fetchFullAppDemoFlight } from '@/lib/fullAppDemoLiveReads';
 import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
 import { parseProductionFlightId } from '@/lib/productionFlights';
+import { markFlightWinCelebration } from '@/lib/flightWinCelebration';
 
 const POLICY_ITEMS = [
   {
@@ -119,13 +120,15 @@ export default function JoinQueueAcknowledgeScreen() {
             pathname: '/flight/confirmed',
             params: {
               ...params,
-              ...(useLinePass ? { passUsed: '1' } : {}),
               petFeeUsd: bringingPet ? '500' : '0',
             },
           });
           if (useLinePass) {
             // Let the applying animation resolve before landing on confirmed.
-            pendingNavRef.current = nav;
+            pendingNavRef.current = () => {
+              markFlightWinCelebration(flightId);
+              nav();
+            };
             setOverlayPhase('success');
           } else {
             nav();
@@ -189,7 +192,7 @@ export default function JoinQueueAcknowledgeScreen() {
       return;
     }
     if (demoMode && demoEntry?.status === 'won') {
-      router.replace({ pathname: '/flight/confirmed', params: { ...params, passUsed: '1', petFeeUsd: '0' } } as any);
+      router.replace(`/flight/${flightId}` as any);
       return;
     }
     if (demoMode && demoEntry) {

@@ -24,6 +24,7 @@
 - [Flight detail read contract](flight-detail-read-contract.md) — use the selected environment's existing detail reader when supported, validate its ID, and preserve the auth-aware unavailable state.
 - [Saved passenger identity](saved-passenger-identity.md) — dedupe member-owned reusable passengers by normalized first/last name; keep date of birth flight-specific.
 - [Queue join merge invariant](queue-join-merge-invariant.md) — validate that POST /queue/join inserts a fresh entry before returning; conflict merges can compile while leaving route-param lookups in place.
+- [Flight win celebration events](flight-win-celebration.md) — trigger the win animation from a consumed one-time event, never from persistent status or replayable URL parameters.
 - [Approved queue product rules](queue-approved-product-rules.md) — use approved Pass/price wording and keep the known local queue-closure mismatch explicit before production integration.
 - [GitHub publish transport](github-publish.md) — REST connector access may not authenticate local git push; empty repos need a Contents seed before Git Data API publishing.
 - [Family pass cycles](family-pass-cycles.md) — tie each Family redemption to its annual cycle so later cancellations cannot refund expired passes into a new pool.

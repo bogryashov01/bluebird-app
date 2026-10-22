@@ -567,19 +567,6 @@ export default function FlightDetailScreen() {
           flightStatus: f.status ?? 'available',
         },
       });
-      const demoWonParams = {
-        flightId: f.id,
-        from: f.fromAirport ?? '',
-        to: f.toAirport ?? '',
-        fromCity: f.fromCity ?? '',
-        toCity: f.toCity ?? '',
-        departureDate: f.departureDate ?? '',
-        departureTime: f.departureTime ?? '',
-        duration: f.duration ?? '',
-        aircraftType: f.aircraftTypeName ?? f.aircraftType ?? '',
-        passUsed: '1',
-        petFeeUsd: '0',
-      };
       return (
         <>
           {entry ? (
@@ -612,7 +599,7 @@ export default function FlightDetailScreen() {
             accessibilityRole="button"
             disabled={!!demoQueue.storageError}
             onPress={() => {
-              if (entry?.status === 'won') router.push({ pathname: '/flight/confirmed', params: demoWonParams } as any);
+              if (entry?.status === 'won') router.replace(`/flight/${entry.flightId}` as any);
               else if (entry) openDemoQueue();
               else openDemoPolicy();
             }}
