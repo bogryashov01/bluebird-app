@@ -68,7 +68,7 @@ export default function QueueJoinedScreen() {
     ]).start();
   }, []);
 
-  const statusLabel = params.flightStatus === 'available' ? 'Open'
+  const statusLabel = params.flightStatus === 'available' || params.flightStatus === 'published' ? 'Open'
     : params.flightStatus ? params.flightStatus.charAt(0).toUpperCase() + params.flightStatus.slice(1)
     : 'Open';
 
@@ -140,18 +140,18 @@ export default function QueueJoinedScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24, gap: 22 },
+  content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24, gap: 20 },
   iconRing: {
-    width: 96, height: 96, borderRadius: 48,
+    width: 88, height: 88, borderRadius: 44,
     justifyContent: 'center', alignItems: 'center',
   },
-  title: { fontFamily: 'Inter_700Bold', fontSize: 26, textAlign: 'center' },
-  subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, textAlign: 'center' },
-  chipRow: { flexDirection: 'row', gap: 12 },
+  title: { fontFamily: 'Inter_700Bold', fontSize: 25, letterSpacing: -0.35, textAlign: 'center' },
+  subtitle: { fontFamily: 'Inter_400Regular', fontSize: 13, textAlign: 'center' },
+  chipRow: { flexDirection: 'row', gap: 12, width: '100%', maxWidth: 330 },
   chip: {
-    borderRadius: 18, paddingVertical: 16, paddingHorizontal: 22,
-    alignItems: 'center', gap: 4, minWidth: 130,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowRadius: 16, shadowOpacity: 0.05, elevation: 2,
+    flex: 1, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 12,
+    alignItems: 'center', gap: 4, minWidth: 0,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowRadius: 14, shadowOpacity: 0.06, elevation: 2,
   },
   chipValue: { fontFamily: 'Inter_700Bold', fontSize: 20 },
   chipLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.6 },

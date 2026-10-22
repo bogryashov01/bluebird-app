@@ -372,7 +372,7 @@ export default function TripsScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { paddingTop: topPad + 24 }]}>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Trips</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>My Flights</Text>
         </View>
         <TripAvailabilityState
           title="Trips unavailable"
@@ -386,7 +386,7 @@ export default function TripsScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { paddingTop: topPad + 24 }]}>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Trips</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>My Flights</Text>
         </View>
         <TripAvailabilityState
           title="Sign in to view your trips"
@@ -530,7 +530,7 @@ export default function TripsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: topPad + 24 }]}>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Trips</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>My Flights</Text>
 
         {/* 3-tab pill selector */}
         <View style={[styles.tabRow, { backgroundColor: colors.card, borderRadius: 14 }]}>
@@ -617,10 +617,10 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowRadius: 32,
-    shadowOpacity: 0.35,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 20,
+    shadowOpacity: 0.08,
+    elevation: 3,
   },
   cardImage: { width: '100%', height: 130 },
   cardBadgeWrap: { position: 'absolute', top: 12, left: 12 },

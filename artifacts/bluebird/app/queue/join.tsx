@@ -304,7 +304,7 @@ export default function JoinQueueAcknowledgeScreen() {
           <TouchableOpacity
             key={item.id}
             testID={`queue-ack-${item.id}`}
-            style={[styles.checkRow, { backgroundColor: colors.surface }]}
+            style={[styles.checkRow, { backgroundColor: colors.surface, borderColor: colors.separator }]}
             onPress={() => setChecked((prev) => prev.map((c, j) => (j === i ? !c : c)))}
             activeOpacity={0.8}
             accessibilityRole="checkbox"
@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20, marginBottom: 10 },
   checkRow: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    borderRadius: 14, padding: 16,
+    borderRadius: 16, borderWidth: 1, padding: 16,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
   },
   checkbox: {

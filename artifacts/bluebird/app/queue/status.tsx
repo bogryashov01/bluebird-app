@@ -19,6 +19,7 @@ import { observeQueueEntries } from '@/lib/queueCelebration';
 import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
+import type { FullAppDemoQueueEntry } from '@/lib/fullAppDemoQueueState';
 import { fetchFullAppDemoFlight } from '@/lib/fullAppDemoLiveReads';
 import { parseProductionFlightId } from '@/lib/productionFlights';
 
@@ -55,10 +56,10 @@ function useDecisionCountdown(joinedAt?: string): string {
 // ─── SVG ring ─────────────────────────────────────────────────────────────────
 const CIRC = 251;
 
-function RingProgress({ position, total }: { position: number; total: number }) {
+function RingProgress({ position, total, size }: { position: number; total: number; size?: number }) {
   const colors = useColors();
   const { width: windowWidth } = useWindowDimensions();
-  const ringSize = Math.round(Math.min(170, Math.max(120, windowWidth - 200)));
+  const ringSize = size ?? Math.round(Math.min(170, Math.max(120, windowWidth - 200)));
   const progress   = total > 1 ? (total - position) / (total - 1) : 1;
   const dashoffset = CIRC * (1 - progress);
   return (
@@ -115,7 +116,7 @@ function ConfirmedCard({ entry }: { entry: QueueEntry }) {
             <View style={flat.statusBadge}>
               <View style={[flat.statusDot, { backgroundColor: colors.success }]} />
               <Text style={[flat.statusText, { color: colors.success }]}>
-                {flight.status === 'available' ? 'Open' : flight.status ?? 'Active'}
+                {formatFlightStatus(flight.status)}
               </Text>
             </View>
           </View>
@@ -146,6 +147,10 @@ function formatAgo(iso: string): string {
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
+}
+
+function formatFlightStatus(status: string | null | undefined): string {
+  return status === 'available' || status === 'published' ? 'Open' : status ?? 'Active';
 }
 
 function movementRows(entry: QueueEntry): { text: string; time: string }[] {
@@ -202,6 +207,64 @@ function QueueMembersCard({ entry }: { entry: QueueEntry }) {
     </View>
   );
 }
+
+function DemoQueueStatusDetails({
+  entry,
+  decisionCountdown,
+}: {
+  entry: FullAppDemoQueueEntry;
+  decisionCountdown: string;
+}) {
+  const colors = useColors();
+  const routeLabel = `${entry.flight.fromAirport ?? '—'} → ${entry.flight.toAirport ?? '—'}`;
+  const flightStatus = entry.flight.status === 'available' || entry.flight.status === 'published'
+    ? 'Open'
+    : entry.flight.status?.trim() || 'Unavailable';
+  const activity = entry.status === 'changed-position'
+    ? `Queue position changed locally to #${entry.position}`
+    : `Joined queue at #${entry.position}`;
+
+  return (
+    <View style={demoStatus.wrap}>
+      <Text style={[demoStatus.route, { color: colors.textOnSurface }]}>{routeLabel}</Text>
+      <Text style={[demoStatus.state, { color: colors.mutedForegroundLight }]}>
+        {entry.status === 'changed-position' ? 'Queue position changed' : 'Waiting'}
+      </Text>
+      <RingProgress position={entry.position} total={entry.totalInQueue} />
+      <Text style={[demoStatus.countdown, { color: colors.primary }]}>
+        {decisionCountdown === 'Imminent' ? 'Decision imminent' : `Decision in ${decisionCountdown}`}
+      </Text>
+
+      <View style={[flat.card, { backgroundColor: colors.surface }]}>
+        <Text style={[flat.cardTitle, { color: colors.textOnSurface }]}>Queue Movement</Text>
+        <View style={flat.logRow}>
+          <Text style={[flat.logText, { color: colors.mutedForegroundLight }]}>{activity}</Text>
+          {entry.status !== 'changed-position' && (
+            <Text style={[flat.logTime, { color: colors.mutedForegroundLight }]}>{formatAgo(entry.createdAt)}</Text>
+          )}
+        </View>
+      </View>
+
+      <View style={[flat.card, { backgroundColor: colors.surface }]}>
+        <View style={flat.statusRow}>
+          <Text style={[flat.cardTitle, { color: colors.textOnSurface }]}>Flight Status</Text>
+          <View style={flat.statusBadge}>
+            <View style={[flat.statusDot, { backgroundColor: flightStatus === 'Open' ? colors.success : colors.mutedForegroundLight }]} />
+            <Text style={[flat.statusText, { color: flightStatus === 'Open' ? colors.success : colors.mutedForegroundLight }]}>
+              {flightStatus}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={[flat.disclaimer, { backgroundColor: colors.primary + '14' }]}>
+        <Text style={[flat.disclaimerText, { color: colors.textOnSurface }]}>
+          Local demo only — this queue does not send a backend request or create a booking.
+        </Text>
+      </View>
+    </View>
+  );
+}
 const confirmed = StyleSheet.create({
   wrap: {
     width: '100%',
@@ -248,6 +311,7 @@ export default function QueueStatusScreen() {
   const demoSelectedForRead = (entryId ? demoEntries.find((entry) => entry.id === entryId) : undefined) ??
     (flightId ? demoEntries.find((entry) => entry.flightId === flightId) : undefined) ??
     (demoEntries.length === 1 ? demoEntries[0] : undefined);
+  const demoDecisionCountdown = useDecisionCountdown(demoSelectedForRead?.createdAt);
   const demoReadFlightId = parseProductionFlightId(demoSelectedForRead?.flightId);
   const demoFlightReadQuery = useQuery({
     queryKey: ['full-app-demo-flight-status', demoReadFlightId],
@@ -445,33 +509,37 @@ export default function QueueStatusScreen() {
         <FloatingBackButton />
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={[styles.scrollContent, { paddingTop: topPad + 76, paddingBottom: bottomPad + 28, gap: 18 }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingTop: topPad + (waiting ? 30 : 76), paddingBottom: bottomPad + (waiting ? 220 : 28), gap: 16 },
+          ]}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={[styles.pickerTitle, { color: colors.textOnSurface }]}>{localStatusLabel}</Text>
-          <View style={[styles.pickerRow, { backgroundColor: colors.surface, width: '100%' }]}>
-            <Text style={[styles.pickerRoute, { color: colors.textOnSurface }]}>{routeLabel}</Text>
-            <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]}>
-              {selected.flight.fromCity ?? selected.flight.fromAirport ?? 'Origin'} → {selected.flight.toCity ?? selected.flight.toAirport ?? 'Destination'}
-            </Text>
-            {waiting && (
-              <Text style={[styles.queuePositionNumber, { color: colors.primary }]}>
-                #{selected.position}{selected.status === 'changed-position' ? ' · updated locally' : ''}
-              </Text>
-            )}
-            <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]}>
-              {selected.flight.departureDate ?? 'Date unavailable'}{selected.flight.departureTime ? ` · ${selected.flight.departureTime}` : ''}
-            </Text>
-            <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]}>
-              Demo state only — no backend queue request or booking was made.
-            </Text>
-          </View>
+          {waiting ? (
+            <DemoQueueStatusDetails entry={selected} decisionCountdown={demoDecisionCountdown} />
+          ) : (
+            <>
+              <Text style={[styles.pickerTitle, { color: colors.textOnSurface }]}>{localStatusLabel}</Text>
+              <View style={[styles.pickerRow, { backgroundColor: colors.surface, width: '100%' }]}>
+                <Text style={[styles.pickerRoute, { color: colors.textOnSurface }]}>{routeLabel}</Text>
+                <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]}>
+                  {selected.flight.fromCity ?? selected.flight.fromAirport ?? 'Origin'} → {selected.flight.toCity ?? selected.flight.toAirport ?? 'Destination'}
+                </Text>
+                <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]}>
+                  {selected.flight.departureDate ?? 'Date unavailable'}{selected.flight.departureTime ? ` · ${selected.flight.departureTime}` : ''}
+                </Text>
+                <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]}>
+                  Demo state only — no backend queue request or booking was made.
+                </Text>
+              </View>
+            </>
+          )}
           {demoQueue.storageError ? (
             <Text testID="full-app-demo-queue-storage-error" style={[styles.emptyBody, { color: colors.destructive }]}>
               {demoQueue.storageError}
             </Text>
           ) : null}
-          {won ? (
+          {!waiting && (won ? (
             <PrimaryButton
               label="View Flight Won"
               testID="full-app-demo-view-won"
@@ -481,43 +549,51 @@ export default function QueueStatusScreen() {
               } as any)}
               style={styles.fullWidth}
             />
-          ) : waiting ? (
-            <>
-              <View style={[styles.pickerRow, { backgroundColor: colors.surface, width: '100%' }]}>
-                <Text style={[styles.pickerRoute, { color: colors.textOnSurface }]}>Skip the Line Pass balance</Text>
-                <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]} testID="full-app-demo-pass-balance">
-                  {demoQueue.passCount} pass{demoQueue.passCount === 1 ? '' : 'es'}
-                </Text>
-              </View>
-              <PrimaryButton
-                label={demoQueue.passCount > 0 ? 'Use Skip the Line Pass' : 'Get a Skip the Line Pass'}
-                testID="full-app-demo-use-pass"
-                disabled={!!demoQueue.storageError}
-                onPress={openPass}
-                style={styles.fullWidth}
-              />
-              <SecondaryButton
-                label="Leave Simulated Queue"
-                testID="full-app-demo-leave-queue"
-                disabled={!!demoQueue.storageError}
-                onPress={() => void leaveLocalEntry()}
-                style={styles.fullWidth}
-              />
-            </>
           ) : (
             <SecondaryButton
               label="Back to Flight Details"
               onPress={() => router.replace(`/flight/${selected.flightId}` as any)}
               style={styles.fullWidth}
             />
+          ))}
+          {!waiting && (
+            <SecondaryButton
+              label="View My Flights"
+              testID="full-app-demo-open-trips"
+              onPress={() => router.push('/(tabs)/trips')}
+              style={styles.fullWidth}
+            />
           )}
-          <SecondaryButton
-            label="View My Flights"
-            testID="full-app-demo-open-trips"
-            onPress={() => router.push('/(tabs)/trips')}
-            style={styles.fullWidth}
-          />
         </ScrollView>
+        {waiting && (
+          <View style={[styles.demoStatusFooter, { backgroundColor: colors.offWhite, paddingBottom: bottomPad + 10 }]}>
+            <Text style={[styles.demoPassBalance, { color: colors.mutedForegroundLight }]} testID="full-app-demo-pass-balance">
+              Skip the Line Pass balance · {demoQueue.passCount} pass{demoQueue.passCount === 1 ? '' : 'es'}
+            </Text>
+            <PrimaryButton
+              label={demoQueue.passCount > 0 ? 'Use Skip the Line Pass' : 'Get a Skip the Line Pass'}
+              testID="full-app-demo-use-pass"
+              disabled={!!demoQueue.storageError}
+              onPress={openPass}
+              style={styles.fullWidth}
+            />
+            <SecondaryButton
+              label="Leave Simulated Queue"
+              testID="full-app-demo-leave-queue"
+              disabled={!!demoQueue.storageError}
+              onPress={() => void leaveLocalEntry()}
+              style={styles.fullWidth}
+            />
+            <TouchableOpacity
+              testID="full-app-demo-open-trips"
+              onPress={() => router.push('/(tabs)/trips')}
+              activeOpacity={0.75}
+              style={styles.demoTripsLink}
+            >
+              <Text style={[styles.demoTripsLinkText, { color: colors.mutedForegroundLight }]}>View My Flights</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     );
   }
@@ -654,12 +730,19 @@ const styles = StyleSheet.create({
   emptyBody:  { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 22, textAlign: 'center' },
   browseBtn: { marginTop: 6, paddingHorizontal: 24 },
   fullWidth: { width: '100%' },
+  demoStatusFooter: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    paddingHorizontal: 22, paddingTop: 10, gap: 8,
+  },
+  demoPassBalance: { fontFamily: 'Inter_500Medium', fontSize: 12, textAlign: 'center' },
+  demoTripsLink: { minHeight: 28, alignItems: 'center', justifyContent: 'center' },
+  demoTripsLinkText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   pickerTitle: { fontFamily: 'Inter_700Bold', fontSize: 22, alignSelf: 'flex-start' },
   pickerSubtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, alignSelf: 'flex-start', marginBottom: 14, marginTop: 4 },
   pickerRow: {
     width: '100%',
-    borderRadius: 18, padding: 18, marginBottom: 12, gap: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowRadius: 16, shadowOpacity: 0.05, elevation: 2,
+    borderRadius: 18, padding: 17, marginBottom: 12, gap: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowRadius: 14, shadowOpacity: 0.06, elevation: 2,
   },
   pickerRowMain: { flexDirection: 'row', alignItems: 'center' },
   pickerPassBtn: {
@@ -674,6 +757,13 @@ const styles = StyleSheet.create({
     position: 'absolute', left: 0, right: 0, bottom: 0,
     paddingHorizontal: 22, paddingTop: 12, gap: 12,
   },
+});
+
+const demoStatus = StyleSheet.create({
+  wrap: { width: '100%', alignItems: 'center', gap: 10 },
+  route: { width: '100%', fontFamily: 'Inter_700Bold', fontSize: 23, letterSpacing: -0.4, textAlign: 'center' },
+  state: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  countdown: { fontFamily: 'Inter_700Bold', fontSize: 15 },
 });
 
 function WaitingQueueView({ entry, onCancel }: { entry: QueueEntry; onCancel: () => void }) {
@@ -711,7 +801,7 @@ function WaitingQueueView({ entry, onCancel }: { entry: QueueEntry; onCancel: ()
           <View style={flat.statusBadge}>
             <View style={[flat.statusDot, { backgroundColor: colors.success }]} />
             <Text style={[flat.statusText, { color: colors.success }]}>
-              {flight?.status === 'available' ? 'Open' : flight?.status ?? 'Active'}
+              {formatFlightStatus(flight?.status)}
             </Text>
           </View>
         </View>
@@ -738,12 +828,12 @@ function WaitingQueueView({ entry, onCancel }: { entry: QueueEntry; onCancel: ()
 }
 
 const flat = StyleSheet.create({
-  wrap: { width: '100%', alignItems: 'center', gap: 18, marginBottom: 20 },
-  route: { fontFamily: 'Inter_700Bold', fontSize: 24, letterSpacing: -0.4 },
+  wrap: { width: '100%', alignItems: 'center', gap: 16, marginBottom: 20 },
+  route: { fontFamily: 'Inter_700Bold', fontSize: 23, letterSpacing: -0.4 },
   countdown: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   card: {
     width: '100%',
-    borderRadius: 16,
+    borderRadius: 17,
     padding: 16,
     gap: 10,
     shadowColor: '#000',

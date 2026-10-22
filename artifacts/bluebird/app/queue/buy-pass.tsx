@@ -142,11 +142,11 @@ export default function BuyPassScreen() {
         contentContainerStyle={[styles.content, { paddingTop: topPad + 72, paddingBottom: 24 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.title, { color: colors.textOnSurface }]}>Skip the Line Pass</Text>
+        <Text style={[styles.title, { color: colors.textOnSurface }]}>Skip the Line</Text>
         <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
-          Approved behavior: a pass immediately wins the flight and closes its queue.
+          Instantly win this flight and close its queue.
         </Text>
-        <Text style={[styles.subtitle, { color: colors.mutedForegroundLight, fontWeight: '600' }]}>
+        <Text style={[styles.demoNote, { color: colors.mutedForegroundLight }]}>
           Local demo only — pass balance changes here are demo state; no real payment is taken.
         </Text>
 

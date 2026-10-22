@@ -93,16 +93,19 @@ export default function InternationalNoticeScreen() {
           This flight crosses an international border. Base members can pay a one-time
           $1,000 fee or choose Plus, which includes five Skip the Line Passes.
         </Text>
-        <Text style={[styles.body, { color: colors.mutedOnBrand, fontWeight: '600' }]}>
+        <Text style={[styles.demoNotice, { color: colors.mutedOnBrand }]}>
           Local demo only — continuing records no real card authorization or payment.
         </Text>
 
-        <View style={[styles.feeRow, { backgroundColor: colors.textOnBrand + '0A', borderColor: colors.textOnBrand + '14' }]}>
+        <View style={[styles.feeRow, { backgroundColor: colors.textOnBrand + '0A', borderColor: colors.textOnBrand + '18' }]}>
           <Text style={[styles.feeLabel, { color: colors.mutedOnBrand }]}>One-time Base fee</Text>
           <Text style={[styles.feeValue, { color: colors.textOnBrand }]}>${fee.toLocaleString()}</Text>
         </View>
 
-        <View style={[styles.plusCard, { backgroundColor: colors.primary + '1F', borderColor: colors.primary + '59' }]}>
+        <View style={[styles.plusCard, { backgroundColor: colors.primary + '24', borderColor: colors.primary + '66' }]}>
+          <View style={[styles.plusIcon, { backgroundColor: colors.primary + '35' }]}>
+            <Feather name="star" size={15} color={colors.primaryForeground} />
+          </View>
           <Text style={[styles.plusTitle, { color: colors.textOnBrand }]}>Choose Plus instead</Text>
           <Text style={[styles.plusBody, { color: colors.mutedOnBrand }]}>
             Plus is the alternative to the one-time Base fee and includes five Skip the Line Passes.
@@ -130,21 +133,23 @@ export default function InternationalNoticeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingHorizontal: 22, paddingBottom: 24, gap: 16 },
+  content: { paddingHorizontal: 22, paddingBottom: 24, gap: 17 },
   globeBadge: {
-    width: 44, height: 44, borderRadius: 22,
+    width: 46, height: 46, borderRadius: 23,
     alignItems: 'center', justifyContent: 'center',
   },
-  title: { fontFamily: 'Inter_700Bold', fontSize: 24 },
-  body: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21, marginTop: -6 },
+  title: { fontFamily: 'Inter_700Bold', fontSize: 25, letterSpacing: -0.35 },
+  body: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21, marginTop: -7 },
+  demoNotice: { fontFamily: 'Inter_500Medium', fontSize: 12, lineHeight: 17, marginTop: -8 },
   feeRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    borderRadius: 14, borderWidth: 1, paddingHorizontal: 18, paddingVertical: 16,
+    borderRadius: 16, borderWidth: 1, paddingHorizontal: 18, paddingVertical: 17,
   },
   feeLabel: { fontFamily: 'Inter_500Medium', fontSize: 14 },
   feeValue: { fontFamily: 'Inter_700Bold', fontSize: 18 },
-  plusCard: { borderRadius: 14, borderWidth: 1, padding: 16, gap: 6 },
-  plusTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14.5 },
+  plusCard: { borderRadius: 17, borderWidth: 1, padding: 17, gap: 7 },
+  plusIcon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  plusTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
   plusBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19 },
   footer: { paddingHorizontal: 22, paddingTop: 12, gap: 10 },
 });

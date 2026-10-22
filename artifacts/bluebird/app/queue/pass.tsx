@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Platform,
+  View, Text, StyleSheet, TouchableOpacity, Platform, Modal, Pressable,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,7 +25,7 @@ function shortDate(d?: string) {
   });
 }
 
-// Dark "Skip the Line Pass" sheet — confirming uses a pass and wins the seat.
+// Dark pass screen with a bottom-sheet confirmation — confirming uses a pass and wins the seat.
 export default function SkipLinePassScreen() {
   const colors = useColors();
   const { user, updateUser, demoMode } = useAuth();
@@ -168,7 +168,7 @@ export default function SkipLinePassScreen() {
           <Text style={{ color: colors.textOnBrand }}>Skip the Line Pass</Text> immediately wins this flight and closes its queue
         </Text>
         <Text style={[styles.body, { color: colors.mutedOnBrand }]}>
-          The approved product behavior is to win the flight immediately and close the queue.
+          A pass skips the waiting list, awards the seat to you, and closes this flight's queue.
         </Text>
 
         <View style={[styles.balanceCard, { backgroundColor: colors.textOnBrand + '0A', borderColor: colors.textOnBrand + '14' }]}>
@@ -191,32 +191,51 @@ export default function SkipLinePassScreen() {
         </View>
       </View>
 
-      <View style={[styles.sheet, { backgroundColor: colors.textOnBrand + '08', borderColor: colors.textOnBrand + '12', paddingBottom: bottomPad + 16 }]}>
-        <Text style={[styles.sheetTitle, { color: colors.textOnBrand }]}>Use 1 Skip the Line Pass?</Text>
-        <Text style={[styles.sheetBody, { color: colors.mutedOnBrand }]}>
-          This immediately confirms your seat on {routeLabel}
-          {params.departureDate ? `, ${shortDate(params.departureDate)}` : ''}. This action can't be undone.
-        </Text>
-        {!!actionError && (
-          <Text style={[styles.noPasses, { color: colors.coral }]}>{actionError}</Text>
-        )}
-        {!canConfirm && (
-          <Text style={[styles.noPasses, { color: colors.coral }]}>
-            You don't have any passes — tap Buy More above to get one.
-          </Text>
-        )}
-        <PrimaryButton
-          label="Confirm — Use Skip the Line Pass"
-          testID={demoMode ? 'full-app-demo-confirm-pass' : undefined}
-          onPress={handleConfirm}
-          loading={isPending}
-          disabled={!canConfirm}
-          style={{ marginTop: 4 }}
-        />
-        <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()} activeOpacity={0.7}>
-          <Text style={[styles.cancelBtnText, { color: colors.mutedOnBrand }]}>Cancel</Text>
-        </TouchableOpacity>
-      </View>
+      <Modal
+        visible={!overlayPhase}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        navigationBarTranslucent
+        onRequestClose={() => router.back()}
+      >
+        <Pressable
+          style={[styles.modalBackdrop, { backgroundColor: colors.backgroundMid + 'CC' }]}
+          onPress={() => router.back()}
+          accessibilityLabel="Dismiss pass confirmation"
+        >
+          <Pressable
+            style={[styles.sheet, { backgroundColor: colors.backgroundMid, borderColor: colors.textOnBrand + '18', paddingBottom: bottomPad + 16 }]}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View style={[styles.sheetHandle, { backgroundColor: colors.mutedOnBrand + '66' }]} />
+            <Text style={[styles.sheetTitle, { color: colors.textOnBrand }]}>Use 1 Skip the Line Pass?</Text>
+            <Text style={[styles.sheetBody, { color: colors.mutedOnBrand }]}>
+              This immediately confirms your seat on {routeLabel}
+              {params.departureDate ? `, ${shortDate(params.departureDate)}` : ''}. This action can't be undone.
+            </Text>
+            {!!actionError && (
+              <Text style={[styles.noPasses, { color: colors.coral }]}>{actionError}</Text>
+            )}
+            {!canConfirm && (
+              <Text style={[styles.noPasses, { color: colors.coral }]}>
+                You don't have any passes — tap Buy More above to get one.
+              </Text>
+            )}
+            <PrimaryButton
+              label="Confirm — Use Skip the Line Pass"
+              testID={demoMode ? 'full-app-demo-confirm-pass' : undefined}
+              onPress={handleConfirm}
+              loading={isPending}
+              disabled={!canConfirm}
+              style={{ marginTop: 4 }}
+            />
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()} activeOpacity={0.7}>
+              <Text style={[styles.cancelBtnText, { color: colors.mutedOnBrand }]}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -224,7 +243,7 @@ export default function SkipLinePassScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   top: { flex: 1, paddingHorizontal: 22, gap: 16 },
-  title: { fontFamily: 'Inter_700Bold', fontSize: 24, lineHeight: 31 },
+  title: { fontFamily: 'Inter_700Bold', fontSize: 23, lineHeight: 30, letterSpacing: -0.35 },
   body: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21 },
   balanceCard: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -234,11 +253,14 @@ const styles = StyleSheet.create({
   balanceValue: { fontFamily: 'Inter_700Bold', fontSize: 20 },
   buyMoreBtn: { borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9 },
   buyMoreText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
-    borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1,
-    paddingHorizontal: 22, paddingTop: 22, gap: 12,
+    borderTopLeftRadius: 26, borderTopRightRadius: 26, borderWidth: 1,
+    paddingHorizontal: 22, paddingTop: 13, gap: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowRadius: 24, shadowOpacity: 0.24, elevation: 16,
   },
-  sheetTitle: { fontFamily: 'Inter_700Bold', fontSize: 17 },
+  sheetHandle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 2, marginBottom: 7 },
+  sheetTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, letterSpacing: -0.2 },
   sheetBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19 },
   noPasses: { fontFamily: 'Inter_500Medium', fontSize: 13 },
   cancelBtn: { alignItems: 'center', paddingVertical: 8 },
