@@ -440,3 +440,68 @@ test("authenticated cache keys isolate both accounts and API environments", () =
   assert.notDeepEqual(devAccountA, prodAccountA);
   assert.throws(() => mainBluebirdAuthenticatedQueryKey("development", "  ", "trips"), /member ID/i);
 });
+
+test("referral contract calls use only the documented Main API paths and typed request bodies", async () => {
+  const requests = [];
+  const api = createMainBluebirdApiIntegration({
+    configuration: development,
+    tokenProvider: tokenProvider("development"),
+    fetcher: async (url, init) => {
+      const parsed = new URL(url);
+      requests.push({ path: parsed.pathname, method: init.method, body: init.body, authorization: init.headers.Authorization });
+      if (parsed.pathname === "/api/me/invite-code") {
+        return jsonResponse({ code: "BB-MEMBER7", inviteUrl: "https://invite.example.test/join/BB-MEMBER7" });
+      }
+      if (parsed.pathname === "/api/me/referrals") {
+        return jsonResponse({ friendsActivated: 3, creditEarnedCents: 300000, creditAppliedCents: 50000, balanceCents: 250000 });
+      }
+      if (parsed.pathname === "/api/invites/validate") {
+        return jsonResponse({ valid: true, code: "BB-FRIEND2" });
+      }
+      if (parsed.pathname === "/api/membership/preview-pricing") {
+        return jsonResponse({ totalCents: 125000, discountCents: 50000 });
+      }
+      return jsonResponse({ error: "not found" }, 404);
+    },
+  });
+
+  assert.deepEqual(await api.authenticated.getInviteCode(), {
+    code: "BB-MEMBER7",
+    inviteUrl: "https://invite.example.test/join/BB-MEMBER7",
+  });
+  assert.deepEqual(await api.authenticated.getReferrals(), {
+    friendsActivated: 3,
+    creditEarnedCents: 300000,
+    creditAppliedCents: 50000,
+    balanceCents: 250000,
+  });
+  assert.deepEqual(await api.authenticated.validateInvite({ code: " bb-friend2 " }), {
+    valid: true,
+    code: "BB-FRIEND2",
+  });
+  assert.deepEqual(await api.authenticated.previewMembershipPricing({ tier: "plus", inviteCode: "bb-friend2" }), {
+    totalCents: 125000,
+    discountCents: 50000,
+  });
+  assert.deepEqual(requests.map(({ path, method, body }) => ({ path, method, body })), [
+    { path: "/api/me/invite-code", method: "GET", body: undefined },
+    { path: "/api/me/referrals", method: "GET", body: undefined },
+    { path: "/api/invites/validate", method: "POST", body: JSON.stringify({ code: "BB-FRIEND2" }) },
+    { path: "/api/membership/preview-pricing", method: "POST", body: JSON.stringify({ tier: "plus", inviteCode: "BB-FRIEND2" }) },
+  ]);
+  assert.ok(requests.every((request) => request.authorization === "Bearer fresh-clerk-token"));
+});
+
+test("an unavailable referral contract fails closed without a legacy endpoint retry", async () => {
+  const paths = [];
+  const api = createMainBluebirdApiIntegration({
+    configuration: development,
+    tokenProvider: tokenProvider("development"),
+    fetcher: async (url) => {
+      paths.push(new URL(url).pathname);
+      return jsonResponse({ error: "contract unavailable" }, 404);
+    },
+  });
+  await assert.rejects(api.authenticated.getInviteCode());
+  assert.deepEqual(paths, ["/api/me/invite-code"]);
+});

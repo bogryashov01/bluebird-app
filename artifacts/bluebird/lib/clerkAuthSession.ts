@@ -85,6 +85,9 @@ export function shouldRedirectClerkRoute(
     return false;
   }
   if (group === '(auth)' && (route === 'splash' || route === 'welcome')) return false;
+  // Referral codes are available to signed-in non-members as well as members.
+  // The referral screen itself requires a valid Clerk session for account data.
+  if (group === 'referral' && segments.length === 1) return false;
   // This one account route is explicitly user-opened and reads only the
   // authenticated user's API profile; it does not grant member capabilities.
   if (group === 'account' && route === 'bluebird-profile') return false;

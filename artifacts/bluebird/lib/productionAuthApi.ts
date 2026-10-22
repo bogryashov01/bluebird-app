@@ -221,6 +221,25 @@ export interface ProductionMembership {
   metaPurchase?: Nullable<{ eventId: string; valueCents?: Nullable<number>; currency: string }>;
 }
 
+export interface ProductionInviteCode {
+  code: string;
+  inviteUrl: string;
+}
+
+export interface ProductionReferralStatistics {
+  friendsActivated: number;
+  creditEarnedCents: number;
+  creditAppliedCents: number;
+  balanceCents: number;
+}
+
+export interface ProductionInviteValidation {
+  valid: boolean;
+  code: string;
+}
+
+export type ProductionMembershipPricingPreview = Readonly<Record<string, unknown>>;
+
 export interface ProductionTripLegSummary {
   id: number;
   originAirport: string;
@@ -509,6 +528,10 @@ export const PRODUCTION_AUTH_PATHS = {
   me: '/me',
   profile: '/me/profile',
   membership: '/membership',
+  inviteCode: '/me/invite-code',
+  referrals: '/me/referrals',
+  validateInvite: '/invites/validate',
+  previewMembershipPricing: '/membership/preview-pricing',
   trips: '/trips',
   phoneVerificationStart: '/me/phone-verification/start',
   phoneVerificationCheck: '/me/phone-verification/check',
@@ -575,6 +598,42 @@ function nullableEnum<T extends string>(
 function stringArray(value: unknown, field: string): string[] {
   if (!Array.isArray(value)) return schemaFailure(field);
   return value.map((item, index) => stringValue(item, `${field}[${index}]`));
+}
+
+function parseInviteCode(value: unknown): ProductionInviteCode {
+  const raw = objectValue(value, 'inviteCode');
+  const code = stringValue(raw.code, 'inviteCode.code');
+  const inviteUrl = stringValue(raw.inviteUrl, 'inviteCode.inviteUrl');
+  if (!/^BB-[A-Z0-9][A-Z0-9-]{1,31}$/.test(code) || !inviteUrl.trim()) {
+    return schemaFailure('inviteCode');
+  }
+  return { code, inviteUrl };
+}
+
+function parseReferralStatistics(value: unknown): ProductionReferralStatistics {
+  const raw = objectValue(value, 'referrals');
+  const statistics = {
+    friendsActivated: integerValue(raw.friendsActivated, 'referrals.friendsActivated'),
+    creditEarnedCents: integerValue(raw.creditEarnedCents, 'referrals.creditEarnedCents'),
+    creditAppliedCents: integerValue(raw.creditAppliedCents, 'referrals.creditAppliedCents'),
+    balanceCents: integerValue(raw.balanceCents, 'referrals.balanceCents'),
+  };
+  if (Object.values(statistics).some((amount) => amount < 0)) return schemaFailure('referrals.nonNegative');
+  return statistics;
+}
+
+function parseInviteValidation(value: unknown): ProductionInviteValidation {
+  const raw = objectValue(value, 'inviteValidation');
+  const code = stringValue(raw.code, 'inviteValidation.code');
+  if (!/^BB-[A-Z0-9][A-Z0-9-]{1,31}$/.test(code)) return schemaFailure('inviteValidation.code');
+  return {
+    valid: booleanValue(raw.valid, 'inviteValidation.valid'),
+    code,
+  };
+}
+
+function parseMembershipPricingPreview(value: unknown): ProductionMembershipPricingPreview {
+  return Object.freeze({ ...objectValue(value, 'membershipPricingPreview') });
 }
 
 function numberArray(value: unknown, field: string): number[] {
@@ -1397,6 +1456,41 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
     },
     getMembership: (requestOptions?: ProductionRequestOptions) =>
       request(PRODUCTION_AUTH_PATHS.membership, 'GET', parseMembership, requestOptions),
+    getInviteCode: (requestOptions?: ProductionRequestOptions) =>
+      request(PRODUCTION_AUTH_PATHS.inviteCode, 'GET', parseInviteCode, requestOptions),
+    getReferrals: (requestOptions?: ProductionRequestOptions) =>
+      request(PRODUCTION_AUTH_PATHS.referrals, 'GET', parseReferralStatistics, requestOptions),
+    validateInvite: (
+      data: { code: string },
+      requestOptions?: ProductionRequestOptions,
+    ) => {
+      const code = data?.code.trim().toUpperCase();
+      if (!code || !/^BB-[A-Z0-9][A-Z0-9-]{1,31}$/.test(code)) schemaFailure('inviteValidation.code');
+      return request(
+        PRODUCTION_AUTH_PATHS.validateInvite,
+        'POST',
+        parseInviteValidation,
+        requestOptions,
+        { code },
+      );
+    },
+    previewMembershipPricing: (
+      data: { tier: MembershipTier; inviteCode?: string },
+      requestOptions?: ProductionRequestOptions,
+    ) => {
+      if (!data || !['base', 'plus'].includes(data.tier)) schemaFailure('membershipPricingPreview.tier');
+      const inviteCode = data.inviteCode?.trim().toUpperCase();
+      if (inviteCode && !/^BB-[A-Z0-9][A-Z0-9-]{1,31}$/.test(inviteCode)) {
+        schemaFailure('membershipPricingPreview.inviteCode');
+      }
+      return request(
+        PRODUCTION_AUTH_PATHS.previewMembershipPricing,
+        'POST',
+        parseMembershipPricingPreview,
+        requestOptions,
+        { tier: data.tier, ...(inviteCode ? { inviteCode } : {}) },
+      );
+    },
     listTrips: (requestOptions?: ProductionRequestOptions) =>
       request(PRODUCTION_AUTH_PATHS.trips, 'GET', parseTrips, requestOptions),
     getEmptyLegQueue: (emptyLegId: number, requestOptions?: ProductionRequestOptions) =>

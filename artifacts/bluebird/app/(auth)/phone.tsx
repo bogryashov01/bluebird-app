@@ -11,6 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import { useRequestLoginCode } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
+import { usePendingReferralCode } from '@/hooks/usePendingReferralCode';
 
 /**
  * Formats the phone input while typing. US-style numbers get (XXX) XXX-XXXX;
@@ -32,7 +33,10 @@ export default function PhoneScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const params = useLocalSearchParams<{ referralCode?: string }>();
-  const referralCode = typeof params.referralCode === 'string' ? params.referralCode : '';
+  const { code: referralCode, ready: referralCodeReady, error: referralStorageError } =
+    usePendingReferralCode(params.referralCode);
+  const routeReferralCode = typeof params.referralCode === 'string' ? params.referralCode : '';
+  const referralCodeForNavigation = referralCode || routeReferralCode;
   const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +50,7 @@ export default function PhoneScreen() {
             // Demo: the raw code stands in for a delivered SMS.
             demoCode: data.demoCode ?? '',
             cooldown: String(data.resendCooldownSeconds ?? 30),
-            referralCode,
+            ...(referralCodeForNavigation ? { referralCode: referralCodeForNavigation } : {}),
           },
         });
       },
@@ -65,7 +69,7 @@ export default function PhoneScreen() {
   }
 
   const handleContinue = () => {
-    if (!valid || requestCode.isPending) return;
+    if (!valid || requestCode.isPending || !referralCodeReady || referralStorageError) return;
     setError(null);
     requestCode.mutate({ data: { phone } });
   };
@@ -122,16 +126,17 @@ export default function PhoneScreen() {
             testID="phone-input"
           />
           {error && <Text style={[styles.errorText, { color: colors.destructive }]}>{error}</Text>}
+        {referralStorageError ? <Text style={[styles.errorText, { color: colors.destructive }]}>{referralStorageError}</Text> : null}
         </View>
 
         <TouchableOpacity
           style={[
             styles.submitBtn,
             { backgroundColor: colors.primary },
-            (!valid || requestCode.isPending) && styles.submitBtnDisabled,
+            (!valid || requestCode.isPending || !referralCodeReady || !!referralStorageError) && styles.submitBtnDisabled,
           ]}
           onPress={handleContinue}
-          disabled={!valid || requestCode.isPending}
+          disabled={!valid || requestCode.isPending || !referralCodeReady || !!referralStorageError}
           activeOpacity={0.8}
           testID="send-code-button"
         >

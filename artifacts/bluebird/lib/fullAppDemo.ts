@@ -45,6 +45,7 @@ export function isFullAppDemoAllowedRoute(pathname: string, segments: readonly s
   const normalizedPath = pathname.replace(/^\/bluebird(?:\/|$)/, '/').replace(/\/+$/, '') || '/';
   const isAllowedPath = (path: string) =>
     path === '/' ||
+    path === '/referral' ||
     /^\/(?:discover|membership|profile|trips)(?:\/index)?$/.test(path) ||
     /^\/demo\/flight\/[1-9]\d*$/.test(path) ||
     /^\/flight\/[1-9]\d*$/.test(path) ||
@@ -68,6 +69,7 @@ export function isFullAppDemoAllowedRoute(pathname: string, segments: readonly s
   if (route === '(tabs)') {
     return ['index', 'discover', 'membership', 'profile', 'trips'].includes(segments[1] ?? '');
   }
+  if (route === 'referral' && segments.length === 1) return true;
   if (route === 'membership') {
     return (segments[1] === 'plans' && segments.length === 2) ||
       (segments[1] === 'mock-preview' &&

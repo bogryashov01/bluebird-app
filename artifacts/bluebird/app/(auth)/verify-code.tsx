@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Platform, Pressable, Alert, Image,
+  ActivityIndicator, Platform, Pressable, Image,
 } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -12,6 +12,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
+import { usePendingReferralCode } from '@/hooks/usePendingReferralCode';
 
 const CODE_LENGTH = 6;
 
@@ -21,7 +22,10 @@ export default function VerifyCodeScreen() {
   const { signIn, setPendingRegistrationGrant } = useAuth();
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<{ phone?: string; demoCode?: string; cooldown?: string; referralCode?: string }>();
+  const pendingReferral = usePendingReferralCode(params.referralCode);
   const phone = typeof params.phone === 'string' ? params.phone : '';
+  const referralCodeForNavigation = pendingReferral.code ||
+    (typeof params.referralCode === 'string' ? params.referralCode : '');
   const initialCooldown = Number(params.cooldown) > 0 ? Number(params.cooldown) : 30;
 
   const [code, setCode] = useState('');
@@ -50,7 +54,7 @@ export default function VerifyCodeScreen() {
           setPendingRegistrationGrant(data.registrationGrant);
           router.replace({
             pathname: '/(auth)/complete-registration',
-            params: typeof params.referralCode === 'string' ? { referralCode: params.referralCode } : {},
+            params: referralCodeForNavigation ? { referralCode: referralCodeForNavigation } : {},
           });
           return;
         }
@@ -63,16 +67,6 @@ export default function VerifyCodeScreen() {
         }
         await signIn(data.token, data.user as any);
         queryClient.clear();
-        if (data.referralFeedback) {
-          const messages = {
-            invalid_code: 'That referral code is not valid, so no passes were added.',
-            self_referral: 'You cannot use your own referral code, so no passes were added.',
-            already_used: 'Referral passes are for friends creating a new account, so no additional passes were added.',
-          } as const;
-          const message = messages[data.referralFeedback];
-          if (Platform.OS === 'web') window.alert(`Signed in\n\n${message}`);
-          else Alert.alert('Signed in', message);
-        }
         router.replace('/(tabs)/discover');
       },
       onError: (err: any) => {
@@ -111,7 +105,6 @@ export default function VerifyCodeScreen() {
         data: {
           phone,
           code: digits,
-          ...(typeof params.referralCode === 'string' ? { referralCode: params.referralCode } : {}),
         },
       });
     }
@@ -137,8 +130,8 @@ export default function VerifyCodeScreen() {
             ? router.back()
             : router.replace({
                 pathname: '/(auth)/phone',
-                params: typeof params.referralCode === 'string'
-                  ? { referralCode: params.referralCode }
+                params: referralCodeForNavigation
+                  ? { referralCode: referralCodeForNavigation }
                   : {},
               })
         )}

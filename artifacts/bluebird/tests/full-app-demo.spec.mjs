@@ -109,6 +109,12 @@ test("the regular Bluebird tabs and flight detail work in the identity-free demo
   await page.getByRole("tab", { name: /Membership/ }).click();
   await expect(page.getByTestId("full-app-demo-membership")).toContainText("Base");
   await expect(page.getByTestId("full-app-demo-membership")).toContainText("Active");
+  await page.getByTestId("membership-referral-program").click();
+  await expect(page.getByTestId("referral-screen")).toBeVisible();
+  await expect(page.getByText("Give $500,", { exact: false })).toBeVisible();
+  await expect(page.getByTestId("referral-code")).toHaveText("BB-PAUL2026");
+  await page.goBack();
+  await expect(page.getByTestId("full-app-demo-membership")).toContainText("Base");
 
   await page.getByRole("tab", { name: /Profile/ }).click();
   await expect(page.getByTestId("full-app-demo-profile")).toContainText("Sample profile");
@@ -134,6 +140,53 @@ test("the regular Bluebird tabs and flight detail work in the identity-free demo
   await expect(page.getByTestId("full-app-demo-denied")).toBeVisible();
   expectAnonymousReadOnlyTraffic(requests);
   expect(externalWrites).toEqual([]);
+});
+
+test("referral code sharing, local activation, and persisted statistics stay local in Phone Preview", async ({ page }) => {
+  const requests = trackProductionRequests(page);
+  const externalWrites = [];
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: async (payload) => { window.__bluebirdSharePayload = payload; },
+    });
+  });
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() !== "GET" && !["127.0.0.1", "localhost"].includes(url.hostname)) {
+      externalWrites.push(`${request.method()} ${url.hostname}${url.pathname}`);
+    }
+  });
+  await mockProduction(page, async ({ path }) => {
+    if (path === "/api/empty-legs") return { body: [liveFlight] };
+    if (path === "/api/empty-legs/98765") return { body: liveFlight };
+    if (path.startsWith("/api/airports")) return { body: [] };
+    return { status: 404, body: { error: "not found" } };
+  });
+
+  await page.goto("/referral");
+  await expect(page.getByTestId("referral-statistics")).toContainText("Friends Activated");
+  await expect(page.getByTestId("referral-statistics")).toContainText("$2,000.00");
+  await expect(page.getByTestId("referral-statistics")).toContainText("$250.00");
+  await expect(page.getByTestId("referral-statistics")).toContainText("$1,750.00");
+
+  await page.getByTestId("copy-referral-code").click();
+  await expect(page.getByTestId("copy-referral-code")).toContainText("Copied");
+  await page.getByTestId("copy-referral-link").click();
+  await expect(page.getByTestId("copy-referral-link")).toContainText("Copied");
+  await page.getByTestId("share-referral").click();
+  await expect.poll(() => page.evaluate(() => window.__bluebirdSharePayload?.url)).toBe(
+    "https://bluebird.co/join/BB-PAUL2026",
+  );
+
+  await page.getByTestId("simulate-referral-activation").click();
+  await expect(page.getByTestId("referral-statistics")).toContainText("$3,000.00");
+  await expect(page.getByTestId("referral-statistics")).toContainText("$2,750.00");
+  await page.reload();
+  await expect(page.getByTestId("referral-statistics")).toContainText("3");
+  await expect(page.getByTestId("referral-statistics")).toContainText("$3,000.00");
+  expect(externalWrites).toEqual([]);
+  expect(requests.some((request) => /\/api\/me\/(?:invite-code|referrals)/.test(request.path))).toBe(false);
 });
 
 test("domestic live-flight queue, local pass purchase, win, and My Flights persist without backend mutations", async ({ page }) => {

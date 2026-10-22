@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGetMembership } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
@@ -389,6 +390,22 @@ export default function MembershipScreen() {
               </TouchableOpacity>
             ) : null}
           </View>
+          <TouchableOpacity
+            testID="membership-referral-program"
+            accessibilityRole="button"
+            onPress={() => router.push('/referral' as any)}
+            style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          >
+            <View style={styles.inlineFeatureRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.usageTitle, { color: colors.textOnSurface }]}>Referral Program</Text>
+                <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 6 }]}>
+                  Give a friend $500 off membership and earn referral credit after activation.
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={20} color={colors.primary} />
+            </View>
+          </TouchableOpacity>
           {plansQuery.isLoading ? (
             <View
               style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
@@ -892,6 +909,7 @@ export default function MembershipScreen() {
           {rows.map((row, i) => (
             <TouchableOpacity
               key={row.label}
+              testID={row.label === 'Referral Program' ? 'membership-referral-program' : undefined}
               activeOpacity={0.7}
               onPress={row.onPress}
               style={[styles.linkRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.separator }]}

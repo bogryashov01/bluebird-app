@@ -48,6 +48,7 @@ test("explicit demo URLs are recognized for release denial", () => {
   assert.equal(isFullAppDemoAllowedRoute("/", []), true);
   assert.equal(isFullAppDemoAllowedRoute("/bluebird/", ["bluebird"]), true);
   assert.equal(isFullAppDemoAllowedRoute("/membership/plans", ["membership", "plans"]), true);
+  assert.equal(isFullAppDemoAllowedRoute("/referral", ["referral"]), true);
   for (const path of [
     "/flight/98765",
     "/flight/policy",

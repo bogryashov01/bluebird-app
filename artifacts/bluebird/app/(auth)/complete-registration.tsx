@@ -19,13 +19,14 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
+import { usePendingReferralCode } from '@/hooks/usePendingReferralCode';
 
 export default function CompleteRegistrationScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<{ referralCode?: string }>();
-  const referralCode = typeof params.referralCode === 'string' ? params.referralCode.trim().toUpperCase() : '';
+  const { code: referralCode } = usePendingReferralCode(params.referralCode);
   const { signIn, pendingRegistrationGrant, setPendingRegistrationGrant } = useAuth();
   const registrationGrant = pendingRegistrationGrant ?? '';
   const [firstName, setFirstName] = useState('');
@@ -45,22 +46,6 @@ export default function CompleteRegistrationScreen() {
       onSuccess: async (data) => {
         await signIn(data.token, data.user as any);
         queryClient.clear();
-        if (data.referralFeedback) {
-          const messages = {
-            reward_granted: 'Your Skip the Line Pass is ready. Your friend received one too.',
-            invalid_code: 'That referral code is not valid, so no passes were added.',
-            self_referral: 'You cannot use your own referral code, so no passes were added.',
-            already_used: 'This account has already used a referral code, so no additional passes were added.',
-          } as const;
-          const message = messages[data.referralFeedback as keyof typeof messages];
-          if (message) {
-            if (Platform.OS === 'web') window.alert(`Account created\n\n${message}`);
-            else {
-              const { Alert } = await import('react-native');
-              Alert.alert('Account created', message);
-            }
-          }
-        }
         router.replace('/(auth)/welcome-tour');
       },
       onError: (err: any) => {
@@ -87,7 +72,6 @@ export default function CompleteRegistrationScreen() {
         firstName: trimmedFirst,
         lastName: trimmedLast,
         email: normalizedEmail,
-        ...(referralCode ? { referralCode } : {}),
       },
     });
   };
