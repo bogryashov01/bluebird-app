@@ -107,3 +107,7 @@ export function useFullAppDemoQueue() {
   }
   return context;
 }
+
+export function useFullAppDemoQueueOptional() {
+  return React.useContext(FullAppDemoQueueContext);
+}

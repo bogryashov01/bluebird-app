@@ -247,7 +247,7 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
             />
             <View style={[styles.featuredBadge, { backgroundColor: colors.primary }]}>
               <Text style={[styles.featuredBadgeText, { color: colors.primaryForeground, fontFamily: 'Inter_700Bold' }]}>
-                FEATURED EMPTY LEG
+                {featured.source === 'local' ? 'SAMPLE FLIGHT' : 'FEATURED EMPTY LEG'}
               </Text>
             </View>
             <View style={styles.featuredBottom}>
@@ -579,7 +579,9 @@ export default function DiscoverScreen() {
 
   const renderCard = ({ item }: { item: FlightView }) => (
     <TouchableOpacity
-      testID={item.source === 'production' ? `production-flight-card-${item.id}` : undefined}
+      testID={item.source === 'production'
+        ? `production-flight-card-${item.id}`
+        : demoMode ? `full-app-demo-fixture-card-${item.id}` : undefined}
       style={[styles.card, { backgroundColor: colors.card }]}
       activeOpacity={0.8}
       onPress={() => openFlightDetails(item, demoMode)}
@@ -607,6 +609,14 @@ export default function DiscoverScreen() {
         <Text style={[styles.cardMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
           {[item.aircraftType, formatDateTime(item)].filter(Boolean).join(' · ')}
         </Text>
+        {item.source === 'local' && (
+          <Text
+            testID={`full-app-demo-fixture-badge-${item.id}`}
+            style={[styles.cardMeta, { color: colors.primary, fontFamily: 'Inter_600SemiBold', marginTop: 4 }]}
+          >
+            SAMPLE DATA · QUEUE DISABLED
+          </Text>
+        )}
       </View>
       <Feather name="chevron-right" size={17} color={colors.mutedForeground} />
     </TouchableOpacity>

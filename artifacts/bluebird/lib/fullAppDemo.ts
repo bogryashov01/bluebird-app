@@ -1,5 +1,7 @@
 import profileFixture from '../fixtures/full-app-demo-me.json';
 import membershipFixture from '../fixtures/production-membership-base-active.json';
+import memberOverviewFixture from '../fixtures/full-app-demo-membership.json';
+import type { Membership } from '@workspace/api-client-react';
 import type { ProductionCurrentUser, ProductionMembership } from './productionAuthApi';
 
 export interface FullAppDemoConfiguration {
@@ -26,6 +28,10 @@ export function getFullAppDemoProfile(): ProductionCurrentUser {
 
 export function getFullAppDemoMembership(): ProductionMembership {
   return membershipFixture as ProductionMembership;
+}
+
+export function getFullAppDemoMemberOverview(): Membership {
+  return memberOverviewFixture as Membership;
 }
 
 export function isFullAppDemoRoute(pathname: string, segments: readonly string[]): boolean {

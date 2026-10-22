@@ -37,7 +37,7 @@ assert.equal(flights[0].id, "98765");
 assert.equal(flights[0].source, "production");
 const detail = await fetchFullAppDemoFlight(98765, { fetcher });
 assert.equal(detail.fromAirport, "SEA");
-const queue = await fetchFullAppDemoQueue(98765, { fetcher });
+const queue = await fetchFullAppDemoQueue(detail, { fetcher });
 assert.deepEqual(queue, [{
   position: 1,
   initials: "AB",
@@ -73,7 +73,7 @@ assert.deepEqual(requests.map(({ url, init }) => ({
 
 for (const status of [401, 403]) {
   await assert.rejects(
-    fetchFullAppDemoQueue(98765, {
+    fetchFullAppDemoQueue(detail, {
       fetcher: async () => new Response(JSON.stringify({ error: "blocked" }), { status }),
     }),
     (error) => error.status === status,
@@ -81,7 +81,7 @@ for (const status of [401, 403]) {
 }
 
 await assert.rejects(
-  fetchFullAppDemoQueue(98765, {
+  fetchFullAppDemoQueue(detail, {
     fetcher: async () => new Response(JSON.stringify([{
       position: 1,
       initials: "AB",
@@ -94,5 +94,28 @@ await assert.rejects(
   /public queue/,
 );
 
-assert.throws(() => fetchFullAppDemoQueue(0), /positive numeric production flight ID/);
+assert.throws(
+  () => fetchFullAppDemoQueue({ ...detail, source: "local" }, { fetcher }),
+  /live Production flight/,
+);
+assert.throws(
+  () => fetchFullAppDemoQueue({ ...detail, id: "0" }, { fetcher }),
+  /positive numeric production flight ID/,
+);
+
+const fixtureFlights = await fetchFullAppDemoFlights({
+  fetcher: async () => new Response(JSON.stringify({ error: "unavailable" }), { status: 503 }),
+});
+assert.ok(fixtureFlights.length > 0);
+assert.equal(fixtureFlights[0].source, "local");
+assert.equal(fixtureFlights[0].fromAirport, "SEA");
+const fallbackDetail = await fetchFullAppDemoFlight(98765, {
+  fetcher: async () => new Response(JSON.stringify({ error: "unavailable" }), { status: 503 }),
+});
+assert.equal(fallbackDetail.source, "local");
+assert.equal(fallbackDetail.toAirport, "SFO");
+assert.throws(
+  () => fetchFullAppDemoQueue(fallbackDetail, { fetcher }),
+  /live Production flight/,
+);
 console.log("full-app demo live-read tests passed");

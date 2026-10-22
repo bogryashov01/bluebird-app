@@ -59,22 +59,29 @@ test("explicit demo URLs are recognized for release denial", () => {
 
 test("the demo provider is identity-free and privileged sample controls stay disabled", () => {
   const authSource = readFileSync(new URL("../context/AuthContext.tsx", import.meta.url), "utf8");
-  const viewsSource = readFileSync(new URL("../components/FullAppDemoViews.tsx", import.meta.url), "utf8");
   const demoFlightSource = readFileSync(new URL("../app/demo/flight/[id].tsx", import.meta.url), "utf8");
+  const flightDetailSource = readFileSync(new URL("../app/flight/[id].tsx", import.meta.url), "utf8");
+  const profileSource = readFileSync(new URL("../app/(tabs)/profile/index.tsx", import.meta.url), "utf8");
+  const membershipSource = readFileSync(new URL("../app/(tabs)/membership/index.tsx", import.meta.url), "utf8");
+  const tripsSource = readFileSync(new URL("../app/(tabs)/trips/index.tsx", import.meta.url), "utf8");
   const layoutSource = readFileSync(new URL("../app/_layout.tsx", import.meta.url), "utf8");
   const queueStoreSource = readFileSync(new URL("../lib/fullAppDemoQueue.tsx", import.meta.url), "utf8");
   assert.match(authSource, /export function DemoAuthProvider/);
   assert.match(authSource, /token: null,\s+user: null,\s+isLoading: false,\s+demoMode: true/);
   assert.match(authSource, /confirmClerkProfileCompletion: \(\) => false/);
-  assert.match(viewsSource, /label: 'Admin flag', hint: String\(profile\.isAdmin\), disabled: true/);
-  assert.match(viewsSource, /label: 'Concierge flag', hint: String\(profile\.isConcierge\), disabled: true/);
+  assert.match(profileSource, /label: 'Personal Information',[\s\S]*?disabled: demoMode/);
+  assert.match(profileSource, /label: 'AI Concierge', disabled: demoMode/);
+  assert.match(membershipSource, /enabled: !demoMode/);
+  assert.match(tripsSource, /<TripCard/);
+  assert.match(tripsSource, /SIMULATED QUEUE/);
+  assert.match(demoFlightSource, /import FlightDetailScreen from '\.\.\/\.\.\/flight\/\[id\]'/);
+  assert.match(flightDetailSource, /if \(demoMode\) \{/);
+  assert.match(flightDetailSource, /if \(isProductionQueueVerified\(\)\)/);
   assert.doesNotMatch(demoFlightSource, /useCancelQueueEntry|useCancelTrip|useCreateNetworkingRequest|useMutation|joinEmptyLegQueue|leaveEmptyLegQueue/);
   assert.match(layoutSource, /name="demo\/flight\/\[id\]"/);
   assert.match(layoutSource, /<FullAppDemoQueueProvider>/);
   assert.match(queueStoreSource, /FULL_APP_DEMO_QUEUE_STORAGE_KEY/);
   assert.doesNotMatch(queueStoreSource, /useMutation|joinEmptyLegQueue|leaveEmptyLegQueue|useCancelQueueEntry/);
-  assert.match(viewsSource, /SIMULATED QUEUE/);
-  assert.match(viewsSource, /not bookings/);
 });
 
 test("the full-app demo root precedes ordinary auth and Clerk mounts", () => {

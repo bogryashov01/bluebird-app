@@ -33,7 +33,7 @@ import {
   loadClerkBluebirdMembership,
 } from '@/lib/clerkBluebirdProfile';
 import type { ClerkBluebirdMembershipLoadResult } from '@/lib/clerkBluebirdProfile';
-import { FullAppDemoMembershipView } from '@/components/FullAppDemoViews';
+import { getFullAppDemoMemberOverview } from '@/lib/fullAppDemo';
 
 // ── Tier config ───────────────────────────────────────────────────────────────
 const TIER_META: Record<string, { label: string }> = {
@@ -75,7 +75,7 @@ export default function MembershipScreen() {
   const { user, authMode, demoMode } = useAuth();
   const clerkSession = useClerkAuthSnapshot();
   const mainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
-  const localDemoFlow = isLocalFlightReadMode();
+  const localDemoFlow = demoMode || isLocalFlightReadMode();
   const memberQueryEnabled = !demoMode && isLegacyMemberQueryEnabled({
     authMode,
     localDemoFlow,
@@ -201,9 +201,7 @@ export default function MembershipScreen() {
     return () => controller.abort();
   }, [authMode, loadClerkMembership, ...membershipRequestDependencies]);
   const plansQuery = useProductionMembershipPlans({ enabled: !demoMode });
-  const mem = membership;
-
-  if (demoMode) return <FullAppDemoMembershipView />;
+  const mem = demoMode ? getFullAppDemoMemberOverview() : membership;
 
   if (authMode === 'clerk') {
     const visibleState = 'clerkUserId' in clerkMembershipState &&
@@ -683,7 +681,10 @@ export default function MembershipScreen() {
   ];
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.offWhite }]}>
+    <View
+      testID={demoMode ? 'full-app-demo-membership' : undefined}
+      style={[styles.root, { backgroundColor: colors.offWhite }]}
+    >
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: topPad + 16, paddingBottom: botPad + 80 }]}
         showsVerticalScrollIndicator={false}
@@ -692,6 +693,11 @@ export default function MembershipScreen() {
         <Text style={[styles.headerName, { color: colors.textOnSurface }]} numberOfLines={1}>
           Membership
         </Text>
+        {demoMode ? (
+          <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
+            Sample membership · Base · Active · Local demo data only
+          </Text>
+        ) : null}
         <View style={[styles.tierPill, { backgroundColor: colors.backgroundMid }]}>
           <Text style={[styles.tierPillText, { color: colors.primaryForeground }]} numberOfLines={1}>
             {tierLabel} Member

@@ -17,6 +17,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
+import { fetchFullAppDemoFlight } from '@/lib/fullAppDemoLiveReads';
+import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
 import { shouldUseLocalFlightReadMode } from '@/lib/clerkAuthSession';
 import {
   getProductionQueueReadOnlyMessage,
@@ -129,10 +131,15 @@ export default function FlightDetailScreen() {
     authMode,
     clerkSignedIn,
     clerkMemberResolution,
+    demoMode,
   } = useAuth();
   const queryClient = useQueryClient();
-  const localReadMode = shouldUseLocalFlightReadMode(authMode, isLocalFlightReadMode());
+  const localReadMode = !demoMode && shouldUseLocalFlightReadMode(authMode, isLocalFlightReadMode());
+  const demoQueue = useFullAppDemoQueueOptional();
   const numericFlightId = parseProductionFlightId(id);
+  const [demoQueueActionPending, setDemoQueueActionPending] = useState(false);
+  const [demoQueueActionError, setDemoQueueActionError] = useState<string | null>(null);
+  const demoQueueIndex = demoQueue?.entries.findIndex((entry) => entry.flightId === String(numericFlightId)) ?? -1;
   const [directionsTarget, setDirectionsTarget] = useState<DirectionsTarget | null>(null);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const [networkMessage, setNetworkMessage] = useState('');
@@ -149,17 +156,23 @@ export default function FlightDetailScreen() {
   });
   const productionFlightQuery = useQuery({
     queryKey: ['production-empty-leg', numericFlightId],
-    queryFn: ({ signal }) => fetchProductionFlight(numericFlightId!, { signal }),
-    enabled: !localReadMode && numericFlightId !== null,
+    queryFn: ({ signal }) => demoMode
+      ? fetchFullAppDemoFlight(numericFlightId!, { signal })
+      : fetchProductionFlight(numericFlightId!, { signal }),
+    enabled: (demoMode || !localReadMode) && numericFlightId !== null,
     retry: shouldRetryProductionRead,
     retryDelay: productionReadRetryDelay,
   });
   const flight: FlightView | undefined = localReadMode
     ? (localFlightQuery.data ? mapLocalFlight(localFlightQuery.data) : undefined)
-    : findProductionFlightById(
-      productionFlightQuery.data ? [productionFlightQuery.data] : undefined,
-      numericFlightId,
-    );
+    : demoMode
+      ? productionFlightQuery.data?.id === String(numericFlightId)
+        ? productionFlightQuery.data
+        : undefined
+      : findProductionFlightById(
+        productionFlightQuery.data ? [productionFlightQuery.data] : undefined,
+        numericFlightId,
+      );
   const localAirportsQuery = useListAirports({
     query: { enabled: localReadMode && !!flight },
   });
@@ -513,6 +526,89 @@ export default function FlightDetailScreen() {
 
   // ── CTA footer rendering — branched on my-status ─────────────────────────
   function renderCTA() {
+    if (demoMode) {
+      if (f.source !== 'production') {
+        return renderUnavailableCTA(
+          'Sample flight · queue disabled',
+          'This local fixture keeps the regular flight detail screen populated. Queue simulation is available only for live flights.',
+        );
+      }
+      if (!demoQueue || !demoQueue.hydrated) {
+        return (
+          <View style={styles.statusLoadingRow} testID="full-app-demo-queue-loading">
+            <ActivityIndicator color={colors.primary} size="small" />
+          </View>
+        );
+      }
+      const queued = demoQueueIndex >= 0;
+      const updateDemoQueue = async () => {
+        if (demoQueueActionPending || demoQueue.storageError) return;
+        setDemoQueueActionError(null);
+        const confirmed = await confirmDialog(
+          queued ? 'Leave simulated queue?' : 'Join simulated queue?',
+          queued
+            ? 'Your local demo position will be removed. This does not change a real flight queue.'
+            : 'This adds the live flight to My Flights on this device only. No request or booking is sent.',
+          queued ? 'Leave Queue' : 'Join Queue',
+          queued,
+        );
+        if (!confirmed) return;
+        setDemoQueueActionPending(true);
+        try {
+          if (queued) await demoQueue.leaveFlight(f.id);
+          else await demoQueue.joinFlight(f);
+        } catch (error) {
+          setDemoQueueActionError(error instanceof Error ? error.message : 'The simulated queue could not be updated.');
+        } finally {
+          setDemoQueueActionPending(false);
+        }
+      };
+      return (
+        <>
+          {queued ? (
+            <View testID="full-app-demo-queue-status" style={[styles.queuePositionCard, { backgroundColor: colors.primary + '12' }]}>
+              <Text style={[styles.queuePositionLabel, { color: colors.mutedForegroundLight }]}>Simulated queue position</Text>
+              <Text style={[styles.queuePositionNumber, { color: colors.textOnSurface }]}>#{demoQueueIndex + 1}</Text>
+            </View>
+          ) : (
+            <View style={[styles.unavailableBadge, { backgroundColor: colors.muted }]}>
+              <Text style={[styles.unavailableBadgeText, { color: colors.mutedForegroundLight }]}>Demo queue · local only</Text>
+            </View>
+          )}
+          {demoQueue.storageError ? (
+            <Text testID="full-app-demo-queue-storage-error" style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}>
+              {demoQueue.storageError}
+            </Text>
+          ) : null}
+          {demoQueueActionError ? (
+            <Text testID="full-app-demo-queue-action-error" style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}>
+              {demoQueueActionError}
+            </Text>
+          ) : null}
+          <TouchableOpacity
+            testID={queued ? 'full-app-demo-leave-queue' : 'full-app-demo-join-queue'}
+            accessibilityRole="button"
+            disabled={demoQueueActionPending || !!demoQueue.storageError}
+            onPress={() => void updateDemoQueue()}
+            style={[
+              queued ? styles.leaveQueueBtn : styles.viewTripBtn,
+              queued ? { borderColor: colors.border } : { backgroundColor: colors.primary },
+              (demoQueueActionPending || !!demoQueue.storageError) && { opacity: 0.6 },
+            ]}
+          >
+            {demoQueueActionPending
+              ? <ActivityIndicator color={queued ? colors.mutedForegroundLight : colors.primaryForeground} size="small" />
+              : <Text style={[
+                queued ? styles.leaveQueueBtnText : styles.viewTripBtnText,
+                { color: queued ? colors.mutedForegroundLight : colors.primaryForeground },
+              ]}>{queued ? 'Leave simulated queue' : 'Join simulated queue'}</Text>}
+          </TouchableOpacity>
+          <Text style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}>
+            Queue participation is stored locally on this device. It is not a booking or account change.
+          </Text>
+        </>
+      );
+    }
     // Keep production queue actions behind the runtime verification gate.
     // Until it opens, this stays a public read-only details screen.
     if (readOnlyProduction) {
@@ -843,6 +939,14 @@ export default function FlightDetailScreen() {
         </View>
 
         <View style={styles.flightHeader}>
+          {demoMode && f.source === 'local' ? (
+            <Text
+              testID="full-app-demo-flight-fixture-badge"
+              style={[styles.flightInfoLabel, { color: colors.primary }]}
+            >
+              SAMPLE FLIGHT · QUEUE DISABLED
+            </Text>
+          ) : null}
           {!!aircraftName && (
             <Text style={[styles.aircraftName, { color: colors.textOnSurface }]} numberOfLines={1}>
               {aircraftName}
@@ -928,7 +1032,7 @@ export default function FlightDetailScreen() {
           accessibilityRole="button"
           accessibilityLabel="Skip the Line Pass details"
           accessibilityHint="Opens pass eligibility and availability information"
-          disabled={skipLineNavigationPending}
+          disabled={skipLineNavigationPending || demoMode}
           onPress={openSkipLinePass}
           activeOpacity={0.78}
           style={[
@@ -1124,15 +1228,17 @@ export default function FlightDetailScreen() {
       {!directionsTarget && (
         <View style={[styles.ctaBar, { backgroundColor: colors.offWhite, borderTopColor: colors.separator, paddingBottom: botPad + 12 }]}>
           {renderCTA()}
-          <TouchableOpacity
-            style={styles.conciergeLink}
-            onPress={() => router.push({ pathname: '/concierge' })}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Ask AI Concierge"
-          >
-            <Text style={[styles.conciergeLinkText, { color: colors.mutedForegroundLight }]}>Ask AI Concierge</Text>
-          </TouchableOpacity>
+          {!demoMode && (
+            <TouchableOpacity
+              style={styles.conciergeLink}
+              onPress={() => router.push({ pathname: '/concierge' })}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Ask AI Concierge"
+            >
+              <Text style={[styles.conciergeLinkText, { color: colors.mutedForegroundLight }]}>Ask AI Concierge</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
     </View>

@@ -1,0 +1,14 @@
+{
+  "tier": "base",
+  "linePassCount": 1,
+  "renewalDate": "2027-01-01T00:00:00.000Z",
+  "features": [
+    "Access to published empty-leg flights",
+    "Join flight queues",
+    "Member support"
+  ],
+  "totalSavedUsd": 18400,
+  "lifetimeCompletedFlights": 3,
+  "annualFlightAllowance": 6,
+  "flightsThisYear": 2
+}

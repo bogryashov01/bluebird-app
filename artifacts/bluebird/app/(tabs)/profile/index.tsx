@@ -22,7 +22,7 @@ import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConf
 import { getClerkBluebirdProfileEffectDependencies, isClerkBluebirdProfileResultCurrent } from '@/lib/clerkBluebirdProfile';
 import { loadClerkPersonalInfo } from '@/lib/clerkPersonalInfo';
 import type { ProductionUserProfile } from '@/lib/productionAuthApi';
-import { FullAppDemoProfileView } from '@/components/FullAppDemoViews';
+import { getFullAppDemoProfile } from '@/lib/fullAppDemo';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; hint: string }[] = [
   { value: 'light',  label: 'Light',  hint: 'Always use the light theme' },
@@ -95,7 +95,7 @@ export default function ProfileScreen() {
   const { preference } = useTheme();
   const clerkSession = useClerkAuthSnapshot();
   const mainApiConfiguration = getMainBluebirdApiConfigurationOrNull();
-  const localDemoFlow = isLocalFlightReadMode();
+  const localDemoFlow = demoMode || isLocalFlightReadMode();
   const memberQueryEnabled = !demoMode && isLegacyMemberQueryEnabled({
     authMode,
     localDemoFlow,
@@ -214,8 +214,6 @@ export default function ProfileScreen() {
   const notifList = (notifications as Notification[]) ?? [];
   const recentActivity = notifList.slice(0, 5);
   const unreadCount = notifList.filter((n) => !n.read).length;
-
-  if (demoMode) return <FullAppDemoProfileView />;
 
   if (authMode === 'clerk') {
     const visibleProfileState = 'clerkUserId' in profileLoadState &&
@@ -389,14 +387,16 @@ export default function ProfileScreen() {
     );
   }
 
-  const initials    = user?.name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) ?? '?';
+  const demoProfile = demoMode ? getFullAppDemoProfile() : null;
+  const displayName = (user?.name ?? [demoProfile?.firstName, demoProfile?.lastName].filter(Boolean).join(' ')) || 'Member';
+  const initials    = displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?';
   const accountPhotoUrl = resolvePhotoUrl(user?.photoUrl);
   const tierLabel   = {
     none:      'Not a member yet',
     base:      'Base Member',
     plus:      'Plus Member',
     concierge: 'Family/Corporate Member',
-  }[user?.membershipTier ?? 'base'] ?? 'Base Member';
+  }[user?.membershipTier ?? (demoProfile?.memberTier === 'plus' ? 'plus' : 'base')] ?? 'Base Member';
   const memberSince = user?.createdAt
     ? new Date(user.createdAt).getFullYear()
     : new Date().getFullYear();
@@ -412,7 +412,10 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
+    <View
+      testID={demoMode ? 'full-app-demo-profile-screen' : undefined}
+      style={[styles.container, { backgroundColor: colors.offWhite }]}
+    >
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -420,6 +423,11 @@ export default function ProfileScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
+        {demoMode ? (
+          <Text testID="full-app-demo-profile" style={[styles.profileReadNote, { color: colors.mutedForegroundLight }]}>
+            Sample profile · local demo data only
+          </Text>
+        ) : null}
         {/* ── Avatar + name ── */}
         <View style={styles.avatarRow}>
           {accountPhotoUrl
@@ -428,7 +436,7 @@ export default function ProfileScreen() {
               <Text style={[styles.avatarText, { color: colors.textOnBrand }]}>{initials}</Text>
             </View>}
           <View>
-            <Text style={[styles.name, { color: colors.textOnSurface }]}>{user?.name ?? 'Member'}</Text>
+            <Text style={[styles.name, { color: colors.textOnSurface }]}>{displayName}</Text>
             <Text style={[styles.memberSince, { color: colors.mutedForegroundLight }]}>
               {tierLabel} since {memberSince}
             </Text>
@@ -441,20 +449,29 @@ export default function ProfileScreen() {
           rows={[
             {
               label: 'Personal Information',
+              testID: demoMode ? 'full-app-demo-disabled-profile-row' : undefined,
+              hint: demoMode ? 'Unavailable in demo' : undefined,
+              disabled: demoMode,
               onPress: () => router.push('/account/personal-info' as any),
             },
             {
               label: membership?.family ? 'Manage Family/Corporate' : 'Family/Corporate',
-              hint: membership?.family ? 'members & shared passes' : 'household membership',
+              hint: demoMode
+                ? 'Unavailable in demo'
+                : membership?.family ? 'members & shared passes' : 'household membership',
+              disabled: demoMode,
               onPress: () => router.push('/membership/family' as any),
             },
             {
               label: 'Payment Methods',
+              hint: demoMode ? 'Unavailable in demo' : undefined,
+              disabled: demoMode,
               onPress: () => router.push('/account/payment-methods' as any),
             },
             {
               label: 'Passengers',
-              hint: 'saved traveler details',
+              hint: demoMode ? 'Unavailable in demo' : 'saved traveler details',
+              disabled: demoMode,
               onPress: () => router.push('/account/passengers' as any),
             },
           ]}
@@ -471,7 +488,8 @@ export default function ProfileScreen() {
             },
             {
               label: 'Notification Settings',
-              hint: 'incl. travel preferences',
+              hint: demoMode ? 'Unavailable in demo' : 'incl. travel preferences',
+              disabled: demoMode,
               onPress: () => router.push('/notifications'),
               right: (
                 <View style={styles.rowRight}>
@@ -488,20 +506,24 @@ export default function ProfileScreen() {
             },
             {
               label: 'Community',
+              disabled: demoMode,
               onPress: () => router.push('/community'),
             },
             {
               label: 'Connections',
-              hint: 'members you’ve met',
+              hint: demoMode ? 'Unavailable in demo' : 'members you’ve met',
+              disabled: demoMode,
               onPress: () => router.push({ pathname: '/(tabs)/connections' as any, params: { view: 'connections' } }),
             },
             {
               label: 'Messages',
-              hint: 'your recent conversations',
+              hint: demoMode ? 'Unavailable in demo' : 'your recent conversations',
+              disabled: demoMode,
               onPress: () => router.push({ pathname: '/(tabs)/connections' as any, params: { view: 'messages' } }),
             },
             {
               label: 'Connection Requests',
+              disabled: demoMode,
               onPress: () => router.push('/networking/requests' as any),
             },
           ]}
@@ -511,10 +533,10 @@ export default function ProfileScreen() {
         <SettingsGroup
           title="Support"
           rows={[
-            { label: 'AI Concierge', onPress: () => router.push('/concierge') },
-            { label: 'Help Center',  onPress: () => router.push('/support/help-center' as any) },
-            { label: 'Referral',     onPress: () => router.push('/referral') },
-            { label: 'Legal',        onPress: () => router.push('/support/legal' as any) },
+            { label: 'AI Concierge', disabled: demoMode, onPress: () => router.push('/concierge') },
+            { label: 'Help Center', disabled: demoMode, onPress: () => router.push('/support/help-center' as any) },
+            { label: 'Referral', disabled: demoMode, onPress: () => router.push('/referral') },
+            { label: 'Legal', disabled: demoMode, onPress: () => router.push('/support/legal' as any) },
           ]}
         />
 
@@ -523,6 +545,7 @@ export default function ProfileScreen() {
           rows={[
             {
               label: 'Sign Out',
+              disabled: demoMode,
               onPress: async () => {
                 const ok = await confirmDialog(
                   'Sign out?',

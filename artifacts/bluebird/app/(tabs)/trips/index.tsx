@@ -14,7 +14,7 @@ import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { TripAvailabilityState } from '@/components/TripAvailabilityState';
 import { PRODUCTION_AUTH_UNAVAILABLE_MESSAGE } from '@/lib/productionAuthState';
 import { ClerkTrips } from '@/components/ClerkTrips';
-import { FullAppDemoMyQueueView } from '@/components/FullAppDemoViews';
+import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
 
 // ─── Aircraft images (same matching logic as Discover) ────────────────────────
 import { useAuth } from '@/context/AuthContext';
@@ -133,6 +133,7 @@ export default function TripsScreen() {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<ActiveTab>('upcoming');
   const { user, updateUser, authMode, demoMode } = useAuth();
+  const demoQueue = useFullAppDemoQueueOptional();
   const queryClient = useQueryClient();
   const localDemoFlow = !demoMode && authMode === 'legacy' && isLocalFlightReadMode();
   const memberQueryEnabled = !demoMode && isLegacyMemberQueryEnabled({
@@ -212,7 +213,87 @@ export default function TripsScreen() {
   ];
 
   if (demoMode) {
-    return <FullAppDemoMyQueueView />;
+    const demoEntries = demoQueue?.entries ?? [];
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]} testID="full-app-demo-trips">
+        <View style={[styles.header, { paddingTop: topPad + 24 }]}>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>My Flights</Text>
+          <View style={[styles.tabRow, { backgroundColor: colors.card, borderRadius: 14 }]}>
+            {TABS.map((tab) => (
+              <TouchableOpacity
+                key={tab.id}
+                testID={`full-app-demo-trips-tab-${tab.id}`}
+                style={[styles.tabBtn, activeTab === tab.id && { backgroundColor: colors.primary }]}
+                onPress={() => setActiveTab(tab.id)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: activeTab === tab.id }}
+              >
+                <Text style={[
+                  styles.tabLabel,
+                  { color: activeTab === tab.id ? colors.primaryForeground : colors.mutedForeground },
+                ]}>{tab.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={[styles.emptyBody, { color: colors.mutedForeground, marginBottom: 16 }]}>
+            Local queue simulations only. These entries are not bookings and do not change a real queue.
+          </Text>
+        </View>
+        {!demoQueue?.hydrated ? (
+          <View testID="full-app-demo-my-queue-loading" style={styles.centered}>
+            <ActivityIndicator color={colors.primary} size="large" />
+          </View>
+        ) : activeTab === 'pending' && demoEntries.length > 0 ? (
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 100 }]}
+            showsVerticalScrollIndicator={false}
+          >
+            {demoEntries.map(({ flightId, flight }, index) => (
+              <TripCard
+                key={flightId}
+                colors={colors}
+                flight={{
+                  fromCity: flight.fromCity || flight.fromAirport || '',
+                  toCity: flight.toCity || flight.toAirport || '',
+                  aircraftType: flight.aircraftTypeName || flight.aircraftType || 'Private aircraft',
+                  departureDate: flight.departureDate || '',
+                  departureTime: flight.departureTime || '',
+                }}
+                badge={`SIMULATED QUEUE · #${index + 1}`}
+                badgeBlue={false}
+                onPress={() => router.push({ pathname: '/demo/flight/[id]' as any, params: { id: flightId } })}
+              />
+            ))}
+          </ScrollView>
+        ) : (
+          <View
+            style={styles.empty}
+            testID={activeTab === 'pending' ? 'full-app-demo-my-queue-empty' : `full-app-demo-${activeTab}-empty`}
+          >
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+              {activeTab === 'pending'
+                ? 'No simulated flights yet'
+                : activeTab === 'upcoming' ? 'No upcoming bookings' : 'No past trips'}
+            </Text>
+            <Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>
+              {activeTab === 'pending'
+                ? 'Join a live flight’s simulated queue in Discover to see it here.'
+                : 'Bookings and completed trips are unavailable in this local demo.'}
+            </Text>
+            {activeTab === 'pending' && (
+              <TouchableOpacity
+                testID="full-app-demo-my-queue-discover"
+                style={[styles.discoverBtn, { backgroundColor: colors.primary }]}
+                onPress={() => router.replace('/(tabs)/discover')}
+              >
+                <Text style={[styles.discoverBtnText, { color: colors.primaryForeground }]}>Browse Flights</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
+    );
   }
   if (authMode === 'clerk') {
     return <ClerkTrips />;

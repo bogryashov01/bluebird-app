@@ -2,12 +2,15 @@ import {
   fetchProductionFlight,
   fetchProductionFlights,
   fetchProductionJson,
+  mapProductionFlight,
   parseProductionFlightId,
+  ProductionReadCancelledError,
   ProductionReadSchemaError,
   type FlightView,
   type ReadRequestOptions,
 } from './productionFlights';
 import type { ProductionPublicQueueEntry } from './productionAuthApi';
+import localFlightFixtures from '../fixtures/full-app-demo-flights.json';
 
 export type FullAppDemoPublicQueueEntry = Omit<ProductionPublicQueueEntry, 'isViewer'>;
 
@@ -58,20 +61,44 @@ function parsePublicQueue(value: unknown): FullAppDemoPublicQueueEntry[] {
 }
 
 export function fetchFullAppDemoFlights(options: ReadRequestOptions = {}): Promise<FlightView[]> {
-  return fetchProductionFlights(options);
+  return fetchProductionFlights(options).then((flights) => {
+    if (flights.length > 0) return flights;
+    return getLocalDemoFlights();
+  }).catch((error: unknown) => {
+    if (options.signal?.aborted || error instanceof ProductionReadCancelledError) throw error;
+    return getLocalDemoFlights();
+  });
 }
 
-export function fetchFullAppDemoFlight(
+export async function fetchFullAppDemoFlight(
   id: number,
   options: ReadRequestOptions = {},
 ): Promise<FlightView> {
-  return fetchProductionFlight(id, options);
+  try {
+    return await fetchProductionFlight(id, options);
+  } catch (error) {
+    if (options.signal?.aborted || error instanceof ProductionReadCancelledError) throw error;
+    const fixture = getLocalDemoFlights().find((flight) => flight.id === String(id));
+    if (fixture) return fixture;
+    throw error;
+  }
+}
+
+function getLocalDemoFlights(): FlightView[] {
+  return localFlightFixtures.map((flight) => ({
+    ...mapProductionFlight(flight),
+    source: 'local',
+  }));
 }
 
 export function fetchFullAppDemoQueue(
-  id: number,
+  flight: FlightView,
   options: ReadRequestOptions = {},
 ): Promise<FullAppDemoPublicQueueEntry[]> {
+  if (flight.source !== 'production') {
+    throw new Error('A live Production flight is required for its public queue read.');
+  }
+  const id = parseProductionFlightId(flight.id);
   if (parseProductionFlightId(id) === null) {
     throw new Error('A positive numeric production flight ID is required.');
   }

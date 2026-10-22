@@ -1,15 +1,24 @@
 import { expect, test } from "@playwright/test";
 
-const demoFlight = {
+const liveFlight = {
   id: 98765,
   status: "published",
   originAirport: "SEA",
   originCity: "Seattle",
+  originTz: "America/Los_Angeles",
   destinationAirport: "SFO",
   destinationCity: "San Francisco",
-  originTz: "America/Los_Angeles",
-  departureTime: "2026-11-01T13:00:00.000Z",
+  destinationTz: "America/Los_Angeles",
+  departureTime: "2026-11-01T16:00:00.000Z",
+  arrivalTime: "2026-11-01T18:05:00.000Z",
+  durationHours: 2.1,
+  aircraftType: "Light jet",
+  aircraftTypeName: "Cessna Citation CJ3",
+  aircraftTypeCode: "C525B",
   aircraftGalleryUrls: [],
+  queueCount: 3,
+  totalPrice: 7800,
+  isInternational: false,
 };
 
 function trackProductionRequests(page) {
@@ -29,24 +38,28 @@ function trackProductionRequests(page) {
   return requests;
 }
 
-async function routeProductionApi(page, respond) {
+async function mockProduction(page, response) {
   await page.route("https://bluebirdjets.com/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    if (url.hostname === "bluebirdjets.com") {
-      const result = await respond({ path: url.pathname, method: request.method() });
-      return route.fulfill({
-        status: result.status ?? 200,
-        headers: { "access-control-allow-origin": "*" },
-        contentType: "application/json",
-        body: JSON.stringify(result.body ?? {}),
-      });
-    }
-    return route.continue();
+    const result = await response({ path: url.pathname, method: request.method() });
+    return route.fulfill({
+      status: result.status ?? 200,
+      headers: { "access-control-allow-origin": "*" },
+      contentType: "application/json",
+      body: JSON.stringify(result.body ?? {}),
+    });
   });
 }
 
-test("demo preserves its local identity fixtures while opening live flights read-only", async ({ page }) => {
+function expectAnonymousReadOnlyTraffic(requests) {
+  expect(requests.length).toBeGreaterThan(0);
+  expect(requests.every((request) =>
+    request.method === "GET" && !request.hasAuthorization && !request.hasCookie,
+  )).toBe(true);
+}
+
+test("the regular Bluebird tabs and flight detail work in the identity-free demo", async ({ page }) => {
   const requests = trackProductionRequests(page);
   const externalWrites = [];
   page.on("request", (request) => {
@@ -55,71 +68,49 @@ test("demo preserves its local identity fixtures while opening live flights read
       externalWrites.push(`${request.method()} ${url.hostname}${url.pathname}`);
     }
   });
-  await routeProductionApi(page, async ({ path }) => {
-    if (path === "/api/empty-legs") return { body: [demoFlight] };
-    if (path === "/api/empty-legs/98765") return { body: demoFlight };
-    if (path === "/api/empty-legs/98765/queue") {
-      return { status: 403, body: { error: "forbidden" } };
-    }
+  await mockProduction(page, async ({ path }) => {
+    if (path === "/api/empty-legs") return { body: [liveFlight] };
+    if (path === "/api/empty-legs/98765") return { body: liveFlight };
+    if (path.startsWith("/api/airports")) return { body: [] };
     return { status: 404, body: { error: "not found" } };
   });
+
   await page.goto("/");
   await expect(page.getByTestId("full-app-demo-banner")).toContainText("DEMO MODE");
-  await expect(page.getByRole("tab", { name: /Membership/ })).toBeVisible();
+  await expect(page.getByTestId("production-flight-card-98765")).toBeVisible();
+  await expect(page.getByRole("tab", { name: /Discover/ })).toBeVisible();
 
   await page.getByRole("tab", { name: /Membership/ }).click();
   await expect(page.getByTestId("full-app-demo-membership")).toContainText("Base");
   await expect(page.getByTestId("full-app-demo-membership")).toContainText("Active");
-  await page.getByTestId("full-app-demo-browse-plans").click();
-  await expect(page.getByTestId("full-app-demo-plans")).toContainText("Plan catalog unavailable");
-  await expect(page.getByTestId("full-app-demo-banner")).toBeVisible();
-  await page.getByTestId("header-back").click();
-  await expect(page.getByTestId("full-app-demo-membership")).toBeVisible();
 
   await page.getByRole("tab", { name: /Profile/ }).click();
-  await expect(page.getByTestId("full-app-demo-profile")).toContainText("Paul Mulko");
-  await expect(page.getByTestId("full-app-demo-profile")).toContainText("Admin flag");
-  await expect(page.getByTestId("full-app-demo-profile")).toContainText("Concierge flag");
-  await expect(page.getByTestId("full-app-demo-admin-flag")).toHaveAttribute("aria-disabled", "true");
-  await expect(page.getByTestId("full-app-demo-concierge-flag")).toHaveAttribute("aria-disabled", "true");
-  await expect(page.getByTestId("full-app-demo-banner")).toBeVisible();
+  await expect(page.getByTestId("full-app-demo-profile")).toContainText("Sample profile");
+  await expect(page.getByText("Paul Mulko")).toBeVisible();
+  await expect(page.getByText("Appearance", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("full-app-demo-disabled-profile-row")).toHaveAttribute("aria-disabled", "true");
+
+  await page.getByRole("tab", { name: /Trips/ }).click();
+  await expect(page.getByTestId("full-app-demo-upcoming-empty")).toContainText("No upcoming bookings");
+  await page.getByTestId("full-app-demo-trips-tab-pending").click();
+  await expect(page.getByTestId("full-app-demo-my-queue-empty")).toContainText("No simulated flights yet");
 
   await page.getByRole("tab", { name: /Discover/ }).click();
   await expect(page.getByTestId("production-flight-card-98765")).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Map" })).toHaveCount(0);
-  await expect(page.getByTestId("full-app-demo-banner")).toBeVisible();
   await page.getByTestId("production-flight-card-98765").click();
-  await expect(page.getByTestId("full-app-demo-flight-summary")).toContainText("SEA → SFO");
-  await expect(page.getByTestId("full-app-demo-queue-endpoint-error"))
-    .toContainText("GET /api/empty-legs/98765/queue — HTTP 403");
-  await expect(page.getByTestId("full-app-demo-banner")).toBeVisible();
-  await page.getByTestId("full-app-demo-flight-back").click();
-  await expect(page.getByTestId("production-flight-card-98765")).toBeVisible();
-
-  await page.getByRole("tab", { name: /Trips/ }).click();
-  await expect(page.getByTestId("full-app-demo-my-queue-empty")).toContainText("No simulated flights yet");
-  await expect(page.getByTestId("full-app-demo-banner")).toBeVisible();
-
-  await page.goto("/concierge");
-  await expect(page.getByTestId("full-app-demo-denied")).toContainText("Demo unavailable");
-  await page.goto("/demo/concierge");
-  await expect(page.getByTestId("full-app-demo-denied")).toContainText("Demo unavailable");
+  await expect(page.getByTestId("flight-detail-route")).toContainText("SEA → SFO");
+  await expect(page.getByTestId("flight-info-aircraft-type")).toContainText("Cessna Citation CJ3");
+  await expect(page.getByTestId("full-app-demo-join-queue")).toBeVisible();
+  await expect(page.getByTestId("flight-skip-line-pass-card")).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByText("Ask AI Concierge", { exact: true })).toHaveCount(0);
 
   await page.goto("/flight/98765");
-  await expect(page.getByTestId("full-app-demo-denied")).toContainText("Demo unavailable");
-  expect(requests).toHaveLength(3);
-  expect(requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
-    "GET /api/empty-legs",
-    "GET /api/empty-legs/98765",
-    "GET /api/empty-legs/98765/queue",
-  ]);
-  expect(requests.every((request) =>
-    request.method === "GET" && !request.hasAuthorization && !request.hasCookie,
-  )).toBe(true);
+  await expect(page.getByTestId("full-app-demo-denied")).toBeVisible();
+  expectAnonymousReadOnlyTraffic(requests);
   expect(externalWrites).toEqual([]);
 });
 
-test("demo queue is local, persists the live flight projection, and never sends a mutation", async ({ page }) => {
+test("live queue join and leave stay local and appear consistently on My Flights", async ({ page }) => {
   const requests = trackProductionRequests(page);
   const externalWrites = [];
   page.on("request", (request) => {
@@ -128,118 +119,67 @@ test("demo queue is local, persists the live flight projection, and never sends 
       externalWrites.push(`${request.method()} ${url.hostname}${url.pathname}`);
     }
   });
-  await routeProductionApi(page, async ({ path, method }) => {
+  await mockProduction(page, async ({ path, method }) => {
     if (method !== "GET") return { status: 405, body: { error: "read only" } };
-    if (path === "/api/empty-legs") return { body: [demoFlight] };
-    if (path === "/api/empty-legs/98765") return { body: demoFlight };
-    if (path === "/api/empty-legs/98765/queue") return { body: [] };
+    if (path === "/api/empty-legs") return { body: [liveFlight] };
+    if (path === "/api/empty-legs/98765") return { body: liveFlight };
+    if (path.startsWith("/api/airports")) return { body: [] };
     return { status: 404, body: { error: "not found" } };
   });
 
   await page.goto("/");
   await page.getByTestId("production-flight-card-98765").click();
-  await expect(page.getByTestId("full-app-demo-flight-summary")).toContainText("SEA → SFO");
-  await expect(page.getByTestId("full-app-demo-join-queue")).toBeEnabled();
+  page.once("dialog", (dialog) => dialog.accept());
   await page.getByTestId("full-app-demo-join-queue").click();
+  await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("#1");
   await expect(page.getByTestId("full-app-demo-leave-queue")).toBeVisible();
-  await expect(page.getByTestId("full-app-demo-local-queue"))
-    .toContainText("Simulated locally for live flight #98765");
-  await expect(page.getByTestId("full-app-demo-local-queue")).toContainText("not a booking");
 
   await page.reload();
-  await expect(page.getByTestId("full-app-demo-flight-summary")).toContainText("SEA → SFO");
+  await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("#1");
   await expect(page.getByTestId("full-app-demo-leave-queue")).toBeVisible();
-
-  await page.goto("/");
+  await page.getByTestId("flight-detail-back").click();
   await page.getByRole("tab", { name: /Trips/ }).click();
-  const queueFlight = page.getByTestId("full-app-demo-queue-flight-98765");
-  await expect(queueFlight).toContainText("SIMULATED QUEUE");
-  await expect(queueFlight).toContainText("SEA → SFO");
-  await expect(queueFlight).toContainText("Live flight #98765");
-  await queueFlight.click();
-  await expect(page.getByTestId("full-app-demo-leave-queue")).toBeVisible();
+  await page.getByTestId("full-app-demo-trips-tab-pending").click();
+  const queuedFlight = page.getByTestId("trip-card-open-details");
+  await expect(queuedFlight).toContainText("SIMULATED QUEUE · #1");
+  await expect(queuedFlight).toContainText("Seattle → San Francisco");
+  await queuedFlight.click();
+  await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("#1");
 
+  page.once("dialog", (dialog) => dialog.accept());
   await page.getByTestId("full-app-demo-leave-queue").click();
   await expect(page.getByTestId("full-app-demo-join-queue")).toBeVisible();
-  await page.reload();
-  await expect(page.getByTestId("full-app-demo-join-queue")).toBeVisible();
-  await page.goto("/");
-  await page.getByRole("tab", { name: /Trips/ }).click();
+  await page.getByTestId("flight-detail-back").click();
+  await page.getByTestId("full-app-demo-trips-tab-pending").click();
   await expect(page.getByTestId("full-app-demo-my-queue-empty")).toBeVisible();
 
-  expect(requests.length).toBeGreaterThanOrEqual(3);
-  expect(new Set(requests.map((request) => request.path))).toEqual(new Set([
-    "/api/empty-legs",
-    "/api/empty-legs/98765",
-    "/api/empty-legs/98765/queue",
-  ]));
-  expect(requests.every((request) =>
-    request.method === "GET" && !request.hasAuthorization && !request.hasCookie,
-  )).toBe(true);
+  expectAnonymousReadOnlyTraffic(requests);
   expect(externalWrites).toEqual([]);
 });
 
-test("successful public queue projection never treats a demo profile as the viewer", async ({ page }) => {
+test("failed live flight reads fall back to typed fixture cards and details without queue actions", async ({ page }) => {
   const requests = trackProductionRequests(page);
-  await routeProductionApi(page, async ({ path }) => {
-    if (path === "/api/empty-legs") return { body: [demoFlight] };
-    if (path === "/api/empty-legs/98765") return { body: demoFlight };
-    if (path === "/api/empty-legs/98765/queue") {
-      return {
-        body: [
-          { position: 1, initials: "AB", tier: "base", hasLineSkip: false, isViewer: true },
-          { position: 2, initials: "CD", tier: "plus", hasLineSkip: true, isViewer: false },
-        ],
-      };
+  const externalWrites = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() !== "GET" && !["127.0.0.1", "localhost"].includes(url.hostname)) {
+      externalWrites.push(`${request.method()} ${url.hostname}${url.pathname}`);
     }
+  });
+  await mockProduction(page, async ({ path }) => {
+    if (path.startsWith("/api/empty-legs")) return { status: 503, body: { error: "temporarily unavailable" } };
     return { status: 404, body: { error: "not found" } };
   });
-  await page.goto("/");
-  await page.getByTestId("production-flight-card-98765").click();
-  await expect(page.getByTestId("full-app-demo-queue-entry-1")).toContainText("AB");
-  await expect(page.getByTestId("full-app-demo-queue-entry-1")).toContainText("Position 1");
-  await expect(page.getByTestId("full-app-demo-queue-entry-2")).toContainText("Line skip");
-  await expect(page.getByTestId("full-app-demo-queue")).not.toContainText("isViewer");
-  await expect(page.getByTestId("full-app-demo-queue")).not.toContainText("Paul");
-  await expect(page.getByTestId("full-app-demo-banner")).toBeVisible();
-  expect(requests.every(({ method, hasAuthorization, hasCookie }) =>
-    method === "GET" && !hasAuthorization && !hasCookie,
-  )).toBe(true);
-});
 
-test("queue access denial displays the actual 401 status and exact endpoint", async ({ page }) => {
-  await routeProductionApi(page, async ({ path }) => {
-    if (path === "/api/empty-legs") return { body: [demoFlight] };
-    if (path === "/api/empty-legs/98765") return { body: demoFlight };
-    if (path === "/api/empty-legs/98765/queue") {
-      return { status: 401, body: { error: "unauthorized" } };
-    }
-    return { status: 404, body: { error: "not found" } };
-  });
   await page.goto("/");
-  await page.getByTestId("production-flight-card-98765").click();
-  await expect(page.getByTestId("full-app-demo-queue-endpoint-error"))
-    .toContainText("GET /api/empty-legs/98765/queue — HTTP 401");
-});
-
-test("Discover shows API failure, retry, and live empty states", async ({ page }) => {
-  const requests = trackProductionRequests(page);
-  let inventoryReads = 0;
-  await routeProductionApi(page, async ({ path }) => {
-    if (path !== "/api/empty-legs") return { status: 404, body: { error: "not found" } };
-    inventoryReads += 1;
-    if (inventoryReads === 1) await new Promise((resolve) => setTimeout(resolve, 700));
-    return inventoryReads <= 2
-      ? { status: 503, body: { error: "temporarily unavailable" } }
-      : { body: [] };
-  });
-  await page.goto("/");
-  await expect(page.getByTestId("full-app-demo-discover-loading")).toBeVisible();
-  await expect(page.getByText("Could not load live flights (HTTP 503).")).toBeVisible();
-  await page.getByTestId("discover-flight-retry").click();
-  await expect(page.getByTestId("full-app-demo-flight-empty")).toContainText("No live flights");
-  expect(inventoryReads).toBe(3);
-  expect(requests.every(({ method, hasAuthorization, hasCookie }) =>
-    method === "GET" && !hasAuthorization && !hasCookie,
-  )).toBe(true);
+  const fixtureCard = page.getByTestId("full-app-demo-fixture-card-98765");
+  await expect(fixtureCard).toBeVisible();
+  await expect(page.getByTestId("full-app-demo-fixture-badge-98765")).toContainText("SAMPLE DATA");
+  await fixtureCard.click();
+  await expect(page.getByTestId("flight-detail-route")).toContainText("SEA → SFO");
+  await expect(page.getByTestId("full-app-demo-flight-fixture-badge")).toContainText("QUEUE DISABLED");
+  await expect(page.getByText("Sample flight · queue disabled", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("full-app-demo-join-queue")).toHaveCount(0);
+  expectAnonymousReadOnlyTraffic(requests);
+  expect(externalWrites).toEqual([]);
 });
