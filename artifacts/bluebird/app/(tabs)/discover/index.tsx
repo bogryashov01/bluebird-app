@@ -701,10 +701,10 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   topBar: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingBottom: 18,
+    paddingHorizontal: 20, paddingBottom: 8,
   },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  logoImg: { width: 22, height: 24 },
+  logoImg: { width: 52, height: 41 },
   conciergeBtn: {
     width: 38, height: 38, borderRadius: 19,
     alignItems: 'center', justifyContent: 'center',
