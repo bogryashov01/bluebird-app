@@ -374,12 +374,10 @@ export default function QueueStatusScreen() {
   // Tracks the entry whose pass button is mid-refetch, to disable the button.
   const [checkingPassEntryId, setCheckingPassEntryId] = useState<string | null>(null);
 
-  // Routes to the Skip the Line flow. With ≥1 pass it opens the pass
-  // confirmation sheet; with 0 passes it goes to the buy-pass screen (which
-  // carries the entry so the member lands back on the confirmation after
-  // purchasing). Refetches the entry first — the queue engine may have
-  // auto-confirmed it since the last 10s poll, in which case the screen
-  // simply updates to the confirmed banner instead of navigating.
+  // Routes to the Skip the Line sheet regardless of balance. The sheet
+  // distinguishes an empty balance from pass confirmation; neither dismissal
+  // path performs a queue action. Refetch first because the queue engine may
+  // have auto-confirmed this entry since the last 10s poll.
   const handleUsePass = async (entry: QueueEntry) => {
     if (!localDemoFlow || checkingPassEntryId) return;
     setCheckingPassEntryId(entry.id);
@@ -391,12 +389,7 @@ export default function QueueStatusScreen() {
         // already in the cache, so the screen re-renders to the right state.
         return;
       }
-      const assignedFamilyPasses = membership?.family?.members.find((member) => member.userId === user?.id)?.availablePasses ?? 0;
-      if ((user?.linePassCount ?? 0) + assignedFamilyPasses > 0) {
-        openPassSheet(latest);
-      } else {
-        router.push({ pathname: '/queue/buy-pass', params: entryParams(latest) });
-      }
+      openPassSheet(latest);
     } finally {
       setCheckingPassEntryId(null);
     }
@@ -458,7 +451,7 @@ export default function QueueStatusScreen() {
       bringingPet: '0',
     } : {};
     const openPass = () => router.push({
-      pathname: demoQueue?.passCount ? '/queue/pass' : '/queue/buy-pass',
+      pathname: '/queue/pass',
       params: localFlightParams,
     } as any);
     const leaveLocalEntry = async () => {

@@ -12,7 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPassOverlay';
 import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
-import { useUseLinePassOnQueueEntry } from '@workspace/api-client-react';
+import { useGetMembership, useUseLinePassOnQueueEntry } from '@workspace/api-client-react';
 import { markQueueEntryCelebrated } from '@/lib/queueCelebration';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
@@ -39,8 +39,13 @@ export default function SkipLinePassScreen() {
     departureDate?: string; departureTime?: string; duration?: string;
     aircraftType?: string; flightId?: string;
   }>();
+  const { data: membership } = useGetMembership({ query: { enabled: localDemoFlow && !demoMode } });
   const queryClient = useQueryClient();
-  const passCount = demoMode ? demoQueue?.passCount ?? 0 : user?.linePassCount ?? 0;
+  const assignedFamilyPasses = membership?.family?.members.find((member) => member.userId === user?.id)?.availablePasses ?? 0;
+  const passCount = demoMode
+    ? demoQueue?.passCount ?? 0
+    : (user?.linePassCount ?? 0) + assignedFamilyPasses;
+  const hasPass = passCount > 0;
   const [actionError, setActionError] = useState<string | null>(null);
   // Overlay shown while the pass is applied; null = hidden.
   const [overlayPhase, setOverlayPhase] = useState<ApplyingPassPhase | null>(null);
@@ -51,6 +56,7 @@ export default function SkipLinePassScreen() {
   const [alreadyConfirmed, setAlreadyConfirmed] = useState(false);
   const [demoActionPending, setDemoActionPending] = useState(false);
   const demoEntry = demoQueue?.entries.find((entry) => entry.flightId === params.flightId);
+  const openPurchase = () => router.replace({ pathname: '/queue/buy-pass', params });
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -185,7 +191,7 @@ export default function SkipLinePassScreen() {
           </View>
           <TouchableOpacity
             style={[styles.buyMoreBtn, { backgroundColor: colors.primary + '33' }]}
-            onPress={() => router.push({ pathname: '/queue/buy-pass', params })}
+            onPress={openPurchase}
             activeOpacity={0.8}
           >
             <Text style={[styles.buyMoreText, { color: colors.primaryForeground }]}>Buy More</Text>
@@ -211,28 +217,53 @@ export default function SkipLinePassScreen() {
             onPress={(event) => event.stopPropagation()}
           >
             <View style={[styles.sheetHandle, { backgroundColor: colors.mutedOnBrand + '66' }]} />
-            <Text style={[styles.sheetTitle, { color: colors.textOnBrand }]}>Use 1 Skip the Line Pass?</Text>
-            <Text style={[styles.sheetBody, { color: colors.mutedOnBrand }]}>
-              This immediately confirms your seat on {routeLabel}
-              {params.departureDate ? `, ${shortDate(params.departureDate)}` : ''}. This action can't be undone.
-            </Text>
-            {!!actionError && (
-              <Text style={[styles.noPasses, { color: colors.coral }]}>{actionError}</Text>
+            {hasPass ? (
+              <>
+                <Text style={[styles.sheetTitle, { color: colors.textOnBrand }]}>Use 1 Skip the Line Pass?</Text>
+                <Text style={[styles.sheetBody, { color: colors.mutedOnBrand }]}>
+                  This immediately confirms your seat on {routeLabel}
+                  {params.departureDate ? `, ${shortDate(params.departureDate)}` : ''}. This action can't be undone.
+                </Text>
+                {!!actionError && (
+                  <Text style={[styles.noPasses, { color: colors.coral }]}>{actionError}</Text>
+                )}
+                <PrimaryButton
+                  label="Confirm — Use Skip the Line Pass"
+                  testID={demoMode ? 'full-app-demo-confirm-pass' : undefined}
+                  onPress={handleConfirm}
+                  loading={isPending}
+                  disabled={!canConfirm}
+                  style={{ marginTop: 4 }}
+                />
+              </>
+            ) : (
+              <>
+                <Text
+                  testID={demoMode ? 'full-app-demo-empty-pass-message' : undefined}
+                  style={[styles.sheetTitle, { color: colors.textOnBrand }]}
+                >
+                  No Skip the Line Passes
+                </Text>
+                <Text style={[styles.sheetBody, { color: colors.mutedOnBrand }]}>
+                  You need a pass to skip the line and confirm your seat on {routeLabel}.
+                </Text>
+                {!!actionError && (
+                  <Text style={[styles.noPasses, { color: colors.coral }]}>{actionError}</Text>
+                )}
+                <PrimaryButton
+                  label="Buy More"
+                  testID={demoMode ? 'full-app-demo-empty-buy-more' : undefined}
+                  onPress={openPurchase}
+                  style={{ marginTop: 4 }}
+                />
+              </>
             )}
-            {!canConfirm && (
-              <Text style={[styles.noPasses, { color: colors.coral }]}>
-                You don't have any passes — tap Buy More above to get one.
-              </Text>
-            )}
-            <PrimaryButton
-              label="Confirm — Use Skip the Line Pass"
-              testID={demoMode ? 'full-app-demo-confirm-pass' : undefined}
-              onPress={handleConfirm}
-              loading={isPending}
-              disabled={!canConfirm}
-              style={{ marginTop: 4 }}
-            />
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => router.back()}
+              activeOpacity={0.7}
+              testID={demoMode ? 'full-app-demo-cancel-pass' : undefined}
+            >
               <Text style={[styles.cancelBtnText, { color: colors.mutedOnBrand }]}>Cancel</Text>
             </TouchableOpacity>
           </Pressable>

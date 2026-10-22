@@ -174,20 +174,70 @@ test("domestic live-flight queue, local pass purchase, win, and My Flights persi
   await page.goto("/queue/join?flightId=98765");
   await page.getByTestId("queue-continue-button").click();
   await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("#1");
+  const queueBeforePassFlow = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("bluebird:full-app-demo:queue:v1") ?? "null"),
+  );
+
   await page.getByTestId("full-app-demo-use-pass").click();
-  await expect(page.getByText("Upgrade to Plus Membership")).toBeVisible();
+  await expect(page.getByTestId("full-app-demo-empty-pass-message")).toBeVisible();
+  await expect(page.getByTestId("full-app-demo-empty-pass-message")).toContainText("No Skip the Line Passes");
+  await expect(page.getByTestId("full-app-demo-empty-buy-more")).toBeVisible();
+  await expect(page.getByTestId("full-app-demo-cancel-pass")).toBeVisible();
+  await page.getByTestId("full-app-demo-cancel-pass").click();
+  await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("#1");
+  await expect(page.getByTestId("full-app-demo-pass-balance")).toContainText("0 passes");
+  expect(await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("bluebird:full-app-demo:queue:v1") ?? "null"),
+  )).toEqual(queueBeforePassFlow);
+
+  await page.getByTestId("full-app-demo-use-pass").click();
+  await page.getByTestId("full-app-demo-empty-buy-more").click();
+  await expect(page).toHaveURL(/\/queue\/buy-pass\?/);
+  await expect(page).toHaveURL(/entryId=demo-98765/);
+  await expect(page).toHaveURL(/flightId=98765/);
   await page.getByTestId("full-app-demo-upgrade-plus").click();
   await expect(page).toHaveURL(/membership\/plans/);
   await page.goBack();
   await expect(page.getByTestId("full-app-demo-buy-pass")).toBeVisible();
   await expect(page.getByText("Local demo purchase — no payment or membership change will be made.")).toBeVisible();
+
+  await page.getByTestId("floating-back").last().click();
+  await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("#1");
+  await expect(page.getByTestId("full-app-demo-pass-balance")).toContainText("0 passes");
+  expect(await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("bluebird:full-app-demo:queue:v1") ?? "null"),
+  )).toEqual(queueBeforePassFlow);
+  expect(mutations).toEqual([]);
+
+  await page.getByTestId("full-app-demo-use-pass").click();
+  await page.getByTestId("full-app-demo-empty-buy-more").click();
   await page.getByTestId("full-app-demo-buy-pass").click();
   await expect(page.getByTestId("full-app-demo-confirm-pass")).toBeVisible();
   await expect(page.getByTestId("full-app-demo-pass-balance-confirmation")).toHaveText("1 pass");
+
+  const queueWithPurchasedPass = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("bluebird:full-app-demo:queue:v1") ?? "null"),
+  );
+  await page.getByTestId("full-app-demo-cancel-pass").click();
+  await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("#1");
+  await expect(page.getByTestId("full-app-demo-pass-balance")).toContainText("1 pass");
+  expect(await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("bluebird:full-app-demo:queue:v1") ?? "null"),
+  )).toEqual(queueWithPurchasedPass);
+  expect(mutations).toEqual([]);
+
+  await page.getByTestId("full-app-demo-use-pass").click();
+  await expect(page.getByTestId("full-app-demo-confirm-pass")).toBeVisible();
   await page.getByTestId("full-app-demo-confirm-pass").click();
   await expect(page.getByTestId("pass-celebration")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText("Flight Secured")).toBeVisible();
   await expect(page.getByText("You're confirmed!")).toBeVisible({ timeout: 10_000 });
+  const wonQueueState = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("bluebird:full-app-demo:queue:v1") ?? "null"),
+  );
+  expect(wonQueueState.passCount).toBe(0);
+  expect(wonQueueState.entries).toHaveLength(1);
+  expect(wonQueueState.entries[0]).toMatchObject({ flightId: "98765", status: "won", position: 1 });
   await page.getByLabel("Skip celebration").click();
   await expect(page.getByTestId("pass-celebration")).toHaveCount(0);
 
