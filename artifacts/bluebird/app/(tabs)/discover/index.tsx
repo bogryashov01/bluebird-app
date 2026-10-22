@@ -18,6 +18,7 @@ import { useAuth } from '@/context/AuthContext';
 import { isLegacyMemberQueryEnabled, shouldUseLocalFlightReadMode } from '@/lib/clerkAuthSession';
 import { getGreetingForHour, reconcileFeaturedFlightId } from '@/lib/discoverPresentation';
 import FlightMapView from '@/components/FlightMap';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 import {
   fetchProductionAirports,
   fetchProductionFlights,
@@ -195,11 +196,7 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
       {/* Logo + concierge */}
       <View style={[styles.topBar, { paddingTop: topPad }]}>
         <View style={styles.logoRow}>
-          <Image
-            source={require('@/assets/images/bluebird-bird-mark.png')}
-            style={styles.logoImg}
-            resizeMode="contain"
-          />
+          <BluebirdLogo variant="symbol" size="small" style={styles.logoImg} />
         </View>
         <TouchableOpacity
           style={[styles.conciergeBtn, { backgroundColor: colors.card }]}

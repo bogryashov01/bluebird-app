@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Image, Dimensions, Platform, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Platform, Pressable } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withDelay, withSpring,
   withSequence, Easing, runOnJS, interpolate,
 } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
 import * as Haptics from 'expo-haptics';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const IS_WEB = Platform.OS === 'web';
@@ -181,11 +182,9 @@ export function PassCelebration({ onDone }: Props) {
       <View pointerEvents="none" style={styles.center}>
         <View style={styles.birdWrap}>
           <Animated.View style={[styles.glow, { backgroundColor: colors.primary }, glowStyle]} />
-          <Animated.Image
-            source={require('@/assets/images/bluebird-bird-mark.png')}
-            style={[styles.bird, birdStyle]}
-            resizeMode="contain"
-          />
+          <Animated.View style={[styles.bird, birdStyle]}>
+            <BluebirdLogo variant="symbol" size="large" style={styles.birdLogo} />
+          </Animated.View>
         </View>
         <Animated.View style={[styles.textBlock, textStyle]}>
           <Text style={[styles.headline, { color: colors.textOnBrand }]}>Flight Secured</Text>
@@ -211,7 +210,8 @@ const styles = StyleSheet.create({
   glow: {
     position: 'absolute', width: 140, height: 140, borderRadius: 70,
   },
-  bird: { width: 85, height: 92 },
+  bird: { width: 85, height: 92, alignItems: 'center', justifyContent: 'center' },
+  birdLogo: { width: 85, height: 66 },
   textBlock: { alignItems: 'center', gap: 10 },
   headline: { fontFamily: 'Inter_700Bold', fontSize: 32, textAlign: 'center', letterSpacing: 0.3 },
   subheadline: { fontFamily: 'Inter_400Regular', fontSize: 15, lineHeight: 22, textAlign: 'center' },

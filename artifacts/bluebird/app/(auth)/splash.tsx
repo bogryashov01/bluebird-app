@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Platform, Image, TouchableOpacity, Text } from 'react-native';
+import { View, StyleSheet, Animated, Platform, TouchableOpacity, Text } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 
 export default function SplashScreen() {
   const insets = useSafeAreaInsets();
@@ -36,7 +37,7 @@ export default function SplashScreen() {
     <View style={[styles.container, { backgroundColor: colors.backgroundMid, paddingTop: topPad, paddingBottom: bottomPad }]}>
       <View style={styles.content}>
         <Animated.View style={{ opacity: logoOpacity, transform: [{ scale: logoScale }] }}>
-          <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+          <BluebirdLogo variant="full" size="large" style={styles.logo} />
         </Animated.View>
 
         <Animated.Text style={[styles.tagline, { color: colors.mutedOnBrand, opacity: taglineOpacity }]}>
@@ -124,5 +125,3 @@ const styles = StyleSheet.create({
     width: 20,
   },
 });
-
-const logoSource = require('@/assets/images/bluebird-logo-white.png');

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Platform, Share, Image,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Platform, Share,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import * as Haptics from 'expo-haptics';
 import { PassCelebration } from '@/components/PassCelebration';
 import { addFlightToCalendar } from '@/lib/addToCalendar';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { consumeFlightWinCelebration } from '@/lib/flightWinCelebration';
@@ -107,11 +108,7 @@ export default function FlightConfirmedScreen() {
       >
         {/* Bluebird brand mark (mockup: blue bird instead of a check ring) */}
         <Animated.View style={{ opacity: opacityAnim, transform: [{ scale: scaleAnim }] }}>
-          <Image
-            source={require('@/assets/images/bluebird-bird-mark.png')}
-            style={styles.birdMark}
-            resizeMode="contain"
-          />
+          <BluebirdLogo variant="symbol" size="large" style={styles.birdMark} />
         </Animated.View>
 
         <Animated.View style={{ opacity: opacityAnim, alignItems: 'center', gap: 6 }}>

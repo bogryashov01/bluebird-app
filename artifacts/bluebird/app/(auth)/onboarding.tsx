@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { useListAirports, useUpdateMe } from '@workspace/api-client-react';
 import { AirportMultiSelect } from '@/components/AirportMultiSelect';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
@@ -44,7 +45,7 @@ export default function OnboardingScreen() {
       <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.header}>
         <View style={styles.logoCircle}>
-          <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.logoMark} resizeMode="contain" />
+          <BluebirdLogo variant="symbol" size="small" style={styles.logoMark} />
         </View>
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.textOnBrand }]}>Where do you fly from?</Text>

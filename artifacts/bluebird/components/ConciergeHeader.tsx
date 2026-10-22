@@ -1,8 +1,9 @@
 import React from 'react';
-import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 
 /**
  * Custom stack header for the AI Concierge screen only.
@@ -47,11 +48,7 @@ export function ConciergeHeader({ navigation, back }: ConciergeHeaderProps) {
           <View style={styles.backBtn} />
         )}
         <View style={[styles.avatar, { backgroundColor: colors.backgroundMid }]}>
-          <Image
-            source={require('@/assets/images/bluebird-bird-mark.png')}
-            style={styles.avatarLogo}
-            resizeMode="contain"
-          />
+          <BluebirdLogo variant="symbol" size="small" style={styles.avatarLogo} />
         </View>
         <View style={styles.titleBlock}>
           <Text

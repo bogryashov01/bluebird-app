@@ -7,7 +7,6 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
-  Image,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -16,6 +15,7 @@ import { Feather } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useGetAirportSummary } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 import FlightMap from '@/components/FlightMap';
 import FlightCard from '@/components/FlightCard';
 import {
@@ -68,11 +68,7 @@ export default function AirportSummaryScreen() {
         >
           <Feather name="arrow-left" size={18} color={colors.foreground} />
         </TouchableOpacity>
-        <Image
-          source={require('@/assets/images/bluebird-logo-white.png')}
-          style={styles.headerLogo}
-          resizeMode="contain"
-        />
+        <BluebirdLogo variant="full" size="small" style={styles.headerLogo} />
         <TouchableOpacity onPress={() => router.replace('/(auth)/onboarding')} activeOpacity={0.8}>
           <Text style={[styles.changeText, { color: colors.primary }]}>Change airport</Text>
         </TouchableOpacity>

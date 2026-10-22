@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Platform, Pressable, Image,
+  ActivityIndicator, Platform, Pressable,
 } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -11,6 +11,7 @@ import { useRequestLoginCode, useVerifyLoginCode } from '@workspace/api-client-r
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 import { usePendingReferralCode } from '@/hooks/usePendingReferralCode';
 
@@ -141,11 +142,7 @@ export default function VerifyCodeScreen() {
         <Feather name="arrow-left" size={20} color={colors.mutedOnBrand} />
       </TouchableOpacity>
 
-      <Image
-        source={require('@/assets/images/bluebird-logo-white.png')}
-        style={styles.logo}
-        resizeMode="contain"
-      />
+      <BluebirdLogo variant="full" size="small" style={styles.logo} />
 
       <Text style={[styles.title, { color: colors.textOnBrand }]}>Enter the code</Text>
       <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>

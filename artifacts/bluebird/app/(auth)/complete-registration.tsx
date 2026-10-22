@@ -1,7 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Platform,
   StyleSheet,
   Text,
@@ -18,6 +17,7 @@ import { useCompletePhoneRegistration } from '@workspace/api-client-react';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 import { usePendingReferralCode } from '@/hooks/usePendingReferralCode';
 
@@ -102,11 +102,7 @@ export default function CompleteRegistrationScreen() {
           <Feather name="arrow-left" size={20} color={colors.mutedOnBrand} />
         </TouchableOpacity>
 
-        <Image
-          source={require('@/assets/images/bluebird-logo-white.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
+        <BluebirdLogo variant="full" size="small" style={styles.logo} />
 
         <Text style={[styles.title, { color: colors.textOnBrand }]}>Finish creating your account</Text>
         <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>

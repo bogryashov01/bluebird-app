@@ -185,7 +185,7 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   const rootLayoutSource = readFileSync(resolve(projectRoot, "app/_layout.tsx"), "utf8");
   const discoverSource = readFileSync(resolve(projectRoot, "app/(tabs)/discover/index.tsx"), "utf8");
   assert.match(rootLayoutSource, /shouldRedirectClerkRoute\(segments, memberAccessResolved, registeredHomeReady\)/);
-  assert.match(discoverSource, /router\.push\(\{ pathname: '\/flight\/\[id\]', params: \{ id \} \}\)/);
+  assert.match(discoverSource, /router\.push\(demoMode[\s\S]*pathname: '\/flight\/\[id\]'/);
   for (const path of [
     ["(tabs)", "discover"],
     ["(tabs)", "trips"],
@@ -246,7 +246,7 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
 
   assert.match(plansSource, /loadClerkBluebirdMembership\(createClerkApi\(\)\.authenticated, signal\)/);
   assert.match(plansSource, /getVerifiedAccessToken: async \(\) =>/);
-  assert.match(plansSource, /useProductionMembershipPlans\(\)/);
+  assert.match(plansSource, /useProductionMembershipPlans\(\{ enabled: !demoMode \}\)/);
   assert.match(plansSource, /membershipState === 'available'/);
   assert.match(plansSource, /membershipState === 'conflict'/);
   assert.match(plansSource, /membershipState === 'unavailable'/);
@@ -257,7 +257,7 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(clerkProfile, /profile\?\.email/);
   assert.match(profileSource, /cachedClerkProfile\.current/);
   assert.match(profileSource, /kind: 'refreshing'/);
-  assert.match(profileSource, /bluebird-bird-mark\.png/);
+  assert.match(profileSource, /<BluebirdLogo variant="symbol"/);
   assert.match(profileSource, /ActivityIndicator size="small"/);
   assert.match(profileSource, /clerkProfileLoadingMark/);
   assert.doesNotMatch(profileSource, /Loading this profile may sync phone information/);
@@ -308,7 +308,7 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(personalInfoSource, /<Stack\.Screen options=\{\{ headerShown: false \}\} \/>/);
   assert.match(personalInfoSource, /formatClerkDateOfBirth\(values\.dob\)/);
   assert.match(personalInfoSource, /cachedProfile\.current/);
-  assert.match(personalInfoSource, /bluebird-bird-mark\.png/);
+  assert.match(personalInfoSource, /<BluebirdLogo variant="symbol"/);
   assert.doesNotMatch(personalInfoSource, /clerk-personal-info-unavailable|profile changes were requested/);
   const personalInfoContract = readFileSync(resolve(projectRoot, "lib/clerkPersonalInfo.ts"), "utf8");
   assert.match(personalInfoContract, /const currentUser = await api\.getMe\(options\)/);

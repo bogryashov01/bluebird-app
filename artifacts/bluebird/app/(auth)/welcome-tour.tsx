@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
   type ViewToken,
 } from 'react-native';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,7 +29,6 @@ export function welcomeTourKey(userId: string) {
   return `${WELCOME_TOUR_KEY_PREFIX}${userId}`;
 }
 
-const logoSource = require('@/assets/images/bluebird-logo-white.png');
 const heroImage1 = require('@/assets/images/onboarding-runway-golden-hour.jpg');
 const heroImage2 = require('@/assets/images/onboarding-cabin-interior.jpg');
 
@@ -171,10 +171,10 @@ export default function WelcomeTourScreen() {
               <View style={{ height: heroHeight, width }}>
                 <Image source={item.image} style={styles.heroImage} resizeMode="cover" />
                 <View style={styles.heroOverlay} />
-                <Image
-                  source={logoSource}
+                <BluebirdLogo
+                  variant="full"
+                  size="small"
                   style={[styles.logo, { top: topPad + 12 }]}
-                  resizeMode="contain"
                 />
               </View>
               <View style={styles.sheet}>

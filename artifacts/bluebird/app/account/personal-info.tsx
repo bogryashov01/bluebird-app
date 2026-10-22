@@ -9,6 +9,7 @@ import { File as ExpoFile } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 import {
   useGetNetworkingProfile,
   useRequestUploadUrl,
@@ -207,7 +208,7 @@ function ClerkPersonalInfoScreen() {
           <>
             {visibleState.kind === 'refreshing' ? (
               <View style={styles.refreshingRow} accessibilityRole="progressbar" testID="clerk-personal-info-refreshing">
-                <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.refreshingMark} resizeMode="contain" />
+                <BluebirdLogo variant="symbol" size="small" style={styles.refreshingMark} />
                 <ActivityIndicator size="small" color={colors.primary} />
               </View>
             ) : null}
@@ -559,7 +560,7 @@ function ClerkPersonalInfoState({
     <View style={styles.center} accessibilityLabel={loading ? title : undefined}>
       {loading ? (
         <>
-          <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.loadingMark} resizeMode="contain" />
+          <BluebirdLogo variant="symbol" size="medium" style={styles.loadingMark} />
           <ActivityIndicator size="small" color={colors.primary} />
         </>
       ) : (

@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, TextIn
 import { Redirect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 import { useColors } from '@/hooks/useColors';
 import { useAuth as useBluebirdAuth } from '@/context/AuthContext';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
@@ -178,7 +179,7 @@ export default function BluebirdProfileScreen() {
 
         {visibleLoadState.kind === 'refreshing' ? (
           <View style={styles.refreshingRow} accessibilityRole="progressbar" testID="clerk-bluebird-profile-refreshing">
-            <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.refreshingMark} resizeMode="contain" />
+            <BluebirdLogo variant="symbol" size="small" style={styles.refreshingMark} />
             <ActivityIndicator size="small" color={colors.primary} />
           </View>
         ) : null}
@@ -516,7 +517,7 @@ function CenteredState({
     <View style={styles.center} accessibilityLabel={loading ? title : undefined}>
       {loading ? (
         <>
-          <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.loadingMark} resizeMode="contain" />
+          <BluebirdLogo variant="symbol" size="medium" style={styles.loadingMark} />
           <ActivityIndicator size="small" color={colors.primary} />
         </>
       ) : (

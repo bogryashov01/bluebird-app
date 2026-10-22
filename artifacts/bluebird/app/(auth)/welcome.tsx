@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
@@ -21,7 +22,7 @@ export default function WelcomeScreen() {
 
       <View style={styles.content}>
         <View style={[styles.logoCircle, { backgroundColor: colors.primary + '1A' }]}>
-          <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.logoMark} resizeMode="contain" />
+          <BluebirdLogo variant="symbol" size="medium" style={styles.logoMark} />
         </View>
 
         <Text style={[styles.title, { color: colors.textOnBrand }]}>Welcome to Bluebird</Text>

@@ -16,6 +16,7 @@ import { confirmDialog } from '@/lib/confirmDialog';
 import { useTheme, type ThemePreference } from '@/context/ThemeContext';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
@@ -223,7 +224,7 @@ export default function ProfileScreen() {
     if (!clerkSession?.isLoaded || visibleProfileState.kind === 'loading') {
       return (
         <View style={[styles.clerkProfileLoading, { backgroundColor: colors.offWhite, paddingTop: topPad }]} testID="clerk-profile-loading" accessibilityLabel="Loading your profile">
-          <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.clerkProfileLoadingMark} resizeMode="contain" />
+          <BluebirdLogo variant="symbol" size="medium" style={styles.clerkProfileLoadingMark} />
           <ActivityIndicator size="small" color={colors.primary} />
         </View>
       );
@@ -295,7 +296,7 @@ export default function ProfileScreen() {
           ) : null}
           {visibleProfileState.kind === 'refreshing' ? (
             <View style={styles.clerkProfileRefreshing} accessibilityRole="progressbar" testID="clerk-profile-refreshing">
-              <Image source={require('@/assets/images/bluebird-bird-mark.png')} style={styles.clerkProfileRefreshingMark} resizeMode="contain" />
+              <BluebirdLogo variant="symbol" size="small" style={styles.clerkProfileRefreshingMark} />
               <ActivityIndicator size="small" color={colors.primary} />
             </View>
           ) : null}
