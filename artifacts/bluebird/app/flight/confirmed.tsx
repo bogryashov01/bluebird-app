@@ -174,7 +174,11 @@ export default function FlightConfirmedScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
-        <PrimaryButton label="View My Trips" onPress={() => router.dismissTo('/(tabs)/trips')} />
+        <PrimaryButton
+          label="View My Trips"
+          testID="full-app-demo-confirmed-my-trips"
+          onPress={() => router.dismissTo('/(tabs)/trips')}
+        />
       </View>
     </View>
   );

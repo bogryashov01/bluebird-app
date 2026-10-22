@@ -11,12 +11,16 @@ import { FloatingBackButton } from '@/components/FloatingBackButton';
 import { FlightUnavailableState } from '@/components/FlightUnavailableState';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { useJoinQueue, useGetFlightMyStatus, useGetFlight } from '@workspace/api-client-react';
+import { useQuery } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPassOverlay';
 import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { fetchFullAppDemoFlight } from '@/lib/fullAppDemoLiveReads';
+import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
+import { parseProductionFlightId } from '@/lib/productionFlights';
 
 const POLICY_ITEMS = [
   {
@@ -47,8 +51,9 @@ export default function JoinQueueAcknowledgeScreen() {
   const { flightId, fromCity, toCity, from, to } = params;
   const useLinePass = params.useLinePass === '1';
   const isInternational = params.international === '1';
-  const localDemoFlow = isLocalFlightReadMode();
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, demoMode } = useAuth();
+  const localDemoFlow = demoMode || isLocalFlightReadMode();
+  const demoQueue = useFullAppDemoQueueOptional();
   const queryClient = useQueryClient();
   const [checked, setChecked] = useState([false, false, false]);
   const [punctualityChecked, setPunctualityChecked] = useState(false);
@@ -57,6 +62,7 @@ export default function JoinQueueAcknowledgeScreen() {
   const [petWeightLbs, setPetWeightLbs] = useState('');
   const joinLock = useRef(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [demoQueueActionPending, setDemoQueueActionPending] = useState(false);
   // Set when the server rejects the join because the flight is gone — drives
   // the full-screen "no longer available" state instead of an inline error.
   const [rejectedUnavailable, setRejectedUnavailable] = useState(false);
@@ -72,21 +78,29 @@ export default function JoinQueueAcknowledgeScreen() {
   // If this lookup fails, we do NOT lock the button — the server enforces the
   // duplicate-entry guard authoritatively on join anyway.
   const { data: myStatus, isLoading: statusLoading, isError: statusError } = useGetFlightMyStatus(flightId!, {
-    query: { enabled: localDemoFlow && !!user && !!flightId },
+    query: { enabled: localDemoFlow && !demoMode && !!user && !!flightId },
   });
-  const isConfirmed = myStatus?.status === 'confirmed';
+  const demoEntry = demoQueue?.entries.find((entry) => entry.flightId === flightId);
+  const isConfirmed = demoMode ? demoEntry?.status === 'won' : myStatus?.status === 'confirmed';
 
   // Re-check the flight's current status when the screen loads — if it became
   // unavailable (departed, cancelled, …) we show a friendly full-screen state
   // instead of letting the member fill out acknowledgments for nothing.
   const { data: liveFlight } = useGetFlight(flightId!, {
-    query: { enabled: localDemoFlow && !!flightId },
+    query: { enabled: localDemoFlow && !demoMode && !!flightId },
   });
+  const demoFlightId = parseProductionFlightId(flightId);
+  const demoFlightQuery = useQuery({
+    queryKey: ['full-app-demo-flight', demoFlightId],
+    queryFn: ({ signal }) => fetchFullAppDemoFlight(demoFlightId!, { signal }),
+    enabled: demoMode && demoFlightId !== null,
+  });
+  const currentFlightStatus = demoMode ? demoFlightQuery.data?.status : (liveFlight as any)?.status;
   const flightUnavailable =
-    rejectedUnavailable || (!!liveFlight && (liveFlight as any).status !== 'available');
+    rejectedUnavailable || (!!currentFlightStatus && currentFlightStatus !== 'available' && currentFlightStatus !== 'published');
   useEffect(() => {
-    if (localDemoFlow && isConfirmed && flightId) router.replace(`/flight/${flightId}`);
-  }, [isConfirmed, flightId, localDemoFlow]);
+    if (localDemoFlow && !demoMode && isConfirmed && flightId) router.replace(`/flight/${flightId}`);
+  }, [isConfirmed, flightId, localDemoFlow, demoMode]);
 
   const joinMutation = useJoinQueue({
     mutation: {
@@ -165,15 +179,32 @@ export default function JoinQueueAcknowledgeScreen() {
   const positiveNumber = (value: string) => Number.isFinite(Number(value)) && Number(value) > 0;
   const petComplete = bringingPet !== null && (!bringingPet || (petFeeAcknowledged && positiveNumber(petWeightLbs)));
   const allChecked = checked.every(Boolean) && punctualityChecked && petComplete;
-  const needsIntlNotice = isInternational && user?.membershipTier === 'base';
+  const membershipTier = demoMode ? 'base' : user?.membershipTier;
+  const needsIntlNotice = isInternational && membershipTier === 'base';
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!localDemoFlow || !flightId) return;
+    if (demoMode && demoEntry && ['waiting', 'changed-position'].includes(demoEntry.status)) {
+      router.replace({ pathname: '/queue/status', params: { entryId: demoEntry.id, flightId } });
+      return;
+    }
+    if (demoMode && demoEntry?.status === 'won') {
+      router.replace({ pathname: '/flight/confirmed', params: { ...params, passUsed: '1', petFeeUsd: '0' } } as any);
+      return;
+    }
+    if (demoMode && demoEntry) {
+      router.replace({ pathname: '/queue/status', params: { entryId: demoEntry.id, flightId } });
+      return;
+    }
     if (myStatus?.status === 'waiting' && myStatus.queueEntryId) {
       router.replace({ pathname: '/queue/status', params: { entryId: myStatus.queueEntryId, flightId } });
       return;
     }
-    if (!allChecked || isConfirmed || joinMutation.isPending || joinLock.current) return;
+    if (!allChecked || isConfirmed || joinMutation.isPending || demoQueueActionPending || joinLock.current) return;
+    if (demoMode && (!demoQueue?.hydrated || !demoFlightQuery.data || demoQueue.storageError)) {
+      setJoinError(demoQueue?.storageError ?? 'The selected flight is not ready. Try again when its details load.');
+      return;
+    }
     if (user?.membershipTier === 'none') {
       // Non-member reached the join flow (e.g. deep link) — route to the paywall.
       router.replace({ pathname: '/membership/join' as any, params: { flightId } });
@@ -190,6 +221,31 @@ export default function JoinQueueAcknowledgeScreen() {
           petWeightLbs,
         },
       });
+      return;
+    }
+    if (demoMode) {
+      joinLock.current = true;
+      setDemoQueueActionPending(true);
+      setJoinError(null);
+      try {
+        await demoQueue!.joinFlight(demoFlightQuery.data!);
+        const entry = demoQueue!.entries.length + 1;
+        router.replace({
+          pathname: '/queue/joined',
+          params: {
+            ...params,
+            entryId: `demo-${flightId}`,
+            position: String(entry),
+            totalInQueue: String(entry),
+            flightStatus: demoFlightQuery.data!.status ?? 'available',
+          },
+        } as any);
+      } catch (error) {
+        setJoinError(error instanceof Error ? error.message : 'The local demo queue could not be updated.');
+      } finally {
+        joinLock.current = false;
+        setDemoQueueActionPending(false);
+      }
       return;
     }
     if (useLinePass) setOverlayPhase('applying');
@@ -214,8 +270,12 @@ export default function JoinQueueAcknowledgeScreen() {
 
   // Note: a failed status lookup (statusError) does NOT disable the CTA — the
   // server re-checks eligibility on join, so the member is never locked out.
-  const ctaDisabled = !allChecked || joinMutation.isPending || (statusLoading && !statusError) || isConfirmed;
-  const alreadyWaiting = myStatus?.status === 'waiting';
+  const ctaDisabled = !allChecked || joinMutation.isPending || demoQueueActionPending ||
+    (statusLoading && !statusError) || (demoMode && (demoFlightQuery.isLoading || !demoQueue?.hydrated)) || isConfirmed;
+  const alreadyWaiting = demoMode
+    ? demoEntry?.status === 'waiting' || demoEntry?.status === 'changed-position'
+    : myStatus?.status === 'waiting';
+  const hasExistingDemoEntry = demoMode && !!demoEntry;
 
   if (!localDemoFlow) {
     return <ProductionReadOnlyNotice flightId={flightId} />;
@@ -223,7 +283,7 @@ export default function JoinQueueAcknowledgeScreen() {
 
   // ── Flight no longer available: friendly full-screen state ──
   if (flightUnavailable) {
-    return <FlightUnavailableState status={(liveFlight as any)?.status} bottomPad={bottomPad} />;
+    return <FlightUnavailableState status={currentFlightStatus} bottomPad={bottomPad} />;
   }
 
   return (
@@ -381,12 +441,12 @@ export default function JoinQueueAcknowledgeScreen() {
           </Text>
         )}
         <PrimaryButton
-          label={alreadyWaiting ? 'View Queue Status' : 'I Acknowledge — Continue'}
+          label={alreadyWaiting || hasExistingDemoEntry ? 'View Queue Status' : 'I Acknowledge — Continue'}
           testID="queue-continue-button"
           accessibilityRole="button"
           onPress={handleContinue}
-          loading={!alreadyWaiting && joinMutation.isPending}
-          disabled={alreadyWaiting ? false : ctaDisabled}
+          loading={!alreadyWaiting && !hasExistingDemoEntry && (joinMutation.isPending || demoQueueActionPending)}
+          disabled={alreadyWaiting || hasExistingDemoEntry ? false : ctaDisabled}
         />
       </View>
     </View>

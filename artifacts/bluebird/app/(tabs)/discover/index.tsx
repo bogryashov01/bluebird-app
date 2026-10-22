@@ -614,7 +614,7 @@ export default function DiscoverScreen() {
             testID={`full-app-demo-fixture-badge-${item.id}`}
             style={[styles.cardMeta, { color: colors.primary, fontFamily: 'Inter_600SemiBold', marginTop: 4 }]}
           >
-            SAMPLE DATA · QUEUE DISABLED
+            SAMPLE DATA · LOCAL QUEUE ONLY
           </Text>
         )}
       </View>

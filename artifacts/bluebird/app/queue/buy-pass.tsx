@@ -16,6 +16,7 @@ import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice'
 import * as Haptics from 'expo-haptics';
 import { formatAnnualPrice, getPlan } from '@/lib/membershipPlans';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
 
 const PLUS_BULLETS = [
   '5 Skip the Line Passes',
@@ -27,12 +28,14 @@ const PLUS_BULLETS = [
 // upgrade to Plus membership.
 export default function BuyPassScreen() {
   const colors = useColors();
-  const localDemoFlow = isLocalFlightReadMode();
+  const { user, updateUser, demoMode } = useAuth();
+  const localDemoFlow = demoMode || isLocalFlightReadMode();
+  const demoQueue = useFullAppDemoQueueOptional();
   const insets = useSafeAreaInsets();
-  const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
-  const { data: membership } = useGetMembership({ query: { enabled: localDemoFlow } });
+  const { data: membership } = useGetMembership({ query: { enabled: localDemoFlow && !demoMode } });
   const [purchased, setPurchased] = useState(false);
+  const [demoPurchasePending, setDemoPurchasePending] = useState(false);
   // Optional originating queue entry (and its flight details) forwarded from
   // Queue Status; when present, a successful purchase lands the member on the
   // pass confirmation for that entry instead of dead-ending here.
@@ -103,8 +106,27 @@ export default function BuyPassScreen() {
     }
   }, [localDemoFlow, user?.membershipTier]);
 
-  const handleBuy = () => {
-    if (!localDemoFlow || buyMutation.isPending || purchased) return;
+  const handleBuy = async () => {
+    if (!localDemoFlow || buyMutation.isPending || demoPurchasePending || purchased) return;
+    if (demoMode) {
+      if (!demoQueue || demoQueue.storageError || !demoQueue.hydrated) return;
+      setDemoPurchasePending(true);
+      try {
+        await demoQueue.buyPass();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        setPurchased(true);
+        afterPurchase();
+      } catch {
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          window.alert('The local demo pass could not be saved. Check this browser’s local storage.');
+        } else {
+          Alert.alert('Demo purchase unavailable', 'The local demo pass could not be saved.');
+        }
+      } finally {
+        setDemoPurchasePending(false);
+      }
+      return;
+    }
     buyMutation.mutate();
   };
 
@@ -132,13 +154,14 @@ export default function BuyPassScreen() {
         <View style={[styles.passCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.passTitle, { color: colors.textOnSurface }]}>1 Skip the Line Pass</Text>
           <Text style={[styles.passSub, { color: colors.mutedForegroundLight }]}>
-            One standalone Skip the Line Pass is $2,000.
+            {demoMode ? 'Preview the approved $2,000 pass purchase. This adds a demo pass only.' : 'One standalone Skip the Line Pass is $2,000.'}
           </Text>
           <Text style={[styles.passPrice, { color: colors.textOnSurface }]}>$2,000</Text>
           <SecondaryButton
-            label="Buy 1 Pass"
+            label={demoMode ? 'Add 1 Demo Pass' : 'Buy 1 Pass'}
+            testID={demoMode ? 'full-app-demo-buy-pass' : undefined}
             onPress={handleBuy}
-            disabled={buyMutation.isPending}
+            disabled={buyMutation.isPending || demoPurchasePending || !!demoQueue?.storageError}
             style={{ marginTop: 8 }}
           />
         </View>
@@ -162,29 +185,33 @@ export default function BuyPassScreen() {
           </View>
           <PrimaryButton
             label="Upgrade to Plus"
-            onPress={() => router.push('/upgrade/plus')}
+            testID={demoMode ? 'full-app-demo-upgrade-plus' : undefined}
+            onPress={() => router.push(demoMode ? '/membership/plans' : '/upgrade/plus' as any)}
             style={{ marginTop: 10 }}
           />
         </View>
 
         <Text style={[styles.demoNote, { color: colors.mutedForegroundLight }]}>
-          Demo checkout — no real payment will be charged.
+          {demoMode
+            ? 'Local demo purchase — no payment or membership change will be made.'
+            : 'Demo checkout — no real payment will be charged.'}
         </Text>
       </ScrollView>
 
       {/* Apple Pay-styled demo pay button (buys 1 pass) */}
       <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
         <TouchableOpacity
-          style={[styles.applePayBtn, { backgroundColor: colors.scheme === 'dark' ? colors.foreground : '#000000' }, buyMutation.isPending && { opacity: 0.7 }]}
+          testID={demoMode ? 'full-app-demo-buy-pass-quick' : undefined}
+          style={[styles.applePayBtn, { backgroundColor: colors.scheme === 'dark' ? colors.foreground : '#000000' }, (buyMutation.isPending || demoPurchasePending) && { opacity: 0.7 }]}
           onPress={handleBuy}
-          disabled={buyMutation.isPending}
+          disabled={buyMutation.isPending || demoPurchasePending || !!demoQueue?.storageError}
           activeOpacity={0.85}
         >
-          {buyMutation.isPending
+          {buyMutation.isPending || demoPurchasePending
             ? <ActivityIndicator color={colors.scheme === 'dark' ? colors.background : '#FFFFFF'} size="small" />
             : (
               <Text style={[styles.applePayText, { color: colors.scheme === 'dark' ? colors.background : '#FFFFFF' }]}>
-                Pay with  Pay
+                {demoMode ? 'Add Demo Pass' : 'Pay with  Pay'}
               </Text>
             )}
         </TouchableOpacity>

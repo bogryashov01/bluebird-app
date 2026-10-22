@@ -7,7 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import type { QueueEntry, QueueMovementEvent } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
 import { FloatingBackButton } from '@/components/FloatingBackButton';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
@@ -18,6 +18,9 @@ import { useAuth } from '@/context/AuthContext';
 import { observeQueueEntries } from '@/lib/queueCelebration';
 import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
+import { fetchFullAppDemoFlight } from '@/lib/fullAppDemoLiveReads';
+import { parseProductionFlightId } from '@/lib/productionFlights';
 
 // ─── Countdown hook ───────────────────────────────────────────────────────────
 // Counts down to the decision moment: the queue engine holds a real member in
@@ -231,21 +234,40 @@ const confirmed = StyleSheet.create({
 });
 export default function QueueStatusScreen() {
   const colors = useColors();
-  const localDemoFlow = isLocalFlightReadMode();
+  const { user, demoMode } = useAuth();
+  const localDemoFlow = demoMode || isLocalFlightReadMode();
+  const demoQueue = useFullAppDemoQueueOptional();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const topPad    = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const { user } = useAuth();
-  const { data: membership } = useGetMembership({ query: { enabled: localDemoFlow } });
+  const { data: membership } = useGetMembership({ query: { enabled: localDemoFlow && !demoMode } });
   const { entryId, flightId } = useLocalSearchParams<{ entryId?: string; flightId?: string }>();
+  const demoEntries = demoQueue?.entries ?? [];
+  const demoSelectedForRead = (entryId ? demoEntries.find((entry) => entry.id === entryId) : undefined) ??
+    (flightId ? demoEntries.find((entry) => entry.flightId === flightId) : undefined) ??
+    (demoEntries.length === 1 ? demoEntries[0] : undefined);
+  const demoReadFlightId = parseProductionFlightId(demoSelectedForRead?.flightId);
+  const demoFlightReadQuery = useQuery({
+    queryKey: ['full-app-demo-flight-status', demoReadFlightId],
+    queryFn: ({ signal }) => fetchFullAppDemoFlight(demoReadFlightId!, { signal }),
+    enabled: demoMode && demoReadFlightId !== null,
+  });
+  useEffect(() => {
+    const entry = demoSelectedForRead;
+    const status = demoFlightReadQuery.data?.status;
+    if (!demoMode || !demoQueue || !entry || !status) return;
+    if (entry.status !== 'waiting' && entry.status !== 'changed-position') return;
+    if (status === 'available' || status === 'published') return;
+    void demoQueue.transition(entry.flightId, 'closed').catch(() => {});
+  }, [demoMode, demoQueue, demoSelectedForRead?.id, demoSelectedForRead?.status, demoFlightReadQuery.data?.status]);
 
   // API returns waiting + confirmed entries for the member. Poll so the
   // screen flips to the confirmed state on its own when the queue engine
   // auto-confirms the seat — no tap required.
   const { data: queueEntries, isLoading, isError, refetch } = useGetQueueStatus({
-    query: { enabled: localDemoFlow && !!user, refetchInterval: 10_000 },
+    query: { enabled: localDemoFlow && !demoMode && !!user, refetchInterval: 10_000 },
   });
   const allEntries = (queueEntries as QueueEntry[]) ?? [];
 
@@ -351,6 +373,154 @@ export default function QueueStatusScreen() {
   // because queue position alone does not guarantee the seat.
   const assignedFamilyPasses = membership?.family?.members.find((member) => member.userId === user?.id)?.availablePasses ?? 0;
   const passCount = (user?.linePassCount ?? 0) + assignedFamilyPasses;
+
+  if (demoMode) {
+    const localEntries = demoEntries;
+    const selected = (entryId && localEntries.find((entry) => entry.id === entryId)) ??
+      (flightId && localEntries.find((entry) => entry.flightId === flightId)) ??
+      (localEntries.length === 1 ? localEntries[0] : undefined);
+    const localFlightParams = selected ? {
+      entryId: selected.id,
+      position: String(selected.position),
+      flightId: selected.flightId,
+      from: selected.flight.fromAirport ?? '',
+      to: selected.flight.toAirport ?? '',
+      fromCity: selected.flight.fromCity ?? '',
+      toCity: selected.flight.toCity ?? '',
+      departureDate: selected.flight.departureDate ?? '',
+      departureTime: selected.flight.departureTime ?? '',
+      duration: selected.flight.duration ?? '',
+      aircraftType: selected.flight.aircraftTypeName ?? selected.flight.aircraftType ?? '',
+      bringingPet: '0',
+    } : {};
+    const openPass = () => router.push({
+      pathname: demoQueue?.passCount ? '/queue/pass' : '/queue/buy-pass',
+      params: localFlightParams,
+    } as any);
+    const leaveLocalEntry = async () => {
+      if (!selected || !demoQueue || demoQueue.storageError) return;
+      const ok = await confirmDialog(
+        'Leave simulated queue?',
+        'This removes the local demo entry only. It does not change a real flight queue.',
+        'Leave Queue',
+        true,
+      );
+      if (ok) await demoQueue.leaveFlight(selected.flightId);
+    };
+    if (!demoQueue?.hydrated) {
+      return (
+        <View style={[styles.centered, { backgroundColor: colors.offWhite }]} testID="full-app-demo-queue-loading">
+          <ActivityIndicator color={colors.primary} size="large" />
+        </View>
+      );
+    }
+    if (!selected) {
+      return (
+        <View style={[styles.empty, { backgroundColor: colors.offWhite }]} testID="full-app-demo-queue-empty">
+          <FloatingBackButton />
+          <Text style={[styles.emptyTitle, { color: colors.textOnSurface }]}>
+            {localEntries.length ? 'Select a queue from My Flights' : 'No active demo queues'}
+          </Text>
+          <Text style={[styles.emptyBody, { color: colors.mutedForegroundLight }]}>
+            Join a flight from Discover to start a local queue simulation.
+          </Text>
+          <SecondaryButton
+            label="Browse Flights"
+            onPress={() => router.replace('/(tabs)/discover')}
+            backgroundColor={colors.primary}
+            textColor={colors.primaryForeground}
+            style={styles.browseBtn}
+          />
+        </View>
+      );
+    }
+    const routeLabel = `${selected.flight.fromAirport ?? '—'} → ${selected.flight.toAirport ?? '—'}`;
+    const won = selected.status === 'won';
+    const waiting = selected.status === 'waiting' || selected.status === 'changed-position';
+    const localStatusLabel = won ? 'Flight won' : selected.status === 'closed' ? 'Queue closed'
+      : selected.status === 'lost' ? 'No seat awarded'
+      : selected.status === 'changed-position' ? 'Queue position changed' : 'Waiting';
+    return (
+      <View style={[styles.container, { backgroundColor: colors.offWhite }]} testID="full-app-demo-queue-status">
+        <FloatingBackButton />
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: topPad + 76, paddingBottom: bottomPad + 28, gap: 18 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={[styles.pickerTitle, { color: colors.textOnSurface }]}>{localStatusLabel}</Text>
+          <View style={[styles.pickerRow, { backgroundColor: colors.surface, width: '100%' }]}>
+            <Text style={[styles.pickerRoute, { color: colors.textOnSurface }]}>{routeLabel}</Text>
+            <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]}>
+              {selected.flight.fromCity ?? selected.flight.fromAirport ?? 'Origin'} → {selected.flight.toCity ?? selected.flight.toAirport ?? 'Destination'}
+            </Text>
+            {waiting && (
+              <Text style={[styles.queuePositionNumber, { color: colors.primary }]}>
+                #{selected.position}{selected.status === 'changed-position' ? ' · updated locally' : ''}
+              </Text>
+            )}
+            <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]}>
+              {selected.flight.departureDate ?? 'Date unavailable'}{selected.flight.departureTime ? ` · ${selected.flight.departureTime}` : ''}
+            </Text>
+            <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]}>
+              Demo state only — no backend queue request or booking was made.
+            </Text>
+          </View>
+          {demoQueue.storageError ? (
+            <Text testID="full-app-demo-queue-storage-error" style={[styles.emptyBody, { color: colors.destructive }]}>
+              {demoQueue.storageError}
+            </Text>
+          ) : null}
+          {won ? (
+            <PrimaryButton
+              label="View Flight Won"
+              testID="full-app-demo-view-won"
+              onPress={() => router.replace({
+                pathname: '/flight/confirmed',
+                params: { ...localFlightParams, passUsed: '1', petFeeUsd: '0' },
+              } as any)}
+              style={styles.fullWidth}
+            />
+          ) : waiting ? (
+            <>
+              <View style={[styles.pickerRow, { backgroundColor: colors.surface, width: '100%' }]}>
+                <Text style={[styles.pickerRoute, { color: colors.textOnSurface }]}>Skip the Line Pass balance</Text>
+                <Text style={[styles.pickerMeta, { color: colors.mutedForegroundLight }]} testID="full-app-demo-pass-balance">
+                  {demoQueue.passCount} pass{demoQueue.passCount === 1 ? '' : 'es'}
+                </Text>
+              </View>
+              <PrimaryButton
+                label={demoQueue.passCount > 0 ? 'Use Skip the Line Pass' : 'Get a Skip the Line Pass'}
+                testID="full-app-demo-use-pass"
+                disabled={!!demoQueue.storageError}
+                onPress={openPass}
+                style={styles.fullWidth}
+              />
+              <SecondaryButton
+                label="Leave Simulated Queue"
+                testID="full-app-demo-leave-queue"
+                disabled={!!demoQueue.storageError}
+                onPress={() => void leaveLocalEntry()}
+                style={styles.fullWidth}
+              />
+            </>
+          ) : (
+            <SecondaryButton
+              label="Back to Flight Details"
+              onPress={() => router.replace(`/flight/${selected.flightId}` as any)}
+              style={styles.fullWidth}
+            />
+          )}
+          <SecondaryButton
+            label="View My Flights"
+            testID="full-app-demo-open-trips"
+            onPress={() => router.push('/(tabs)/trips')}
+            style={styles.fullWidth}
+          />
+        </ScrollView>
+      </View>
+    );
+  }
 
   if (!localDemoFlow) {
     return <ProductionReadOnlyNotice flightId={flightId} />;
@@ -483,6 +653,7 @@ const styles = StyleSheet.create({
   emptyTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 20 },
   emptyBody:  { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 22, textAlign: 'center' },
   browseBtn: { marginTop: 6, paddingHorizontal: 24 },
+  fullWidth: { width: '100%' },
   pickerTitle: { fontFamily: 'Inter_700Bold', fontSize: 22, alignSelf: 'flex-start' },
   pickerSubtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, alignSelf: 'flex-start', marginBottom: 14, marginTop: 4 },
   pickerRow: {
@@ -498,6 +669,7 @@ const styles = StyleSheet.create({
   pickerRoute: { fontFamily: 'Inter_700Bold', fontSize: 17 },
   pickerMeta: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 3 },
   pickerChevron: { fontFamily: 'Inter_700Bold', fontSize: 20, marginLeft: 10 },
+  queuePositionNumber: { fontFamily: 'Inter_700Bold', fontSize: 36, letterSpacing: -1 },
   footer: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
     paddingHorizontal: 22, paddingTop: 12, gap: 12,

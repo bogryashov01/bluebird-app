@@ -390,6 +390,17 @@ function FullAppDemoRoot() {
               name="demo/flight/[id]"
               options={{ headerShown: false }}
             />
+            <Stack.Screen name="flight/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="flight/policy" options={{ headerShown: true, title: 'Flight Policy', ...headerOptions }} />
+            <Stack.Screen name="flight/confirmed" options={{ headerShown: false }} />
+            <Stack.Screen name="queue/join" options={{ headerShown: false }} />
+            <Stack.Screen name="queue/intl-notice" options={{ headerShown: false }} />
+            <Stack.Screen name="queue/payment-review" options={{ headerShown: false }} />
+            <Stack.Screen name="queue/joined" options={{ headerShown: false, gestureEnabled: false }} />
+            <Stack.Screen name="queue/status" options={{ headerShown: false }} />
+            <Stack.Screen name="queue/pass" options={{ headerShown: false }} />
+            <Stack.Screen name="queue/buy-pass" options={{ headerShown: false }} />
+            <Stack.Screen name="upgrade/[tier]" options={{ headerShown: true, title: 'Upgrade Membership', ...headerOptions }} />
           </Stack>
         </View>
       </FullAppDemoQueueProvider>

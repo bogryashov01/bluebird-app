@@ -214,6 +214,11 @@ export default function TripsScreen() {
 
   if (demoMode) {
     const demoEntries = demoQueue?.entries ?? [];
+    const pendingDemoEntries = demoEntries.filter((entry) =>
+      entry.status === 'waiting' || entry.status === 'changed-position');
+    const wonDemoEntries = demoEntries.filter((entry) => entry.status === 'won');
+    const endedDemoEntries = demoEntries.filter((entry) =>
+      entry.status === 'lost' || entry.status === 'closed');
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]} testID="full-app-demo-trips">
         <View style={[styles.header, { paddingTop: topPad + 24 }]}>
@@ -243,13 +248,13 @@ export default function TripsScreen() {
           <View testID="full-app-demo-my-queue-loading" style={styles.centered}>
             <ActivityIndicator color={colors.primary} size="large" />
           </View>
-        ) : activeTab === 'pending' && demoEntries.length > 0 ? (
+        ) : activeTab === 'upcoming' && wonDemoEntries.length > 0 ? (
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 100 }]}
             showsVerticalScrollIndicator={false}
           >
-            {demoEntries.map(({ flightId, flight }, index) => (
+            {wonDemoEntries.map(({ flightId, flight }) => (
               <TripCard
                 key={flightId}
                 colors={colors}
@@ -260,9 +265,70 @@ export default function TripsScreen() {
                   departureDate: flight.departureDate || '',
                   departureTime: flight.departureTime || '',
                 }}
-                badge={`SIMULATED QUEUE · #${index + 1}`}
+                badge="FLIGHT WON · DEMO"
+                badgeBlue
+                onPress={() => router.push({
+                  pathname: '/flight/confirmed',
+                  params: {
+                    flightId,
+                    from: flight.fromAirport ?? '',
+                    to: flight.toAirport ?? '',
+                    fromCity: flight.fromCity ?? '',
+                    toCity: flight.toCity ?? '',
+                    departureDate: flight.departureDate ?? '',
+                    departureTime: flight.departureTime ?? '',
+                    duration: flight.duration ?? '',
+                    aircraftType: flight.aircraftTypeName ?? flight.aircraftType ?? '',
+                    passUsed: '1',
+                    petFeeUsd: '0',
+                  },
+                } as any)}
+              />
+            ))}
+          </ScrollView>
+        ) : activeTab === 'pending' && pendingDemoEntries.length > 0 ? (
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 100 }]}
+            showsVerticalScrollIndicator={false}
+          >
+            {pendingDemoEntries.map(({ flightId, flight, position, status }) => (
+              <TripCard
+                key={flightId}
+                colors={colors}
+                flight={{
+                  fromCity: flight.fromCity || flight.fromAirport || '',
+                  toCity: flight.toCity || flight.toAirport || '',
+                  aircraftType: flight.aircraftTypeName || flight.aircraftType || 'Private aircraft',
+                  departureDate: flight.departureDate || '',
+                  departureTime: flight.departureTime || '',
+                }}
+                badge={`${status === 'changed-position' ? 'POSITION CHANGED' : 'SIMULATED QUEUE'} · #${position}`}
                 badgeBlue={false}
                 onPress={() => router.push({ pathname: '/demo/flight/[id]' as any, params: { id: flightId } })}
+              />
+            ))}
+          </ScrollView>
+        ) : activeTab === 'past' && endedDemoEntries.length > 0 ? (
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 100 }]}
+            showsVerticalScrollIndicator={false}
+          >
+            {endedDemoEntries.map(({ flightId, flight, status }) => (
+              <TripCard
+                key={flightId}
+                colors={colors}
+                flight={{
+                  fromCity: flight.fromCity || flight.fromAirport || '',
+                  toCity: flight.toCity || flight.toAirport || '',
+                  aircraftType: flight.aircraftTypeName || flight.aircraftType || 'Private aircraft',
+                  departureDate: flight.departureDate || '',
+                  departureTime: flight.departureTime || '',
+                }}
+                badge={status === 'closed' ? 'QUEUE CLOSED · DEMO' : 'NOT AWARDED · DEMO'}
+                badgeBlue={false}
+                onPress={() => router.push({ pathname: '/queue/status', params: { flightId } })}
               />
             ))}
           </ScrollView>
@@ -274,12 +340,16 @@ export default function TripsScreen() {
             <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
               {activeTab === 'pending'
                 ? 'No simulated flights yet'
-                : activeTab === 'upcoming' ? 'No upcoming bookings' : 'No past trips'}
+                : activeTab === 'upcoming' ? 'No flights won yet' : 'No closed demo queues'}
             </Text>
             <Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>
               {activeTab === 'pending'
                 ? 'Join a live flight’s simulated queue in Discover to see it here.'
-                : 'Bookings and completed trips are unavailable in this local demo.'}
+                : activeTab === 'upcoming'
+                  ? 'Using a Skip the Line Pass on a waiting demo queue records a local flight win.'
+                  : endedDemoEntries.length === 0
+                    ? 'Closed or not-awarded local queue outcomes appear here.'
+                    : 'No local demo outcomes are available.'}
             </Text>
             {activeTab === 'pending' && (
               <TouchableOpacity

@@ -1,8 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Platform } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
+import { PrimaryButton } from '@/components/PrimaryButton';
+import { useAuth } from '@/context/AuthContext';
 
 const POLICY_SECTIONS = [
   {
@@ -34,6 +37,12 @@ const POLICY_SECTIONS = [
 export default function FlightPolicyScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { demoMode } = useAuth();
+  const params = useLocalSearchParams<{
+    flightId?: string; from?: string; to?: string; fromCity?: string; toCity?: string;
+    departureDate?: string; departureTime?: string; duration?: string; aircraftType?: string;
+    international?: string; feeUsd?: string; flightStatus?: string;
+  }>();
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   return (
@@ -61,6 +70,18 @@ export default function FlightPolicyScreen() {
           <Text style={[styles.footerText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
             Last updated: August 2026 · Bluebird Aviation Inc.
           </Text>
+          {demoMode && params.flightId ? (
+            <View style={styles.demoContinue}>
+              <Text style={[styles.footerText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                This local Preview does not send a queue request or change a real account.
+              </Text>
+              <PrimaryButton
+                label="Continue to Queue Acknowledgements"
+                testID="full-app-demo-policy-continue"
+                onPress={() => router.push({ pathname: '/queue/join', params } as any)}
+              />
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </View>
@@ -78,6 +99,7 @@ const styles = StyleSheet.create({
   section: { gap: 8 },
   sectionTitle: { fontSize: 16 },
   sectionBody: { fontSize: 14, lineHeight: 22 },
-  footer: { borderTopWidth: 1, paddingTop: 16 },
+  footer: { borderTopWidth: 1, paddingTop: 16, gap: 12 },
+  demoContinue: { gap: 12, marginTop: 4 },
   footerText: { fontSize: 12, textAlign: 'center' },
 });

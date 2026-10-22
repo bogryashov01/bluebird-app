@@ -5,7 +5,10 @@ import {
   mapProductionFlight,
   parseProductionFlightId,
   ProductionReadCancelledError,
+  ProductionReadHttpError,
+  ProductionReadNetworkError,
   ProductionReadSchemaError,
+  ProductionReadTimeoutError,
   type FlightView,
   type ReadRequestOptions,
 } from './productionFlights';
@@ -13,6 +16,12 @@ import type { ProductionPublicQueueEntry } from './productionAuthApi';
 import localFlightFixtures from '../fixtures/full-app-demo-flights.json';
 
 export type FullAppDemoPublicQueueEntry = Omit<ProductionPublicQueueEntry, 'isViewer'>;
+
+function canUseFixtureFallback(error: unknown): boolean {
+  return error instanceof ProductionReadNetworkError ||
+    error instanceof ProductionReadTimeoutError ||
+    (error instanceof ProductionReadHttpError && (error.status === 429 || error.status >= 500));
+}
 
 const PUBLIC_QUEUE_CONTRACT_KEYS = [
   'position',
@@ -61,11 +70,10 @@ function parsePublicQueue(value: unknown): FullAppDemoPublicQueueEntry[] {
 }
 
 export function fetchFullAppDemoFlights(options: ReadRequestOptions = {}): Promise<FlightView[]> {
-  return fetchProductionFlights(options).then((flights) => {
-    if (flights.length > 0) return flights;
-    return getLocalDemoFlights();
-  }).catch((error: unknown) => {
-    if (options.signal?.aborted || error instanceof ProductionReadCancelledError) throw error;
+  return fetchProductionFlights(options).catch((error: unknown) => {
+    if (options.signal?.aborted || error instanceof ProductionReadCancelledError || !canUseFixtureFallback(error)) {
+      throw error;
+    }
     return getLocalDemoFlights();
   });
 }
@@ -77,7 +85,9 @@ export async function fetchFullAppDemoFlight(
   try {
     return await fetchProductionFlight(id, options);
   } catch (error) {
-    if (options.signal?.aborted || error instanceof ProductionReadCancelledError) throw error;
+    if (options.signal?.aborted || error instanceof ProductionReadCancelledError || !canUseFixtureFallback(error)) {
+      throw error;
+    }
     const fixture = getLocalDemoFlights().find((flight) => flight.id === String(id));
     if (fixture) return fixture;
     throw error;

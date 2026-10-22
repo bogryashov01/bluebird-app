@@ -12,12 +12,16 @@ import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPas
 import { FlightUnavailableState } from '@/components/FlightUnavailableState';
 import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
 import { useGetFlight, useJoinQueue } from '@workspace/api-client-react';
+import { useQuery } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { usePersistedState } from '@/hooks/usePersistedState';
 import { INITIAL_CARDS, type MockCard } from '@/lib/paymentMethods';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import * as Haptics from 'expo-haptics';
+import { fetchFullAppDemoFlight } from '@/lib/fullAppDemoLiveReads';
+import { parseProductionFlightId } from '@/lib/productionFlights';
+import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
 
 type PaymentReviewParams = {
   flightId: string;
@@ -31,10 +35,11 @@ type PaymentReviewParams = {
 
 export default function InternationalPaymentReviewScreen() {
   const colors = useColors();
-  const localDemoFlow = isLocalFlightReadMode();
+  const { user, updateUser, demoMode } = useAuth();
+  const localDemoFlow = demoMode || isLocalFlightReadMode();
+  const demoQueue = useFullAppDemoQueueOptional();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<PaymentReviewParams>();
-  const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
   const [cards, , cardsHydrated] = usePersistedState<MockCard[]>(
     localDemoFlow
@@ -58,10 +63,17 @@ export default function InternationalPaymentReviewScreen() {
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const { data: liveFlight } = useGetFlight(params.flightId!, {
-    query: { enabled: localDemoFlow && !!params.flightId, queryKey: [`/api/flights/${params.flightId}`] },
+    query: { enabled: localDemoFlow && !demoMode && !!params.flightId, queryKey: [`/api/flights/${params.flightId}`] },
   });
+  const numericFlightId = parseProductionFlightId(params.flightId);
+  const demoFlightQuery = useQuery({
+    queryKey: ['full-app-demo-flight', numericFlightId],
+    queryFn: ({ signal }) => fetchFullAppDemoFlight(numericFlightId!, { signal }),
+    enabled: demoMode && numericFlightId !== null,
+  });
+  const currentFlightStatus = demoMode ? demoFlightQuery.data?.status : (liveFlight as any)?.status;
   const flightUnavailable =
-    rejectedUnavailable || (!!liveFlight && (liveFlight as any).status !== 'available');
+    rejectedUnavailable || (!!currentFlightStatus && currentFlightStatus !== 'available' && currentFlightStatus !== 'published');
 
   const petMeasurements = bringingPet ? {
     petWeightLbs: Number(params.petWeightLbs),
@@ -136,9 +148,41 @@ export default function InternationalPaymentReviewScreen() {
     },
   });
 
-  const handleConfirm = () => {
-    if (!localDemoFlow || !params.flightId || joinMutation.isPending || !cardsHydrated) return;
+  const [demoJoinPending, setDemoJoinPending] = useState(false);
+  const handleConfirm = async () => {
+    if (!localDemoFlow || !params.flightId || joinMutation.isPending || demoJoinPending || (!demoMode && !cardsHydrated)) return;
     setJoinError(null);
+    if (demoMode) {
+      if (!demoQueue?.hydrated || !demoFlightQuery.data || demoQueue.storageError) {
+        setJoinError(demoQueue?.storageError ?? 'The selected flight is not ready. Try again when its details load.');
+        return;
+      }
+      const existing = demoQueue.entries.find((entry) => entry.flightId === params.flightId);
+      if (existing) {
+        router.replace({ pathname: '/queue/status', params: { entryId: existing.id, flightId: existing.flightId } });
+        return;
+      }
+      setDemoJoinPending(true);
+      try {
+        await demoQueue.joinFlight(demoFlightQuery.data);
+        const position = demoQueue.entries.length + 1;
+        router.replace({
+          pathname: '/queue/joined',
+          params: {
+            ...params,
+            entryId: `demo-${params.flightId}`,
+            position: String(position),
+            totalInQueue: String(position),
+            flightStatus: demoFlightQuery.data.status ?? 'available',
+          },
+        } as any);
+      } catch (error) {
+        setJoinError(error instanceof Error ? error.message : 'The local demo queue could not be updated.');
+      } finally {
+        setDemoJoinPending(false);
+      }
+      return;
+    }
     if (useLinePass) setOverlayPhase('applying');
     joinMutation.mutate({
       data: {
@@ -164,7 +208,7 @@ export default function InternationalPaymentReviewScreen() {
   }
 
   if (flightUnavailable) {
-    return <FlightUnavailableState status={(liveFlight as any)?.status} bottomPad={bottomPad} />;
+    return <FlightUnavailableState status={currentFlightStatus} bottomPad={bottomPad} />;
   }
 
   return (
@@ -180,9 +224,13 @@ export default function InternationalPaymentReviewScreen() {
           <Feather name="lock" size={13} color={colors.primary} />
           <Text style={[styles.eyebrow, { color: colors.primary }]}>PAYMENT REVIEW</Text>
         </View>
-        <Text style={[styles.title, { color: colors.textOnSurface }]}>Review your international hold</Text>
+        <Text style={[styles.title, { color: colors.textOnSurface }]}>
+          {demoMode ? 'Review the international demo step' : 'Review your international hold'}
+        </Text>
         <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
-          Confirm the authorization hold before joining the waiting queue.
+          {demoMode
+            ? 'Continue to add this flight to the local Preview queue.'
+            : 'Confirm the authorization hold before joining the waiting queue.'}
         </Text>
         <Text style={[styles.subtitle, { color: colors.mutedForegroundLight, fontWeight: '600' }]}>
           Local demo only — no real card authorization or charge is made.
@@ -211,37 +259,45 @@ export default function InternationalPaymentReviewScreen() {
             <Text style={[styles.amountLabel, { color: colors.primaryForeground + 'CC' }]}>INTERNATIONAL FLIGHT</Text>
           </View>
           <Text style={[styles.amount, { color: colors.primaryForeground }]}>
-            ${fee.toLocaleString()} authorization hold
+            {demoMode ? `$${fee.toLocaleString()} demo-only fee` : `$${fee.toLocaleString()} authorization hold`}
           </Text>
           <Text style={[styles.amountSub, { color: colors.primaryForeground + 'D9' }]}>
-            Placed on your saved card when you join
+            {demoMode ? 'No card authorization or charge is made in this Preview.' : 'Placed on your saved card when you join'}
           </Text>
         </View>
 
         <View style={[styles.explanationCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textOnSurface }]}>How the hold works</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textOnSurface }]}>
+            {demoMode ? 'Local Preview outcome' : 'How the hold works'}
+          </Text>
           <ExplanationRow
             colors={colors}
-            icon="credit-card"
-            title="The hold is placed now"
-            body={`A ${`$${fee.toLocaleString()}`} authorization hold is placed on your card when you join the queue.`}
+            icon={demoMode ? 'smartphone' : 'credit-card'}
+            title={demoMode ? 'The fee is display-only' : 'The hold is placed now'}
+            body={demoMode
+              ? 'This screen stores a simulated queue entry only. It does not authorize a card or record a fee.'
+              : `A ${`$${fee.toLocaleString()}`} authorization hold is placed on your card when you join the queue.`}
           />
           <ExplanationRow
             colors={colors}
-            icon="check-circle"
-            title="You are charged only if you take the flight"
-            body="The hold becomes a charge only when you actually take this flight."
+            icon={demoMode ? 'check-circle' : 'check-circle'}
+            title={demoMode ? 'No payment is processed' : 'You are charged only if you take the flight'}
+            body={demoMode
+              ? 'Continue to the Queue Success screen with no billing or membership changes.'
+              : 'The hold becomes a charge only when you actually take this flight.'}
           />
-          <ExplanationRow
-            colors={colors}
-            icon="rotate-ccw"
-            title="The hold is released if you do not take the flight"
-            body="If you do not take the flight, the authorization is released instead of becoming a charge."
-            last
-          />
+          {!demoMode && (
+            <ExplanationRow
+              colors={colors}
+              icon="rotate-ccw"
+              title="The hold is released if you do not take the flight"
+              body="If you do not take the flight, the authorization is released instead of becoming a charge."
+              last
+            />
+          )}
         </View>
 
-        <View style={[styles.cardCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        {!demoMode && <View style={[styles.cardCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.cardHeader}>
             <Text style={[styles.sectionTitle, { color: colors.textOnSurface }]}>Payment method</Text>
             <Feather name="credit-card" size={18} color={colors.mutedForegroundLight} />
@@ -266,7 +322,7 @@ export default function InternationalPaymentReviewScreen() {
               No saved card is selected. This demo review does not connect to a billing provider.
             </Text>
           )}
-        </View>
+        </View>}
 
         <View style={[styles.plusCard, { backgroundColor: colors.primary + '0D', borderColor: colors.primary + '44' }]}>
           <View style={styles.plusCopy}>
@@ -276,7 +332,7 @@ export default function InternationalPaymentReviewScreen() {
             </Text>
           </View>
           <TouchableOpacity
-            onPress={() => router.push('/upgrade/plus')}
+            onPress={() => router.push(demoMode ? '/membership/plans' : '/upgrade/plus' as any)}
             activeOpacity={0.8}
             style={[styles.plusButton, { borderColor: colors.primary }]}
           >
@@ -297,10 +353,12 @@ export default function InternationalPaymentReviewScreen() {
           </View>
         )}
         <PrimaryButton
-          label={`Confirm $${fee.toLocaleString()} hold & join queue`}
+          label={demoMode ? 'Continue — Demo Only' : `Confirm $${fee.toLocaleString()} hold & join queue`}
+          testID={demoMode ? 'full-app-demo-confirm-international' : undefined}
           onPress={handleConfirm}
-          loading={joinMutation.isPending}
-          disabled={!cardsHydrated || joinMutation.isPending}
+          loading={joinMutation.isPending || demoJoinPending}
+          disabled={(!demoMode && !cardsHydrated) || joinMutation.isPending || demoJoinPending ||
+            (demoMode && (!demoQueue?.hydrated || !!demoQueue.storageError || demoFlightQuery.isLoading))}
         />
       </View>
     </View>

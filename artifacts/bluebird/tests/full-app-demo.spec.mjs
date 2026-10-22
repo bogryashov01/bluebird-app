@@ -59,6 +59,32 @@ function expectAnonymousReadOnlyTraffic(requests) {
   )).toBe(true);
 }
 
+function trackQueueMutations(page) {
+  const mutations = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() !== "GET" && /\/api\/(?:queue|empty-legs|line-passes|membership|trips)/.test(url.pathname)) {
+      mutations.push(`${request.method()} ${url.pathname}`);
+    }
+  });
+  return mutations;
+}
+
+async function acknowledgeQueuePolicies(page) {
+  await expect(page.getByTestId("queue-continue-button")).toBeDisabled();
+  for (const id of [
+    "queue-ack-pet-policy",
+    "queue-ack-cancellation-risk",
+    "queue-ack-baggage-limit",
+    "queue-ack-punctuality",
+    "bringing-pet-no",
+  ]) {
+    await page.getByTestId(id).click();
+  }
+  await expect(page.getByTestId("queue-continue-button")).toBeEnabled();
+  await page.getByTestId("queue-continue-button").click();
+}
+
 test("the regular Bluebird tabs and flight detail work in the identity-free demo", async ({ page }) => {
   const requests = trackProductionRequests(page);
   const externalWrites = [];
@@ -91,7 +117,7 @@ test("the regular Bluebird tabs and flight detail work in the identity-free demo
   await expect(page.getByTestId("full-app-demo-disabled-profile-row")).toHaveAttribute("aria-disabled", "true");
 
   await page.getByRole("tab", { name: /Trips/ }).click();
-  await expect(page.getByTestId("full-app-demo-upcoming-empty")).toContainText("No upcoming bookings");
+  await expect(page.getByTestId("full-app-demo-upcoming-empty")).toContainText("No flights won yet");
   await page.getByTestId("full-app-demo-trips-tab-pending").click();
   await expect(page.getByTestId("full-app-demo-my-queue-empty")).toContainText("No simulated flights yet");
 
@@ -104,14 +130,15 @@ test("the regular Bluebird tabs and flight detail work in the identity-free demo
   await expect(page.getByTestId("flight-skip-line-pass-card")).toHaveAttribute("aria-disabled", "true");
   await expect(page.getByText("Ask AI Concierge", { exact: true })).toHaveCount(0);
 
-  await page.goto("/flight/98765");
+  await page.goto("/concierge");
   await expect(page.getByTestId("full-app-demo-denied")).toBeVisible();
   expectAnonymousReadOnlyTraffic(requests);
   expect(externalWrites).toEqual([]);
 });
 
-test("live queue join and leave stay local and appear consistently on My Flights", async ({ page }) => {
+test("domestic live-flight queue, local pass purchase, win, and My Flights persist without backend mutations", async ({ page }) => {
   const requests = trackProductionRequests(page);
+  const mutations = trackQueueMutations(page);
   const externalWrites = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -129,36 +156,156 @@ test("live queue join and leave stay local and appear consistently on My Flights
 
   await page.goto("/");
   await page.getByTestId("production-flight-card-98765").click();
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByTestId("full-app-demo-join-queue").click();
+  await expect(page.getByTestId("full-app-demo-policy-continue")).toBeVisible();
+  await page.goBack();
+  await expect(page.getByTestId("full-app-demo-join-queue")).toBeVisible();
+  await page.getByTestId("full-app-demo-join-queue").click();
+  await page.getByTestId("full-app-demo-policy-continue").click();
+  await acknowledgeQueuePolicies(page);
+  await expect(page.getByText("You're in the queue")).toBeVisible();
+  await page.getByTestId("full-app-demo-joined-view-status").click();
   await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("#1");
-  await expect(page.getByTestId("full-app-demo-leave-queue")).toBeVisible();
+  await expect(page.getByTestId("full-app-demo-pass-balance")).toContainText("0 passes");
 
   await page.reload();
   await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("#1");
-  await expect(page.getByTestId("full-app-demo-leave-queue")).toBeVisible();
-  await page.getByTestId("flight-detail-back").click();
-  await page.getByRole("tab", { name: /Trips/ }).click();
-  await page.getByTestId("full-app-demo-trips-tab-pending").click();
-  const queuedFlight = page.getByTestId("trip-card-open-details");
-  await expect(queuedFlight).toContainText("SIMULATED QUEUE · #1");
-  await expect(queuedFlight).toContainText("Seattle → San Francisco");
-  await queuedFlight.click();
+  await expect(page.getByTestId("full-app-demo-pass-balance")).toContainText("0 passes");
+  await page.goto("/queue/join?flightId=98765");
+  await page.getByTestId("queue-continue-button").click();
   await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("#1");
-
-  page.once("dialog", (dialog) => dialog.accept());
-  await page.getByTestId("full-app-demo-leave-queue").click();
-  await expect(page.getByTestId("full-app-demo-join-queue")).toBeVisible();
-  await page.getByTestId("flight-detail-back").click();
+  await page.getByTestId("full-app-demo-use-pass").click();
+  await expect(page.getByText("Upgrade to Plus Membership")).toBeVisible();
+  await page.getByTestId("full-app-demo-upgrade-plus").click();
+  await expect(page).toHaveURL(/membership\/plans/);
+  await page.goBack();
+  await expect(page.getByTestId("full-app-demo-buy-pass")).toBeVisible();
+  await expect(page.getByText("Local demo purchase — no payment or membership change will be made.")).toBeVisible();
+  await page.getByTestId("full-app-demo-buy-pass").click();
+  await expect(page.getByTestId("full-app-demo-confirm-pass")).toBeVisible();
+  await expect(page.getByTestId("full-app-demo-pass-balance-confirmation")).toHaveText("1 pass");
+  await page.getByTestId("full-app-demo-confirm-pass").click();
+  await expect(page.getByText("You're confirmed!")).toBeVisible({ timeout: 10_000 });
+  await page.goto("/queue/status?flightId=98765");
+  await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("Flight won");
+  await page.getByTestId("full-app-demo-view-won").click();
+  await expect(page.getByText("You're confirmed!")).toBeVisible();
+  await page.getByTestId("full-app-demo-confirmed-my-trips").click();
+  await expect(page.getByTestId("full-app-demo-trips")).toBeVisible();
+  await expect(page.getByTestId("trip-card-open-details")).toContainText("FLIGHT WON · DEMO");
+  await page.reload();
+  await expect(page.getByTestId("trip-card-open-details")).toContainText("FLIGHT WON · DEMO");
   await page.getByTestId("full-app-demo-trips-tab-pending").click();
   await expect(page.getByTestId("full-app-demo-my-queue-empty")).toBeVisible();
+  await page.goto("/flight/98765");
+  await expect(page.getByTestId("full-app-demo-flight-queue-status")).toContainText("Flight won");
+  await expect(page.getByTestId("full-app-demo-view-won-flight")).toBeVisible();
 
+  expect(mutations).toEqual([]);
   expectAnonymousReadOnlyTraffic(requests);
   expect(externalWrites).toEqual([]);
 });
 
-test("failed live flight reads fall back to typed fixture cards and details without queue actions", async ({ page }) => {
+test("international Base flow shows the notice and demo-only confirmation before joining", async ({ page }) => {
+  const intlFlight = {
+    ...liveFlight,
+    id: 98766,
+    originAirport: "SFO",
+    originCity: "San Francisco",
+    destinationAirport: "YVR",
+    destinationCity: "Vancouver",
+    destinationTz: "America/Vancouver",
+    isInternational: true,
+  };
   const requests = trackProductionRequests(page);
+  const mutations = trackQueueMutations(page);
+  const externalWrites = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() !== "GET" && !["127.0.0.1", "localhost"].includes(url.hostname)) {
+      externalWrites.push(`${request.method()} ${url.hostname}${url.pathname}`);
+    }
+  });
+  await mockProduction(page, async ({ path, method }) => {
+    if (method !== "GET") return { status: 405, body: { error: "read only" } };
+    if (path === "/api/empty-legs") return { body: [intlFlight] };
+    if (path === "/api/empty-legs/98766") return { body: intlFlight };
+    if (path.startsWith("/api/airports")) return { body: [] };
+    return { status: 404, body: { error: "not found" } };
+  });
+
+  await page.goto("/");
+  await page.getByTestId("production-flight-card-98766").click();
+  await page.getByTestId("full-app-demo-join-queue").click();
+  await page.getByTestId("full-app-demo-policy-continue").click();
+  await acknowledgeQueuePolicies(page);
+  await expect(page.getByText("International Flight Notice")).toBeVisible();
+  await expect(page.getByText("Local demo only — continuing records no real card authorization or payment.")).toBeVisible();
+  await page.getByTestId("full-app-demo-intl-continue").click();
+  await expect(page.getByText("Local Preview outcome")).toBeVisible();
+  await expect(page.getByTestId("full-app-demo-confirm-international")).toBeVisible();
+  await page.getByTestId("full-app-demo-confirm-international").click();
+  await expect(page.getByText("You're in the queue")).toBeVisible();
+  await page.getByTestId("full-app-demo-joined-view-status").click();
+  await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("#1");
+
+  expect(mutations).toEqual([]);
+  expectAnonymousReadOnlyTraffic(requests);
+  expect(externalWrites).toEqual([]);
+});
+
+test("a live flight that is no longer available cannot start a demo queue", async ({ page }) => {
+  const unavailableFlight = { ...liveFlight, status: "cancelled" };
+  const requests = trackProductionRequests(page);
+  const mutations = trackQueueMutations(page);
+  await mockProduction(page, async ({ path }) => {
+    if (path === "/api/empty-legs") return { body: [unavailableFlight] };
+    if (path === "/api/empty-legs/98765") return { body: unavailableFlight };
+    if (path.startsWith("/api/airports")) return { body: [] };
+    return { status: 404, body: { error: "not found" } };
+  });
+
+  await page.goto("/");
+  await page.goto("/flight/98765");
+  await expect(page.getByText("Flight no longer available")).toBeVisible();
+  await expect(page.getByTestId("full-app-demo-join-queue")).toHaveCount(0);
+  expect(mutations).toEqual([]);
+  expectAnonymousReadOnlyTraffic(requests);
+});
+
+test("an existing local queue closes when its live flight becomes unavailable", async ({ page }) => {
+  let liveStatus = "published";
+  const requests = trackProductionRequests(page);
+  const mutations = trackQueueMutations(page);
+  await mockProduction(page, async ({ path }) => {
+    const flight = { ...liveFlight, status: liveStatus };
+    if (path === "/api/empty-legs") return { body: [flight] };
+    if (path === "/api/empty-legs/98765") return { body: flight };
+    if (path.startsWith("/api/airports")) return { body: [] };
+    return { status: 404, body: { error: "not found" } };
+  });
+
+  await page.goto("/");
+  await page.getByTestId("production-flight-card-98765").click();
+  await page.getByTestId("full-app-demo-join-queue").click();
+  await page.getByTestId("full-app-demo-policy-continue").click();
+  await acknowledgeQueuePolicies(page);
+  await page.getByTestId("full-app-demo-joined-view-status").click();
+  await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("Waiting");
+
+  liveStatus = "cancelled";
+  await page.reload();
+  await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("Queue closed");
+  await page.goto("/flight/98765");
+  await expect(page.getByTestId("full-app-demo-flight-queue-status")).toContainText("Closed");
+  await expect(page.getByTestId("full-app-demo-open-queue-status")).toBeVisible();
+  expect(mutations).toEqual([]);
+  expectAnonymousReadOnlyTraffic(requests);
+});
+
+test("failed live reads still support the approved local queue journey from a fallback fixture", async ({ page }) => {
+  const requests = trackProductionRequests(page);
+  const mutations = trackQueueMutations(page);
   const externalWrites = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -177,9 +324,14 @@ test("failed live flight reads fall back to typed fixture cards and details with
   await expect(page.getByTestId("full-app-demo-fixture-badge-98765")).toContainText("SAMPLE DATA");
   await fixtureCard.click();
   await expect(page.getByTestId("flight-detail-route")).toContainText("SEA → SFO");
-  await expect(page.getByTestId("full-app-demo-flight-fixture-badge")).toContainText("QUEUE DISABLED");
-  await expect(page.getByText("Sample flight · queue disabled", { exact: true })).toBeVisible();
-  await expect(page.getByTestId("full-app-demo-join-queue")).toHaveCount(0);
+  await expect(page.getByTestId("full-app-demo-flight-fixture-badge")).toContainText("LOCAL QUEUE ONLY");
+  await page.getByTestId("full-app-demo-join-queue").click();
+  await page.getByTestId("full-app-demo-policy-continue").click();
+  await acknowledgeQueuePolicies(page);
+  await expect(page.getByText("You're in the queue")).toBeVisible();
+  await page.getByTestId("full-app-demo-joined-view-status").click();
+  await expect(page.getByTestId("full-app-demo-queue-status")).toContainText("#1");
+  expect(mutations).toEqual([]);
   expectAnonymousReadOnlyTraffic(requests);
   expect(externalWrites).toEqual([]);
 });

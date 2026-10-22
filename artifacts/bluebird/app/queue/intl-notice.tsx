@@ -9,15 +9,20 @@ import { useColors } from '@/hooks/useColors';
 import { FloatingBackButton } from '@/components/FloatingBackButton';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import { useGetFlight } from '@workspace/api-client-react';
+import { useQuery } from '@tanstack/react-query';
 import { FlightUnavailableState } from '@/components/FlightUnavailableState';
 import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { useAuth } from '@/context/AuthContext';
+import { fetchFullAppDemoFlight } from '@/lib/fullAppDemoLiveReads';
+import { parseProductionFlightId } from '@/lib/productionFlights';
 
 // Dark "International Flight Notice" — shown only to Base members joining an
 // international flight. Plus waives the fee.
 export default function InternationalNoticeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { demoMode } = useAuth();
   const params = useLocalSearchParams<{
     flightId: string; fromCity: string; toCity: string;
     from: string; to: string; useLinePass?: string;
@@ -25,16 +30,23 @@ export default function InternationalNoticeScreen() {
     petWeightLbs?: string;
   }>();
   const { flightId } = params;
-  const localDemoFlow = isLocalFlightReadMode();
+  const localDemoFlow = demoMode || isLocalFlightReadMode();
   const bringingPet = params.bringingPet === '1';
   const fee = 1000;
   // Re-check the flight's current status when the screen loads so members
   // aren't offered fee/upgrade choices for a flight they can no longer join.
   const { data: liveFlight } = useGetFlight(flightId!, {
-    query: { enabled: localDemoFlow && !!flightId, queryKey: [`/api/flights/${flightId}`] },
+    query: { enabled: localDemoFlow && !demoMode && !!flightId, queryKey: [`/api/flights/${flightId}`] },
   });
+  const numericFlightId = parseProductionFlightId(flightId);
+  const demoFlightQuery = useQuery({
+    queryKey: ['full-app-demo-flight', numericFlightId],
+    queryFn: ({ signal }) => fetchFullAppDemoFlight(numericFlightId!, { signal }),
+    enabled: demoMode && numericFlightId !== null,
+  });
+  const currentFlightStatus = demoMode ? demoFlightQuery.data?.status : (liveFlight as any)?.status;
   const flightUnavailable =
-    !!liveFlight && (liveFlight as any).status !== 'available';
+    !!currentFlightStatus && currentFlightStatus !== 'available' && currentFlightStatus !== 'published';
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -60,7 +72,7 @@ export default function InternationalNoticeScreen() {
 
   // ── Flight no longer available: friendly full-screen state ──
   if (flightUnavailable) {
-    return <FlightUnavailableState status={(liveFlight as any)?.status} bottomPad={bottomPad} />;
+    return <FlightUnavailableState status={currentFlightStatus} bottomPad={bottomPad} />;
   }
 
   // Brand-navy surface in both modes — textOnBrand/mutedOnBrand tokens apply.
@@ -99,9 +111,14 @@ export default function InternationalNoticeScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
-        <PrimaryButton label="Upgrade to Plus" onPress={() => router.push('/upgrade/plus')} />
+        <PrimaryButton
+          label="Upgrade to Plus"
+          testID={demoMode ? 'full-app-demo-upgrade-plus' : undefined}
+          onPress={() => router.push(demoMode ? '/membership/plans' : '/upgrade/plus' as any)}
+        />
         <SecondaryButton
           label={`Continue with $${fee.toLocaleString()} international fee`}
+          testID={demoMode ? 'full-app-demo-intl-continue' : undefined}
           onPress={handleContinueBase}
           backgroundColor={colors.textOnBrand + '14'}
           textColor={colors.textOnBrand}

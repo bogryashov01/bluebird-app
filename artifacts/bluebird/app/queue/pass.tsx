@@ -15,6 +15,7 @@ import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice'
 import { useUseLinePassOnQueueEntry } from '@workspace/api-client-react';
 import { markQueueEntryCelebrated } from '@/lib/queueCelebration';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
 
 function shortDate(d?: string) {
   if (!d) return '';
@@ -27,7 +28,9 @@ function shortDate(d?: string) {
 // Dark "Skip the Line Pass" sheet — confirming uses a pass and wins the seat.
 export default function SkipLinePassScreen() {
   const colors = useColors();
-  const localDemoFlow = isLocalFlightReadMode();
+  const { user, updateUser, demoMode } = useAuth();
+  const localDemoFlow = demoMode || isLocalFlightReadMode();
+  const demoQueue = useFullAppDemoQueueOptional();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
         entryId?: string; position?: string; bringingPet?: string;
@@ -35,9 +38,8 @@ export default function SkipLinePassScreen() {
     departureDate?: string; departureTime?: string; duration?: string;
     aircraftType?: string; flightId?: string;
   }>();
-  const { user, updateUser } = useAuth();
   const queryClient = useQueryClient();
-  const passCount = user?.linePassCount ?? 0;
+  const passCount = demoMode ? demoQueue?.passCount ?? 0 : user?.linePassCount ?? 0;
   const [actionError, setActionError] = useState<string | null>(null);
   // Overlay shown while the pass is applied; null = hidden.
   const [overlayPhase, setOverlayPhase] = useState<ApplyingPassPhase | null>(null);
@@ -46,6 +48,8 @@ export default function SkipLinePassScreen() {
   // True when the server reported the seat was already confirmed — a positive
   // outcome where no pass was spent; the overlay copy changes to match.
   const [alreadyConfirmed, setAlreadyConfirmed] = useState(false);
+  const [demoActionPending, setDemoActionPending] = useState(false);
+  const demoEntry = demoQueue?.entries.find((entry) => entry.flightId === params.flightId);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -106,11 +110,28 @@ export default function SkipLinePassScreen() {
     },
   });
 
-  const isPending = usePassMutation.isPending;
+  const isPending = usePassMutation.isPending || demoActionPending;
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!localDemoFlow || !params.entryId || isPending) return;
     setActionError(null);
+    if (demoMode) {
+      if (!params.flightId || !demoQueue || demoQueue.storageError) {
+        setActionError(demoQueue?.storageError ?? 'This local queue is unavailable.');
+        return;
+      }
+      setDemoActionPending(true);
+      try {
+        await demoQueue.usePass(params.flightId);
+        pendingNavRef.current = goConfirmed;
+        setOverlayPhase('success');
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : 'The local demo pass could not be used.');
+      } finally {
+        setDemoActionPending(false);
+      }
+      return;
+    }
     setOverlayPhase('applying');
     usePassMutation.mutate({ id: params.entryId });
   };
@@ -123,7 +144,8 @@ export default function SkipLinePassScreen() {
   };
 
   const routeLabel = `${params.from ?? '—'} → ${params.to ?? '—'}`;
-  const canConfirm = passCount > 0;
+  const canConfirm = passCount > 0 &&
+    (!demoMode || (demoEntry?.status === 'waiting' && !demoQueue?.storageError));
 
   if (!localDemoFlow) {
     return <ProductionReadOnlyNotice flightId={params.flightId} />;
@@ -152,7 +174,10 @@ export default function SkipLinePassScreen() {
         <View style={[styles.balanceCard, { backgroundColor: colors.textOnBrand + '0A', borderColor: colors.textOnBrand + '14' }]}>
           <View>
             <Text style={[styles.balanceLabel, { color: colors.mutedOnBrand }]}>SKIP THE LINE PASS BALANCE</Text>
-            <Text style={[styles.balanceValue, { color: colors.textOnBrand }]}>
+            <Text
+              testID={demoMode ? 'full-app-demo-pass-balance-confirmation' : undefined}
+              style={[styles.balanceValue, { color: colors.textOnBrand }]}
+            >
               {passCount} pass{passCount === 1 ? '' : 'es'}
             </Text>
           </View>
@@ -182,6 +207,7 @@ export default function SkipLinePassScreen() {
         )}
         <PrimaryButton
           label="Confirm — Use Skip the Line Pass"
+          testID={demoMode ? 'full-app-demo-confirm-pass' : undefined}
           onPress={handleConfirm}
           loading={isPending}
           disabled={!canConfirm}

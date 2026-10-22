@@ -48,12 +48,29 @@ test("explicit demo URLs are recognized for release denial", () => {
   assert.equal(isFullAppDemoAllowedRoute("/", []), true);
   assert.equal(isFullAppDemoAllowedRoute("/bluebird/", ["bluebird"]), true);
   assert.equal(isFullAppDemoAllowedRoute("/membership/plans", ["membership", "plans"]), true);
+  for (const path of [
+    "/flight/98765",
+    "/flight/policy",
+    "/flight/confirmed",
+    "/queue/join",
+    "/queue/intl-notice",
+    "/queue/payment-review",
+    "/queue/joined",
+    "/queue/status",
+    "/queue/pass",
+    "/queue/buy-pass",
+    "/upgrade/plus",
+  ]) {
+    assert.equal(isFullAppDemoAllowedRoute(path, []), true, `${path} should be allowed inside the demo`);
+  }
   assert.equal(isFullAppDemoAllowedRoute("/demo/flight/98765", ["demo", "flight", "[id]"]), true);
   assert.equal(isFullAppDemoAllowedRoute("", ["demo", "flight", "[id]"]), true);
   assert.equal(isFullAppDemoAllowedRoute("/demo/flight/0", ["demo", "flight", "0"]), false);
   assert.equal(isFullAppDemoAllowedRoute("/demo/flight/98765/queue", ["demo", "flight", "[id]", "queue"]), false);
   assert.equal(isFullAppDemoAllowedRoute("/bluebird/concierge", ["bluebird", "concierge"]), false);
-  assert.equal(isFullAppDemoAllowedRoute("/queue/join", ["queue", "join"]), false);
+  assert.equal(isFullAppDemoAllowedRoute("/queue/production-unavailable", ["queue", "production-unavailable"]), false);
+  assert.equal(isFullAppDemoAllowedRoute("/flight/0", ["flight", "0"]), false);
+  assert.equal(isFullAppDemoAllowedRoute("/queue/status/extra", ["queue", "status", "extra"]), false);
   assert.equal(isFullAppDemoAllowedRoute("/concierge", ["concierge"]), false);
 });
 
@@ -81,6 +98,8 @@ test("the demo provider is identity-free and privileged sample controls stay dis
   assert.match(layoutSource, /name="demo\/flight\/\[id\]"/);
   assert.match(layoutSource, /<FullAppDemoQueueProvider>/);
   assert.match(queueStoreSource, /FULL_APP_DEMO_QUEUE_STORAGE_KEY/);
+  assert.match(queueStoreSource, /AsyncStorage\.setItem\(FULL_APP_DEMO_QUEUE_STORAGE_KEY/);
+  assert.match(queueStoreSource, /useFullAppDemoPass/);
   assert.doesNotMatch(queueStoreSource, /useMutation|joinEmptyLegQueue|leaveEmptyLegQueue|useCancelQueueEntry/);
 });
 

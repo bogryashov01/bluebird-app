@@ -118,6 +118,7 @@ export default function QueueJoinedScreen() {
       <View style={styles.footer}>
         <PrimaryButton
           label="View Queue Status"
+          testID="full-app-demo-joined-view-status"
           onPress={() =>
             router.replace({
               pathname: '/queue/status',

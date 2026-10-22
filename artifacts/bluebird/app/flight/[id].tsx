@@ -137,9 +137,7 @@ export default function FlightDetailScreen() {
   const localReadMode = !demoMode && shouldUseLocalFlightReadMode(authMode, isLocalFlightReadMode());
   const demoQueue = useFullAppDemoQueueOptional();
   const numericFlightId = parseProductionFlightId(id);
-  const [demoQueueActionPending, setDemoQueueActionPending] = useState(false);
-  const [demoQueueActionError, setDemoQueueActionError] = useState<string | null>(null);
-  const demoQueueIndex = demoQueue?.entries.findIndex((entry) => entry.flightId === String(numericFlightId)) ?? -1;
+  const demoEntry = demoQueue?.entries.find((entry) => entry.flightId === String(numericFlightId));
   const [directionsTarget, setDirectionsTarget] = useState<DirectionsTarget | null>(null);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const [networkMessage, setNetworkMessage] = useState('');
@@ -173,6 +171,13 @@ export default function FlightDetailScreen() {
         productionFlightQuery.data ? [productionFlightQuery.data] : undefined,
         numericFlightId,
       );
+  React.useEffect(() => {
+    if (!demoMode || !demoQueue || !demoEntry || !flight?.status) return;
+    if (demoEntry.status !== 'waiting' && demoEntry.status !== 'changed-position') return;
+    if (flight.status === 'available' || flight.status === 'published') return;
+    void demoQueue.transition(demoEntry.flightId, 'closed').catch(() => {});
+  }, [demoMode, demoQueue, demoEntry, flight?.status]);
+
   const localAirportsQuery = useListAirports({
     query: { enabled: localReadMode && !!flight },
   });
@@ -527,12 +532,6 @@ export default function FlightDetailScreen() {
   // ── CTA footer rendering — branched on my-status ─────────────────────────
   function renderCTA() {
     if (demoMode) {
-      if (f.source !== 'production') {
-        return renderUnavailableCTA(
-          'Sample flight · queue disabled',
-          'This local fixture keeps the regular flight detail screen populated. Queue simulation is available only for live flights.',
-        );
-      }
       if (!demoQueue || !demoQueue.hydrated) {
         return (
           <View style={styles.statusLoadingRow} testID="full-app-demo-queue-loading">
@@ -540,39 +539,67 @@ export default function FlightDetailScreen() {
           </View>
         );
       }
-      const queued = demoQueueIndex >= 0;
-      const updateDemoQueue = async () => {
-        if (demoQueueActionPending || demoQueue.storageError) return;
-        setDemoQueueActionError(null);
-        const confirmed = await confirmDialog(
-          queued ? 'Leave simulated queue?' : 'Join simulated queue?',
-          queued
-            ? 'Your local demo position will be removed. This does not change a real flight queue.'
-            : 'This adds the live flight to My Flights on this device only. No request or booking is sent.',
-          queued ? 'Leave Queue' : 'Join Queue',
-          queued,
+      const entry = demoEntry;
+      if (!entry && f.status && f.status !== 'available' && f.status !== 'published') {
+        return renderUnavailableCTA(
+          'Flight no longer available',
+          'This flight is no longer accepting queue entries. No demo queue was created.',
         );
-        if (!confirmed) return;
-        setDemoQueueActionPending(true);
-        try {
-          if (queued) await demoQueue.leaveFlight(f.id);
-          else await demoQueue.joinFlight(f);
-        } catch (error) {
-          setDemoQueueActionError(error instanceof Error ? error.message : 'The simulated queue could not be updated.');
-        } finally {
-          setDemoQueueActionPending(false);
-        }
+      }
+      const openDemoQueue = () => router.push({
+        pathname: '/queue/status',
+        params: { flightId: f.id, ...(entry ? { entryId: entry.id } : {}) },
+      });
+      const openDemoPolicy = () => router.push({
+        pathname: '/flight/policy',
+        params: {
+          flightId: f.id,
+          from: f.fromAirport ?? '',
+          to: f.toAirport ?? '',
+          fromCity: f.fromCity ?? '',
+          toCity: f.toCity ?? '',
+          departureDate: f.departureDate ?? '',
+          departureTime: f.departureTime ?? '',
+          duration: f.duration ?? '',
+          aircraftType: f.aircraftTypeName ?? f.aircraftType ?? '',
+          international: f.international ? '1' : '0',
+          feeUsd: String(f.internationalFeeUsd ?? 1000),
+          flightStatus: f.status ?? 'available',
+        },
+      });
+      const demoWonParams = {
+        flightId: f.id,
+        from: f.fromAirport ?? '',
+        to: f.toAirport ?? '',
+        fromCity: f.fromCity ?? '',
+        toCity: f.toCity ?? '',
+        departureDate: f.departureDate ?? '',
+        departureTime: f.departureTime ?? '',
+        duration: f.duration ?? '',
+        aircraftType: f.aircraftTypeName ?? f.aircraftType ?? '',
+        passUsed: '1',
+        petFeeUsd: '0',
       };
       return (
         <>
-          {queued ? (
-            <View testID="full-app-demo-queue-status" style={[styles.queuePositionCard, { backgroundColor: colors.primary + '12' }]}>
-              <Text style={[styles.queuePositionLabel, { color: colors.mutedForegroundLight }]}>Simulated queue position</Text>
-              <Text style={[styles.queuePositionNumber, { color: colors.textOnSurface }]}>#{demoQueueIndex + 1}</Text>
+          {entry ? (
+            <View testID="full-app-demo-flight-queue-status" style={[styles.queuePositionCard, { backgroundColor: colors.primary + '12' }]}>
+              <Text style={[styles.queuePositionLabel, { color: colors.mutedForegroundLight }]}>
+                {entry.status === 'won' ? 'Local demo outcome' : 'Local demo queue status'}
+              </Text>
+              <Text style={[styles.queuePositionNumber, { color: colors.textOnSurface }]}>
+                {entry.status === 'won'
+                  ? 'Flight won'
+                  : entry.status === 'waiting' || entry.status === 'changed-position'
+                    ? `#${entry.position}`
+                    : entry.status === 'closed' ? 'Closed' : 'No longer waiting'}
+              </Text>
             </View>
           ) : (
             <View style={[styles.unavailableBadge, { backgroundColor: colors.muted }]}>
-              <Text style={[styles.unavailableBadgeText, { color: colors.mutedForegroundLight }]}>Demo queue · local only</Text>
+              <Text style={[styles.unavailableBadgeText, { color: colors.mutedForegroundLight }]}>
+                {f.source === 'local' ? 'Sample flight · local demo queue' : 'Demo queue · local only'}
+              </Text>
             </View>
           )}
           {demoQueue.storageError ? (
@@ -580,31 +607,29 @@ export default function FlightDetailScreen() {
               {demoQueue.storageError}
             </Text>
           ) : null}
-          {demoQueueActionError ? (
-            <Text testID="full-app-demo-queue-action-error" style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}>
-              {demoQueueActionError}
-            </Text>
-          ) : null}
           <TouchableOpacity
-            testID={queued ? 'full-app-demo-leave-queue' : 'full-app-demo-join-queue'}
+            testID={entry?.status === 'won' ? 'full-app-demo-view-won-flight' : entry ? 'full-app-demo-open-queue-status' : 'full-app-demo-join-queue'}
             accessibilityRole="button"
-            disabled={demoQueueActionPending || !!demoQueue.storageError}
-            onPress={() => void updateDemoQueue()}
+            disabled={!!demoQueue.storageError}
+            onPress={() => {
+              if (entry?.status === 'won') router.push({ pathname: '/flight/confirmed', params: demoWonParams } as any);
+              else if (entry) openDemoQueue();
+              else openDemoPolicy();
+            }}
             style={[
-              queued ? styles.leaveQueueBtn : styles.viewTripBtn,
-              queued ? { borderColor: colors.border } : { backgroundColor: colors.primary },
-              (demoQueueActionPending || !!demoQueue.storageError) && { opacity: 0.6 },
+              styles.viewTripBtn,
+              { backgroundColor: colors.primary },
+              demoQueue.storageError && { opacity: 0.6 },
             ]}
           >
-            {demoQueueActionPending
-              ? <ActivityIndicator color={queued ? colors.mutedForegroundLight : colors.primaryForeground} size="small" />
-              : <Text style={[
-                queued ? styles.leaveQueueBtnText : styles.viewTripBtnText,
-                { color: queued ? colors.mutedForegroundLight : colors.primaryForeground },
-              ]}>{queued ? 'Leave simulated queue' : 'Join simulated queue'}</Text>}
+            <Text style={[styles.viewTripBtnText, { color: colors.primaryForeground }]}>
+              {entry?.status === 'won'
+                ? 'View Flight Won'
+                : demoEntry ? 'View Queue Status' : 'Review Flight Policy & Join Queue'}
+            </Text>
           </TouchableOpacity>
           <Text style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}>
-            Queue participation is stored locally on this device. It is not a booking or account change.
+            Demo outcomes are saved on this device only. No queue request, booking, pass mutation, or payment is sent.
           </Text>
         </>
       );
@@ -944,7 +969,7 @@ export default function FlightDetailScreen() {
               testID="full-app-demo-flight-fixture-badge"
               style={[styles.flightInfoLabel, { color: colors.primary }]}
             >
-              SAMPLE FLIGHT · QUEUE DISABLED
+              SAMPLE FLIGHT · LOCAL QUEUE ONLY
             </Text>
           ) : null}
           {!!aircraftName && (

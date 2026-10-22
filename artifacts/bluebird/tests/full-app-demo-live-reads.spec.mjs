@@ -109,6 +109,31 @@ const fixtureFlights = await fetchFullAppDemoFlights({
 assert.ok(fixtureFlights.length > 0);
 assert.equal(fixtureFlights[0].source, "local");
 assert.equal(fixtureFlights[0].fromAirport, "SEA");
+
+const emptyLiveFlights = await fetchFullAppDemoFlights({
+  fetcher: async () => new Response(JSON.stringify([]), { status: 200 }),
+});
+assert.deepEqual(emptyLiveFlights, []);
+
+await assert.rejects(
+  fetchFullAppDemoFlights({
+    fetcher: async () => new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
+  }),
+  (error) => error.status === 404,
+);
+await assert.rejects(
+  fetchFullAppDemoFlight(98765, {
+    fetcher: async () => new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
+  }),
+  (error) => error.status === 404,
+);
+await assert.rejects(
+  fetchFullAppDemoFlights({
+    fetcher: async () => new Response(JSON.stringify({ unexpected: true }), { status: 200 }),
+  }),
+  /Production read response did not match/,
+);
+
 const fallbackDetail = await fetchFullAppDemoFlight(98765, {
   fetcher: async () => new Response(JSON.stringify({ error: "unavailable" }), { status: 503 }),
 });

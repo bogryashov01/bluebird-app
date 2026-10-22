@@ -3,8 +3,8 @@ name: Bluebird demo flight sources
 description: Source-aware rules for live and fixture flights in the identity-free Bluebird Preview.
 ---
 
-Keep fixture flights visually useful in the shared screens, but never treat them as public or queue-eligible flights. Only a live Production flight may be used for a public queue read or a local simulated queue entry.
+Only live Production flights may be used for public queue reads. In the development-only full-app Preview, typed fallback fixtures may create local simulated queue entries; those entries never call a queue mutation endpoint.
 
-**Why:** A fixture-backed action could look like real public queue participation even though the flight is invented and the demo has no authenticated member.
+**Why:** Bluebird's full-app Preview must exercise the approved queue journey when live flight reads are unavailable, while keeping fixture activity visibly simulated and isolated from Production.
 
-**How to apply:** Preserve the flight source through list/detail mapping and require `source === 'production'` at every public-queue or demo-queue boundary.
+**How to apply:** Preserve flight source. Require `source === 'production'` for any public queue read; allow a typed fixture only in the full-app demo's local-storage queue adapter.
