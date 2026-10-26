@@ -1,5 +1,7 @@
 # Bluebird iOS development-build readiness
 
+See [Replit Publish Expo authentication diagnosis](RELEASE-CONFIGURATION.md#replit-publish-expo-authentication-diagnosis-2026-10-26) for the read-only status of the managed Publish session and the support escalation path. The app identity remains unchanged.
+
 ## Active EAS project association (2026-10-26)
 
 - Per the owner's instruction, the local Expo config now targets owner

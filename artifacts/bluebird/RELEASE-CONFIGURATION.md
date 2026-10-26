@@ -2,6 +2,54 @@
 
 This note records Bluebird's owner-confirmed Expo/EAS identity and the remaining requirements for an iOS production build and App Store submission. No app identity, EAS project, credentials, or production environment values were created here.
 
+## Replit Publish Expo authentication diagnosis (2026-10-26)
+
+This was a read-only investigation of the reported `EXPO_UNAUTHORIZED` error.
+No app identity, credentials, build, or submission was changed or created.
+
+- **Saved and resolved identity: unchanged.** `app.json` and
+  `expo config --type public --json` both resolve owner `bogryashov01`, slug
+  `bluebird`, EAS project ID
+  `83e7e28f-bdf2-4b83-9e9d-0727ba066b2c`, and iOS bundle ID
+  `com.bluebirdjets.app`. These match the owner-confirmed active association
+  recorded below.
+- **Connected Expo personal integration: query succeeds.** The connected
+  `Expo (personal)` MCP integration is marked ready. Its read-only iOS build
+  list for this project returned an empty list without an authorization error.
+  This shows that this integration can query the project; it does not verify
+  Replit Publish's session or mean a build was created.
+- **Publish authentication: not observable from this workspace.** The personal
+  Expo integration and Replit's managed Publishing/Launch path are separate
+  observable contexts. Bluebird's local Preview script invokes
+  `create-launch login` with the Replit-provided Expo session when present;
+  that Preview helper and its workflow log do not expose the identity or
+  validity of the Publish session. No authentication token or secret value was
+  read. A successful personal-integration query cannot establish that Publish
+  is authenticated as the project owner.
+- **No verified user-facing Expo re-login or reconnect path.** Replit's
+  published mobile Launch guidance describes a managed cloud flow and documents
+  Apple account setup, but does not document an Expo-specific login, account
+  selection, logout, or reconnect control for a failed Publish session. Do not
+  reconnect the personal Expo integration as a supposed fix for the separate
+  Publish session; no evidence shows those sessions are shared.
+- **Rejection stage: undetermined.** The available task report names
+  `EXPO_UNAUTHORIZED`, but contains no raw Publishing log, request/trace ID,
+  route, full message, or attempt timestamp. The refreshed workspace logs
+  contain app workflow and deployment output, not the Publishing tool's
+  request-level diagnostics. Therefore this evidence cannot locate the error
+  before project authorization, during EAS build creation, or at another
+  backend step. No such stage is inferred here.
+- **Safe next step.** In the Project Editor, open **Publishing** and choose
+  **View logs** beside the failed deployment. If the logs do not identify the
+  rejection, use the **? / Get Help** control at the top-right of Replit to
+  contact Replit Support. Include the Repl/workspace URL, app name, the
+  existing Expo owner/slug/project ID/bundle ID above, the exact error text,
+  and the failure timestamp with timezone. Ask Support to trace the
+  Replit-managed Expo/Launch principal and session validity, verify its access
+  to the existing EAS project, identify the request route and exact failing
+  stage, and confirm whether a user-facing session reset is supported or
+  backend repair is required. Do not include credentials or tokens.
+
 ## Active EAS project association (2026-10-26)
 
 - Per the owner's instruction, Bluebird now targets Expo owner `bogryashov01`,
