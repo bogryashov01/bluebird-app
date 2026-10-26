@@ -13,7 +13,8 @@
     },
     "production": {
       "environment": "production",
-      "distribution": "store"
+      "distribution": "store",
+      "pnpm": "10.26.1"
     },
     "production-auth-test": {
       "extends": "production",
