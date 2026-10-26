@@ -13,8 +13,12 @@
       "buildNumber": "1",
       "supportsTablet": false,
       "associatedDomains": [
+        "applinks:bluebird.co",
         "applinks:bluebird.co"
-      ]
+      ],
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "intentFilters": [
@@ -33,6 +37,10 @@
             "DEFAULT"
           ]
         }
+      ],
+      "permissions": [
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR"
       ]
     },
     "web": {
