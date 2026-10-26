@@ -1,5 +1,194 @@
 # Bluebird authenticated production API readiness
 
+## Consolidated Production readiness report (2026-10-26)
+
+### Executive status
+
+**Production is not verified end to end.** No Bluebird Production API request,
+authenticated Production session, Production membership or queue operation,
+or native-device sign-in was performed for this report. The Main API clients
+and Clerk integration are implemented in source, but implementation, mocked
+tests, supplied contract/source snapshots, and the owner's reported checks do
+not prove deployed Production behavior. No row below is classified as
+**Production verified**.
+
+The current code keeps Production member-data access unavailable until token
+acceptance and a stable Bluebird member identity are verified. The Main API
+contract snapshot and separate owner report say some of those checks were
+completed; that is owner-reported evidence, not an independent runtime check.
+In particular, the current `/api/me` projection has no stable Bluebird member
+ID, so it cannot authorize member-specific routes on its own.
+
+### Clerk and transport path confirmed in current source
+
+- The installed versions recorded by the lockfile are Expo `57.0.30` and
+  `@clerk/expo` `4.10.1`. Static package compatibility is not native-runtime
+  verification.
+- Main API and Clerk selection are explicit. Development selects the
+  Development API URL and `pk_test_` key; Production selects the canonical
+  Production API URL and `pk_live_` key. Production Clerk also requires
+  `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH=true`, a valid issuer setting whose
+  host matches the key, and the Production API/Clerk pair. There is no legacy
+  API or Clerk-key fallback. The key and issuer values are not reproduced.
+- The root app mounts `ClerkProvider` only after the selected auth
+  configuration passes. Clerk Expo's `tokenCache` is passed to the provider;
+  its native implementation uses Expo SecureStore. The Clerk session snapshot
+  supplies loaded/signed-in state, `getToken`, and sign-out to the isolated
+  auth/session bridge. The UI includes separate sign-in/sign-up routes and a
+  signed-in pending/unlinked state. Route guards keep legacy-auth and
+  member-only destinations from being inferred from Clerk sign-in alone.
+- The Main API token provider reads the current Clerk session for every
+  operation, calls `getToken()` without a named template, returns no token when
+  the session is not loaded/signed in, and retains no token. The authenticated
+  transport rejects a missing token before fetch, sends
+  `Authorization: Bearer <token>`, omits cookies, and maps an HTTP 401 to a
+  local session-expired error. It does not automatically retry or sign out.
+  This is source behavior, not evidence that the deployed server accepts that
+  token type or returns those statuses.
+- `GET /api/me` is the Clerk member-resolution read, but its response is only a
+  projection. It does not return the stable Bluebird member ID required by
+  member-data cache keys or member-specific access. A token-bearing
+  `isAuthenticated: true` response is not proof of a linked member.
+  Additionally, the authenticated client requires a token even for `/api/me`,
+  while the supplied contract describes an optional-auth anonymous response.
+  A no-token anonymous request is therefore not implemented by this client.
+
+### Interpreting the earlier HTTP 400
+
+The retained 2026-10-21 browser observation was an HTTP 400 during Clerk's
+Production-key initialization/auth request from the Replit Expo Web Preview.
+The sanitized browser error said Production keys are allowed only for
+`bluebirdjets.com` and that the HTTP `Origin` must match or be a subdomain of
+the requesting URL. The retained evidence does not include the Clerk request
+URL or method, so no more specific endpoint is asserted here.
+
+This identifies a Clerk browser-domain/origin rejection. It is **not** an
+HTTP response from Bluebird's Main API `/api/me`, an API Bearer-token failure,
+or evidence of API CORS behavior. The Preview's Replit hostname is outside the
+reported accepted domain, so Production Clerk sign-in in that web Preview is
+a confirmed blocker. Do not add an origin or change Clerk settings based on
+this report; dashboard access and supported origin options were unavailable
+for independent inspection.
+
+Native iOS/Android requests do not use the browser's Replit `Origin` header,
+so this specific browser-origin restriction does not establish a native API
+failure. Native sign-in, SecureStore session restoration, callback routing,
+and Production API acceptance remain **unverified on a device**. A browser
+Preview result cannot substitute for a native test, and native implementation
+in source does not prove native runtime support.
+
+### Main API integration evidence matrix
+
+Statuses describe the evidence available for this report, not feature
+availability or deployed-service health:
+
+- **Production verified** — direct, authorized Production runtime evidence.
+  None is available for the listed integrations.
+- **Implemented but unverified** — Mobile client and supplied contract/source
+  evidence exist, but no Production runtime verification is available.
+- **Demo only** — the user-facing action is implemented in the local/demo path;
+  no supported Production action is available.
+- **Missing backend contract** — Mobile code may contain a caller or data shape,
+  but the evidence supplied here does not establish the corresponding Main API
+  contract.
+
+| Area | Evidence status | Current Mobile behavior and limit |
+| --- | --- | --- |
+| `GET /api/me` | **Implemented but unverified** | Authenticated request and strict response parser exist; profile-completion routing uses its booleans. The supplied snapshot describes an optional-auth endpoint, but this client requires a token. The response has no stable Bluebird member ID and cannot resolve member access. A 2026-10-16 authenticated Development 200 was reported; it is not Production evidence. |
+| `GET /api/membership` | **Implemented but unverified** | Authenticated reader/parser exists and is separate from `/api/me`. Supplied contract evidence describes the membership projection. Production membership data is not established by the mock fixtures or source. |
+| Flight list | **Implemented but unverified** | Public `GET /api/empty-legs` reader and response validation exist. Supplied source-audit evidence describes the route as public. Intercepted/mock reads and the legacy local API are not Production runtime proof. |
+| Flight details | **Implemented but unverified** | Current source has a public per-flight `GET /api/empty-legs/{id}` reader. The supplied Main-source audit reports a detail route; a prior 2026-10-16 note described a list-backed implementation and is historical, not the current reader. Deployed route/response compatibility remains unverified. |
+| Queue reads and join/leave | **Implemented but unverified** | Authenticated Bearer readers/actions validate the viewer marker, requested flight ID, and server-confirmed transition. The supplied contract/source snapshot describes these operations; Production UI readiness remains gated. No queue action was sent. |
+| Trips | **Implemented but unverified** | Authenticated `GET /api/trips` parses current/past lists. The supplied contract documents the list. Production trip details, passenger/manifest changes, boarding passes, and booking actions are not wired through this Main API client; their contracts are not established here. |
+| Referral program | **Missing backend contract** | The Mobile Main API client contains invite-code, referral-statistics, invite-validation, and pricing-preview callers. Local tests assert the client's route strings and mock responses, but the supplied contract/source evidence reviewed for this report does not establish deployed Main API routes or response schemas. Do not treat those callers or mock tests as proof of a Production integration. |
+| Skip the Line credit use | **Implemented but unverified** | A confirmed action can call `POST /api/empty-legs/{id}/skip-line` with `useCredit: true`; the client requires a positive existing credit balance and accepts success only when the API confirms the effective winner. The snapshot documents the operation. Credit ownership, eligibility, and transition behavior are server-authoritative and not Production-tested. This is not a checkout or purchase. |
+| International Pass use when joining a queue | **Implemented but unverified** | The queue join caller models the documented pass-authorization/credit fields, but the Production UI remains unavailable. No queue join was sent; the server must confirm eligibility and spend/transition behavior. |
+| Skip the Line pass purchase | **Demo only** | The purchase screens are confined to local/demo flow and show a demo/no-real-payment notice; Production routes show a read-only unavailable state. The Main API client has no pass-purchase/checkout operation. No payment was attempted. |
+| Membership purchase or activation | **Missing backend contract** | Production plan browsing is separate from authenticated membership; the Main API client has no checkout/activation operation and the Production UI does not offer one. A plan catalog, member status, pricing preview, or legacy demo flow is not proof of a Production purchase or activation contract. |
+
+### Confirmed blockers versus unknowns
+
+**Confirmed blockers**
+
+1. Production Clerk sign-in from the Replit Expo Web Preview is rejected by the
+   observed Clerk domain/origin check. This blocks that web origin only; it does
+   not establish a native iOS/Android failure.
+2. `PRODUCTION_AUTH_AVAILABILITY` remains `unavailable`, and
+   `CLERK_MEMBER_NAVIGATION_READINESS.linkedMember` remains false. The current
+   `/api/me` shape does not supply the stable Bluebird member identity needed to
+   open member-only data and actions. Do not enable those routes from
+   `isMember`, profile completeness, or Clerk `userId`.
+3. Native Production behavior is not device-verified. This is a readiness
+   verification blocker, not evidence of a native runtime failure. Source-level
+   Secure Store/token-cache wiring and web tests do not demonstrate iOS or
+   Android sign-in, restoration, or sign-out.
+
+**Material unknowns (not evidence of a misconfiguration)**
+
+- The 2026-10-21 owner report says the API owner verified Production issuer and
+  token acceptance, both owners approved the pair/identity mapping/client
+  configuration, and an authorized owner checked the remote EAS environment.
+  The report is not independently verified here. The workspace cannot inspect
+  remote EAS values, and the current app's member-data gate still records token
+  acceptance and member mapping as unverified.
+- The exact deployed Production build/revision, the selected remote EAS values,
+  Clerk session token claims/template requirements, deployed `/api/me` and
+  protected-route status/body behavior, and real API response compatibility
+  remain unverified by this workspace.
+- Contract sources conflict on `PUT /api/me/profile`: the supplied snapshot
+  says `UserProfile`, while supplied Development evidence and the Mobile parser
+  use a `CurrentUser` projection. Neither source is Production runtime proof.
+- Referral route/schema evidence and a Production purchase/checkout contract
+  were not established by the reviewed Main API materials.
+
+### Nick's administrator checklist
+
+Do not change Production settings merely to make this report pass. Preserve
+the existing auth gates. A check marked as previously reported complete needs
+confirmation that the evidence is current; if it still matches, no
+configuration change is requested.
+
+| System / owner | Exact setting or contract to inspect | Evidence now | Smallest action and safe completion check | Deployment needed? |
+| --- | --- | --- | --- | --- |
+| Main API owner + Nick | Deployed Main API service/revision at the configured Production `/api`; accepted Clerk token type (default session token or named template), issuer/signature, audience/authorized-party rules, subject mapping, and exact `/api/me` plus protected-route responses. Confirm `/api/me` provides the stable Bluebird member ID/decision required for member access, or document that it does not. | 2026-10-21 approval/token-acceptance checks are owner-reported. The client calls default `getToken()` and sends Bearer; `/api/me` is only a projection. Current source still marks Production auth unavailable. | Reconfirm the prior written approval against the deployed revision. If member identity is still absent, keep member routes closed and ask the API owner for the supported identity contract. Validate with an approved non-Production test first; do not probe Production from this task. | No, if the deployed contract already matches. A backend or Mobile change is a separate approved task only if evidence shows one is required. |
+| Nick / authorized Expo owner | Named EAS `production` environment: `EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT`, Production API base URL, Production Clerk publishable-key presence/type, API-verified issuer presence/parity, `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH`, and `EXPO_PUBLIC_DOMAIN` target if set. Do not copy values into chat, logs, or source. | Checked-in EAS profile selects `production`/`store`. Prior local preflight reported syntactically valid matching local values. Remote values were reported checked by the owner on 2026-10-21 but are not independently inspectable here. | Confirm the previous remote review remains current and the six variable presences/targets match the approved pair. Report only pass/fail/presence; make no edits if correct. The preflight script is local-only and cannot verify EAS. | No if unchanged. Any embedded app-config change would require a separately authorized build; none is requested. |
+| Clerk owner / Nick (web only) | Production Clerk accepted browser-domain policy for any intended web host. | Sanitized 2026-10-21 Clerk initialization error rejects the Replit Preview origin; dashboard access and supported extra-origin options were unavailable. | If Replit Preview web sign-in is not a requirement, record no action. If web sign-in is required, use `bluebirdjets.com` or a subdomain the Clerk owner confirms is accepted, then verify only Clerk initialization/sign-in on that host. Do not assume an origin can be added. | No for native. A web-host change may require a web deployment; no Clerk or EAS setting change is requested. |
+| Nick / iOS release owner | Availability of an already-approved Production TestFlight build for `com.bluebirdjets.app`; confirm existing version and supported redirect configuration. | EAS identity/profile are recorded locally, but a Production build, credentials, and device behavior were not independently verified in this task. | If a suitable build already exists, use an owner-controlled iPhone to test sign-in, close/reopen restoration, and sign-out. Record pass/fail only. Make an authenticated `/api/me` check only under a separate API-owner-approved controlled test. | No if a suitable build exists. If not, a build requires a separate owner-approved release task; this report starts none. |
+| Main API owner | Supported referral endpoints/schemas and any trip-detail/action contracts; separately, whether pass checkout/purchase exists. | Mobile contains referral callers, trip-list support, and credit-use actions. The reviewed API materials do not establish referral schemas or checkout; purchase screens remain demo-only. | Provide authoritative Main API contract/source evidence before any Production wiring. Do not send referral mutations, queue actions, bookings, membership changes, or payments as a diagnostic. | Only if the owner confirms the backend contract or implementation is missing; otherwise no. |
+
+### Safe validation recorded for this report
+
+All checks below were local source/type/test checks. Tests use mock or
+intercepted responses and do not constitute Production verification.
+
+- `pnpm run typecheck:libs` — passed.
+- `pnpm --filter @workspace/bluebird run typecheck` — passed.
+- `test:main-bluebird-api` — 13 passed.
+- `test:production-auth-api` — 23 passed.
+- `test:production-flight-api` — passed.
+- `test:production-queue-actions` — 4 passed.
+- `test:production-membership-plans` — passed.
+- `test:referral-program` — 4 passed.
+- `test:clerk-bridge` — 6 passed.
+- `test:clerk-session-isolation` — 9 passed.
+- `test:production-queue-gate` — 2 passed.
+- `git diff --check` — passed.
+
+The tests verify local parsing, route construction, bearer formatting,
+environment gating, mock-backed transitions, and the unavailable-member
+gate. They do not contact Production, Clerk, or EAS. No remote EAS or Clerk
+values were read, no authenticated Production request or mutation was sent,
+and no Clerk, EAS, backend, database, deployment, or auth-gate setting was
+changed.
+
+For prior Clerk dependency, web-origin, Main API source-contract, and feature
+test evidence, see the dated sections in this report and
+[`MAIN-API-INTEGRATION-REVIEW.md`](./MAIN-API-INTEGRATION-REVIEW.md),
+[`RELEASE-CONFIGURATION.md`](./RELEASE-CONFIGURATION.md), and
+[`STAGE_2B_ACTIVATION_CHECKLIST.md`](./STAGE_2B_ACTIVATION_CHECKLIST.md).
+Those records retain their original evidence scope; this summary does not
+upgrade them to Production runtime proof.
+
 ## Contract-driven Notification Settings (2026-10-16)
 
 Clerk Notification Settings displays only `notificationPrefs` from the existing
