@@ -35,3 +35,6 @@ EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL = "https://bluebirdjets.com/api"
 
 [userenv.shared]
 EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH = "true"
+
+[objectStorage]
+defaultBucketID = "replit-objstore-f0a40bec-9b4f-4071-8b21-26703d69452c"
