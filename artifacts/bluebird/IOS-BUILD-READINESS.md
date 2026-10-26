@@ -1,5 +1,72 @@
 # Bluebird iOS development-build readiness
 
+## Native Production auth TestFlight preparation (2026-10-26)
+
+- **Dedicated profile: locally configured.** `production-auth-test` extends the
+  store-distribution Production profile, selects the EAS `production`
+  environment, and forces Production API selection, release flight reads, no
+  demo, no local flight fixtures, no membership mocks, and no Development
+  Clerk auth. Its separate request guard allows only authenticated
+  `GET /api/me` at the canonical Production Main API. All other app API
+  requests are denied before token lookup/network access, including writes and
+  GET endpoints with possible server-side effects.
+- **Production Clerk rollout gate: preserved / externally unverified.** The
+  new profile does not set the approval flag or override the Production API
+  URL, Clerk publishable key, or issuer. Clerk remains blocked unless the
+  selected Production environment supplies the approved matching pair and
+  enabled gate. The sanitized local preflight reports the Production selector,
+  API/Clerk formats, issuer-host parity, and local approval gate as ready. This
+  is workspace-only evidence; it does not inspect Expo/EAS's remote `production`
+  environment or establish API-owner approval.
+- **Native provider wiring: verified in source and focused tests.** The
+  `@clerk/expo` provider receives its native token cache, the session adapter
+  calls the current Clerk session's `getToken()` for each request, and the
+  authenticated transport sends `Authorization: Bearer …`. No token or Clerk
+  secret key is stored or printed. Native SecureStore persistence, restoration,
+  and token acceptance by the Production API have not been exercised.
+- **Allowed authenticated API operation:** only `GET /api/me`, used by the
+  current Clerk member-resolution path. `GET /api/me/profile`, passenger-list
+  GETs, phone-verification status GETs, and all other authenticated API calls
+  are excluded. This conservatively avoids endpoint reads that may write or
+  synchronize state. Queue/booking, membership, referral, payment, and profile
+  mutations are blocked.
+- **Backend confirmation still required:** the deployed Production Main API
+  handler for `/api/me` is not included in this workspace. The allowlist is
+  limited to the existing identity projection and matches the earlier
+  owner-reported approved client configuration, but this task could not inspect
+  the deployed handler for side effects. The API owner must reconfirm that this
+  route remains genuinely read-only before any live authenticated check.
+- **App identity:** version `1.0.0` and bundle ID `com.bluebirdjets.app` are
+  unchanged. Build number remains `1`: no authorized EAS/App Store Connect
+  build listing was available to verify the latest uploaded build. It was not
+  incremented or guessed. Signing credentials and App Store Connect submission
+  setup also remain unverified.
+- **External blockers:** owner must verify the remote Production API/Clerk
+  pairing and approval gate, inspect the latest uploaded iOS build number, and
+  confirm reusable signing credentials and App Store Connect access. Source,
+  mock, and local configuration checks do not prove device-level auth success.
+- **Owner-run commands, not run here:** after those checks, from
+  `artifacts/bluebird`, run `eas build --platform ios --profile
+  production-auth-test`, then submit that exact successful build with
+  `eas submit --platform ios --profile production --id <BUILD_ID>`. The submit
+  profile has no configured `ascAppId` and may require authorized interactive
+  setup.
+- No remote setting, live sign-in, SMS, API request/mutation, EAS build,
+  upload, TestFlight submission, deployment, or Git operation was performed.
+
+### Focused checks for this preparation
+
+| Check | Result |
+| --- | --- |
+| Shared-library and Bluebird TypeScript | **PASS.** `pnpm run typecheck:libs` and `pnpm --filter @workspace/bluebird run typecheck`. |
+| Native Production auth-test boundary | **PASS.** 5/5 tests: exact Production `GET /api/me` allowlist, rejected methods/paths/hosts, denied requests before bearer-token lookup, EAS profile settings, and provider/token source wiring. |
+| Clerk token bridge | **PASS.** 6/6 tests, including fresh token retrieval and Bearer transport. |
+| Clerk auth configuration | **PASS.** 11/11 tests, including fail-closed Production approval and environment matching. |
+| Production authenticated API | **PASS.** 23/23 tests, including side-effecting GET exclusion and mutation method contracts. |
+| Resolved local Expo config | **PASS.** Public config resolved; version, bundle ID, and build number are unchanged. |
+| Sanitized local Production preflight | **PASS, local workspace only.** Required inputs are present; API URL/key/issuer formats and issuer-host parity are valid; local approval flag is enabled; Production login reports ready. Owner verification, deployed token acceptance, and remote EAS values are not established. |
+| Remote EAS/Apple checks, device sign-in, SecureStore restoration, live `/api/me`, EAS build, and TestFlight submission | **NOT RUN / NOT AVAILABLE.** No authorized remote account inspection or native runtime was available; no live request or release action was initiated. |
+
 ## EAS identity verification (2026-10-20, latest)
 
 - **Resolved Expo owner:** `replit-private-cd8d8a20-320c-4224-accf-5c9dc7df2ff1`.

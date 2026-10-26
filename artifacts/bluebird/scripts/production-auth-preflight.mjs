@@ -26,6 +26,30 @@ function getCheckedInProductionProfileStatus() {
   }
 }
 
+function getCheckedInNativeAuthTestProfileStatus() {
+  try {
+    const easConfig = JSON.parse(readFileSync(new URL('../eas.json', import.meta.url), 'utf8'));
+    const profile = easConfig?.build?.['production-auth-test'];
+    const expectedEnvironment = {
+      EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: 'production',
+      EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST: 'true',
+      EXPO_PUBLIC_ENABLE_CLERK_AUTH: 'false',
+      EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO: 'false',
+      EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE: 'production',
+      EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE: 'production',
+    };
+    return profile?.extends === 'production' &&
+      profile?.environment === 'production' &&
+      profile?.distribution === 'store' &&
+      JSON.stringify(profile?.env) === JSON.stringify(expectedEnvironment) &&
+      !Object.hasOwn(profile.env, 'EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH')
+      ? 'configured'
+      : 'missing or invalid';
+  } catch {
+    return 'missing or invalid';
+  }
+}
+
 console.log(JSON.stringify({
   scope: 'Mobile local workspace only',
   production: getProductionAuthPreflightStatus(process.env),
@@ -34,5 +58,6 @@ console.log(JSON.stringify({
   ),
   expoPublicDomain: hasValue(process.env.EXPO_PUBLIC_DOMAIN) ? 'present' : 'not configured',
   checkedInEasProductionProfile: getCheckedInProductionProfileStatus(),
+  checkedInEasNativeAuthTestProfile: getCheckedInNativeAuthTestProfileStatus(),
   remoteEasProductionValues: 'not inspectable from this workspace',
 }, null, 2));

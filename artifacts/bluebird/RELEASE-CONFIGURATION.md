@@ -206,6 +206,66 @@ The API URL, environment selector, and Clerk publishable key are embedded in the
 
 The `submit.production` profile intentionally leaves `ios` values empty until those owner inputs are available; EAS Submit can prompt for missing values interactively.
 
+## Owner-authorized native Production auth test (2026-10-26)
+
+- A dedicated `production-auth-test` iOS build profile now extends the existing
+  store-distribution Production profile and explicitly selects the EAS
+  `production` environment. It forces the Main API selector to Production,
+  disables Development Clerk auth, full-app demo, local flight fixtures, and
+  membership mocks, and enables a build-time native-auth-test request guard.
+- The profile does **not** set `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH` or
+  provide an API URL, Clerk key, or issuer. The existing Production Clerk gate
+  remains fail-closed and must already be enabled in the authorized EAS
+  Production environment after the existing owner approvals. Missing or
+  mismatched Production settings still block Clerk provider mounting.
+- In this build, the application API boundary allows only authenticated
+  `GET https://bluebirdjets.com/api/me`. The production-auth transport blocks
+  all other endpoints and methods, including potentially side-effecting GET
+  endpoints. The generated/legacy API client is separately pinned away from
+  `EXPO_PUBLIC_DOMAIN` and restricted to the same path. Queue, profile,
+  membership, referral, payment, passenger, phone-verification, and other
+  operations cannot reach the API through these clients.
+- The deployed Production Main API handler is not present in this workspace.
+  Although the earlier owner report approved the client configuration, the API
+  owner must reconfirm that `/api/me` remains genuinely read-only before any
+  live authenticated request.
+- Source confirms `@clerk/expo` receives Clerk's token cache (SecureStore-backed
+  on native), the session bridge exposes the current `getToken`, the adapter
+  obtains a fresh token per request, and the approved request attaches it as a
+  Bearer token. This is source/test evidence only; no token or secret key is
+  embedded in this report.
+- The sanitized local preflight reports the Production selector, API/Clerk
+  formats, issuer-host parity, and local approval gate as ready. This validates
+  only the current Replit workspace's effective configuration, not the remote
+  EAS `production` environment or API-owner approval. An earlier owner-reported
+  EAS check is recorded above; it was not independently repeated in this task.
+- The local app version and bundle ID remain `1.0.0` and
+  `com.bluebirdjets.app`. The checked-in iOS build number remains `1` because
+  the latest uploaded TestFlight/App Store Connect build could not be verified
+  with authorized EAS/Apple access. Do not start a build until the owner checks
+  the latest uploaded number and advances the local build number only from that
+  evidence. Signing credentials and App Store Connect submission identity also
+  remain owner-controlled checks.
+- No Production or Clerk Dashboard setting was changed. No live sign-in,
+  authenticated request, API mutation, EAS build, upload, TestFlight
+  submission, deployment, or Git operation was performed. Automated checks do
+  not establish physical-device sign-in or SecureStore restoration.
+
+After the owner has verified the remote Production inputs, approval gate,
+latest uploaded build number, and signing readiness, run from
+`artifacts/bluebird`:
+
+```sh
+eas build --platform ios --profile production-auth-test
+eas submit --platform ios --profile production --id <BUILD_ID>
+```
+
+Use the build ID from that successful build for the submit command. The
+existing submit profile has no configured `ascAppId`, so owner-authorized
+App Store Connect access may be needed to complete submission. Internal
+TestFlight tester-group availability was not inspected or changed. These
+commands are a handoff only; neither was run for this task.
+
 ## Before an owner-authorized TestFlight build
 
 1. In the organization-owned Expo account, inspect the `production` EAS

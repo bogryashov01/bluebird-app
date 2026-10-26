@@ -14,6 +14,19 @@
     "production": {
       "environment": "production",
       "distribution": "store"
+    },
+    "production-auth-test": {
+      "extends": "production",
+      "environment": "production",
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST": "true",
+        "EXPO_PUBLIC_ENABLE_CLERK_AUTH": "false",
+        "EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO": "false",
+        "EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE": "production",
+        "EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE": "production"
+      }
     }
   },
   "submit": {

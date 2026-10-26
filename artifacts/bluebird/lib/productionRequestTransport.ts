@@ -1,3 +1,8 @@
+import {
+  isNativeProductionAuthTestEnabled,
+  isNativeProductionAuthTestRequestAllowed,
+} from './nativeAuthTestPolicy';
+
 export interface ProductionTransportErrorFactory {
   timeout: (timeoutMs: number) => Error;
   cancelled: () => Error;
@@ -48,6 +53,12 @@ const SAFE_REQUEST_HEADER_NAMES = new Map([
 export async function requestProductionJson<T>(
   options: ProductionJsonRequestOptions<T>,
 ): Promise<T> {
+  if (
+    isNativeProductionAuthTestEnabled() &&
+    !isNativeProductionAuthTestRequestAllowed(options.url, options.method)
+  ) {
+    throw new Error('This native Production auth test build permits only GET /api/me.');
+  }
   if (options.signal?.aborted) throw options.errors.cancelled();
 
   const controller = new AbortController();

@@ -17,7 +17,7 @@ import {
 } from '@expo-google-fonts/inter';
 import { Redirect, Stack, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { setBaseUrl } from '@workspace/api-client-react';
+import { setBaseUrl, setRequestGuard } from '@workspace/api-client-react';
 import { AuthProvider, DemoAuthProvider } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { useColors } from '@/hooks/useColors';
@@ -42,11 +42,25 @@ import {
   isFullAppDemoRoute,
 } from '@/lib/fullAppDemo';
 import { FullAppDemoQueueProvider } from '@/lib/fullAppDemoQueue';
+import {
+  isNativeProductionAuthTestEnabled,
+  isNativeProductionAuthTestRequestAllowed,
+} from '@/lib/nativeAuthTestPolicy';
 
 SplashScreen.preventAutoHideAsync();
 
-// Set API base URL for Expo (absolute URL needed outside web proxy)
-if (process.env.EXPO_PUBLIC_DOMAIN) {
+// The restricted native test build pins the legacy client to Production and
+// allows it to make only the authenticated /api/me read. It never trusts the
+// injected EXPO_PUBLIC_DOMAIN, which may target a Preview or legacy service.
+if (isNativeProductionAuthTestEnabled()) {
+  setBaseUrl('https://bluebirdjets.com');
+  setRequestGuard(isNativeProductionAuthTestRequestAllowed);
+} else {
+  setRequestGuard(null);
+}
+
+// Set API base URL for Expo (absolute URL needed outside web proxy).
+if (!isNativeProductionAuthTestEnabled() && process.env.EXPO_PUBLIC_DOMAIN) {
   setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
 }
 

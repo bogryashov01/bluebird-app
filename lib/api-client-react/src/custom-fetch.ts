@@ -7,6 +7,7 @@ export type ErrorType<T = unknown> = ApiError<T>;
 export type BodyType<T> = T;
 
 export type AuthTokenGetter = () => Promise<string | null> | string | null;
+export type RequestGuard = (url: string, method: string) => boolean;
 
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
@@ -17,6 +18,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _requestGuard: RequestGuard | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -42,6 +44,14 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+/**
+ * Register an optional request boundary for app-specific restricted builds.
+ * The guard runs before token retrieval and before any network request.
+ */
+export function setRequestGuard(guard: RequestGuard | null): void {
+  _requestGuard = guard;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -335,6 +345,11 @@ export async function customFetch<T = unknown>(
     throw new TypeError(`customFetch: ${method} requests cannot have a body.`);
   }
 
+  const requestInfo = { method, url: resolveUrl(input) };
+  if (_requestGuard && !_requestGuard(requestInfo.url, method)) {
+    throw new TypeError("customFetch: this build does not allow the requested API operation.");
+  }
+
   const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
 
   if (
@@ -357,8 +372,6 @@ export async function customFetch<T = unknown>(
       headers.set("authorization", `Bearer ${token}`);
     }
   }
-
-  const requestInfo = { method, url: resolveUrl(input) };
 
   const response = await fetch(input, { ...init, method, headers });
 
