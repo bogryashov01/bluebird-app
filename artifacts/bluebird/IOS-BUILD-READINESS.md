@@ -1,5 +1,21 @@
 # Bluebird iOS development-build readiness
 
+## Active EAS project association (2026-10-26)
+
+- Per the owner's instruction, the local Expo config now targets owner
+  `bogryashov01`, project `bluebird`, and EAS project ID
+  `83e7e28f-bdf2-4b83-9e9d-0727ba066b2c`.
+- The owner/project identity was provided by the owner. A read-only iOS
+  build-list request for the supplied project ID succeeded and returned no
+  builds, so the connected Expo account can read the project.
+- The Bluebird slug and `com.bluebirdjets.app` bundle identifier are unchanged.
+  No credentials, Apple association, remote setting, build, or submission was
+  changed or created.
+- Signing readiness, App Store Connect app association and access, current
+  uploaded build number, and the remote EAS production environment remain
+  unverified. Do not start a cloud build until those prerequisites and
+  owner-approved paid build use are confirmed.
+
 ## Native Production auth TestFlight preparation (2026-10-26)
 
 - **Dedicated profile: locally configured.** `production-auth-test` extends the
@@ -67,7 +83,7 @@
 | Sanitized local Production preflight | **PASS, local workspace only.** Required inputs are present; API URL/key/issuer formats and issuer-host parity are valid; local approval flag is enabled; Production login reports ready. Owner verification, deployed token acceptance, and remote EAS values are not established. |
 | Remote EAS/Apple checks, device sign-in, SecureStore restoration, live `/api/me`, EAS build, and TestFlight submission | **NOT RUN / NOT AVAILABLE.** No authorized remote account inspection or native runtime was available; no live request or release action was initiated. |
 
-## EAS identity verification (2026-10-20, latest)
+## Historical EAS identity verification (2026-10-20)
 
 - **Resolved Expo owner:** `replit-private-cd8d8a20-320c-4224-accf-5c9dc7df2ff1`.
 - **Resolved EAS project ID:** `7becc11e-ad08-40c7-ab29-317fe74c6ed7`.

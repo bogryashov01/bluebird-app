@@ -27,6 +27,7 @@
 - [Flight win celebration events](flight-win-celebration.md) — trigger the win animation from a consumed one-time event, never from persistent status or replayable URL parameters.
 - [Approved queue product rules](queue-approved-product-rules.md) — use approved Pass/price wording and keep the known local queue-closure mismatch explicit before production integration.
 - [GitHub publish transport](github-publish.md) — REST connector access may not authenticate local git push; empty repos need a Contents seed before Git Data API publishing.
+- [Expo project access](expo-project-access.md) — an authenticated Expo integration can still lack EAS project build-read permission; reconnecting alone does not grant project access.
 - [Family pass cycles](family-pass-cycles.md) — tie each Family redemption to its annual cycle so later cancellations cannot refund expired passes into a new pool.
 - [Networking photo persistence](networking-photo-persistence.md) — Expo profile photos use validated portable data URIs/HTTPS URLs until a compatible App Storage upload path exists.
 - [Networking fixture isolation](networking-fixture-isolation.md) — keep the deterministic front member on an isolated demo flight and exempt only that fixture from queue simulation.

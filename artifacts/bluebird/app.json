@@ -2,7 +2,7 @@
   "expo": {
     "name": "Bluebird",
     "slug": "bluebird",
-    "owner": "replit-private-cd8d8a20-320c-4224-accf-5c9dc7df2ff1",
+    "owner": "bogryashov01",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -88,7 +88,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "7becc11e-ad08-40c7-ab29-317fe74c6ed7"
+        "projectId": "83e7e28f-bdf2-4b83-9e9d-0727ba066b2c"
       }
     }
   }

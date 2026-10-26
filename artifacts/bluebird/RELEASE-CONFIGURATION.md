@@ -2,6 +2,22 @@
 
 This note records Bluebird's owner-confirmed Expo/EAS identity and the remaining requirements for an iOS production build and App Store submission. No app identity, EAS project, credentials, or production environment values were created here.
 
+## Active EAS project association (2026-10-26)
+
+- Per the owner's instruction, Bluebird now targets Expo owner `bogryashov01`,
+  project `bluebird`, EAS project ID
+  `83e7e28f-bdf2-4b83-9e9d-0727ba066b2c`.
+- The configured app slug remains `bluebird`; iOS bundle identifier remains
+  `com.bluebirdjets.app`. Only the local Expo owner/project association was
+  changed.
+- A read-only iOS build listing for this project succeeded and returned no
+  builds. This confirms the connected Expo account can read the project; it
+  does not verify signing credentials, App Store Connect association, or
+  whether App Store Connect already uses build number `1`.
+- No build or submission was started. A new cloud build may be required, but
+  signing readiness, production EAS environment values, Apple submission
+  access, and the numeric App Store Connect app ID remain unverified.
+
 ## EAS identity verification (2026-10-20)
 
 - **Effective Expo owner:** `replit-private-cd8d8a20-320c-4224-accf-5c9dc7df2ff1`.
