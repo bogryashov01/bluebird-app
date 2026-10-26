@@ -13,7 +13,7 @@ paths = [ "/bluebird/" ]
 localPort = 20104
 
 [services.development]
-run = "pnpm --filter @workspace/bluebird run preview:membership-mock-web"
+run = "pnpm --filter @workspace/bluebird run preview:expo-go"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/bluebird", "run", "build" ]
