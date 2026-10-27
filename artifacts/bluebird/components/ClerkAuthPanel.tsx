@@ -11,11 +11,14 @@ import {
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuth } from '@clerk/expo';
+import { useAuth as useClerkAuth } from '@clerk/expo';
 import { useSignIn, useSignUp } from '@clerk/expo/legacy';
 import { Feather } from '@expo/vector-icons';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
+import { ClerkStartupStateView } from '@/components/ClerkStartupStateView';
+import { useAuth as useAppAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { useClerkProviderMounted } from '@/lib/dormantClerkIntegration';
 import {
   beginClerkPhoneAuth,
   createClerkAuthActionGuard,
@@ -32,9 +35,31 @@ import {
 type FormStep = 'phone' | 'code';
 
 export function ClerkAuthPanel() {
+  const { clerkStartupState, retryClerkStartup } = useAppAuth();
+  const providerMounted = useClerkProviderMounted();
+
+  if (!providerMounted) {
+    return <ClerkStartupStateView state="failed" onRetry={retryClerkStartup} />;
+  }
+
+  return (
+    <ClerkAuthForm
+      startupFailed={clerkStartupState === 'failed'}
+      onRetryStartup={retryClerkStartup}
+    />
+  );
+}
+
+function ClerkAuthForm({
+  startupFailed,
+  onRetryStartup,
+}: {
+  startupFailed: boolean;
+  onRetryStartup: () => void;
+}) {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useClerkAuth();
   const signInResource = useSignIn();
   const signUpResource = useSignUp();
   const [phone, setPhone] = useState('');
@@ -53,7 +78,8 @@ export function ClerkAuthPanel() {
     !!signInResource.signIn &&
     !!signUpResource.signUp &&
     !!signInResource.setActive;
-  const actions = resourcesLoaded
+  const authResourcesReady = isLoaded && resourcesLoaded && !startupFailed;
+  const actions = authResourcesReady
     ? createClerkPhoneAuthActions({
         signIn: signInResource.signIn as unknown as ClerkSignInPhoneResource,
         signUp: signUpResource.signUp as unknown as ClerkSignUpPhoneResource,
@@ -182,7 +208,28 @@ export function ClerkAuthPanel() {
                 : `This number isn’t linked to an account yet. Verify ${phone} to create one. Bluebird member access is confirmed separately after sign-in.`}
           </Text>
 
-          {(!isLoaded || !resourcesLoaded) && (
+          {startupFailed ? (
+            <View
+              accessibilityLiveRegion="polite"
+              style={[styles.messageBox, { borderColor: colors.destructive }]}
+              testID="clerk-startup-error"
+            >
+              <Text style={[styles.messageTitle, { color: colors.destructive }]}>
+                Sign-in couldn’t start
+              </Text>
+              <Text style={[styles.stateText, { color: colors.textOnBrand }]}>
+                Bluebird couldn’t initialize secure sign-in. Your account is protected. Please try again.
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={onRetryStartup}
+                style={styles.secondaryAction}
+                testID="clerk-startup-retry"
+              >
+                <Text style={[styles.linkText, { color: colors.paleBlue }]}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : (!isLoaded || !resourcesLoaded) && (
             <View style={styles.stateBox} accessibilityLiveRegion="polite" testID="clerk-auth-loading">
               <ActivityIndicator color={colors.primary} />
               <Text style={[styles.stateText, { color: colors.mutedOnBrand }]}>
@@ -191,7 +238,7 @@ export function ClerkAuthPanel() {
             </View>
           )}
 
-          {isLoaded && resourcesLoaded && isSignedIn !== true && (
+          {isSignedIn !== true && (
             <>
               {step === 'phone' ? (
                 <View style={styles.fieldGroup}>
@@ -200,13 +247,14 @@ export function ClerkAuthPanel() {
                     accessibilityLabel="Phone number"
                     autoComplete="tel"
                     autoCapitalize="none"
+                    editable={authResourcesReady}
                     keyboardType="phone-pad"
                     onChangeText={(value) => {
                       setPhone(value);
                       setFlowMode('sign-in');
                       setError(null);
                     }}
-                    onSubmitEditing={handleRequestCode}
+                    onSubmitEditing={authResourcesReady ? handleRequestCode : undefined}
                     placeholder="+1 555 555 0100"
                     placeholderTextColor={colors.mutedForeground}
                     returnKeyType="go"
@@ -232,13 +280,14 @@ export function ClerkAuthPanel() {
                     accessibilityLabel="SMS verification code"
                     autoComplete="one-time-code"
                     autoCapitalize="none"
+                    editable={authResourcesReady}
                     keyboardType="number-pad"
                     maxLength={8}
                     onChangeText={(value) => {
                       setCode(value.replace(/\D/g, '').slice(0, 8));
                       setError(null);
                     }}
-                    onSubmitEditing={handleVerifyCode}
+                    onSubmitEditing={authResourcesReady ? handleVerifyCode : undefined}
                     placeholder="Enter code"
                     placeholderTextColor={colors.mutedForeground}
                     returnKeyType="go"
@@ -253,7 +302,7 @@ export function ClerkAuthPanel() {
                 </View>
               )}
 
-              {error && (
+              {error && authResourcesReady && (
                 <View
                   accessibilityLiveRegion="polite"
                   style={[styles.messageBox, { borderColor: colors.destructive }]}
@@ -268,13 +317,13 @@ export function ClerkAuthPanel() {
 
               <Pressable
                 accessibilityRole="button"
-                accessibilityState={{ disabled: pending || !isLoaded || !resourcesLoaded, busy: pending }}
-                disabled={pending || !isLoaded || !resourcesLoaded}
+                accessibilityState={{ disabled: pending || !authResourcesReady, busy: pending }}
+                disabled={pending || !authResourcesReady}
                 onPress={step === 'phone' ? handleRequestCode : handleVerifyCode}
                 style={[
                   styles.primaryButton,
                   { backgroundColor: colors.primary },
-                  (pending || !resourcesLoaded) && styles.disabled,
+                  (pending || !authResourcesReady) && styles.disabled,
                 ]}
                 testID={step === 'phone' ? 'clerk-request-code' : 'clerk-verify-code'}
               >
@@ -282,7 +331,11 @@ export function ClerkAuthPanel() {
                   <ActivityIndicator color={colors.primaryForeground} />
                 ) : (
                   <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>
-                    {step === 'phone' ? 'Send verification code' : 'Verify and continue'}
+                    {!authResourcesReady
+                      ? 'Preparing sign-in…'
+                      : step === 'phone'
+                        ? 'Send verification code'
+                        : 'Verify and continue'}
                   </Text>
                 )}
               </Pressable>
@@ -291,7 +344,7 @@ export function ClerkAuthPanel() {
                 <View style={styles.codeActions}>
                   <Pressable
                     accessibilityRole="button"
-                    disabled={pending}
+                    disabled={pending || !authResourcesReady}
                     onPress={handleResendCode}
                     style={styles.secondaryAction}
                     testID="clerk-resend-code"
@@ -304,7 +357,7 @@ export function ClerkAuthPanel() {
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
-                    disabled={pending}
+                    disabled={pending || !authResourcesReady}
                     onPress={() => {
                       setStep('phone');
                       setCode('');

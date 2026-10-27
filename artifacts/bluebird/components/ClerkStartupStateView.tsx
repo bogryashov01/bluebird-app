@@ -1,5 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import type { ClerkStartupState } from '@/lib/clerkStartup';
 
@@ -11,22 +12,50 @@ export function ClerkStartupStateView({
   onRetry: () => void;
 }) {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const failed = state === 'failed';
+  const topPad = Platform.OS === 'web' ? 67 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.backgroundMid }]}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: colors.backgroundMid, paddingTop: topPad + 24, paddingBottom: bottomPad + 24 },
+      ]}
+    >
+      <Text style={[styles.eyebrow, { color: colors.paleBlue }]}>BLUEBIRD ACCOUNT</Text>
+      <Text style={[styles.title, { color: colors.textOnBrand }]}>
+        Continue with your phone
+      </Text>
+      <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>
+        Sign-in is being prepared securely. Your account remains protected.
+      </Text>
+      <TextInput
+        accessibilityLabel="Phone number"
+        editable={false}
+        placeholder="Phone number"
+        placeholderTextColor={colors.mutedForeground}
+        style={[
+          styles.phoneInput,
+          { backgroundColor: colors.input, borderColor: colors.border, color: colors.textOnBrand },
+        ]}
+        testID="clerk-phone-input"
+      />
       {failed ? (
         <>
-          <Text style={[styles.title, { color: colors.textOnBrand }]}>
-            Sign-in couldn’t start
-          </Text>
-          <Text
+          <View
             accessibilityLiveRegion="polite"
-            style={[styles.message, { color: colors.mutedOnBrand }]}
+            style={[styles.errorBox, { borderColor: colors.destructive }]}
             testID="clerk-startup-error"
           >
-            Bluebird couldn’t initialize secure sign-in. Your account is protected. Please try again.
-          </Text>
+            <Text style={[styles.message, { color: colors.destructive }]}>
+              Sign-in couldn’t start
+            </Text>
+            <Text style={[styles.message, { color: colors.textOnBrand }]}>
+              Bluebird couldn’t initialize secure sign-in. Your account is protected. Please try again.
+            </Text>
+          </View>
           <Pressable
             accessibilityRole="button"
             onPress={onRetry}
@@ -44,6 +73,17 @@ export function ClerkStartupStateView({
           </Text>
         </>
       )}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ disabled: true }}
+        disabled
+        style={[styles.disabledButton, { backgroundColor: colors.primary }]}
+        testID="clerk-request-code"
+      >
+        <Text style={[styles.retryText, { color: colors.primaryForeground }]}>
+          Preparing sign-in…
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -55,6 +95,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 28,
     gap: 14,
+    paddingTop: 32,
+    paddingBottom: 32,
+  },
+  eyebrow: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    letterSpacing: 1.4,
+  },
+  subtitle: {
+    maxWidth: 340,
+    fontSize: 15,
+    fontFamily: 'Inter_400Regular',
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  phoneInput: {
+    width: '100%',
+    maxWidth: 400,
+    minHeight: 52,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    opacity: 0.72,
+  },
+  errorBox: {
+    width: '100%',
+    maxWidth: 400,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    gap: 8,
+  },
+  disabledButton: {
+    width: '100%',
+    maxWidth: 400,
+    minHeight: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    opacity: 0.55,
   },
   title: {
     fontSize: 24,

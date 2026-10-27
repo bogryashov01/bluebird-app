@@ -32,7 +32,6 @@ import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
 import { canAccessClerkProfileOnboardingRoute } from '@/lib/clerkProfileOnboarding';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
-import { ClerkStartupStateView } from '@/components/ClerkStartupStateView';
 import { getNextClerkStartupAttempt } from '@/lib/clerkStartup';
 import {
   getMembershipDataModeConfiguration,
@@ -83,13 +82,8 @@ function RootLayoutNav() {
     clerkSignedIn,
     clerkMemberResolution,
     memberAccessResolved,
-    clerkStartupState,
-    retryClerkStartup,
   } = useAuth();
   const clerkSession = useClerkAuthSnapshot();
-  if (authMode === 'clerk' && clerkStartupState === 'failed') {
-    return <ClerkStartupStateView state={clerkStartupState} onRetry={retryClerkStartup} />;
-  }
   const isClerkProfileRoute = segments[0] === 'account' && segments[1] === 'bluebird-profile';
   if (isClerkProfileRoute && authMode !== 'clerk') {
     return <Redirect href="/(auth)/welcome" />;

@@ -1,5 +1,5 @@
 import { Redirect } from 'expo-router';
-import { View, ActivityIndicator } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { getClerkAuthRootDestination } from '@/lib/clerkMemberResolution';
@@ -15,20 +15,16 @@ export default function Index() {
     clerkSignedIn,
     clerkMemberResolution,
     memberAccessResolved,
+    clerkStartupState,
   } = useAuth();
   const colors = useColors();
 
   if (demoMode) return <Redirect href="/(tabs)/discover" />;
 
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: colors.backgroundMid, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator color={colors.primary} size="large" />
-      </View>
-    );
-  }
-
   if (authMode === 'clerk') {
+    if (clerkStartupState !== 'ready' || !clerkSignedIn) {
+      return <Redirect href="/(clerk-auth)/sign-in" />;
+    }
     const destination = getClerkAuthRootDestination({
       clerkSignedIn,
       resolution: clerkMemberResolution,
@@ -38,6 +34,14 @@ export default function Index() {
       },
     });
     return <Redirect href={destination} />;
+  }
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.backgroundMid, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
   }
 
   if (token && user) {

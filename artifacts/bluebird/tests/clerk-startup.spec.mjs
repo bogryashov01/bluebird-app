@@ -176,17 +176,33 @@ test('startup diagnostics allow only safe fields and broad sanitized error categ
   for (const event of events) assert.ok(serialized.includes(`"event":"${event}"`));
 });
 
-test('the live auth layout remounts Clerk on Retry and blocks route rendering during failure', async () => {
+test('the live auth layout remounts Clerk on Retry and keeps startup on the phone sign-in route', async () => {
+  const index = await readFile(new URL('../app/index.tsx', import.meta.url), 'utf8');
   const layout = await readFile(new URL('../app/_layout.tsx', import.meta.url), 'utf8');
   const auth = await readFile(new URL('../context/AuthContext.tsx', import.meta.url), 'utf8');
   const provider = await readFile(new URL('../lib/dormantClerkIntegration.tsx', import.meta.url), 'utf8');
+  const panel = await readFile(new URL('../components/ClerkAuthPanel.tsx', import.meta.url), 'utf8');
+  const startupView = await readFile(new URL('../components/ClerkStartupStateView.tsx', import.meta.url), 'utf8');
 
   assert.match(layout, /<DormantClerkProvider[\s\S]*key=\{clerkStartupAttempt\}[\s\S]*attempt=\{clerkStartupAttempt\}/);
-  assert.match(layout, /clerkStartupState === 'failed'/);
+  assert.doesNotMatch(layout, /clerkStartupState === 'failed'/);
+  assert.match(index, /if \(authMode === 'clerk'\)[\s\S]*clerkStartupState !== 'ready' \|\| !clerkSignedIn[\s\S]*Redirect href="\/\(clerk-auth\)\/sign-in"/);
+  assert.match(index, /if \(isLoading\)/);
   assert.match(auth, /useState<ClerkStartupState>\(\(\) =>\s*getClerkStartupState/);
   assert.match(auth, /onRetryClerkStartup\(\)/);
   assert.match(auth, /if \(!production\) return;\s*return startClerkStartupTimeout/);
   assert.match(provider, /value=\{false\}/);
   assert.match(provider, /event: 'provider_mount'/);
   assert.match(provider, /errorCategory: sanitizeClerkStartupError\(error\)/);
+  assert.match(provider, /<ClerkStartupStateView\s+state="failed"\s+onRetry=/);
+  assert.match(panel, /isSignedIn !== true/);
+  assert.match(panel, /testID="clerk-auth-loading"/);
+  assert.match(panel, /startupFailed \? \(/);
+  assert.match(panel, /const authResourcesReady = isLoaded && resourcesLoaded && !startupFailed/);
+  assert.match(panel, /editable=\{authResourcesReady\}/);
+  assert.match(panel, /onPress=\{onRetryStartup\}/);
+  assert.match(startupView, /editable=\{false\}/);
+  assert.match(startupView, /accessibilityState=\{\{ disabled: true \}\}/);
+  assert.match(startupView, /testID="clerk-startup-error"/);
+  assert.match(startupView, /testID="clerk-startup-retry"/);
 });

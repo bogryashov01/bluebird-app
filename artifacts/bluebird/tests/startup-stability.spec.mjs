@@ -181,7 +181,14 @@ test("Clerk-enabled Welcome routes the phone journey into Clerk without starting
   await page.getByTestId("welcome-phone-entry").click();
   await expect(page).toHaveURL(/\/sign-in$/);
   await expect(page.getByText("Continue with your phone", { exact: true })).toBeVisible();
+  await expect(
+    page.getByTestId("clerk-auth-loading").or(page.getByTestId("clerk-startup-error")),
+  ).toBeVisible();
   await expect(page.getByTestId("clerk-phone-input")).toBeVisible();
+  expect(await page.getByTestId("clerk-phone-input").evaluate((input) =>
+    input.hasAttribute("readonly"),
+  )).toBe(true);
+  await expect(page.getByTestId("clerk-request-code")).toBeDisabled();
   await expect(page.getByTestId("clerk-go-to-sign-up")).toHaveCount(0);
   await expect(page.getByTestId("clerk-development-preview-entry")).toHaveCount(0);
   expect(authApiCalls).toEqual([]);
@@ -204,6 +211,30 @@ test("Clerk-enabled Welcome routes the phone journey into Clerk without starting
   await expect(page).toHaveURL(/\/sign-in$/);
   await expect(page.getByText("Flight Details", { exact: false })).toHaveCount(0);
   expect(authApiCalls).toEqual([]);
+});
+
+test("Clerk root opens phone sign-in while startup is pending", async ({ page }) => {
+  test.skip(!clerkAuthEnabled, "This case runs against the Clerk-enabled Preview bundle.");
+  const apiRequests = [];
+  await page.route("https://clerk.example.com/**", (route) => route.abort());
+  await page.route("**/api/**", async (route) => {
+    apiRequests.push(new URL(route.request().url()).pathname);
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  await page.goto("/");
+
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByText("Continue with your phone", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("clerk-auth-loading")).toBeVisible();
+  await expect(page.getByTestId("clerk-phone-input")).toBeVisible();
+  expect(await page.getByTestId("clerk-phone-input").evaluate((input) =>
+    input.hasAttribute("readonly"),
+  )).toBe(true);
+  await expect(page.getByTestId("clerk-request-code")).toBeDisabled();
+  await expect(page.getByText("Get Started", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("full-app-demo-banner")).toHaveCount(0);
+  expect(apiRequests).toEqual([]);
 });
 
 test("requested Clerk with a missing key shows configuration errors instead of demo phone auth", async ({ page }) => {
