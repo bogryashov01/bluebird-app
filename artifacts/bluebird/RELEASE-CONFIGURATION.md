@@ -395,22 +395,45 @@ submission was started for this audit.
    request guard runs before token lookup/fetch and allows only the exact
    Production `GET /api/me` URL.
 
-**Reported TestFlight startup failure: root cause undetermined.** Source and
-mocked tests do not reproduce a physical-device failure. Build 6's available
-EAS record establishes that the cloud build finished, not that its app starts.
-The missing evidence is the Build 6 iPhone startup timeline (safe diagnostic
-events and fields below), the exact screen/error or termination behavior,
-iOS version/device, and an accessible TestFlight crash report or a controlled
-reproduction. Without those, no specific Clerk/network/configuration cause is
-supported.
+### Build 6 owner-authorized iPhone reproduction (2026-10-27)
 
-The app's safe startup diagnostics can distinguish `production_mode`,
+- The owner tested Build 6 on a real iPhone using Apple Console. The native
+  splash appeared briefly, then a full-screen loading spinner remained
+  indefinitely; the phone sign-in screen never appeared and the app did not
+  visibly crash.
+- Console showed generic Bluebird-process messages associated with Security,
+  trust evaluation, and preferences, but no explicit Clerk initialization
+  error, React Native exception, or API failure. These messages do not prove a
+  Keychain or TLS failure and are not treated as the cause.
+- The Build 6 source explains the indefinite spinner: the root route returned
+  its loading view until the Clerk snapshot reported `isLoaded`. In Clerk mode,
+  the legacy session-restoration effect exits without clearing its loading
+  state. If the Clerk snapshot stays absent or unloaded, the root route never
+  reaches its sign-in redirect. The Build 6 code had no bounded Clerk startup
+  timeout or Bluebird startup-event logging.
+- The bounded 15-second Production startup timeout, Retry path, and safe
+  provider/readiness diagnostics were added after Build 6. They replace the
+  unbounded wait in the current source, but have not been verified on an
+  iPhone in a later binary. No EAS build was created for this investigation.
+
+**Finding:** the Mobile-owned cause of the *indefinite loading screen* is the
+unbounded wait for Clerk readiness in Build 6. The evidence does not establish
+why Clerk failed to become loaded on that device. Build 6 predates the
+diagnostic events, so provider mount, Clerk readiness, phone-code completion,
+and signed-in navigation cannot be reconstructed from its Console capture.
+No TestFlight crash or feedback submission was available, EAS Observe returned
+no iOS versions/events for the app, and the detailed EAS build-log request
+timed out. Do not infer an underlying Clerk, Keychain, TLS, configuration, or
+API fault from the current evidence.
+
+The current source's safe diagnostics can distinguish `production_mode`,
 `provider_mount`, `initialization_start`, `readiness_change` (including
-`isLoaded`), `timeout`, and `initialization_error` with a broad sanitized
-error category and attempt number. For diagnosis, the owner should capture
-those events from the Build 6 device session and whether `provider_mount` and
-`isLoaded: true` occurred. Do not send a key, issuer, phone number, token,
-Clerk message containing identity data, or other secret.
+`isLoaded`), `timeout`, and `initialization_error`; they also mark a loaded
+signed-in session, successful phone sign-in/sign-up, signed-in route requests,
+route reach, and synchronous route failures. Diagnostic fields are limited to
+fixed event names, booleans, attempt counters, and broad error categories.
+They never include SDK messages, keys, tokens, phone numbers, session data, or
+member identifiers. None of these app-specific events were present in Build 6.
 
 ### Production API scope for this test profile
 
@@ -441,7 +464,7 @@ with mock/demo responses.
 
 - PASS — status-only local Production preflight. Remote EAS environment
   presence/value statuses remain unverified from this workspace.
-- PASS — `test:native-production-auth` (5 tests), `test:clerk-startup` (8
+- PASS — `test:native-production-auth` (5 tests), `test:clerk-startup` (9
   tests), Clerk auth configuration tests (11 tests), `test:production-auth-api`
   (23 tests), and `test:production-flight-api`.
 - PASS — Bluebird `typecheck` after rebuilding the shared

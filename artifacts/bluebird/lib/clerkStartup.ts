@@ -48,7 +48,13 @@ export type ClerkStartupDiagnosticEvent =
   | 'initialization_start'
   | 'readiness_change'
   | 'timeout'
-  | 'initialization_error';
+  | 'initialization_error'
+  | 'signed_in_session'
+  | 'sign_in_completed'
+  | 'sign_up_completed'
+  | 'signed_in_route_requested'
+  | 'signed_in_route_reached'
+  | 'signed_in_route_failed';
 
 export type ClerkStartupErrorCategory =
   | 'clerk'
@@ -71,21 +77,27 @@ export function sanitizeClerkStartupError(error: unknown): ClerkStartupErrorCate
 export function logClerkStartupDiagnostic(input: {
   event: ClerkStartupDiagnosticEvent;
   production: boolean;
-  attempt: number;
+  attempt?: number;
   providerMounted?: boolean;
   isLoaded?: boolean;
+  isSignedIn?: boolean;
   errorCategory?: ClerkStartupErrorCategory;
 }) {
   const entry = {
     source: 'bluebird_clerk_startup',
     event: input.event,
     production: input.production,
-    attempt: Number.isSafeInteger(input.attempt) && input.attempt >= 0 ? input.attempt : 0,
+    ...(typeof input.attempt === 'number' && Number.isSafeInteger(input.attempt) && input.attempt >= 0
+      ? { attempt: input.attempt }
+      : {}),
     ...(typeof input.providerMounted === 'boolean' ? { providerMounted: input.providerMounted } : {}),
     ...(typeof input.isLoaded === 'boolean' ? { isLoaded: input.isLoaded } : {}),
+    ...(typeof input.isSignedIn === 'boolean' ? { isSignedIn: input.isSignedIn } : {}),
     ...(input.errorCategory ? { errorCategory: input.errorCategory } : {}),
   };
-  const output = input.event === 'timeout' || input.event === 'initialization_error'
+  const output = input.event === 'timeout' ||
+    input.event === 'initialization_error' ||
+    input.event === 'signed_in_route_failed'
     ? console.warn
     : console.info;
   output('[Bluebird auth startup]', entry);

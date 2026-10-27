@@ -31,6 +31,8 @@ import {
   type ClerkSignInPhoneResource,
   type ClerkSignUpPhoneResource,
 } from '@/lib/clerkPhoneAuth';
+import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
+import { logClerkStartupDiagnostic } from '@/lib/clerkStartup';
 
 type FormStep = 'phone' | 'code';
 
@@ -46,6 +48,7 @@ export function ClerkAuthPanel() {
     <ClerkAuthForm
       startupFailed={clerkStartupState === 'failed'}
       onRetryStartup={retryClerkStartup}
+      providerMounted={providerMounted}
     />
   );
 }
@@ -53,9 +56,11 @@ export function ClerkAuthPanel() {
 function ClerkAuthForm({
   startupFailed,
   onRetryStartup,
+  providerMounted,
 }: {
   startupFailed: boolean;
   onRetryStartup: () => void;
+  providerMounted: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const colors = useColors();
@@ -101,12 +106,19 @@ function ClerkAuthForm({
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
-      navigateToClerkSignedIn(() => {
+      logClerkStartupDiagnostic({
+        event: 'signed_in_session',
+        production: CLERK_AUTH_CONFIGURATION.environment === 'production',
+        providerMounted,
+        isLoaded,
+        isSignedIn: true,
+      });
+      navigateToClerkSignedIn(providerMounted, () => {
         setErrorStage('navigation');
         setError('Your Clerk session is active, but the signed-in screen could not be opened.');
       });
     }
-  }, [isLoaded, isSignedIn]);
+  }, [isLoaded, isSignedIn, providerMounted]);
 
   const handleRequestCode = async () => {
     if (!actions) return;
@@ -143,7 +155,12 @@ function ClerkAuthForm({
       setErrorStage(result.stage);
       return;
     }
-    navigateToClerkSignedIn(() => {
+    logClerkStartupDiagnostic({
+      event: flowMode === 'sign-in' ? 'sign_in_completed' : 'sign_up_completed',
+      production: CLERK_AUTH_CONFIGURATION.environment === 'production',
+      providerMounted,
+    });
+    navigateToClerkSignedIn(providerMounted, () => {
       setErrorStage('navigation');
       setError('Your Clerk session is active, but the signed-in screen could not be opened.');
     });
@@ -387,7 +404,7 @@ function ClerkAuthForm({
               <Pressable
                 accessibilityRole="button"
                 onPress={() =>
-                  navigateToClerkSignedIn(() => {
+                  navigateToClerkSignedIn(providerMounted, () => {
                     setErrorStage('navigation');
                     setError('Your sign-in is complete, but we couldn’t open your account. Try again.');
                   })
@@ -455,10 +472,22 @@ function getErrorTitle(stage: ClerkPhoneAuthFailureStage | null): string {
   }
 }
 
-function navigateToClerkSignedIn(onFailure: () => void): void {
+function navigateToClerkSignedIn(providerMounted: boolean, onFailure: () => void): void {
+  const production = CLERK_AUTH_CONFIGURATION.environment === 'production';
+  logClerkStartupDiagnostic({
+    event: 'signed_in_route_requested',
+    production,
+    providerMounted,
+  });
   try {
     router.replace('/(clerk-auth)/signed-in' as never);
   } catch {
+    logClerkStartupDiagnostic({
+      event: 'signed_in_route_failed',
+      production,
+      providerMounted,
+      errorCategory: 'unknown',
+    });
     onFailure();
   }
 }

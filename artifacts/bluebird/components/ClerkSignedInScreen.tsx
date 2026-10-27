@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -12,12 +12,17 @@ import {
   getClerkPostLoginJourney,
 } from '@/lib/clerkMemberResolution';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
+import { logClerkStartupDiagnostic } from '@/lib/clerkStartup';
+import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
+import { useClerkProviderMounted } from '@/lib/dormantClerkIntegration';
 
 export function ClerkSignedInScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { isLoaded, isSignedIn, signOut } = useClerkAuth();
+  const providerMounted = useClerkProviderMounted();
   const { clerkMemberResolution } = useBluebirdAuth();
+  const signedInRouteReachedLogged = useRef(false);
   const postLoginJourney = getClerkPostLoginJourney(
     clerkMemberResolution,
     CLERK_MEMBER_NAVIGATION_READINESS,
@@ -28,6 +33,18 @@ export function ClerkSignedInScreen() {
   const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || signedInRouteReachedLogged.current) return;
+    signedInRouteReachedLogged.current = true;
+    logClerkStartupDiagnostic({
+      event: 'signed_in_route_reached',
+      production: CLERK_AUTH_CONFIGURATION.environment === 'production',
+      providerMounted,
+      isLoaded: true,
+      isSignedIn: true,
+    });
+  }, [isLoaded, isSignedIn, providerMounted]);
 
   const handleSignOut = async () => {
     if (isSigningOut) return;

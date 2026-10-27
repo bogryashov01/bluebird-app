@@ -146,6 +146,12 @@ test('startup diagnostics allow only safe fields and broad sanitized error categ
     'readiness_change',
     'timeout',
     'initialization_error',
+    'signed_in_session',
+    'sign_in_completed',
+    'sign_up_completed',
+    'signed_in_route_requested',
+    'signed_in_route_reached',
+    'signed_in_route_failed',
   ];
   const previousInfo = console.info;
   const previousWarn = console.warn;
@@ -159,6 +165,12 @@ test('startup diagnostics allow only safe fields and broad sanitized error categ
         attempt: 1,
         providerMounted: true,
         ...(event === 'readiness_change' ? { isLoaded: true } : {}),
+        ...(event === 'signed_in_session' || event === 'signed_in_route_reached'
+          ? { isLoaded: true, isSignedIn: true }
+          : {}),
+        ...(event === 'signed_in_route_failed'
+          ? { errorCategory: 'unknown' }
+          : {}),
         ...(event === 'initialization_error'
           ? { errorCategory: sanitizeClerkStartupError(rawError) }
           : {}),
@@ -174,6 +186,28 @@ test('startup diagnostics allow only safe fields and broad sanitized error categ
   assert.match(serialized, /"production":true/);
   assert.match(serialized, /"errorCategory":"unknown"/);
   for (const event of events) assert.ok(serialized.includes(`"event":"${event}"`));
+  assert.match(serialized, /"isLoaded":true/);
+  assert.match(serialized, /"isSignedIn":true/);
+  assert.equal(serialized.includes('"userId"'), false);
+  assert.equal(serialized.includes('"phone"'), false);
+});
+
+test('signed-in navigation diagnostics do not require or invent a startup attempt', () => {
+  const logLines = [];
+  const previousInfo = console.info;
+  console.info = (...values) => logLines.push(values);
+  try {
+    logClerkStartupDiagnostic({
+      event: 'signed_in_route_requested',
+      production: true,
+      providerMounted: true,
+    });
+  } finally {
+    console.info = previousInfo;
+  }
+  const serialized = JSON.stringify(logLines);
+  assert.match(serialized, /"event":"signed_in_route_requested"/);
+  assert.equal(serialized.includes('"attempt"'), false);
 });
 
 test('the live auth layout remounts Clerk on Retry and keeps startup on the phone sign-in route', async () => {
@@ -182,6 +216,7 @@ test('the live auth layout remounts Clerk on Retry and keeps startup on the phon
   const auth = await readFile(new URL('../context/AuthContext.tsx', import.meta.url), 'utf8');
   const provider = await readFile(new URL('../lib/dormantClerkIntegration.tsx', import.meta.url), 'utf8');
   const panel = await readFile(new URL('../components/ClerkAuthPanel.tsx', import.meta.url), 'utf8');
+  const signedInScreen = await readFile(new URL('../components/ClerkSignedInScreen.tsx', import.meta.url), 'utf8');
   const startupView = await readFile(new URL('../components/ClerkStartupStateView.tsx', import.meta.url), 'utf8');
 
   assert.match(layout, /<DormantClerkProvider[\s\S]*key=\{clerkStartupAttempt\}[\s\S]*attempt=\{clerkStartupAttempt\}/);
@@ -195,6 +230,9 @@ test('the live auth layout remounts Clerk on Retry and keeps startup on the phon
   assert.match(provider, /event: 'provider_mount'/);
   assert.match(provider, /errorCategory: sanitizeClerkStartupError\(error\)/);
   assert.match(provider, /<ClerkStartupStateView\s+state="failed"\s+onRetry=/);
+  assert.match(panel, /event: flowMode === 'sign-in' \? 'sign_in_completed' : 'sign_up_completed'/);
+  assert.match(panel, /event: 'signed_in_route_requested'/);
+  assert.match(signedInScreen, /event: 'signed_in_route_reached'/);
   assert.match(panel, /isSignedIn !== true/);
   assert.match(panel, /testID="clerk-auth-loading"/);
   assert.match(panel, /startupFailed \? \(/);
