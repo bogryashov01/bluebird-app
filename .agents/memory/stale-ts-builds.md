@@ -7,4 +7,4 @@ description: Phantom "no exported member" / missing-property type errors come fr
 
 **Why:** Libs are composite projects emitting declarations to `dist/`; consumers resolve types from there, so edits to `src/` don't propagate until rebuilt. This masqueraded as "pre-existing type errors blocking mobile builds."
 
-**How to apply:** After editing any `lib/*` source or seeing implausible cross-package type errors, run `tsc -b` on the affected libs, then re-run the consumer's typecheck. Prefer explicit project paths: `lib/api-spec` has no `tsconfig.json`, so `tsc -b lib/*` can fail before building anything.
+**How to apply:** After editing any `lib/*` source or seeing implausible cross-package type errors, use the workspace's configured `pnpm run typecheck:libs` build or `tsc -b` on explicit project paths, then rerun the consumer typecheck. Do not use `tsc -b lib/*`: `lib/api-spec` has no `tsconfig.json`.

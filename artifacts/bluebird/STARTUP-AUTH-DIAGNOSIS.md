@@ -144,3 +144,171 @@ change, authentication fallback, or new build is justified.
 ## Earlier route-guard finding
 
 The earlier diagnosis recorded a direct protected-tab startup race: tab screens could mount before legacy auth restoration finished. The tabs layout was subsequently changed to withhold those screens until restoration completes. That finding concerns protected-tab requests and is distinct from the current isolated hosted `/` and `/sign-in` checks above.
+
+## Build 8 iPhone Clerk startup diagnosis — 2026-10-27
+
+### Evidence and selected Production configuration
+
+- The direct-device report supplied for this task says Build 8 reached the
+  phone-auth screen, the Clerk auth snapshot bridge reported a snapshot, and
+  `useAuth().isLoaded` remained false through the 15-second startup timeout.
+  This is evidence of a rendered Clerk provider subtree with an unready auth
+  snapshot, not evidence that a native Clerk event or token was received.
+- A read-only Expo build-list/build-info check confirms a finished iOS
+  `production-auth-test` artifact, app version `1.0.0`, build version `8`,
+  created and completed on 2026-10-27, with Expo SDK metadata `57.0.0`. The
+  record confirms the artifact exists; it cannot independently prove which
+  binary was installed on the reported phone.
+- The checked-in `production-auth-test` profile selects EAS `production`,
+  `EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT=production`, and the restricted native
+  auth-test policy. It disables the Development Clerk flag and demo mode, but
+  does not set the separate Production Clerk approval flag or override the
+  Production API URL, publishable key, or issuer.
+- Production Main API validation only accepts the `bluebirdjets.com` API host
+  (the `/api` base path). Because the reported snapshot bridge is inside
+  `ClerkProvider`, the source implies that the runtime passed the Production
+  provider gates: Production was selected, the independent approval flag was
+  true, a valid `pk_live_` key was present, its decoded host matched the
+  configured issuer host, and the selected API/key pair matched. This is an
+  inference from the observed mounted provider and checked-in gates, not a
+  read of remote EAS values or proof of API-owner approval.
+- The exact Production Clerk instance hostname is **not verifiable from the
+  available workspace evidence**. The EAS build record exposes profile/build
+  metadata, not the effective remote environment values. The connected Expo
+  tools cannot list the remote Production variables. No publishable key,
+  issuer value, URL value, token, or credential was read, printed, or saved.
+  The exact remote Production approval and key/issuer values therefore remain
+  owner-verifiable inputs.
+
+### Startup path and evidence
+
+1. `app/_layout.tsx` holds the splash until fonts load or font loading errors.
+   It then enters `RoutedRoot`; the report that the phone-auth screen and
+   snapshot bridge rendered rules out the font gate as the cause of this
+   particular observed stall.
+2. `clerkAuthConfig.ts` treats Production builds as Clerk-expected regardless
+   of the Development auth flag. It requires the Production selector,
+   independent Production approval, a valid live key, valid API URL, and
+   issuer/key host parity. `mainBluebirdApiConfig.ts` pins the Production
+   API host and `DormantClerkProvider` additionally requires the API
+   configuration's key to equal the provider key. A failed gate blocks
+   provider mounting; it does not fall back to Development or legacy auth.
+3. `DormantClerkProvider` renders `ClerkProvider` with the selected
+   publishable key and `@clerk/expo/token-cache`. Its snapshot bridge calls
+   `useAuth()` and reports `snapshotReceived=true` from an effect even when
+   `auth.isLoaded` is false. The Build 8 observation is therefore consistent
+   with the bridge reporting an initial loading snapshot; it does not mean
+   Clerk is ready.
+4. In installed `@clerk/expo` 4.10.1, the provider creates the JS Clerk
+   singleton with the supplied token cache and starts native bootstrap from
+   an iOS layout effect. Bootstrap waits for the JS Clerk instance's loaded
+   status, reads the cached client token with a one-second bound, calls the
+   native `ClerkExpo.configure`, reconciles JS/native client state, then marks
+   the native client ready. This native-ready flag is distinct from the app's
+   `useAuth().isLoaded`.
+5. The native iOS module exposes `configure` through an async Expo function.
+   `ClerkNativeBridge.configure` configures or reconfigures ClerkKit with the
+   publishable key, observes client/auth-flow changes, synchronizes token
+   state, and waits in up to 30 × 100 ms intervals for the native client to
+   load. A native configuration error rejects the bridge promise. The JS
+   bootstrap retries a configuration error once after 250 ms; its pending-sync
+   coordinator records failures and has a separate 10-second iOS tracking
+   timeout. The coordinator timeout is not the app's 15-second readiness
+   timeout, and source inspection does not show which, if either, was involved
+   on Build 8.
+6. The installed native token cache uses Expo SecureStore with iOS
+   `AFTER_FIRST_UNLOCK` Keychain accessibility. A read exception triggers a
+   delete attempt and returns null if that cleanup succeeds; save/delete
+   failures can reject. The SDK also bounds one bootstrap cache read, but the
+   underlying SecureStore/Keychain operations and actual Build 8 device state
+   were not observed. The package's native Clerk keychain service defaults to
+   the app bundle identifier unless a custom service is configured; this app
+   does not set a custom service in its Clerk plugin options.
+7. In `ClerkAuthPanel.tsx`, inputs and the code-request action stay disabled
+   until `useAuth().isLoaded`, both legacy Clerk sign-in/sign-up resources,
+   and the `setActive` function are ready. The Production 15-second timer in
+   `AuthContext.tsx` fails closed and shows Retry; Retry increments the
+   provider key to remount Clerk. The timer bounds the wait but does not
+   diagnose or cancel a hung SDK/network/Keychain operation.
+
+### SDK and native compatibility review
+
+- The installed package is exactly `@clerk/expo` 4.10.1. Its declared peers
+  include Expo `>=54 <58`, React `^18 || ^19`, and React Native `>=0.75`.
+  Bluebird resolves Expo `57.0.31`, React `19.2.3`, React Native `0.86.3`,
+  and `@types/react` `19.2.4`; these versions satisfy the declared Expo,
+  React, and React Native ranges. This rules out an obvious declared-peer
+  mismatch, not an undocumented runtime incompatibility.
+- The Expo app config includes the Clerk config plugin with Apple Sign-In
+  disabled. The installed plugin raises the iOS deployment target to 17.0;
+  the Clerk podspec includes the native Expo module and pins Clerk iOS SDK
+  1.6.1 through Swift Package Manager. The successful Build 8 build record
+  and rendered JS provider do not prove the native module was present,
+  configured, or able to use the device Keychain.
+- The custom provider wrapper uses stable module-level contexts, the passed
+  Production key/cache, and a keyed remount on Retry. No source evidence
+  proves a wrapper lifecycle or key-selection defect. Native async failures
+  are tracked by Clerk's sync coordinator. The wrapper's React error boundary
+  does not itself observe arbitrary rejected native-effect promises; the app's
+  bounded readiness timeout is the fallback for a still-unready auth snapshot.
+  No sanitized Build 8 native configure result, failure stage, HTTP status, or
+  device log was supplied.
+
+### Phone-first account selection
+
+The phone form starts in `sign-in` mode. `beginClerkPhoneAuth` calls
+`startSignIn` first, and calls `startSignUp` only when the sign-in error has an
+`errors[0].code` equal to Clerk's `form_identifier_not_found`. It does not
+infer a missing account from HTTP 404/422 alone, a top-level code, or a
+network/status failure. The focused phone-auth test verifies this behavior,
+including rejection of other 422 responses. No phone request is enabled
+before Clerk auth resources are ready.
+
+### Findings, remaining causes, and action
+
+- **Confirmed:** the observed failure is a readiness stall that crossed the
+  app's 15-second bound; the provider subtree rendered and the auth snapshot
+  was still not loaded. The app failed closed and did not enable phone
+  requests.
+- **Ruled out for this observation:** font loading never reaching the app,
+  the provider being absent, an immediately rejected Production configuration
+  gate, and choosing sign-up before the missing-account response.
+- **Not established / still possible:** stalled JS Clerk initial resource
+  loading; a blocked or failed iOS native module/configure call; network,
+  DNS, TLS, or Clerk service response problems; SecureStore/Keychain read,
+  write, or entitlement behavior; or an SDK/device-specific issue outside
+  declared package peers. The snapshot and timeout alone cannot distinguish
+  these causes. There is no evidence to claim any one of them caused Build 8.
+- **Code change:** none. No reproducible Mobile-owned defect was demonstrated,
+  so auth gates, provider wiring, timeout, and phone flow were left unchanged.
+- **Exact owner checks before another build:** (1) inspect the remote EAS
+  `production` environment in an authorized view and report only presence and
+  status—never values—for the Production selector, approval flag, API base,
+  live key, and issuer; confirm the selected API host is
+  `bluebirdjets.com` and the key-host/issuer-host match; (2) on the existing
+  Build 8 device, reproduce one cold launch and one Retry while preserving a
+  redacted Apple Console timeline that records only startup event order,
+  provider-mounted/snapshot/isLoaded booleans, native module/configure
+  started/returned status, and broad error/network status categories; remove
+  raw SDK/system messages, URLs, headers, bodies, keys, tokens, phone numbers,
+  and identifiers; (3) confirm the built app's Clerk native module and iOS
+  deployment target are present (17.0 or newer) and that a SecureStore read
+  after the device has been unlocked does not throw. No phone sign-in or API
+  request is needed for these checks.
+- **Build decision:** another iOS build is not justified yet. First collect
+  the owner-only configuration status and sanitized device timeline above.
+  Build only if those observations isolate a Mobile-owned source defect and a
+  focused regression fix is made; no build, upload, or deployment was
+  performed for this diagnosis.
+
+### Local verification
+
+- `pnpm --filter @workspace/bluebird run test:clerk-startup`: **11 passed**.
+- `pnpm --filter @workspace/bluebird run test:clerk-auth-ui`: **11 passed**.
+- `pnpm --filter @workspace/bluebird run test:clerk-phone-auth`: **19 passed**.
+- The first direct Bluebird typecheck reported stale generated API-client
+  declarations. `pnpm run typecheck:libs` rebuilt the workspace composite
+  libraries, after which `pnpm --filter @workspace/bluebird run typecheck`
+  **passed**.
+- `git diff --check`: **passed**. The only project-file change is this
+  diagnosis report; no app or auth code changed.
