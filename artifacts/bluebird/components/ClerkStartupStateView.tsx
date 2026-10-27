@@ -2,14 +2,61 @@ import React from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import type { ClerkStartupState } from '@/lib/clerkStartup';
+import {
+  getClerkStartupDiagnosticLines,
+  type ClerkStartupFailureReason,
+  type ClerkStartupState,
+} from '@/lib/clerkStartup';
+import { isNativeProductionAuthTestEnabled, shouldShowNativeAuthStartupDiagnostics } from '@/lib/nativeAuthTestPolicy';
+
+export function ClerkStartupDiagnosticDetails({
+  failureReason,
+  snapshotReceived,
+  isLoaded,
+}: {
+  failureReason: ClerkStartupFailureReason;
+  snapshotReceived: boolean;
+  isLoaded: boolean;
+}) {
+  const colors = useColors();
+  const visible = shouldShowNativeAuthStartupDiagnostics({
+    platformOS: Platform.OS,
+    nativeAuthTestEnabled: isNativeProductionAuthTestEnabled(),
+    apiEnvironment: process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT,
+    developmentBuild: typeof __DEV__ !== 'undefined' && __DEV__,
+  });
+  if (!visible) return null;
+
+  return (
+    <View
+      accessibilityLabel="Clerk startup diagnostics"
+      style={[styles.diagnosticsBox, { borderColor: colors.border }]}
+      testID="clerk-startup-diagnostics"
+    >
+      <Text style={[styles.diagnosticsTitle, { color: colors.mutedOnBrand }]}>
+        Startup diagnostics
+      </Text>
+      {getClerkStartupDiagnosticLines({ failureReason, snapshotReceived, isLoaded }).map((line) => (
+        <Text key={line} style={[styles.diagnosticText, { color: colors.textOnBrand }]}>
+          {line}
+        </Text>
+      ))}
+    </View>
+  );
+}
 
 export function ClerkStartupStateView({
   state,
   onRetry,
+  failureReason = 'initialization_timeout',
+  snapshotReceived = false,
+  isLoaded = false,
 }: {
   state: ClerkStartupState;
   onRetry: () => void;
+  failureReason?: ClerkStartupFailureReason;
+  snapshotReceived?: boolean;
+  isLoaded?: boolean;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -55,6 +102,11 @@ export function ClerkStartupStateView({
             <Text style={[styles.message, { color: colors.textOnBrand }]}>
               Bluebird couldn’t initialize secure sign-in. Your account is protected. Please try again.
             </Text>
+            <ClerkStartupDiagnosticDetails
+              failureReason={failureReason}
+              snapshotReceived={snapshotReceived}
+              isLoaded={isLoaded}
+            />
           </View>
           <Pressable
             accessibilityRole="button"
@@ -127,6 +179,23 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     gap: 8,
+  },
+  diagnosticsBox: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    gap: 3,
+  },
+  diagnosticsTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: 2,
+  },
+  diagnosticText: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    lineHeight: 17,
   },
   disabledButton: {
     width: '100%',

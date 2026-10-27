@@ -6,6 +6,7 @@ import {
 } from '../scripts/.production-auth-api.test.mjs';
 import {
   isNativeProductionAuthTestRequestAllowed,
+  shouldShowNativeAuthStartupDiagnostics,
 } from '../scripts/.native-auth-test-policy.test.mjs';
 import {
   customFetch,
@@ -54,6 +55,21 @@ test('the restricted request policy allows only the exact read-only Production /
   ]) {
     assert.equal(isNativeProductionAuthTestRequestAllowed(...request), false);
   }
+});
+
+test('startup diagnostics are limited to release iOS Production auth-test builds', () => {
+  const allowed = {
+    platformOS: 'ios',
+    nativeAuthTestEnabled: true,
+    apiEnvironment: 'production',
+    developmentBuild: false,
+  };
+  assert.equal(shouldShowNativeAuthStartupDiagnostics(allowed), true);
+  assert.equal(shouldShowNativeAuthStartupDiagnostics({ ...allowed, platformOS: 'android' }), false);
+  assert.equal(shouldShowNativeAuthStartupDiagnostics({ ...allowed, platformOS: 'web' }), false);
+  assert.equal(shouldShowNativeAuthStartupDiagnostics({ ...allowed, nativeAuthTestEnabled: false }), false);
+  assert.equal(shouldShowNativeAuthStartupDiagnostics({ ...allowed, apiEnvironment: 'development' }), false);
+  assert.equal(shouldShowNativeAuthStartupDiagnostics({ ...allowed, developmentBuild: true }), false);
 });
 
 test('the Production authenticated API permits /api/me and blocks all other reads and writes before fetch', async () => {

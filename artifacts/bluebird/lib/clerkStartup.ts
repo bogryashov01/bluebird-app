@@ -4,7 +4,8 @@ export type ClerkStartupState = 'loading' | 'ready' | 'failed';
 export type ClerkStartupFailureReason =
   | 'configuration_invalid'
   | 'provider_missing'
-  | 'initialization_timeout';
+  | 'initialization_timeout'
+  | 'error_boundary';
 
 export function getClerkStartupState(input: {
   authExpected: boolean;
@@ -23,11 +24,25 @@ export function getClerkStartupFailureReason(input: {
   configurationValid?: boolean;
   providerMounted: boolean;
   timedOut: boolean;
+  errorBoundary?: boolean;
 }): ClerkStartupFailureReason | null {
   if (input.configurationValid === false) return 'configuration_invalid';
   if (!input.providerMounted) return 'provider_missing';
+  if (input.errorBoundary) return 'error_boundary';
   if (input.timedOut) return 'initialization_timeout';
   return null;
+}
+
+export function getClerkStartupDiagnosticLines(input: {
+  failureReason: ClerkStartupFailureReason;
+  snapshotReceived: boolean;
+  isLoaded: boolean;
+}): [string, string, string] {
+  return [
+    `Failure stage: ${input.failureReason}`,
+    `Auth snapshot received: ${input.snapshotReceived ? 'Yes' : 'No'}`,
+    `Clerk isLoaded: ${input.isLoaded ? 'Yes' : 'No'}`,
+  ];
 }
 
 export function getNextClerkStartupAttempt(attempt: number): number {

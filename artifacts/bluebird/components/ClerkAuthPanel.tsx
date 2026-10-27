@@ -15,7 +15,10 @@ import { useAuth as useClerkAuth } from '@clerk/expo';
 import { useSignIn, useSignUp } from '@clerk/expo/legacy';
 import { Feather } from '@expo/vector-icons';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
-import { ClerkStartupStateView } from '@/components/ClerkStartupStateView';
+import {
+  ClerkStartupDiagnosticDetails,
+  ClerkStartupStateView,
+} from '@/components/ClerkStartupStateView';
 import { useAuth as useAppAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { useClerkProviderMounted } from '@/lib/dormantClerkIntegration';
@@ -32,21 +35,39 @@ import {
   type ClerkSignUpPhoneResource,
 } from '@/lib/clerkPhoneAuth';
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
+import type { ClerkStartupFailureReason } from '@/lib/clerkStartup';
 import { logClerkStartupDiagnostic } from '@/lib/clerkStartup';
 
 type FormStep = 'phone' | 'code';
 
 export function ClerkAuthPanel() {
-  const { clerkStartupState, retryClerkStartup } = useAppAuth();
+  const {
+    clerkStartupState,
+    clerkStartupFailureReason,
+    clerkStartupSnapshotReceived,
+    clerkStartupIsLoaded,
+    retryClerkStartup,
+  } = useAppAuth();
   const providerMounted = useClerkProviderMounted();
 
   if (!providerMounted) {
-    return <ClerkStartupStateView state="failed" onRetry={retryClerkStartup} />;
+    return (
+      <ClerkStartupStateView
+        state="failed"
+        failureReason="provider_missing"
+        snapshotReceived={false}
+        isLoaded={false}
+        onRetry={retryClerkStartup}
+      />
+    );
   }
 
   return (
     <ClerkAuthForm
       startupFailed={clerkStartupState === 'failed'}
+      startupFailureReason={clerkStartupFailureReason ?? 'initialization_timeout'}
+      startupSnapshotReceived={clerkStartupSnapshotReceived}
+      startupIsLoaded={clerkStartupIsLoaded}
       onRetryStartup={retryClerkStartup}
       providerMounted={providerMounted}
     />
@@ -55,10 +76,16 @@ export function ClerkAuthPanel() {
 
 function ClerkAuthForm({
   startupFailed,
+  startupFailureReason,
+  startupSnapshotReceived,
+  startupIsLoaded,
   onRetryStartup,
   providerMounted,
 }: {
   startupFailed: boolean;
+  startupFailureReason: ClerkStartupFailureReason;
+  startupSnapshotReceived: boolean;
+  startupIsLoaded: boolean;
   onRetryStartup: () => void;
   providerMounted: boolean;
 }) {
@@ -237,6 +264,11 @@ function ClerkAuthForm({
               <Text style={[styles.stateText, { color: colors.textOnBrand }]}>
                 Bluebird couldn’t initialize secure sign-in. Your account is protected. Please try again.
               </Text>
+              <ClerkStartupDiagnosticDetails
+                failureReason={startupFailureReason}
+                snapshotReceived={startupSnapshotReceived}
+                isLoaded={startupIsLoaded}
+              />
               <Pressable
                 accessibilityRole="button"
                 onPress={onRetryStartup}

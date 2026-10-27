@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
+import { ClerkStartupDiagnosticDetails } from '@/components/ClerkStartupStateView';
 
 export function ClerkAuthConfigurationError() {
   const colors = useColors();
@@ -19,6 +20,11 @@ export function ClerkAuthConfigurationError() {
         {CLERK_AUTH_CONFIGURATION.configurationError ??
           'Sign-in is temporarily unavailable. Please try again later.'}
       </Text>
+      <ClerkStartupDiagnosticDetails
+        failureReason="configuration_invalid"
+        snapshotReceived={false}
+        isLoaded={false}
+      />
     </View>
   );
 }

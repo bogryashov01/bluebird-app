@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ClerkProvider, useAuth, useUser } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -27,12 +27,27 @@ export interface ClerkAuthSnapshot extends ClerkSessionSnapshot {
 const ClerkAuthSnapshotContext = createContext<ClerkAuthSnapshot | null>(null);
 const ClerkProviderMountedContext = createContext(false);
 const ClerkStartupRetryContext = createContext<() => void>(() => {});
+interface ClerkStartupSnapshotStatus {
+  snapshotReceived: boolean;
+  isLoaded: boolean;
+}
+const ClerkStartupSnapshotStatusContext = createContext<ClerkStartupSnapshotStatus>({
+  snapshotReceived: false,
+  isLoaded: false,
+});
+const ClerkStartupSnapshotStatusSetterContext = createContext<
+  React.Dispatch<React.SetStateAction<ClerkStartupSnapshotStatus>>
+>(() => {});
 
 function ClerkProviderStartupFailure({ resetError }: ErrorFallbackProps) {
   const retry = useContext(ClerkStartupRetryContext);
+  const snapshotStatus = useContext(ClerkStartupSnapshotStatusContext);
   return (
     <ClerkStartupStateView
       state="failed"
+      failureReason="error_boundary"
+      snapshotReceived={snapshotStatus.snapshotReceived}
+      isLoaded={snapshotStatus.isLoaded}
       onRetry={() => {
         resetError();
         retry();
@@ -43,6 +58,7 @@ function ClerkProviderStartupFailure({ resetError }: ErrorFallbackProps) {
 
 function ClerkAuthSnapshotBridge({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
+  const setSnapshotStatus = useContext(ClerkStartupSnapshotStatusSetterContext);
   const { isLoaded: isUserLoaded, user } = useUser();
   const phone = user?.primaryPhoneNumber;
   const verifiedPhoneNumber =
@@ -59,6 +75,10 @@ function ClerkAuthSnapshotBridge({ children }: { children: React.ReactNode }) {
     getToken: auth.getToken,
     signOut: async () => { await auth.signOut(); },
   }), [auth.isLoaded, auth.isSignedIn, auth.userId, auth.getToken, auth.signOut, verifiedPhoneNumber]);
+
+  useEffect(() => {
+    setSnapshotStatus({ snapshotReceived: true, isLoaded: auth.isLoaded });
+  }, [auth.isLoaded, setSnapshotStatus]);
 
   return (
     <ClerkAuthSnapshotContext.Provider value={snapshot}>
@@ -81,6 +101,10 @@ export function DormantClerkProvider({
   onRetryClerkStartup?: () => void;
 }) {
   const { publishableKey } = CLERK_AUTH_CONFIGURATION;
+  const [snapshotStatus, setSnapshotStatus] = useState<ClerkStartupSnapshotStatus>({
+    snapshotReceived: false,
+    isLoaded: false,
+  });
   let canMountProvider = shouldMountClerkProvider(CLERK_AUTH_CONFIGURATION) && !!publishableKey;
   if (CLERK_AUTH_CONFIGURATION.environment === 'production') {
     const apiConfiguration = getMainBluebirdApiConfigurationOrNull();
@@ -114,22 +138,26 @@ export function DormantClerkProvider({
   return (
     <ClerkProviderMountedContext.Provider value>
       <ClerkStartupRetryContext.Provider value={onRetryClerkStartup}>
-        <ErrorBoundary
-          FallbackComponent={ClerkProviderStartupFailure}
-          onError={(error) => {
-            logClerkStartupDiagnostic({
-              event: 'initialization_error',
-              production: CLERK_AUTH_CONFIGURATION.environment === 'production',
-              attempt,
-              providerMounted: true,
-              errorCategory: sanitizeClerkStartupError(error),
-            });
-          }}
-        >
-          <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-            <ClerkAuthSnapshotBridge>{children}</ClerkAuthSnapshotBridge>
-          </ClerkProvider>
-        </ErrorBoundary>
+        <ClerkStartupSnapshotStatusContext.Provider value={snapshotStatus}>
+          <ClerkStartupSnapshotStatusSetterContext.Provider value={setSnapshotStatus}>
+            <ErrorBoundary
+              FallbackComponent={ClerkProviderStartupFailure}
+              onError={(error) => {
+                logClerkStartupDiagnostic({
+                  event: 'initialization_error',
+                  production: CLERK_AUTH_CONFIGURATION.environment === 'production',
+                  attempt,
+                  providerMounted: true,
+                  errorCategory: sanitizeClerkStartupError(error),
+                });
+              }}
+            >
+              <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+                <ClerkAuthSnapshotBridge>{children}</ClerkAuthSnapshotBridge>
+              </ClerkProvider>
+            </ErrorBoundary>
+          </ClerkStartupSnapshotStatusSetterContext.Provider>
+        </ClerkStartupSnapshotStatusContext.Provider>
       </ClerkStartupRetryContext.Provider>
     </ClerkProviderMountedContext.Provider>
   );
@@ -141,6 +169,10 @@ export function useClerkAuthSnapshot(): ClerkAuthSnapshot | null {
 
 export function useClerkProviderMounted(): boolean {
   return useContext(ClerkProviderMountedContext);
+}
+
+export function useClerkStartupSnapshotStatus(): ClerkStartupSnapshotStatus {
+  return useContext(ClerkStartupSnapshotStatusContext);
 }
 
 /**

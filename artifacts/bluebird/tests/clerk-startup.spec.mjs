@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import {
   CLERK_STARTUP_TIMEOUT_MS,
+  getClerkStartupDiagnosticLines,
   getClerkStartupFailureReason,
   getClerkStartupState,
   getNextClerkStartupAttempt,
@@ -100,6 +101,47 @@ test('a missing provider is failed, not a successful signed-out session', () => 
     providerMounted: false,
     timedOut: false,
   }), 'provider_missing');
+});
+
+test('startup failure diagnostics distinguish all safe failure stages', () => {
+  assert.equal(getClerkStartupFailureReason({
+    configurationValid: false,
+    providerMounted: false,
+    timedOut: false,
+  }), 'configuration_invalid');
+  assert.equal(getClerkStartupFailureReason({
+    configurationValid: true,
+    providerMounted: false,
+    timedOut: false,
+  }), 'provider_missing');
+  assert.equal(getClerkStartupFailureReason({
+    configurationValid: true,
+    providerMounted: true,
+    timedOut: true,
+  }), 'initialization_timeout');
+  assert.equal(getClerkStartupFailureReason({
+    configurationValid: true,
+    providerMounted: true,
+    timedOut: false,
+    errorBoundary: true,
+  }), 'error_boundary');
+});
+
+test('diagnostics keep snapshot receipt separate from Clerk readiness', () => {
+  for (const snapshotReceived of [false, true]) {
+    for (const isLoaded of [false, true]) {
+      const lines = getClerkStartupDiagnosticLines({
+        failureReason: 'initialization_timeout',
+        snapshotReceived,
+        isLoaded,
+      });
+      assert.deepEqual(lines, [
+        'Failure stage: initialization_timeout',
+        `Auth snapshot received: ${snapshotReceived ? 'Yes' : 'No'}`,
+        `Clerk isLoaded: ${isLoaded ? 'Yes' : 'No'}`,
+      ]);
+    }
+  }
 });
 
 test('invalid Production configuration remains blocked', () => {
@@ -218,6 +260,9 @@ test('the live auth layout remounts Clerk on Retry and keeps startup on the phon
   const panel = await readFile(new URL('../components/ClerkAuthPanel.tsx', import.meta.url), 'utf8');
   const signedInScreen = await readFile(new URL('../components/ClerkSignedInScreen.tsx', import.meta.url), 'utf8');
   const startupView = await readFile(new URL('../components/ClerkStartupStateView.tsx', import.meta.url), 'utf8');
+  const startupLogic = await readFile(new URL('../lib/clerkStartup.ts', import.meta.url), 'utf8');
+  const configErrorView = await readFile(new URL('../components/ClerkAuthConfigurationError.tsx', import.meta.url), 'utf8');
+  const nativeAuthPolicy = await readFile(new URL('../lib/nativeAuthTestPolicy.ts', import.meta.url), 'utf8');
 
   assert.match(layout, /<DormantClerkProvider[\s\S]*key=\{clerkStartupAttempt\}[\s\S]*attempt=\{clerkStartupAttempt\}/);
   assert.doesNotMatch(layout, /clerkStartupState === 'failed'/);
@@ -229,7 +274,7 @@ test('the live auth layout remounts Clerk on Retry and keeps startup on the phon
   assert.match(provider, /value=\{false\}/);
   assert.match(provider, /event: 'provider_mount'/);
   assert.match(provider, /errorCategory: sanitizeClerkStartupError\(error\)/);
-  assert.match(provider, /<ClerkStartupStateView\s+state="failed"\s+onRetry=/);
+  assert.match(provider, /<ClerkStartupStateView\s+state="failed"[\s\S]*?onRetry=/);
   assert.match(panel, /event: flowMode === 'sign-in' \? 'sign_in_completed' : 'sign_up_completed'/);
   assert.match(panel, /event: 'signed_in_route_requested'/);
   assert.match(signedInScreen, /event: 'signed_in_route_reached'/);
@@ -243,4 +288,14 @@ test('the live auth layout remounts Clerk on Retry and keeps startup on the phon
   assert.match(startupView, /accessibilityState=\{\{ disabled: true \}\}/);
   assert.match(startupView, /testID="clerk-startup-error"/);
   assert.match(startupView, /testID="clerk-startup-retry"/);
+  assert.match(startupView, /testID="clerk-startup-diagnostics"/);
+  assert.match(startupView, /shouldShowNativeAuthStartupDiagnostics/);
+  assert.match(startupView, /getClerkStartupDiagnosticLines\(\{ failureReason, snapshotReceived, isLoaded \}\)/);
+  assert.match(startupLogic, /Failure stage:/);
+  assert.match(startupLogic, /Auth snapshot received:/);
+  assert.match(startupLogic, /Clerk isLoaded:/);
+  assert.match(provider, /failureReason="error_boundary"/);
+  assert.match(configErrorView, /failureReason="configuration_invalid"/);
+  assert.match(nativeAuthPolicy, /input\.platformOS === 'ios'/);
+  assert.match(nativeAuthPolicy, /input\.apiEnvironment === 'production'/);
 });
