@@ -143,6 +143,22 @@ export function resolveClerkAuthConfigurationFromEnvironment(
   }
 }
 
+/**
+ * A specifically opted-in development client uses the Production auth resolver.
+ * This selector does not grant approval or bypass any Production validation.
+ */
+export function resolveRuntimeClerkAuthConfiguration(
+  environment: Record<string, unknown>,
+  isDevelopment: boolean,
+): ClerkAuthConfiguration {
+  const productionClerkDebugClient = isDevelopment &&
+    environment.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG === 'true';
+  return resolveClerkAuthConfigurationFromEnvironment(
+    environment,
+    isDevelopment && !productionClerkDebugClient,
+  );
+}
+
 export interface ProductionAuthPreflightStatus {
   selectedEnvironment: 'selected' | 'not selected';
   productionApiUrl: 'configured' | 'missing' | 'invalid';
@@ -340,10 +356,11 @@ export async function performClerkSignOut(
  * Clerk token.
  */
 export const CLERK_AUTH_CONFIGURATION: ClerkAuthConfiguration = {
-  ...resolveClerkAuthConfigurationFromEnvironment(
+  ...resolveRuntimeClerkAuthConfiguration(
     {
       EXPO_PUBLIC_ENABLE_CLERK_AUTH: process.env.EXPO_PUBLIC_ENABLE_CLERK_AUTH,
       EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT,
+      EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG: process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG,
       EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY: process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY,
       EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH: process.env.EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH,
       EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL: process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL,

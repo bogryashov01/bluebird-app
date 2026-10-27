@@ -36,6 +36,7 @@ test("demo profile fixture matches the Bluebird /api/me display projection", () 
 test("public launch selection cannot enable the demo outside a development runtime", () => {
   assert.deepEqual(resolveFullAppDemoConfiguration("true", true), { enabled: true });
   assert.deepEqual(resolveFullAppDemoConfiguration("true", false), { enabled: false });
+  assert.deepEqual(resolveFullAppDemoConfiguration("true", true, true), { enabled: false });
   assert.deepEqual(resolveFullAppDemoConfiguration("false", true), { enabled: false });
   assert.deepEqual(resolveFullAppDemoConfiguration(undefined, true), { enabled: false });
 });
@@ -107,8 +108,8 @@ test("the demo provider is identity-free and privileged sample controls stay dis
 test("the full-app demo root precedes ordinary auth and Clerk mounts", () => {
   const rootSource = readFileSync(new URL("../app/_layout.tsx", import.meta.url), "utf8");
   const demoBranch = rootSource.indexOf("if (fullAppDemo.enabled) {");
-  const authProvider = rootSource.indexOf("<AuthProvider>");
-  const clerkProvider = rootSource.indexOf("<DormantClerkProvider>");
+  const authProvider = rootSource.indexOf("<AuthProvider");
+  const clerkProvider = rootSource.indexOf("<DormantClerkProvider");
   assert.ok(demoBranch >= 0 && authProvider > demoBranch && clerkProvider > demoBranch);
   assert.match(rootSource, /if \(isFullAppDemoRoute\(pathname, segments\)\) return <FullAppDemoUnavailable \/>;/);
 });

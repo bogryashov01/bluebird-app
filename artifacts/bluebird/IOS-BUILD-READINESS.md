@@ -2,6 +2,117 @@
 
 See [Replit Publish Expo authentication diagnosis](RELEASE-CONFIGURATION.md#replit-publish-expo-authentication-diagnosis-2026-10-26) for the read-only status of the managed Publish session and the support escalation path. The app identity remains unchanged.
 
+## Production Clerk debug client preparation (2026-10-27)
+
+### Configuration and safety
+
+- Added a separate `production-clerk-debug` EAS profile. It extends the
+  existing Production profile, uses its `production` EAS environment, enables
+  `developmentClient`, and selects internal distribution. The `production`
+  and `production-auth-test` profiles are unchanged.
+- The profile sets only safe runtime selectors: Production API selection,
+  Production Clerk debug selection, the existing native auth-test guard,
+  Development Clerk off, Full App Demo off, and Production flight/membership
+  modes. It does **not** set or override the independent Production Clerk
+  approval flag, Production API URL, publishable key, issuer, development
+  credentials, or `EXPO_PUBLIC_DOMAIN`.
+- A development bundle selects the existing Production resolver only when
+  `EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG=true` is explicitly present.
+  That marker does not replace Production validation: the resolver still
+  requires Production selection, the enabled owner-approval flag, a valid
+  canonical Production API URL, a valid `pk_live_` key, and a valid issuer
+  whose host matches the key. The provider separately confirms the resolved
+  API uses the same key. A failed check blocks Clerk; Development and legacy
+  credentials are not fallbacks.
+- Full App Demo is disabled both by the profile/Metro overrides and by the
+  Production debug runtime guard, even if a development bundle requests demo
+  mode.
+- The existing native Production auth-test guard is enabled. It permits only
+  authenticated `GET https://bluebirdjets.com/api/me`; other methods, paths,
+  hosts, queries, and fragments remain denied before token retrieval/network
+  access. No authenticated Production API request was made during verification.
+
+### Environment status and Replit route
+
+- The status-only check in the Replit workspace reported the Production API
+  selector, API URL, Production Clerk publishable key, issuer, and approval
+  flag **present** in the Metro environment. `EXPO_PUBLIC_DOMAIN` was **not
+  configured**. No values were displayed or persisted.
+- **Remote EAS Production environment: BLOCKED / inaccessible here.** The
+  connected Expo integration supports build and diagnostics queries but does
+  not expose EAS environment-variable presence; EAS CLI is unavailable in this
+  workspace. The remote presence of the API selector, API URL, key, issuer,
+  approval flag, and applicable `EXPO_PUBLIC_DOMAIN` therefore remains
+  unverified. An authorized owner must inspect presence only before running a
+  future EAS build. The Replit Metro values are independently checked and do
+  not prove remote EAS status.
+- The managed `artifacts/bluebird: expo` workflow defaults to its existing
+  Expo Go demo Preview. Its opt-in dispatches to the diagnostic launcher while
+  preserving that default behavior.
+  The Replit Expo launcher supports the temporary
+  `BLUEBIRD_PRODUCTION_CLERK_DEBUG=true` opt-in through the existing
+  `artifacts/bluebird: expo` workflow. It unsets the legacy
+  `EXPO_PUBLIC_DOMAIN` for the diagnostic process and uses Replit's Expo proxy
+  URL with LAN host mode.
+  `BLUEBIRD_EXPO_TUNNEL=true` selects Expo tunnel mode if the direct proxy route
+  is unreachable. The restarted regular workflow confirmed Metro starts and
+  prints a Replit Expo proxy QR/URL. The QR was an Expo Go QR because the
+  diagnostic switch was not enabled; direct diagnostic-client reachability and
+  tunnel reachability were not tested on an iPhone.
+- Install an eventual internal build from its EAS details-page install link/QR
+  on an iPhone registered for the signing profile. Read Metro and forwarded
+  JavaScript logs in the Replit Expo workflow console; React Native DevTools
+  remains unverified in this workspace.
+
+### Verification record and boundaries
+
+- **Configuration regression tests: PASS.** `test:production-clerk-debug`
+  20/20; `test:clerk-startup` 11/11; `test:native-production-auth` 7/7;
+  `test:production-preview-config` 9/9; and
+  `test:clerk-development-workflow` 6/6. The checks cover exact profile
+  overrides, unchanged release profiles, Production selection and fail-closed
+  approval/API/issuer validation, demo prohibition, sanitized preflight, and
+  the existing request restriction. Total: 53 passing tests.
+- **TypeScript: PASS.** `pnpm run typecheck:libs`, then
+  `pnpm --filter @workspace/bluebird run typecheck`.
+- **Resolved Expo config: PASS.** Public config resolved to Bluebird,
+  `com.bluebirdjets.app`, version `1.0.0`, build number `1`, and the existing
+  EAS project ID. Only those identity fields were printed.
+- **Expo Doctor: PASS, 21/21.** `pnpm dlx expo-doctor@latest`.
+- **Other checks: PASS.** EAS/package JSON parse, debug-shell syntax,
+  status-only preflight, and `git diff --check`.
+- **Replit Expo workflow: PASS with environment limitation.** Normal
+  Expo-Go workflow restarted and Metro printed its Replit proxy URL/QR. The
+  optional React Native DevTools helper reported the known missing
+  `libglib-2.0.so.0`; Metro still started. No iPhone connected.
+- **No release action:** no build, signing, device registration, TestFlight
+  upload, submission, deployment, Production credential change, Clerk
+  Dashboard/domain change, or authenticated Production API request was made.
+- **Build 8 comparison:** Build 8 is the existing TestFlight binary and serves
+  its archived JavaScript without Replit Metro or development tooling. The new
+  profile would be an internal-installation development client that loads
+  development JavaScript from Metro and exposes development diagnostics. It is
+  not equivalent to a TestFlight release and has not been installed or
+  exercised on a physical iPhone.
+- **Future build command, not run:** from the repository root,
+  `cd artifacts/bluebird && eas build --platform ios --profile production-clerk-debug`.
+- **Exact files changed:**
+  - `artifacts/bluebird/eas.json`
+  - `artifacts/bluebird/package.json`
+  - `artifacts/bluebird/lib/clerkAuthConfig.ts`
+  - `artifacts/bluebird/lib/fullAppDemo.ts`
+  - `artifacts/bluebird/scripts/dev-production-clerk-debug.sh`
+  - `artifacts/bluebird/scripts/production-clerk-debug-preflight.mjs`
+  - `artifacts/bluebird/tests/clerk-auth-config.spec.mjs`
+  - `artifacts/bluebird/tests/full-app-demo-mode.spec.mjs`
+  - `artifacts/bluebird/tests/native-production-auth-test.spec.mjs`
+  - `artifacts/bluebird/tests/production-clerk-debug.spec.mjs`
+  - `artifacts/bluebird/tests/production-preview-config.spec.mjs`
+  - `artifacts/bluebird/IPHONE-DEVELOPMENT.md`
+  - `artifacts/bluebird/IOS-BUILD-READINESS.md`
+  - `artifacts/bluebird/RELEASE-CONFIGURATION.md`
+  - `artifacts/bluebird/STARTUP-AUTH-DIAGNOSIS.md`
+
 ## Active EAS project association (2026-10-26)
 
 - Per the owner's instruction, the local Expo config now targets owner

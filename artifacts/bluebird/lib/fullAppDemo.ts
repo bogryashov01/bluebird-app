@@ -11,14 +11,20 @@ export interface FullAppDemoConfiguration {
 export function resolveFullAppDemoConfiguration(
   requested: unknown,
   isDevelopment: boolean,
+  isProductionClerkDebugClient = false,
 ): FullAppDemoConfiguration {
-  return { enabled: isDevelopment && requested === 'true' };
+  return {
+    enabled: isDevelopment &&
+      !isProductionClerkDebugClient &&
+      requested === 'true',
+  };
 }
 
 export function getFullAppDemoConfiguration(): FullAppDemoConfiguration {
   return resolveFullAppDemoConfiguration(
     process.env.EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO,
     typeof __DEV__ !== 'undefined' && __DEV__,
+    process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG === 'true',
   );
 }
 

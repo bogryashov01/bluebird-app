@@ -8,11 +8,13 @@ import {
   performClerkSignOut,
   resolveClerkAuthConfiguration,
   resolveClerkAuthConfigurationFromEnvironment,
+  resolveRuntimeClerkAuthConfiguration,
   shouldShowClerkConfigurationError,
   shouldMountClerkProvider,
 } from "../scripts/.clerk-auth-config.test.mjs";
 
 const validTestKey = "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k";
+const validProductionKey = "pk_live_Y2xlcmsuZXhhbXBsZS5jb20k";
 
 test("Clerk stays disabled unless the flag is exactly true and the public key is valid", () => {
   for (const flag of [undefined, "", "false", "TRUE", "1", true]) {
@@ -140,6 +142,54 @@ test("Production Clerk remains blocked until explicit approval and an exact matc
   });
   assert.equal(shouldMountClerkProvider(enabled), true);
   assert.equal(canAccessClerkAuthRoutes(enabled), true);
+});
+
+test("an opted-in development client selects Production Clerk and never falls back", () => {
+  const productionDebug = {
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG: "true",
+    EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: "production",
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL: "https://bluebirdjets.com/api",
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY: validProductionKey,
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_CLERK_ISSUER: "https://clerk.example.com",
+    EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH: "true",
+    EXPO_PUBLIC_ENABLE_CLERK_AUTH: "false",
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY: validTestKey,
+    EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: validTestKey,
+  };
+
+  const selected = resolveRuntimeClerkAuthConfiguration(productionDebug, true);
+  assert.deepEqual(selected, {
+    authExpected: true,
+    enabled: true,
+    environment: "production",
+    publishableKey: validProductionKey,
+    configurationError: null,
+  });
+
+  for (const invalid of [
+    { ...productionDebug, EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH: "false" },
+    { ...productionDebug, EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL: undefined },
+    { ...productionDebug, EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY: undefined },
+    { ...productionDebug, EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY: validTestKey },
+    { ...productionDebug, EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_CLERK_ISSUER: undefined },
+    { ...productionDebug, EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_CLERK_ISSUER: "https://other.example.com" },
+    { ...productionDebug, EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: "development" },
+  ]) {
+    const blocked = resolveRuntimeClerkAuthConfiguration(invalid, true);
+    assert.equal(blocked.authExpected, true);
+    assert.equal(blocked.enabled, false);
+    assert.equal(blocked.environment, null);
+    assert.equal(blocked.publishableKey, null);
+    assert.ok(blocked.configurationError);
+  }
+
+  const noProfileMarker = resolveRuntimeClerkAuthConfiguration({
+    EXPO_PUBLIC_ENABLE_CLERK_AUTH: "true",
+    EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: "development",
+    EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY: validTestKey,
+  }, true);
+  assert.equal(noProfileMarker.environment, "development");
+  assert.equal(noProfileMarker.publishableKey, validTestKey);
 });
 
 test("Production builds block legacy fallback when the API environment selector is missing", () => {

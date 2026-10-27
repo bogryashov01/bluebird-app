@@ -31,20 +31,27 @@ const launcherSource = await readFile(
 );
 
 test("the artifact's Development Preview offers Expo Go with isolated Membership mock mode", () => {
-  assert.equal(
-    packageJson.scripts.dev,
-    "sh -c 'if [ -n \"$REPLIT_EXPO_SESSION_SECRET\" ]; then pnpm exec create-launch login --session \"$REPLIT_EXPO_SESSION_SECRET\" || true; fi' && BROWSER=none EXPO_PACKAGER_PROXY_URL=https://$REPLIT_EXPO_DEV_DOMAIN EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE=local EXPO_PUBLIC_REPL_ID=$REPL_ID REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_EXPO_DEV_DOMAIN pnpm exec expo start --dev-client --web --host lan --port $PORT",
+  const devCommand = packageJson.scripts.dev;
+  assert.match(
+    devCommand,
+    /^if \[ "\$BLUEBIRD_PRODUCTION_CLERK_DEBUG" = "true" \]; then sh scripts\/dev-production-clerk-debug\.sh; else /,
   );
+  assert.match(devCommand, /EXPO_PUBLIC_DOMAIN=\$REPLIT_DEV_DOMAIN/);
+  assert.match(devCommand, /EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE=local/);
+  assert.match(devCommand, /EXPO_PUBLIC_REPL_ID=\$REPL_ID/);
+  assert.match(devCommand, /pnpm exec expo start --dev-client --web --host lan --port \$PORT; fi$/);
   assert.match(
     artifactConfig,
     /\[services\.development\]\s+run = "pnpm --filter @workspace\/bluebird run preview:expo-go"/,
   );
-  assert.match(packageJson.scripts["preview:expo-go"], /pnpm exec create-launch login --session/);
-  assert.match(packageJson.scripts["preview:expo-go"], /--go --web --host lan --port \$PORT/);
-  assert.doesNotMatch(packageJson.scripts["preview:expo-go"], /--dev-client/);
-  assert.match(packageJson.scripts["preview:expo-go"], /EXPO_PUBLIC_ENABLE_CLERK_AUTH=false/);
-  assert.match(packageJson.scripts["preview:expo-go"], /EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO=true/);
-  assert.match(packageJson.scripts["preview:expo-go"], /EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE=mock/);
+  const expoGoCommand = packageJson.scripts["preview:expo-go"];
+  const normalPreviewPrefix =
+    'if [ "$BLUEBIRD_PRODUCTION_CLERK_DEBUG" = "true" ]; then sh scripts/dev-production-clerk-debug.sh; else ';
+  assert.ok(expoGoCommand.startsWith(normalPreviewPrefix));
+  assert.equal(
+    expoGoCommand.slice(normalPreviewPrefix.length, -4),
+    "sh -c 'if [ -n \"$REPLIT_EXPO_SESSION_SECRET\" ]; then pnpm exec create-launch login --session \"$REPLIT_EXPO_SESSION_SECRET\" || true; fi' && BROWSER=none EXPO_PACKAGER_PROXY_URL=https://$REPLIT_EXPO_DEV_DOMAIN EXPO_PUBLIC_DOMAIN=$REPL_DEV_DOMAIN EXPO_PUBLIC_ENABLE_CLERK_AUTH=false EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO=true EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT=production EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE=local EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE=mock EXPO_PUBLIC_REPL_ID=$REPL_ID REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_EXPO_DEV_DOMAIN pnpm exec expo start --go --web --host lan --port $PORT",
+  );
   assert.match(
     packageJson.scripts["preview:membership-mock-web"],
     /EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE=mock/,

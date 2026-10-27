@@ -191,6 +191,11 @@ test('EAS TestFlight profile is Production-only and keeps the existing approval 
   const layoutSource = await readFile(new URL('../app/_layout.tsx', import.meta.url), 'utf8');
   const profile = eas.build['production-auth-test'];
 
+  assert.deepEqual(eas.build.production, {
+    environment: 'production',
+    distribution: 'store',
+    pnpm: '10.26.1',
+  });
   assert.equal(profile.extends, 'production');
   assert.equal(profile.environment, 'production');
   assert.equal(profile.distribution, 'store');
@@ -220,6 +225,37 @@ test('EAS TestFlight profile is Production-only and keeps the existing approval 
   assert.match(layoutSource, /setBaseUrl\('https:\/\/bluebirdjets\.com'\)/);
   assert.match(layoutSource, /setRequestGuard\(isNativeProductionAuthTestRequestAllowed\)/);
   assert.match(layoutSource, /!isNativeProductionAuthTestEnabled\(\) && process\.env\.EXPO_PUBLIC_DOMAIN/);
+});
+
+test('the Production Clerk debug EAS profile is isolated and preserves all Production gates', async () => {
+  const eas = JSON.parse(await readFile(new URL('../eas.json', import.meta.url), 'utf8'));
+  const profile = eas.build['production-clerk-debug'];
+
+  assert.equal(profile.extends, 'production');
+  assert.equal(profile.developmentClient, true);
+  assert.equal(profile.distribution, 'internal');
+  assert.equal(profile.environment, 'production');
+  assert.deepEqual(profile.env, {
+    EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: 'production',
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG: 'true',
+    EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST: 'true',
+    EXPO_PUBLIC_ENABLE_CLERK_AUTH: 'false',
+    EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO: 'false',
+    EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE: 'production',
+    EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE: 'production',
+  });
+
+  for (const forbiddenOverride of [
+    'EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH',
+    'EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL',
+    'EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY',
+    'EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_CLERK_ISSUER',
+    'EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL',
+    'EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY',
+    'EXPO_PUBLIC_DOMAIN',
+  ]) {
+    assert.equal(Object.hasOwn(profile.env, forbiddenOverride), false);
+  }
 });
 
 test('the native Clerk provider uses Clerk token caching and does not embed a Clerk secret', async () => {

@@ -346,6 +346,32 @@ before Clerk auth resources are ready.
 - `git diff --check`: **passed**. The only project-file change is this
   diagnosis report; no app or auth code changed.
 
+## Production Clerk development-client preparation — 2026-10-27
+
+The owner-requested diagnostic profile is now prepared as
+`production-clerk-debug`; it has not been built or installed. Unlike TestFlight
+Build 8, the internal development client will load its JavaScript from Replit
+Metro and expose development tooling/logs. It is intended to distinguish
+JavaScript startup behavior from the native Clerk bootstrap stall seen on
+Build 8; it does not by itself instrument or prove the native
+`ClerkExpo.configure` result.
+
+The profile uses the existing Production resolver and unchanged approval,
+API/key, and issuer checks, plus the existing restricted native auth-test
+request guard. Full App Demo is prohibited. The Replit Metro process separately
+reports required-variable presence without values; remote EAS environment
+presence is inaccessible from the available Expo connection and remains an
+owner verification blocker. The managed Expo workflow normally starts its
+Expo Go demo Preview; the explicit debug toggle routes that same workflow to
+the internal-client Metro launcher. The restarted workflow printed its Replit
+proxy URL/QR in default Expo Go mode. Diagnostic-client device reachability and
+the optional tunnel were not tested.
+
+Focused regression tests, resolved Expo configuration, Expo Doctor, and the
+exact changed-file list are recorded in `IOS-BUILD-READINESS.md`. No Production
+request, build, upload, submission, deployment, credential change, or Clerk
+domain/origin change was made.
+
 ## Clerk Development browser workflow — 2026-10-27
 
 ### Workflow and pairing
@@ -360,8 +386,9 @@ before Clerk auth resources are ready.
   issuer matching the key's instance host, and Clerk enabled. It does not
   return or log configured URLs, keys, issuer values, or tokens.
 - The workspace's Production default selector remains unchanged. The separate
-  launcher overrides it only within its process. The existing
-  `preview:expo-go` command and running Full App Demo workflow remain unchanged.
+  Development web launcher overrides it only within its process. The
+  `preview:expo-go` command keeps its normal behavior unless the separate
+  Production Clerk debug toggle is explicitly set.
 
 ### Fresh browser evidence
 

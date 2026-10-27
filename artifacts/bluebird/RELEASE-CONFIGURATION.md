@@ -2,6 +2,38 @@
 
 This note records Bluebird's owner-confirmed Expo/EAS identity and the remaining requirements for an iOS production build and App Store submission. No app identity, EAS project, credentials, or production environment values were created here.
 
+## Internal Production Clerk debug profile preparation (2026-10-27)
+
+Bluebird now has a separate `production-clerk-debug` profile for an internal
+iOS development client. It selects EAS `production`, enables the development
+client, and uses internal distribution. It does not alter either the
+store-distributed `production` or `production-auth-test` profile.
+
+The debug selector routes a Metro-served development JavaScript bundle into
+the existing fail-closed Production Clerk resolver. The resolver still
+requires the independent approval flag and matching Production API/key/issuer
+checks; the profile does not supply or replace those values. The profile
+disables demo mode and enables the existing native-auth-test guard, which
+allows only exact authenticated `GET /api/me`.
+
+The local Replit workflow had the API selector, Production API URL, publishable
+key, issuer, and approval flag present; the legacy `EXPO_PUBLIC_DOMAIN` was
+absent. This is Metro-process status only. Remote EAS Production environment
+variable presence is **unverified** because the connected Expo access does not
+provide an environment-variable listing and EAS CLI is unavailable here. An
+authorized owner must confirm remote presence before a future build.
+
+To use the existing Expo workflow, set the non-secret Replit workflow toggle
+`BLUEBIRD_PRODUCTION_CLERK_DEBUG=true` for the diagnostic session and restart
+`artifacts/bluebird: expo`; remove the toggle afterward. Without it, the
+workflow keeps its existing Expo Go demo behavior. The Replit proxy/QR is the
+preferred direct Metro route, but physical iPhone reachability is unverified.
+`BLUEBIRD_EXPO_TUNNEL=true` selects Expo tunnel mode if needed.
+See `IPHONE-DEVELOPMENT.md` for internal installation, logging, and the
+future build command. No build, device registration, credential change,
+upload, submission, deployment, authenticated Production request, or Clerk
+domain/origin change was made.
+
 ## Replit Publish Expo authentication diagnosis (2026-10-26)
 
 This was a read-only investigation of the reported `EXPO_UNAUTHORIZED` error.
