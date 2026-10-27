@@ -19,6 +19,7 @@ import type { ProductionAuthRequestError } from '@/lib/productionAuthApi';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { getProductionQueueReadOnlyMessage } from '@/lib/productionQueueReadiness';
 import { canJoinProductionQueue, canStartQueueJoin } from '@/lib/queueJoinGuards';
+import { logJoinNav } from '@/lib/joinNavDiagnostics';
 
 export interface ClerkQueuePanelProps {
   emptyLegId: number;
@@ -101,6 +102,12 @@ export function ClerkQueuePanel({
     }
   };
   const joinQueue = async () => {
+    logJoinNav('join-button', {
+      screen: 'ClerkQueuePanel',
+      visibleLabel: 'Join Queue',
+      routerMethod: 'none',
+      targetPathname: 'none',
+    });
     if (!canStartQueueJoin(joinLock.current, busy)) return;
     joinLock.current = true;
     try {

@@ -6,7 +6,12 @@ import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
 import { createMockReferralRepository, type MockReferralFixture } from '@/lib/mockReferralRepository';
-import { createProductionReferralRepository, type ReferralRepository, type ReferralSnapshot } from '@/lib/referralProgram';
+import {
+  createProductionReferralRepository,
+  logReferralDiagnostic,
+  type ReferralRepository,
+  type ReferralSnapshot,
+} from '@/lib/referralProgram';
 
 export type ReferralProgramState =
   | { status: 'loading'; snapshot: null; error: null }
@@ -89,6 +94,11 @@ export function useReferralProgram() {
     const controller = new AbortController();
     setState({ identity, value: EMPTY_LOADING_STATE });
     if (!repository) {
+      logReferralDiagnostic({
+        phase: 'screen',
+        requestAttempted: 'no',
+        failureCategory: authMode === 'clerk' ? 'session-or-api-not-ready' : 'clerk-required',
+      });
       setState({
         identity,
         value: {

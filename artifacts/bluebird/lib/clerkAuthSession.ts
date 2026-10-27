@@ -56,10 +56,31 @@ export function canAccessClerkMemberScreens(input: {
   return getClerkEntryState(input) === 'member-linked';
 }
 
+const CLERK_JOIN_FLOW_ROUTES = new Set([
+  'join',
+  'demo-policy',
+  'demo-intl',
+  'demo-joined',
+  'demo-status',
+  'demo-pass',
+  'demo-purchase',
+  'demo-winner',
+  'demo-confirmed',
+]);
+
+export function isClerkJoinFlowPath(segments: readonly string[], pathname = ''): boolean {
+  const path = pathname.split(/[?#]/, 1)[0].replace(/\/+$/, '');
+  if (path === '/flight/join' || /^\/flight\/demo-[a-z]+$/.test(path)) return true;
+  return segments[0] === 'flight' &&
+    segments.length === 2 &&
+    CLERK_JOIN_FLOW_ROUTES.has(segments[1] ?? '');
+}
+
 export function shouldRedirectClerkRoute(
   segments: readonly string[],
   memberAccessResolved: boolean,
   registeredHomeReady = false,
+  pathname = '',
 ): boolean {
   if (memberAccessResolved) return false;
   const group = segments[0];
@@ -84,10 +105,19 @@ export function shouldRedirectClerkRoute(
   if (registeredHomeReady && group === 'flight' && route === '[id]' && segments.length === 2) {
     return false;
   }
+  // The join review and development-only demo screens do not submit a
+  // production request. Match both the route name and the pathname so an
+  // unmatched segment cannot send this flow back to the start screen.
+  if (registeredHomeReady && isClerkJoinFlowPath(segments, pathname)) {
+    return false;
+  }
   if (group === '(auth)' && (route === 'splash' || route === 'welcome')) return false;
   // Referral codes are available to signed-in non-members as well as members.
   // The referral screen itself requires a valid Clerk session for account data.
   if (group === 'referral' && segments.length === 1) return false;
+  // The Concierge screen for a complete Clerk profile is a local demo. It does
+  // not send messages or call the concierge API.
+  if (registeredHomeReady && group === 'concierge' && segments.length === 1) return false;
   // This one account route is explicitly user-opened and reads only the
   // authenticated user's API profile; it does not grant member capabilities.
   if (group === 'account' && route === 'bluebird-profile') return false;

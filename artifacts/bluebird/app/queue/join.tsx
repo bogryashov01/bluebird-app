@@ -18,6 +18,7 @@ import * as Haptics from 'expo-haptics';
 import { ApplyingPassOverlay, ApplyingPassPhase } from '@/components/ApplyingPassOverlay';
 import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
+import { logJoinNav } from '@/lib/joinNavDiagnostics';
 import { fetchFullAppDemoFlight } from '@/lib/fullAppDemoLiveReads';
 import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
 import { parseProductionFlightId } from '@/lib/productionFlights';
@@ -186,6 +187,12 @@ export default function JoinQueueAcknowledgeScreen() {
   const needsIntlNotice = isInternational && membershipTier === 'base';
 
   const handleContinue = async () => {
+    logJoinNav('join-button', {
+      screen: 'queue/join',
+      visibleLabel: 'I Acknowledge — Continue',
+      routerMethod: 'pending',
+      targetPathname: 'pending',
+    });
     if (!localDemoFlow || !flightId) return;
     if (demoMode && demoEntry && ['waiting', 'changed-position'].includes(demoEntry.status)) {
       router.replace({ pathname: '/queue/status', params: { entryId: demoEntry.id, flightId } });

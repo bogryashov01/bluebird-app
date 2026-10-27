@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
+import { logJoinNav } from '@/lib/joinNavDiagnostics';
 
 /**
  * Uniform floating circular back button for full-bleed screens without a
@@ -27,7 +28,15 @@ export function FloatingBackButton({
   return (
     <TouchableOpacity
       style={[styles.btn, { top: topPad + 14, backgroundColor: bg }]}
-      onPress={onPress ?? (() => router.back())}
+      onPress={() => {
+        logJoinNav('floating-back', {
+          routerMethod: onPress ? 'custom' : 'back',
+          destination: onPress ? 'custom' : 'previous',
+          reason: 'floating-back-press',
+        });
+        if (onPress) onPress();
+        else router.back();
+      }}
       activeOpacity={0.75}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       testID="floating-back"

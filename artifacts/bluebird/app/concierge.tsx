@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
-import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
+import { DemoConciergeChat } from '@/components/DemoConciergeChat';
 import { useConciergeChat, useGetConciergeHistory, useRequestConciergeCallback } from '@workspace/api-client-react';
 import * as Haptics from 'expo-haptics';
 
@@ -286,13 +286,7 @@ function ConciergeContent() {
 export default function ConciergeScreen() {
   const { authMode } = useAuth();
   if (authMode === 'clerk') {
-    return (
-      <ProductionAuthenticatedUnavailableNotice
-        title="AI Concierge unavailable"
-        description="Concierge chat is not connected to your signed-in Bluebird account yet. No message was sent."
-        testID="clerk-concierge-unavailable"
-      />
-    );
+    return <DemoConciergeChat />;
   }
   return <ConciergeContent />;
 }

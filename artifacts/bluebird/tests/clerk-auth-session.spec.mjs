@@ -138,6 +138,9 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["notifications"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["account", "payment-methods"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["concierge"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["concierge"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["concierge", "extra"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["airport-picker"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["account", "payment-methods"], false, false), true);
   assert.equal(shouldRedirectClerkRoute(["airport-picker"], false, false), true);
@@ -150,7 +153,21 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "connections"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["flight", "[id]"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["flight", "[id]"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "join"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["flight", "join"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "join", "extra"], false, true), true);
+  for (const route of ["demo-policy", "demo-intl", "demo-joined", "demo-status", "demo-pass", "demo-purchase", "demo-winner", "demo-confirmed"]) {
+    assert.equal(shouldRedirectClerkRoute(["flight", route], false, true), false);
+    assert.equal(shouldRedirectClerkRoute(["flight", route], false, false), true);
+    assert.equal(shouldRedirectClerkRoute(["flight", route, "extra"], false, true), true);
+  }
   assert.equal(shouldRedirectClerkRoute(["flight", "policy"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["+not-found"], false, true, "/flight/join"), false);
+  assert.equal(shouldRedirectClerkRoute(["+not-found"], false, true, "/flight/join?flightId=42"), false);
+  assert.equal(shouldRedirectClerkRoute(["+not-found"], false, true, "/flight/demo-policy"), false);
+  assert.equal(shouldRedirectClerkRoute(["+not-found"], false, false, "/flight/join"), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "policy"], false, true, "/flight/policy"), true);
+  assert.equal(shouldRedirectClerkRoute(["queue", "join"], false, true, "/queue/join"), true);
   assert.equal(shouldRedirectClerkRoute(["flight", "confirmed"], false, true), true);
   for (const resolution of [
     { status: "signed_out" },
@@ -184,7 +201,7 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   ), false);
   const rootLayoutSource = readFileSync(resolve(projectRoot, "app/_layout.tsx"), "utf8");
   const discoverSource = readFileSync(resolve(projectRoot, "app/(tabs)/discover/index.tsx"), "utf8");
-  assert.match(rootLayoutSource, /shouldRedirectClerkRoute\(segments, memberAccessResolved, registeredHomeReady\)/);
+  assert.match(rootLayoutSource, /shouldRedirectClerkRoute\(segments, memberAccessResolved, registeredHomeReady, pathname\)/);
   assert.match(discoverSource, /router\.push\(demoMode[\s\S]*pathname: '\/flight\/\[id\]'/);
   for (const path of [
     ["(tabs)", "discover"],
@@ -193,6 +210,8 @@ test("central Clerk resolution states gate member screens and distinguish outcom
     ["(tabs)", "profile"],
     ["account", "personal-info"],
     ["notifications"],
+    ["concierge"],
+    ["flight", "join"],
   ]) {
     assert.equal(shouldRedirectClerkRoute(path, false, false), true, `${path.join("/")} must deny an incomplete Clerk profile`);
   }
@@ -290,12 +309,14 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   for (const [source, unavailableTitle] of [
     [contactsSource, "Connect Contacts unavailable"],
     [communitySource, "Community unavailable"],
-    [conciergeSource, "AI Concierge unavailable"],
   ]) {
     assert.match(source, /authMode === 'clerk'/);
     assert.match(source, new RegExp(unavailableTitle));
     assert.match(source, /ProductionAuthenticatedUnavailableNotice/);
   }
+  assert.match(conciergeSource, /authMode === 'clerk'/);
+  assert.match(conciergeSource, /<DemoConciergeChat \/>/);
+  assert.doesNotMatch(conciergeSource, /AI Concierge unavailable/);
   const paymentMethodsSource = readFileSync(resolve(projectRoot, "app/account/payment-methods.tsx"), "utf8");
   assert.match(paymentMethodsSource, /Your payment methods/);
   assert.match(paymentMethodsSource, /Payment method management is coming soon\./);
@@ -352,11 +373,11 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(airportPickerSource, /Loading the saved profile may synchronize phone information/);
   assert.match(airportPickerSource, /Read-only: required profile details are incomplete/);
   assert.match(notificationsSource, /router\.canGoBack\(\) \? router\.back\(\)/);
-  assert.match(membershipSource, /const api = createClerkApi\(\)\.authenticated;[\s\S]*?loadClerkBluebirdMembership\(api, signal\)/);
-  assert.match(clerkMembership, /membershipState === 'available'/);
-  assert.match(clerkMembership, /membershipState === 'conflict'/);
-  assert.match(clerkMembership, /membershipState === 'unavailable'/);
-  assert.match(clerkMembership, /clerk-membership-details/);
+  assert.match(membershipSource, /loadPreparedMobileMembership/);
+  assert.doesNotMatch(clerkMembership, /loadClerkBluebirdMembership|getMembership\(/);
+  assert.match(clerkMembership, /presentClerkMembershipDesign/);
+  assert.match(clerkMembership, /router\.push\('\/concierge'/);
+  assert.doesNotMatch(clerkMembership, /router\.(push|replace)\('\/\(tabs\)\/discover'/);
   assert.match(clerkMembership, /clerk-membership-retry/);
   assert.doesNotMatch(clerkMembership, /user\?\.membershipTier|linePassCount|annualFlightAllowance/);
   assert.doesNotMatch(clerkMembership, /useBuy|useChange|useUpgrade|updateProfile/);

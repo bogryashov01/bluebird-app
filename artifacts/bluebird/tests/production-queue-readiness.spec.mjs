@@ -184,9 +184,10 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   expect(flightId).toBeGreaterThan(0);
   await firstCard.click();
   await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
-  const queueBlockers = page.getByTestId("production-queue-read-only-message");
-  await expect(queueBlockers).toHaveText("Queue is temporarily unavailable. Please try again later.");
-  await expect(queueBlockers).not.toContainText(/Main API|Clerk|JWT|contract|verification/i);
+  await expect(page.getByTestId("production-queue-read-only-cta")).toHaveText("Join the Flight");
+  const joinHint = page.getByTestId("join-flight-details-hint");
+  await expect(joinHint).toHaveText("Review what joining the queue means. No request is sent from this screen.");
+  await expect(joinHint).not.toContainText(/Main API|Clerk|JWT|contract|verification/i);
   await expect(page.getByTestId("flight-info-queue-count")).toHaveCount(0);
   await expect(page.getByTestId("flight-info-status")).toHaveText("Available");
   expect(new URL(page.url()).pathname).toMatch(new RegExp(`/flight/${flightId}$`));
@@ -204,9 +205,16 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   await expect(page.getByText(/Sunday, November 1 · Departs/)).toBeVisible();
 
   await page.getByTestId("production-queue-read-only-cta").click();
-  await expect(page.getByTestId("production-read-only-notice")).toBeVisible();
-  await expect(page.getByTestId("production-read-only-notice")).toContainText("Queue is temporarily unavailable. Please try again later.");
-  await expect(page.getByTestId("production-read-only-notice")).not.toContainText(/Main API|Clerk|JWT|contract|verification/i);
+  await expect(page.getByTestId("join-flight-confirmation")).toBeVisible();
+  await expect(page.getByText("Joining enters this flight's queue. It does not create a confirmed booking or a Trips entry.")).toBeVisible();
+  await expect(page.getByText("DAL → SFO")).toBeVisible();
+  await expect(page.getByText("A place in the queue does not guarantee a seat. After the queue closes, a winner must confirm before the flight is awarded.")).toBeVisible();
+  await expect(page.getByText("An active membership and a complete profile are required. This screen does not check either one.")).toBeVisible();
+  await expect(page.getByTestId("join-flight-confirm")).toBeDisabled();
+  await expect(page.getByTestId("join-flight-confirm-note")).toHaveText("Queue joining is not available in this build. No request is sent.");
+  await expect(page.getByTestId("queue-join-success")).toHaveCount(0);
+  await expect(page.getByTestId("production-read-only-notice")).toHaveCount(0);
+  await expect(page.getByText("$2,000", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("production-flight-id")).toHaveCount(0);
 
   await page.goto(appUrl(baseURL, `flight/${flightId}`));
@@ -234,6 +242,12 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
     `queue/buy-pass?flightId=${flightId}&entryId=demo-entry`,
     `flight/confirmed?flightId=${flightId}&passUsed=1`,
   ];
+
+  await page.goto(appUrl(baseURL, `flight/join?flightId=${flightId}&position=7&totalInQueue=23&from=DAL&to=SFO`));
+  await expect(page.getByTestId("join-flight-confirmation")).toBeVisible();
+  await expect(page.getByTestId("queue-join-success")).toHaveCount(0);
+  await expect(page.getByText("#7")).toHaveCount(0);
+  await expect(page.getByText("23", { exact: true })).toHaveCount(0);
 
   for (const route of directQueueRoutes) {
     await page.goto(appUrl(baseURL, route));

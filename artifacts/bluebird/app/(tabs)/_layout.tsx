@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotifications';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
+import { useJoinNavDecision } from '@/lib/joinNavDiagnostics';
 
 function NativeTabLayout({ unreadCount }: { unreadCount: number }) {
   return (
@@ -163,6 +164,25 @@ export default function TabLayout() {
     clerkMemberResolution,
     CLERK_MEMBER_NAVIGATION_READINESS,
   );
+  const tabDestination = demoMode || isLoading
+    ? 'none'
+    : authMode === 'clerk' && (!clerkSignedIn || !registeredHomeReady)
+      ? (clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(clerk-auth)/sign-in')
+      : authMode !== 'clerk' && !token
+        ? '/(auth)/splash'
+        : 'none';
+  const tabReason = tabDestination === 'none'
+    ? 'tabs-allowed'
+    : authMode === 'clerk'
+      ? (clerkSignedIn ? 'home-not-ready' : 'clerk-signed-out')
+      : 'legacy-signed-out';
+  useJoinNavDecision('tabs', `${tabReason}|${tabDestination}`, {
+    reason: tabReason,
+    destination: tabDestination,
+    authMode,
+    clerkSignedIn,
+    homeReady: registeredHomeReady,
+  });
   if (demoMode) {
     if (isLiquidGlassAvailable() && preference === 'system') {
       return <NativeTabLayout unreadCount={0} />;

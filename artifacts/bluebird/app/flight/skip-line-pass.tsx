@@ -11,6 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { useJoinNavDecision } from '@/lib/joinNavDiagnostics';
 
 function paramValue(value: string | string[] | undefined): string | null {
   return typeof value === 'string' ? value : Array.isArray(value) ? value[0] ?? null : null;
@@ -25,6 +26,10 @@ export default function SkipLinePassDetailsScreen() {
   const flightRoute = paramValue(rawRoute);
   const flightAvailable = paramValue(rawAvailable) === 'true';
   const topPad = Platform.OS === 'web' ? 54 : insets.top;
+  useJoinNavDecision('skip-line-pass', flightId ? 'stay' : 'discover', {
+    reason: flightId ? 'flight-present' : 'missing-flight-id',
+    destination: flightId ? 'none' : '/(tabs)/discover',
+  });
   const bottomPad = Platform.OS === 'web' ? 28 : insets.bottom;
 
   if (!flightId) {

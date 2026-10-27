@@ -16,7 +16,15 @@ import {
 } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
 import { isLegacyMemberQueryEnabled, shouldUseLocalFlightReadMode } from '@/lib/clerkAuthSession';
-import { getGreetingForHour, reconcileFeaturedFlightId } from '@/lib/discoverPresentation';
+import {
+  discoverResultCountLabel,
+  durationInMinutes,
+  filterDiscoverFlights,
+  getGreetingForHour,
+  reconcileFeaturedFlightId,
+  validDepartureDate,
+  type DiscoverFlightFilter,
+} from '@/lib/discoverPresentation';
 import FlightMapView from '@/components/FlightMap';
 import { BluebirdLogo } from '@/components/BluebirdLogo';
 import {
@@ -87,42 +95,11 @@ function featuredPrice(flight: FlightView): string | null {
   return null;
 }
 
-function matchesQuery(flight: FlightView, q: string): boolean {
-  return [flight.fromAirport, flight.toAirport, flight.fromCity, flight.toCity, flight.aircraftType]
-    .some((value) => (value ?? '').toLowerCase().includes(q));
-}
-
 function airportLabel(code: string | null, city: string | null): string {
   return code || city || '—';
 }
 
-type FlightFilter = 'all' | 'week' | 'short';
-
-function validDepartureDate(value: string | null): Date | null {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const [year, month, day] = value.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
-    ? date
-    : null;
-}
-
-function durationInMinutes(value: string | null): number | null {
-  if (!value) return null;
-  const match = value.trim().match(/^(?:(\d+(?:\.\d+)?)\s*h)?(?:\s*(\d+)\s*m)?$/i);
-  if (!match || (!match[1] && !match[2])) return null;
-  return Math.round(Number(match[1] ?? 0) * 60 + Number(match[2] ?? 0));
-}
-
-function isThisWeek(date: Date): boolean {
-  const today = new Date();
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const weekday = (start.getDay() + 6) % 7;
-  start.setDate(start.getDate() - weekday);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 7);
-  return date >= start && date < end;
-}
+type FlightFilter = DiscoverFlightFilter;
 
 function openFlightDetails(flight: FlightView, demoMode = false): void {
   const id = typeof flight.id === 'string' ? flight.id.trim() : '';
@@ -147,7 +124,7 @@ interface HeaderProps {
   demoMode: boolean;
   greetingText: string;
   userName?: string;
-  allCount: number;
+  resultCount: number;
   productionReadOnly: boolean;
   featured?: FlightView;
   search: string;
@@ -174,7 +151,7 @@ interface HeaderProps {
  * search input focused while typing.
  */
 const DiscoverHeader = React.memo(function DiscoverHeader({
-  colors, topPad, demoMode, greetingText, userName, allCount, productionReadOnly, featured, search, onSearchChange, onClearSearch,
+  colors, topPad, demoMode, greetingText, userName, resultCount, productionReadOnly, featured, search, onSearchChange, onClearSearch,
   view, onViewChange, mapFlights, mapAirports, mapLoading, mapError, onMapRetry,
   filter, filters, onFilterChange, showEmpty, hasActiveQuery, onClearSearchFromEmpty,
 }: HeaderProps) {
@@ -212,12 +189,13 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
       <Text testID="discover-greeting" style={[styles.greeting, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
         {greetingText}{userName ? `, ${userName}` : ''}
       </Text>
-      <Text style={[styles.subGreeting, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-        {allCount > 0
-          ? productionReadOnly
-            ? `${allCount} available flight${allCount === 1 ? '' : 's'}`
-            : `${allCount} empty legs available`
-          : productionReadOnly ? 'Browse available flights' : 'Browse available empty legs'}
+      <Text testID="discover-result-count" style={[styles.subGreeting, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+        {discoverResultCountLabel({
+          count: resultCount,
+          filter,
+          hasQuery: hasActiveQuery,
+          productionReadOnly,
+        })}
       </Text>
       {/* Featured empty leg stays independent of the active search and filters. */}
       {featured && (
@@ -379,7 +357,11 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
           <View style={styles.mapPlaceholder}>
             <Feather name="map" size={28} color={colors.mutedForeground} />
             <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-              No flights match your search
+              {demoMode
+                ? hasActiveQuery || filter !== 'all'
+                  ? 'No flights match your search or filters.'
+                  : 'No live flights are currently available.'
+                : 'No flights match'}
             </Text>
             {(hasActiveQuery || filter !== 'all') && (
               <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={onClearSearchFromEmpty}>
@@ -527,32 +509,16 @@ export default function DiscoverScreen() {
   ];
   const selectedFilter: FlightFilter = filters.includes(filter) ? filter : 'all';
 
-  const matchesFilter = React.useCallback((flight: FlightView) => {
-    if (selectedFilter === 'week') {
-      const date = validDepartureDate(flight.departureDate);
-      return !!date && isThisWeek(date);
-    }
-    if (selectedFilter === 'short') {
-      const minutes = durationInMinutes(flight.duration);
-      return minutes !== null && minutes < 240;
-    }
-    return true;
-  }, [selectedFilter]);
-
-  const filteredFlights = React.useMemo(() => {
-    let list = all;
-    if (q) list = list.filter((f) => matchesQuery(f, q));
-    list = list.filter(matchesFilter);
-    return list;
-  }, [all, q, matchesFilter]);
-
-  // Map view respects the same search and supported flight filters.
-  const mapFlights = React.useMemo(() => {
-    let list = all;
-    if (q) list = list.filter((f) => matchesQuery(f, q));
-    list = list.filter(matchesFilter);
-    return list;
-  }, [all, q, matchesFilter]);
+  const visibleFlights = React.useMemo(
+    () => filterDiscoverFlights(all, {
+      query: q,
+      filter: selectedFilter,
+      now: new Date(),
+    }),
+    [all, q, selectedFilter],
+  );
+  const filteredFlights = visibleFlights;
+  const mapFlights = visibleFlights;
 
   const airportCodes = React.useMemo(() => getFlightAirportCodes(mapFlights), [mapFlights]);
   const airportQuery = useQuery({
@@ -670,7 +636,7 @@ export default function DiscoverScreen() {
               demoMode={demoMode}
               greetingText={greetingText}
               userName={user?.name?.trim().split(/\s+/)[0] || undefined}
-              allCount={all.length}
+              resultCount={visibleFlights.length}
               productionReadOnly={!localReadMode}
               featured={featured}
               search={search}

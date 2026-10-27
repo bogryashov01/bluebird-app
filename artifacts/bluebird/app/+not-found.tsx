@@ -1,9 +1,16 @@
-import { Link, Stack } from 'expo-router';
+import { Link, Stack, usePathname } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
+import { useJoinNavDecision } from '@/lib/joinNavDiagnostics';
 
 export default function NotFoundScreen() {
   const colors = useColors();
+  const pathname = usePathname();
+  useJoinNavDecision('unmatched', pathname || '/', {
+    pathname: pathname || '/',
+    reason: 'unmatched-route-mounted',
+    destination: 'none',
+  });
 
   return (
     <>

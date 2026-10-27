@@ -452,9 +452,6 @@ test("referral contract calls use only the documented Main API paths and typed r
       if (parsed.pathname === "/api/me/invite-code") {
         return jsonResponse({ code: "BB-MEMBER7", inviteUrl: "https://invite.example.test/join/BB-MEMBER7" });
       }
-      if (parsed.pathname === "/api/me/referrals") {
-        return jsonResponse({ friendsActivated: 3, creditEarnedCents: 300000, creditAppliedCents: 50000, balanceCents: 250000 });
-      }
       if (parsed.pathname === "/api/invites/validate") {
         return jsonResponse({ valid: true, code: "BB-FRIEND2" });
       }
@@ -469,12 +466,6 @@ test("referral contract calls use only the documented Main API paths and typed r
     code: "BB-MEMBER7",
     inviteUrl: "https://invite.example.test/join/BB-MEMBER7",
   });
-  assert.deepEqual(await api.authenticated.getReferrals(), {
-    friendsActivated: 3,
-    creditEarnedCents: 300000,
-    creditAppliedCents: 50000,
-    balanceCents: 250000,
-  });
   assert.deepEqual(await api.authenticated.validateInvite({ code: " bb-friend2 " }), {
     valid: true,
     code: "BB-FRIEND2",
@@ -485,11 +476,63 @@ test("referral contract calls use only the documented Main API paths and typed r
   });
   assert.deepEqual(requests.map(({ path, method, body }) => ({ path, method, body })), [
     { path: "/api/me/invite-code", method: "GET", body: undefined },
-    { path: "/api/me/referrals", method: "GET", body: undefined },
     { path: "/api/invites/validate", method: "POST", body: JSON.stringify({ code: "BB-FRIEND2" }) },
     { path: "/api/membership/preview-pricing", method: "POST", body: JSON.stringify({ tier: "plus", inviteCode: "BB-FRIEND2" }) },
   ]);
   assert.ok(requests.every((request) => request.authorization === "Bearer fresh-clerk-token"));
+});
+
+test("GET /api/me/referrals uses the Clerk bearer token, omits cookies, and rejects an unsafe share URL", async () => {
+  const previousNativeAuthTest = process.env.EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST;
+  process.env.EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST = "false";
+  const requests = [];
+  let response = {
+    code: "PERSONAL_CODE",
+    shareUrl: "https://bluebirdjets.com/invite/PERSONAL_CODE",
+    successfulReferrals: 0,
+    creditEarnedCents: 0,
+    creditAppliedCents: 0,
+    creditBalanceCents: 0,
+  };
+  try {
+    const api = createMainBluebirdApiIntegration({
+      configuration: development,
+      tokenProvider: tokenProvider("development"),
+      fetcher: async (url, init) => {
+        const parsed = new URL(url);
+        requests.push({
+          path: parsed.pathname,
+          method: init.method,
+          body: init.body,
+          authorization: init.headers.Authorization,
+          credentials: init.credentials,
+        });
+        return jsonResponse(response);
+      },
+    });
+    assert.equal((await api.authenticated.getReferrals()).inviteUrl, "https://bluebirdjets.com/invite/PERSONAL_CODE");
+    response = { ...response, shareUrl: "https://example.com/invite/PERSONAL_CODE" };
+    await assert.rejects(() => api.authenticated.getReferrals());
+    assert.deepEqual(requests, [
+      {
+        path: "/api/me/referrals",
+        method: "GET",
+        body: undefined,
+        authorization: "Bearer fresh-clerk-token",
+        credentials: "omit",
+      },
+      {
+        path: "/api/me/referrals",
+        method: "GET",
+        body: undefined,
+        authorization: "Bearer fresh-clerk-token",
+        credentials: "omit",
+      },
+    ]);
+  } finally {
+    if (previousNativeAuthTest === undefined) delete process.env.EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST;
+    else process.env.EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST = previousNativeAuthTest;
+  }
 });
 
 test("an unavailable referral contract fails closed without a legacy endpoint retry", async () => {

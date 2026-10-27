@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { parseProductionFlightId } from '@/lib/productionFlights';
 import { getProductionQueueReadOnlyMessage } from '@/lib/productionQueueReadiness';
+import { logJoinNav } from '@/lib/joinNavDiagnostics';
 
 interface ProductionReadOnlyNoticeProps {
   flightId?: string | number | null;
@@ -37,11 +38,16 @@ export function ProductionReadOnlyNotice({
           accessibilityLabel={validatedFlightId !== null ? 'View flight details' : 'Browse flights'}
           style={[styles.button, { backgroundColor: colors.primary }]}
           onPress={() => {
-            if (validatedFlightId !== null) {
-              router.replace(`/flight/${validatedFlightId}`);
-            } else {
-              router.replace('/(tabs)/discover');
-            }
+            const destination = validatedFlightId !== null
+              ? `/flight/${validatedFlightId}`
+              : '/(tabs)/discover';
+            logJoinNav('read-only-notice', {
+              routerMethod: 'replace',
+              destination,
+              reason: 'read-only-notice-press',
+            });
+            if (validatedFlightId !== null) router.replace(`/flight/${validatedFlightId}`);
+            else router.replace('/(tabs)/discover');
           }}
         >
           <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>

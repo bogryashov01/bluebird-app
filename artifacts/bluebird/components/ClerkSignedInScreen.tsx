@@ -15,6 +15,7 @@ import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { logClerkStartupDiagnostic } from '@/lib/clerkStartup';
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 import { useClerkProviderMounted } from '@/lib/dormantClerkIntegration';
+import { useJoinNavDecision } from '@/lib/joinNavDiagnostics';
 
 export function ClerkSignedInScreen() {
   const insets = useSafeAreaInsets();
@@ -31,6 +32,19 @@ export function ClerkSignedInScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
+  const signedInDestination = !isLoaded
+    ? 'pending'
+    : !isSignedIn
+      ? '/(clerk-auth)/sign-in'
+      : postLoginJourney.kind === 'profile' || postLoginJourney.kind === 'home'
+        ? postLoginJourney.destination
+        : 'none';
+  useJoinNavDecision('signed-in', `${signedInDestination}|${postLoginJourney.kind}|${clerkMemberResolution.status}`, {
+    reason: postLoginJourney.kind,
+    destination: signedInDestination,
+    resolution: clerkMemberResolution.status,
+    clerkSignedIn: isSignedIn === true,
+  });
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 

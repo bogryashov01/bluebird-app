@@ -8,6 +8,19 @@ import {
   validateMainBluebirdApiBaseUrl,
   type MainBluebirdApiEnvironment,
 } from './mainBluebirdApiConfig';
+import {
+  isNativeProductionAuthTestEnabled,
+  isNativeProductionAuthTestRequestAllowed,
+} from './nativeAuthTestPolicy';
+import {
+  areReferralAccountReadsEnabled,
+  logReferralDiagnostic,
+  logReferralResponseShape,
+  logReferralTransportFailure,
+  parseReferralAccountResponse,
+  ReferralContractUnavailableError,
+  type ReferralSnapshot,
+} from './referralProgram';
 
 /**
  * This provider is deliberately isolated from AuthContext and demo JWT storage.
@@ -48,6 +61,8 @@ export class ProductionAuthConfigurationError extends Error {
 export interface ProductionRequestOptions {
   signal?: AbortSignal;
   onResponseStatus?: (status: number) => void;
+  onFetchInitiated?: () => void;
+  onTokenResult?: (obtained: boolean) => void;
 }
 
 export interface ProductionCurrentUserResponse {
@@ -224,13 +239,6 @@ export interface ProductionMembership {
 export interface ProductionInviteCode {
   code: string;
   inviteUrl: string;
-}
-
-export interface ProductionReferralStatistics {
-  friendsActivated: number;
-  creditEarnedCents: number;
-  creditAppliedCents: number;
-  balanceCents: number;
 }
 
 export interface ProductionInviteValidation {
@@ -608,18 +616,6 @@ function parseInviteCode(value: unknown): ProductionInviteCode {
     return schemaFailure('inviteCode');
   }
   return { code, inviteUrl };
-}
-
-function parseReferralStatistics(value: unknown): ProductionReferralStatistics {
-  const raw = objectValue(value, 'referrals');
-  const statistics = {
-    friendsActivated: integerValue(raw.friendsActivated, 'referrals.friendsActivated'),
-    creditEarnedCents: integerValue(raw.creditEarnedCents, 'referrals.creditEarnedCents'),
-    creditAppliedCents: integerValue(raw.creditAppliedCents, 'referrals.creditAppliedCents'),
-    balanceCents: integerValue(raw.balanceCents, 'referrals.balanceCents'),
-  };
-  if (Object.values(statistics).some((amount) => amount < 0)) return schemaFailure('referrals.nonNegative');
-  return statistics;
 }
 
 function parseInviteValidation(value: unknown): ProductionInviteValidation {
@@ -1367,7 +1363,10 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
       timeoutMs,
       signal: requestOptions.signal,
       onResponseStatus: requestOptions.onResponseStatus,
-      onFetchInitiated: options.diagnostic?.onFetchInitiated,
+      onFetchInitiated: () => {
+        options.diagnostic?.onFetchInitiated?.();
+        requestOptions.onFetchInitiated?.();
+      },
       onFetchCompleted: options.diagnostic?.onFetchCompleted,
       onFetchFailed: options.diagnostic?.onFetchFailed,
       onRequestMetadata: options.diagnostic?.onRequestMetadata,
@@ -1377,10 +1376,20 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
           token = await options.tokenProvider.getVerifiedAccessToken();
         } catch {
           notifyDiagnosticTokenResult(options.diagnostic, false);
+          try {
+            requestOptions.onTokenResult?.(false);
+          } catch {
+            // Diagnostic observers must never change request behavior.
+          }
           throw new ProductionAuthRequestError('Main API access token is unavailable.', 'token');
         }
         const tokenObtained = typeof token === 'string' && token.trim().length > 0;
         notifyDiagnosticTokenResult(options.diagnostic, tokenObtained);
+        try {
+          requestOptions.onTokenResult?.(tokenObtained);
+        } catch {
+          // Diagnostic observers must never change request behavior.
+        }
         if (signal.aborted) throw new ProductionAuthCancelledError();
         if (!tokenObtained) {
           throw new ProductionAuthRequestError('Main API access token is unavailable.', 'token');
@@ -1458,8 +1467,64 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
       request(PRODUCTION_AUTH_PATHS.membership, 'GET', parseMembership, requestOptions),
     getInviteCode: (requestOptions?: ProductionRequestOptions) =>
       request(PRODUCTION_AUTH_PATHS.inviteCode, 'GET', parseInviteCode, requestOptions),
-    getReferrals: (requestOptions?: ProductionRequestOptions) =>
-      request(PRODUCTION_AUTH_PATHS.referrals, 'GET', parseReferralStatistics, requestOptions),
+    getReferrals: (requestOptions?: ProductionRequestOptions): Promise<ReferralSnapshot> => {
+      if (!areReferralAccountReadsEnabled()) {
+        logReferralDiagnostic({
+          phase: 'request',
+          requestAttempted: 'no',
+          failureCategory: 'reads-disabled',
+        });
+        return Promise.reject(new ReferralContractUnavailableError());
+      }
+      const url = `${baseUrl}${PRODUCTION_AUTH_PATHS.referrals}`;
+      const exactUrlPermitted = !isNativeProductionAuthTestEnabled()
+        || isNativeProductionAuthTestRequestAllowed(url, 'GET');
+      logReferralDiagnostic({
+        phase: 'request',
+        requestAttempted: 'yes',
+        exactUrlPermitted: exactUrlPermitted ? 'yes' : 'no',
+      });
+      let httpStatus = 0;
+      let tokenObtained: 'not-requested' | 'yes' | 'no' = 'not-requested';
+      let fetchReached = false;
+      return request(
+        PRODUCTION_AUTH_PATHS.referrals,
+        'GET',
+        (value) => {
+          logReferralResponseShape(value);
+          return parseReferralAccountResponse(value);
+        },
+        {
+          signal: requestOptions?.signal,
+          onResponseStatus: (status) => {
+            httpStatus = status;
+            requestOptions?.onResponseStatus?.(status);
+          },
+          onFetchInitiated: () => {
+            fetchReached = true;
+            requestOptions?.onFetchInitiated?.();
+          },
+          onTokenResult: (obtained) => {
+            tokenObtained = obtained ? 'yes' : 'no';
+            requestOptions?.onTokenResult?.(obtained);
+          },
+        },
+      ).then((snapshot) => {
+        logReferralDiagnostic({
+          phase: 'result',
+          requestAttempted: 'yes',
+          exactUrlPermitted: 'yes',
+          tokenObtained,
+          fetchReached: 'yes',
+          httpStatus,
+          failureCategory: 'none',
+        });
+        return snapshot;
+      }, (error: unknown) => {
+        logReferralTransportFailure(error, httpStatus, exactUrlPermitted, tokenObtained, fetchReached);
+        throw error;
+      });
+    },
     validateInvite: (
       data: { code: string },
       requestOptions?: ProductionRequestOptions,

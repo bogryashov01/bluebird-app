@@ -15,7 +15,7 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
-import { Redirect, Stack, useSegments } from 'expo-router';
+import { Redirect, Stack, usePathname, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { setBaseUrl, setRequestGuard } from '@workspace/api-client-react';
 import { AuthProvider, DemoAuthProvider } from '@/context/AuthContext';
@@ -28,6 +28,7 @@ import { ClerkAuthConfigurationError } from '@/components/ClerkAuthConfiguration
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '@/context/AuthContext';
 import { shouldRedirectClerkRoute } from '@/lib/clerkAuthSession';
+import { useJoinNavDecision } from '@/lib/joinNavDiagnostics';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
 import { canAccessClerkProfileOnboardingRoute } from '@/lib/clerkProfileOnboarding';
@@ -43,6 +44,7 @@ import {
   isFullAppDemoRoute,
 } from '@/lib/fullAppDemo';
 import { FullAppDemoQueueProvider } from '@/lib/fullAppDemoQueue';
+import { DemoJoinFlowProvider } from '@/lib/demoJoinFlowStore';
 import {
   isNativeProductionAuthTestEnabled,
   isNativeProductionAuthTestRequestAllowed,
@@ -77,6 +79,7 @@ const queryClient = new QueryClient({
 function RootLayoutNav() {
   const colors = useColors();
   const segments = useSegments();
+  const pathname = usePathname();
   const {
     authMode,
     clerkSignedIn,
@@ -85,9 +88,6 @@ function RootLayoutNav() {
   } = useAuth();
   const clerkSession = useClerkAuthSnapshot();
   const isClerkProfileRoute = segments[0] === 'account' && segments[1] === 'bluebird-profile';
-  if (isClerkProfileRoute && authMode !== 'clerk') {
-    return <Redirect href="/(auth)/welcome" />;
-  }
   const registeredHomeReady = isClerkHomeAvailable(
     clerkMemberResolution,
     CLERK_MEMBER_NAVIGATION_READINESS,
@@ -101,10 +101,44 @@ function RootLayoutNav() {
       clerkMemberResolution,
       clerkSession.userId,
     );
+  const profileRouteBlocked = isClerkProfileRoute && authMode !== 'clerk';
   const clerkRouteGuarded =
     authMode === 'clerk' &&
     !incompleteProfileOnboardingRoute &&
-    shouldRedirectClerkRoute(segments, memberAccessResolved, registeredHomeReady);
+    shouldRedirectClerkRoute(segments, memberAccessResolved, registeredHomeReady, pathname);
+  const redirectDestination = profileRouteBlocked
+    ? '/(auth)/welcome'
+    : clerkRouteGuarded
+      ? (clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(clerk-auth)/sign-in')
+      : 'none';
+  const redirectReason = profileRouteBlocked
+    ? 'non-clerk-profile-route'
+    : authMode !== 'clerk'
+      ? 'not-clerk'
+      : incompleteProfileOnboardingRoute
+        ? 'profile-onboarding-route'
+        : clerkRouteGuarded
+          ? 'clerk-route-guard'
+          : memberAccessResolved
+            ? 'member-access-resolved'
+            : 'route-allowed';
+  const segmentList = segments.join('/') || 'none';
+  useJoinNavDecision('layout', `${pathname}|${segmentList}|${redirectReason}|${redirectDestination}`, {
+    pathname,
+    segments: segmentList,
+    authMode,
+    clerkSignedIn,
+    sessionLoaded: clerkSession?.isLoaded === true,
+    resolution: clerkMemberResolution.status,
+    homeReady: registeredHomeReady,
+    memberAccessResolved,
+    allowed: redirectDestination === 'none',
+    reason: redirectReason,
+    destination: redirectDestination,
+  });
+  if (profileRouteBlocked) {
+    return <Redirect href="/(auth)/welcome" />;
+  }
   if (clerkRouteGuarded) {
     return <Redirect href={clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(clerk-auth)/sign-in'} />;
   }
@@ -143,6 +177,30 @@ function RootLayoutNav() {
       <Stack.Screen
         name="flight/policy"
         options={{ headerShown: true, title: 'Flight Policy', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="flight/join"
+        options={{ headerShown: true, title: 'Join the Flight', ...headerOptions }}
+      />
+      <Stack.Screen name="flight/demo-policy" options={{ headerShown: false }} />
+      <Stack.Screen name="flight/demo-intl" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="flight/demo-joined"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="flight/demo-status"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen name="flight/demo-pass" options={{ headerShown: false }} />
+      <Stack.Screen name="flight/demo-purchase" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="flight/demo-winner"
+        options={{ headerShown: true, title: 'Simulated winner', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="flight/demo-confirmed"
+        options={{ headerShown: true, title: 'Simulated confirmation', ...headerOptions }}
       />
       <Stack.Screen
         name="flight/confirmed"
@@ -367,7 +425,9 @@ function RoutedRoot() {
       clerkStartupAttempt={clerkStartupAttempt}
       onRetryClerkStartup={retryClerkStartup}
     >
-      <RootLayoutNav />
+      <DemoJoinFlowProvider>
+        <RootLayoutNav />
+      </DemoJoinFlowProvider>
     </AuthProvider>
   );
 
@@ -427,6 +487,7 @@ function FullAppDemoRoot() {
             />
             <Stack.Screen name="flight/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="flight/policy" options={{ headerShown: true, title: 'Flight Policy', ...headerOptions }} />
+            <Stack.Screen name="flight/join" options={{ headerShown: true, title: 'Join the Flight', ...headerOptions }} />
             <Stack.Screen name="flight/confirmed" options={{ headerShown: false }} />
             <Stack.Screen name="queue/join" options={{ headerShown: false }} />
             <Stack.Screen name="queue/intl-notice" options={{ headerShown: false }} />

@@ -6,6 +6,7 @@ import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { useAuth } from '@/context/AuthContext';
+import { logJoinNav } from '@/lib/joinNavDiagnostics';
 
 const POLICY_SECTIONS = [
   {
@@ -78,7 +79,15 @@ export default function FlightPolicyScreen() {
               <PrimaryButton
                 label="Continue to Queue Acknowledgements"
                 testID="full-app-demo-policy-continue"
-                onPress={() => router.push({ pathname: '/queue/join', params } as any)}
+                onPress={() => {
+                  logJoinNav('join-button', {
+                    screen: 'flight/policy',
+                    visibleLabel: 'Continue to Queue Acknowledgements',
+                    routerMethod: 'push',
+                    targetPathname: '/queue/join',
+                  });
+                  router.push({ pathname: '/queue/join', params } as any);
+                }}
               />
             </View>
           ) : null}

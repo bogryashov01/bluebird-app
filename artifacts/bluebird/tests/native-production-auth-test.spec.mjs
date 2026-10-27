@@ -32,28 +32,136 @@ const currentUser = {
   needsSignupPhone: false,
 };
 
-test('the restricted request policy allows only the exact read-only Production /api/me request', () => {
+const profile = {
+  firstName: 'Test',
+  lastName: 'Member',
+  dob: '1990-02-12',
+  gender: 'female',
+  homeAirportCode: 'KJFK',
+  homeAirportLabel: null,
+  favoriteAirportCodes: ['KJFK'],
+  favoriteAirportLabels: ['New York JFK'],
+  favoriteCityKeys: ['new-york'],
+  favoriteCityLabels: ['New York'],
+  email: 'member@example.test',
+  emailLocked: false,
+  phoneE164: null,
+  phoneCountry: null,
+  phoneVerifiedAt: null,
+  phoneVerificationRequired: false,
+  smsConsent: false,
+  smsConsentAt: null,
+  smsConsentRevokedAt: null,
+  signupChannel: 'email',
+  upgradeCreditBalances: { skipTheLine: 0, internationalPass: 0 },
+  weightLbs: null,
+  isComplete: true,
+  notificationPrefs: {
+    mode: 'off',
+    allChannels: null,
+    emptyLegHomeAirport: null,
+    departingFavorite: null,
+    arrivingFavorite: null,
+    queueUpdates: 'email',
+    winningNotifications: 'email',
+  },
+};
+
+test('the restricted request policy allows the native auth-test reads and blocks everything else', () => {
+  const airportLookup = `https://bluebirdjets.com/api/airports?${new URLSearchParams({ codes: 'SEA,DAL' }).toString()}`;
   for (const request of [
     ['https://bluebirdjets.com/api/me', 'GET'],
     ['/api/me', 'get'],
+    ['https://bluebirdjets.com/api/me/profile', 'GET'],
+    ['/api/me/profile', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs', 'GET'],
+    ['/api/empty-legs', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/123', 'GET'],
+    ['/api/empty-legs/9007199254740991', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/42/queue', 'GET'],
+    ['/api/empty-legs/9007199254740991/queue', 'GET'],
+    [airportLookup, 'GET'],
+    ['/api/airports?codes=KJFK', 'GET'],
+    ['https://bluebirdjets.com/api/trips', 'GET'],
+    ['/api/trips', 'GET'],
+    ['https://bluebirdjets.com/api/me/referrals', 'GET'],
+    ['/api/me/referrals', 'GET'],
   ]) {
-    assert.equal(isNativeProductionAuthTestRequestAllowed(...request), true);
+    assert.equal(isNativeProductionAuthTestRequestAllowed(...request), true, request.join(' '));
   }
 
-  for (const request of [
-    ['https://bluebirdjets.com/api/me', 'POST'],
-    ['https://bluebirdjets.com/api/me', 'PUT'],
-    ['https://bluebirdjets.com/api/me', 'DELETE'],
-    ['https://bluebirdjets.com/api/me/profile', 'GET'],
-    ['https://bluebirdjets.com/api/trips', 'GET'],
-    ['https://bluebirdjets.com/api/empty-legs/42/queue', 'GET'],
-    ['https://bluebirdjets.com/api/me?expand=profile', 'GET'],
+  const blocked = [];
+  for (const path of ['/api/me', '/api/me/profile', '/api/empty-legs', '/api/empty-legs/123', '/api/airports', '/api/trips', '/api/me/referrals']) {
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      blocked.push([`https://bluebirdjets.com${path}`, method]);
+    }
+    blocked.push(
+      [`https://bluebirdjets.com${path}/`, 'GET'],
+      [`https://bluebirdjets.com${path}#fragment`, 'GET'],
+      [`http://bluebirdjets.com${path}`, 'GET'],
+    );
+  }
+  for (const path of ['/api/me', '/api/me/profile', '/api/empty-legs', '/api/empty-legs/123', '/api/trips', '/api/me/referrals']) {
+    blocked.push([`https://bluebirdjets.com${path}?expand=1`, 'GET']);
+  }
+  const tooManyCodes = Array.from({ length: 201 }, (_, index) => `A${String(index).padStart(2, '0')}`).join(',');
+  blocked.push(
+    ['https://bluebirdjets.com/api/empty-legs/0', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/0123', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/-1', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/1.5', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/9007199254740993', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/42/queue/', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/42/queue?expand=1', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/42/queue#fragment', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/42/queue/extra', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/42/queue', 'POST'],
+    ['https://bluebirdjets.com/api/empty-legs/42/queue', 'PUT'],
+    ['https://bluebirdjets.com/api/empty-legs/42/queue', 'PATCH'],
+    ['https://bluebirdjets.com/api/empty-legs/42/queue', 'DELETE'],
+    ['https://bluebirdjets.com/api/empty-legs/0/queue', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/0123/queue', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/-1/queue', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/1.5/queue', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/9007199254740993/queue', 'GET'],
+    ['http://bluebirdjets.com/api/empty-legs/42/queue', 'GET'],
+    ['https://preview.bluebirdjets.com/api/empty-legs/42/queue', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/42/skip-line', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/42/skip-line', 'POST'],
+    ['https://bluebirdjets.com/api/empty-legs/42/winner/confirm', 'POST'],
+    ['https://bluebirdjets.com/api/empty-legs/42/winner/decline', 'POST'],
+    ['https://bluebirdjets.com/api/empty-legs/42/passengers', 'GET'],
+    ['https://bluebirdjets.com/api/empty-legs/42/pets', 'POST'],
+    ['https://bluebirdjets.com/api/airports', 'GET'],
+    ['https://bluebirdjets.com/api/airports?codes=', 'GET'],
+    ['https://bluebirdjets.com/api/airports?codes=SEA,SEA', 'GET'],
+    ['https://bluebirdjets.com/api/airports?codes=sea', 'GET'],
+    ['https://bluebirdjets.com/api/airports?codes=S', 'GET'],
+    ['https://bluebirdjets.com/api/airports?codes=ABCDEFGHIJKLM', 'GET'],
+    [`https://bluebirdjets.com/api/airports?codes=${tooManyCodes}`, 'GET'],
+    ['https://bluebirdjets.com/api/airports?codes=SEA&extra=1', 'GET'],
+    ['https://bluebirdjets.com/api/airports/search?q=SEA', 'GET'],
+    ['https://bluebirdjets.com/api/airports/cities', 'GET'],
+    ['https://bluebirdjets.com/api/trips/1', 'GET'],
+    ['https://bluebirdjets.com/api/trips/1/cancel', 'GET'],
+    ['https://bluebirdjets.com/api/me/referrals/extra', 'GET'],
+    ['https://bluebirdjets.com/api/me/invite-code', 'GET'],
+    ['https://bluebirdjets.com/api/invites/validate', 'GET'],
+    ['https://bluebirdjets.com/api/invites/validate', 'POST'],
+    ['https://bluebirdjets.com/api/membership/preview-pricing', 'GET'],
+    ['https://bluebirdjets.com/api/membership/preview-pricing', 'POST'],
+    ['https://preview.bluebirdjets.com/api/trips', 'GET'],
+    ['https://bluebirdjets.com/api/membership', 'GET'],
     ['https://preview.bluebirdjets.com/api/me', 'GET'],
+    ['https://preview.bluebirdjets.com/api/empty-legs/123', 'GET'],
     ['https://bluebirdjets.com.evil.example/api/me', 'GET'],
+    ['https://bluebirdjets.com/api/me?expand=profile', 'GET'],
     ['/api/me#fragment', 'GET'],
+    ['/api/empty-legs/123#fragment', 'GET'],
     ['not a URL', 'GET'],
-  ]) {
-    assert.equal(isNativeProductionAuthTestRequestAllowed(...request), false);
+  );
+  for (const request of blocked) {
+    assert.equal(isNativeProductionAuthTestRequestAllowed(...request), false, request.join(' '));
   }
 });
 
@@ -72,7 +180,7 @@ test('startup diagnostics are limited to release iOS Production auth-test builds
   assert.equal(shouldShowNativeAuthStartupDiagnostics({ ...allowed, developmentBuild: true }), false);
 });
 
-test('the Production authenticated API permits /api/me and blocks all other reads and writes before fetch', async () => {
+test('the Production authenticated API permits /api/me, /api/me/profile, and /api/trips and blocks other reads and writes before fetch', async () => {
   const previousEnvironment = {
     apiEnvironment: process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT,
     apiUrl: process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL,
@@ -96,25 +204,94 @@ test('the Production authenticated API permits /api/me and blocks all other read
         url: String(url),
         method: init.method,
         authorization: new Headers(init.headers).get('authorization'),
+        cookie: new Headers(init.headers).get('cookie'),
+        credentials: init.credentials,
       });
+      const pathname = new URL(String(url)).pathname;
+      const referralAccount = {
+        code: 'PERSONAL_CODE',
+        shareUrl: 'https://bluebirdjets.com/invite/PERSONAL_CODE',
+        successfulReferrals: 1,
+        creditEarnedCents: 100000,
+        creditAppliedCents: 0,
+        creditBalanceCents: 100000,
+      };
+      const body = pathname === '/api/me/profile'
+        ? profile
+        : pathname === '/api/trips'
+          ? { current: [], past: [] }
+          : pathname === '/api/me/referrals'
+            ? referralAccount
+            : pathname === '/api/empty-legs/42/queue'
+              ? [{ position: 2, initials: 'AB', tier: 'base', hasLineSkip: false, isViewer: true }]
+              : currentUser;
       return {
         ok: true,
         status: 200,
-        json: async () => currentUser,
+        json: async () => body,
       };
     },
   });
 
   try {
     assert.equal((await client.getMe()).isAuthenticated, true);
-    assert.equal(requests.length, 1);
+    assert.equal((await client.getProfile()).firstName, 'Test');
+    assert.deepEqual(await client.listTrips(), { current: [], past: [] });
+    assert.deepEqual(await client.getReferrals(), {
+      code: 'PERSONAL_CODE',
+      inviteUrl: 'https://bluebirdjets.com/invite/PERSONAL_CODE',
+      statistics: {
+        friendsActivated: 1,
+        creditEarnedCents: 100000,
+        creditAppliedCents: 0,
+        balanceCents: 100000,
+      },
+    });
+    assert.deepEqual(await client.getEmptyLegQueue(42), [{
+      position: 2,
+      initials: 'AB',
+      tier: 'base',
+      hasLineSkip: false,
+      isViewer: true,
+    }]);
+    assert.equal(requests.length, 5);
     assert.deepEqual(requests[0], {
       url: 'https://bluebirdjets.com/api/me',
       method: 'GET',
       authorization: 'Bearer test-session-token',
+      cookie: null,
+      credentials: 'omit',
     });
-    await assert.rejects(client.getProfile(), /permits only GET \/api\/me/);
-    await assert.rejects(client.listTrips(), /permits only GET \/api\/me/);
+    assert.deepEqual(requests[1], {
+      url: 'https://bluebirdjets.com/api/me/profile',
+      method: 'GET',
+      authorization: 'Bearer test-session-token',
+      cookie: null,
+      credentials: 'omit',
+    });
+    assert.deepEqual(requests[2], {
+      url: 'https://bluebirdjets.com/api/trips',
+      method: 'GET',
+      authorization: 'Bearer test-session-token',
+      cookie: null,
+      credentials: 'omit',
+    });
+    assert.deepEqual(requests[3], {
+      url: 'https://bluebirdjets.com/api/me/referrals',
+      method: 'GET',
+      authorization: 'Bearer test-session-token',
+      cookie: null,
+      credentials: 'omit',
+    });
+    assert.deepEqual(requests[4], {
+      url: 'https://bluebirdjets.com/api/empty-legs/42/queue',
+      method: 'GET',
+      authorization: 'Bearer test-session-token',
+      cookie: null,
+      credentials: 'omit',
+    });
+    await assert.rejects(client.getInviteCode(), /permits only GET \/api\/me/);
+    await assert.rejects(client.validateInvite({ code: 'BB-FRIEND2' }), /permits only GET \/api\/me/);
     await assert.rejects(client.getPhoneVerificationStatus('+15555550123'), /permits only GET \/api\/me/);
     await assert.rejects(client.updateProfile({
       firstName: 'Test',
@@ -125,9 +302,13 @@ test('the Production authenticated API permits /api/me and blocks all other read
       favoriteCityKeys: ['new-york'],
     }), /permits only GET \/api\/me/);
     await assert.rejects(client.joinEmptyLegQueue(42), /permits only GET \/api\/me/);
+    await assert.rejects(client.leaveEmptyLegQueue(42), /permits only GET \/api\/me/);
     await assert.rejects(client.skipLine(42), /permits only GET \/api\/me/);
+    await assert.rejects(client.confirmEmptyLegWinner(42), /permits only GET \/api\/me/);
+    await assert.rejects(client.declineEmptyLegWinner(42), /permits only GET \/api\/me/);
     await assert.rejects(client.previewMembershipPricing({ tier: 'base' }), /permits only GET \/api\/me/);
-    assert.equal(requests.length, 1, 'blocked API calls must not reach fetch');
+    await assert.rejects(client.getMembership(), /permits only GET \/api\/me/);
+    assert.equal(requests.length, 5, 'blocked API calls must not reach fetch');
   } finally {
     const restore = (name, value) => {
       if (value === undefined) delete process.env[name];
@@ -160,23 +341,126 @@ test('the generated API client guard rejects legacy and mutating calls before to
 
   try {
     await customFetch('/api/me', { method: 'GET' });
-    assert.equal(fetchCalls, 1);
-    assert.equal(tokenReads, 1);
+    await customFetch('/api/me/profile', { method: 'GET' });
+    await customFetch('/api/empty-legs', { method: 'GET' });
+    await customFetch('/api/empty-legs/123', { method: 'GET' });
+    await customFetch('/api/empty-legs/42/queue', { method: 'GET' });
+    await customFetch(`/api/airports?${new URLSearchParams({ codes: 'SEA,DAL' }).toString()}`, { method: 'GET' });
+    await customFetch('/api/trips', { method: 'GET' });
+    await customFetch('/api/me/referrals', { method: 'GET' });
+    assert.equal(fetchCalls, 8);
+    assert.equal(tokenReads, 8);
 
-    await assert.rejects(
-      customFetch('/api/me/profile', { method: 'GET' }),
-      /does not allow the requested API operation/,
-    );
+    for (const path of ['/api/me', '/api/me/profile', '/api/empty-legs', '/api/empty-legs/123', '/api/trips', '/api/me/referrals']) {
+      for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+        await assert.rejects(
+          customFetch(`https://bluebirdjets.com${path}`, { method }),
+          /does not allow the requested API operation/,
+        );
+      }
+      await assert.rejects(
+        customFetch(`https://bluebirdjets.com${path}/`, { method: 'GET' }),
+        /does not allow the requested API operation/,
+      );
+      await assert.rejects(
+        customFetch(`https://bluebirdjets.com${path}?expand=1`, { method: 'GET' }),
+        /does not allow the requested API operation/,
+      );
+      await assert.rejects(
+        customFetch(`http://bluebirdjets.com${path}`, { method: 'GET' }),
+        /does not allow the requested API operation/,
+      );
+    }
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      await assert.rejects(
+        customFetch('https://bluebirdjets.com/api/airports?codes=SEA', { method }),
+        /does not allow the requested API operation/,
+      );
+    }
     await assert.rejects(
       customFetch('/api/queue/join', { method: 'POST' }),
       /does not allow the requested API operation/,
     );
     await assert.rejects(
-      customFetch('https://preview.bluebirdjets.com/api/me', { method: 'GET' }),
+      customFetch('https://bluebirdjets.com/api/empty-legs/0123', { method: 'GET' }),
       /does not allow the requested API operation/,
     );
-    assert.equal(fetchCalls, 1);
-    assert.equal(tokenReads, 1, 'blocked operations must not retrieve a bearer token');
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      await assert.rejects(
+        customFetch('https://bluebirdjets.com/api/empty-legs/42/queue', { method }),
+        /does not allow the requested API operation/,
+      );
+    }
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/empty-legs/42/queue?expand=1', { method: 'GET' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/empty-legs/42/queue/extra', { method: 'GET' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/empty-legs/0/queue', { method: 'GET' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/empty-legs/42/skip-line', { method: 'POST' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/airports', { method: 'GET' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/airports/search?q=SEA', { method: 'GET' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/trips/1', { method: 'GET' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/trips/1/cancel', { method: 'POST' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/me/referrals/extra', { method: 'GET' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/me/referrals?expand=1', { method: 'GET' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/me/referrals#fragment', { method: 'GET' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/me/invite-code', { method: 'GET' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/invites/validate', { method: 'POST' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/membership/preview-pricing', { method: 'POST' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/membership', { method: 'GET' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/me#fragment', { method: 'GET' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://preview.bluebirdjets.com/api/empty-legs/123', { method: 'GET' }),
+      /does not allow the requested API operation/,
+    );
+    assert.equal(fetchCalls, 8);
+    assert.equal(tokenReads, 8, 'blocked operations must not retrieve a bearer token');
   } finally {
     setRequestGuard(null);
     setAuthTokenGetter(null);

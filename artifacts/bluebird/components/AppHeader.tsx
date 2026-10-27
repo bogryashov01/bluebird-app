@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { logJoinNav } from '@/lib/joinNavDiagnostics';
 
 /**
  * Shared stack header for screens registered with `headerShown: true`
@@ -38,7 +39,13 @@ export function AppHeader({ navigation, options, back }: AppHeaderProps) {
           {back ? (
             <TouchableOpacity
               onPress={() => {
-                if (router.canGoBack()) navigation.goBack();
+                const canGoBack = router.canGoBack();
+                logJoinNav('header-back', {
+                  routerMethod: canGoBack ? 'goBack' : 'replace',
+                  destination: canGoBack ? 'previous' : '/(tabs)/discover',
+                  reason: 'header-back-press',
+                });
+                if (canGoBack) navigation.goBack();
                 else router.replace('/(tabs)/discover');
               }}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}

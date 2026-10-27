@@ -1,13 +1,13 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Alert, ImageBackground, useWindowDimensions,
-  Modal, Pressable, Linking, TextInput,
+  Modal, Pressable, Linking, TextInput, Switch,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect, useLocalSearchParams, router } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, usePathname, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useGetFlight, useGetFlightMyStatus, useCancelQueueEntry, useCancelTrip, useListAirports,
@@ -20,10 +20,10 @@ import { confirmDialog } from '@/lib/confirmDialog';
 import { fetchFullAppDemoFlight } from '@/lib/fullAppDemoLiveReads';
 import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
 import { shouldUseLocalFlightReadMode } from '@/lib/clerkAuthSession';
-import {
-  getProductionQueueReadOnlyMessage,
-  isProductionQueueVerified,
-} from '@/lib/productionQueueReadiness';
+import { isProductionQueueVerified } from '@/lib/productionQueueReadiness';
+import { joinFlightRouteParams } from '@/lib/joinFlightPresentation';
+import { useDemoJoinFlow } from '@/lib/demoJoinFlowStore';
+import { JOIN_NAV_BUILD_MARKER, logJoinNav } from '@/lib/joinNavDiagnostics';
 import { ClerkQueuePanel } from '@/components/ClerkQueuePanel';
 import {
   fetchProductionAirports,
@@ -121,6 +121,14 @@ function FlightInfoCard({
 export default function FlightDetailScreen() {
   const colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const pathname = usePathname();
+  useEffect(() => {
+    logJoinNav('flight-details-screen', {
+      currentPathname: pathname,
+      visibleLabel: 'Join the Flight',
+      route: 'flight/[id]',
+    });
+  }, [pathname]);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   // Keep the aircraft image present without pushing the key flight details below the fold.
@@ -136,6 +144,7 @@ export default function FlightDetailScreen() {
   const queryClient = useQueryClient();
   const localReadMode = !demoMode && shouldUseLocalFlightReadMode(authMode, isLocalFlightReadMode());
   const demoQueue = useFullAppDemoQueueOptional();
+  const demoJoin = useDemoJoinFlow();
   const numericFlightId = parseProductionFlightId(id);
   const demoEntry = demoQueue?.entries.find((entry) => entry.flightId === String(numericFlightId));
   const [directionsTarget, setDirectionsTarget] = useState<DirectionsTarget | null>(null);
@@ -599,6 +608,23 @@ export default function FlightDetailScreen() {
             accessibilityRole="button"
             disabled={!!demoQueue.storageError}
             onPress={() => {
+              const targetPathname = entry?.status === 'won'
+                ? `/flight/${entry.flightId}`
+                : entry
+                  ? '/queue/status'
+                  : '/flight/policy';
+              logJoinNav('join-button', {
+                screen: 'flight/[id]',
+                visibleLabel: entry?.status === 'won'
+                  ? 'View Flight Won'
+                  : entry
+                    ? 'View Queue Status'
+                    : 'Review Flight Policy & Join Queue',
+                currentPathname: pathname,
+                targetPathname,
+                routerMethod: entry?.status === 'won' ? 'replace' : 'push',
+                demoMode: true,
+              });
               if (entry?.status === 'won') router.replace(`/flight/${entry.flightId}` as any);
               else if (entry) openDemoQueue();
               else openDemoPolicy();
@@ -637,36 +663,52 @@ export default function FlightDetailScreen() {
       }
       return (
         <>
-          <View style={[styles.unavailableBadge, { backgroundColor: colors.muted }]}>
-            <Text style={[styles.unavailableBadgeText, { color: colors.mutedForegroundLight }]}>
-              Queue temporarily unavailable
-            </Text>
-          </View>
           <Text
-            testID="production-queue-read-only-message"
+            testID="join-flight-details-hint"
             style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}
           >
-            {getProductionQueueReadOnlyMessage()}
+            Review what joining the queue means. No request is sent from this screen.
           </Text>
+          {demoJoin.available ? (
+            <View style={styles.demoJoinSwitch}>
+              <Text style={[styles.unavailableHint, { color: colors.mutedForegroundLight, flex: 1 }]}>
+                Demo Join Flow
+              </Text>
+              <Switch
+                testID="demo-join-flow-switch"
+                value={demoJoin.enabled}
+                onValueChange={demoJoin.setEnabled}
+              />
+            </View>
+          ) : null}
           <TouchableOpacity
             testID="production-queue-read-only-cta"
             accessibilityRole="button"
-            accessibilityLabel="View queue availability"
+            accessibilityLabel="Join the Flight"
             disabled={productionFlightId === null}
             onPress={() => {
               if (productionFlightId === null) return;
+              logJoinNav('join-button', {
+                screen: 'flight/[id]',
+                visibleLabel: 'Join the Flight',
+                currentPathname: pathname,
+                targetPathname: '/flight/join',
+                flightId: productionFlightId,
+                demoEnabled: demoJoin.enabled,
+                routerMethod: 'push',
+              });
               router.push({
-                pathname: '/queue/production-unavailable',
-                params: { flightId: String(productionFlightId) },
+                pathname: '/flight/join',
+                params: joinFlightRouteParams(productionFlightId, f),
               });
             }}
             style={[
-              styles.queueReadOnlyLink,
+              styles.viewTripBtn,
               { backgroundColor: colors.primary, opacity: productionFlightId === null ? 0.5 : 1 },
             ]}
           >
-            <Text style={[styles.queueReadOnlyLinkText, { color: colors.primaryForeground }]}>
-              View availability
+            <Text style={[styles.viewTripBtnText, { color: colors.primaryForeground }]}>
+              Join the Flight
             </Text>
           </TouchableOpacity>
         </>
@@ -885,7 +927,17 @@ export default function FlightDetailScreen() {
       {/* ── Frosted back button (floats above hero) ── */}
       <TouchableOpacity
         style={[styles.backBtn, { top: backTop, backgroundColor: colors.surface + 'CC' }]}
-        onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/discover'))}
+        onPress={() => {
+          const canGoBack = router.canGoBack();
+          logJoinNav('flight-details-back', {
+            currentPathname: pathname,
+            routerMethod: canGoBack ? 'back' : 'replace',
+            destination: canGoBack ? 'previous' : '/(tabs)/discover',
+            reason: 'flight-details-back-press',
+          });
+          if (canGoBack) router.back();
+          else router.replace('/(tabs)/discover');
+        }}
         activeOpacity={0.75}
         accessibilityRole="button"
         accessibilityLabel="Back to flights"
@@ -1175,7 +1227,16 @@ export default function FlightDetailScreen() {
         {/* ── Policy link ── */}
         <TouchableOpacity
           style={[styles.policyRow, { borderTopColor: colors.separator }]}
-          onPress={() => router.push('/flight/policy')}
+          onPress={() => {
+            logJoinNav('flight-details-policy', {
+              screen: 'flight/[id]',
+              visibleLabel: 'View Flight Policy & Terms',
+              currentPathname: pathname,
+              targetPathname: '/flight/policy',
+              routerMethod: 'push',
+            });
+            router.push('/flight/policy');
+          }}
           activeOpacity={0.7}
         >
           <Text style={[styles.policyText, { color: colors.mutedForegroundLight }]}>View Flight Policy & Terms</Text>
@@ -1239,11 +1300,19 @@ export default function FlightDetailScreen() {
       {/* ── Bottom sticky CTA ── */}
       {!directionsTarget && (
         <View style={[styles.ctaBar, { backgroundColor: colors.offWhite, borderTopColor: colors.separator, paddingBottom: botPad + 12 }]}>
+          {typeof __DEV__ !== 'undefined' && __DEV__ ? (
+            <Text testID="join-nav-build-marker" style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}>
+              {JOIN_NAV_BUILD_MARKER}
+            </Text>
+          ) : null}
           {renderCTA()}
           {!demoMode && (
             <TouchableOpacity
               style={styles.conciergeLink}
-              onPress={() => router.push({ pathname: '/concierge' })}
+              onPress={() => router.push({
+                pathname: '/concierge',
+                params: productionFlightId !== null ? joinFlightRouteParams(productionFlightId, f) : {},
+              })}
               activeOpacity={0.7}
               accessibilityRole="button"
               accessibilityLabel="Ask AI Concierge"
@@ -1448,6 +1517,7 @@ const styles = StyleSheet.create({
   },
   unavailableBadgeText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   unavailableHint: { fontFamily: 'Inter_400Regular', fontSize: 13, textAlign: 'center', paddingBottom: 4 },
+  demoJoinSwitch: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   queueReadOnlyLink: { minHeight: 46, borderRadius: 14, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
   queueReadOnlyLinkText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
 

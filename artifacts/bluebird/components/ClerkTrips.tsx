@@ -20,6 +20,8 @@ import {
 } from '@/lib/mainBluebirdApi';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import type { ProductionTrip, ProductionTrips } from '@/lib/productionAuthApi';
+import { useDemoJoinFlow } from '@/lib/demoJoinFlowStore';
+import { separateDemoTrip } from '@/lib/demoJoinFlow';
 
 type TripList = 'current' | 'past';
 
@@ -56,6 +58,7 @@ export function ClerkTrips() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { authMode, clerkUserId } = useAuth();
+  const demo = useDemoJoinFlow();
   const session = useClerkAuthSnapshot();
   const sessionRef = React.useRef(session);
   sessionRef.current = session;
@@ -141,6 +144,7 @@ export function ClerkTrips() {
   }
 
   const items = query.data?.[activeList];
+  const demoTrip = query.data ? separateDemoTrip(query.data, demo.entry).demo : demo.demoTrip;
   let state: React.ReactNode;
   if (query.isPending) {
     state = (
@@ -215,6 +219,22 @@ export function ClerkTrips() {
           ))}
         </View>
       </View>
+      {demoTrip && activeList === 'current' ? (
+        <View testID="demo-trip-section" style={styles.demoSection}>
+          <View style={[styles.tripCard, { backgroundColor: colors.card }]} testID="demo-trip-card">
+            <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.badgeText, { color: colors.primaryForeground }]}>DEMO</Text>
+            </View>
+            <Text style={[styles.route, { color: colors.foreground }]}>{demoTrip.routeLabel}</Text>
+            <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+              Not booked. This simulated trip is separate from your account trips.
+            </Text>
+            {!!demoTrip.detailLabel && (
+              <Text style={[styles.meta, { color: colors.mutedForeground }]}>{demoTrip.detailLabel}</Text>
+            )}
+          </View>
+        </View>
+      ) : null}
       {state}
     </View>
   );
@@ -262,6 +282,7 @@ const styles = StyleSheet.create({
   tabLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   body: { flex: 1 },
   list: { gap: 14, paddingHorizontal: 20 },
+  demoSection: { paddingHorizontal: 20, paddingBottom: 4 },
   tripCard: { borderRadius: 20, padding: 18, gap: 8 },
   badge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
   badgeText: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 0.5 },
