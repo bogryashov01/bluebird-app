@@ -316,19 +316,13 @@ The `submit.production` profile intentionally leaves `ios` values empty until th
   not establish physical-device sign-in or SecureStore restoration.
 
 After the owner has verified the remote Production inputs, approval gate,
-latest uploaded build number, and signing readiness, run from
-`artifacts/bluebird`:
-
-```sh
-eas build --platform ios --profile production-auth-test
-eas submit --platform ios --profile production --id <BUILD_ID>
-```
-
-Use the build ID from that successful build for the submit command. The
-existing submit profile has no configured `ascAppId`, so owner-authorized
-App Store Connect access may be needed to complete submission. Internal
-TestFlight tester-group availability was not inspected or changed. These
-commands are a handoff only; neither was run for this task.
+latest uploaded build number, and signing readiness, use the authorized Expo
+publishing workflow only if it supports selecting `production-auth-test`.
+Do not substitute the general `production` profile for this restricted test.
+The existing submit profile has no configured `ascAppId`, so owner-authorized
+App Store Connect access may be needed for a later submission. Internal
+TestFlight tester-group availability was not inspected or changed. No build or
+submission was started for this audit.
 
 ## Before an owner-authorized TestFlight build
 
@@ -353,3 +347,134 @@ commands are a handoff only; neither was run for this task.
 5. Confirm the app version/build number and Universal Link association with
    the owner, then run a future owner-authorized iOS build/device-validation
    task. This audit started no build, upload, or submission.
+
+## Production auth-test readiness for Build 7 (2026-10-27)
+
+### Verified configuration and runtime evidence
+
+- The checked-in `production-auth-test` profile is store-distributed and
+  explicitly selects EAS `production`. It sets the Production API selector,
+  native auth-test guard, Production flight/membership modes, and disables
+  Development Clerk and full-app demo. It does not override the separate
+  Production Clerk approval flag or the API/key/issuer values.
+- The status-only local preflight passed: Production selected; API URL, live
+  key, issuer and local approval gate present; API URL/key/issuer formats
+  valid; key/issuer host syntax matched; local login status ready. No
+  publishable key, issuer, token, or secret value was printed. This is Replit
+  workspace evidence only; this workspace cannot inspect the remote EAS
+  `production` environment or establish API/Clerk owner approval.
+- The connected Expo account's read-only build list confirms an iOS
+  `production-auth-test` Build 6 (`1.0.0`, build version `6`) finished on
+  2026-10-27. The checked-in `app.json` still has build number `1`; this audit
+  did not change it. Build-log retrieval returned an error and the TestFlight
+  crash-data query returned an error, so neither provided startup diagnostics.
+- No authenticated Production request, live sign-in, write, build, upload, or
+  submission was performed. No Apple, Expo, Clerk, API, or remote environment
+  setting was changed.
+
+### Clerk startup and request path
+
+1. The profile supplies `EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT=production` and
+   sets `EXPO_PUBLIC_ENABLE_CLERK_AUTH=false`. Production auth does not use
+   that Development flag: it still expects Clerk, and remains blocked unless
+   the separate `EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH` gate is enabled in
+   the selected environment.
+2. Before mounting `ClerkProvider`, Mobile requires the Production selector,
+   explicit approval gate, canonical Production API URL, a valid `pk_live_`
+   key, and HTTPS issuer-host parity with the key. Host parity is syntax
+   validation, not proof of owner approval. Invalid configuration never
+   falls back to the Development key or legacy session.
+3. The provider uses Clerk Expo's native token cache. Its bridge propagates
+   `isLoaded`, sign-in state, current user ID and `getToken`. Production
+   startup fails closed after 15 seconds if Clerk never loads; Retry remounts
+   the provider. Phone sign-in routes to the existing signed-in route only
+   after Clerk reports a loaded signed-in session.
+4. A signed-in, loaded session triggers identity-bound authenticated
+   `GET /api/me` resolution. The API adapter calls `getToken()` for each
+   request and attaches the fresh token as a Bearer header. The test-build
+   request guard runs before token lookup/fetch and allows only the exact
+   Production `GET /api/me` URL.
+
+**Reported TestFlight startup failure: root cause undetermined.** Source and
+mocked tests do not reproduce a physical-device failure. Build 6's available
+EAS record establishes that the cloud build finished, not that its app starts.
+The missing evidence is the Build 6 iPhone startup timeline (safe diagnostic
+events and fields below), the exact screen/error or termination behavior,
+iOS version/device, and an accessible TestFlight crash report or a controlled
+reproduction. Without those, no specific Clerk/network/configuration cause is
+supported.
+
+The app's safe startup diagnostics can distinguish `production_mode`,
+`provider_mount`, `initialization_start`, `readiness_change` (including
+`isLoaded`), `timeout`, and `initialization_error` with a broad sanitized
+error category and attempt number. For diagnosis, the owner should capture
+those events from the Build 6 device session and whether `provider_mount` and
+`isLoaded: true` occurred. Do not send a key, issuer, phone number, token,
+Clerk message containing identity data, or other secret.
+
+### Production API scope for this test profile
+
+Only `/api/me` is enabled by the native request policy. The routes below are
+blocked in this build unless separately reviewed and explicitly approved.
+The evidence boundary and endpoint contract summary in
+`MAIN-API-INTEGRATION-REVIEW.md` still apply.
+
+| Screen or flow | Request | Build 7 status and reason |
+| --- | --- | --- |
+| Clerk post-sign-in profile-routing check | Authenticated `GET /api/me` | Allowed by the Mobile guard. The API owner must reconfirm this endpoint is still read-only before any live call. Its response can route only on profile-completion booleans; it does not verify Bluebird member identity or member capabilities. |
+| Bluebird Profile / Personal Information | `GET /api/me/profile` | Blocked. The supplied contract says this GET may synchronize verified-phone data; it is not safe to assume it is read-only. |
+| Profile, notification, airport, and onboarding saves | `PUT /api/me/profile` and other writes | Blocked. Every app API write is denied by the native guard. The profile PUT response contract also remains disputed between the supplied snapshot and current Mobile parser. |
+| Membership overview | Authenticated `GET /api/membership` | Blocked. The shape is documented, but current deployed read-only behavior has not been verified. No membership fixture is substituted in Production mode. |
+| Membership plan catalog | Public `GET /api/plans` | Blocked by this narrow test allowlist. It is described as public/read-only in the supplied audit, but the current deployed endpoint and response contract are not independently verified. |
+| Discover, map and flight details | Public `GET /api/empty-legs`, `GET /api/empty-legs/{id}`, and airport lookup GETs | Blocked by this allowlist. Mobile selects Production flight mode and does not use local fixtures in a release build; failed/blocked real requests remain errors rather than demo flights. Current deployed support and response compatibility still need confirmation. |
+| Queue and trip screens | Authenticated `GET /api/empty-legs/{id}/queue`, `GET /api/trips` | Blocked. Contract/source audit evidence is not live Production verification; queue personalization and member identity remain unconfirmed. |
+| Passenger and phone verification | Passenger-list GET and phone-verification-status GET | Blocked. The supplied Mobile/API review identifies possible server-side mutations from these GETs, so they are not safe probes. |
+
+All other GETs, every POST/PUT/PATCH/DELETE, and wrong-host/path/query variants
+are denied before the app API fetch. The guard is exercised for both the
+Production JSON transport and generated API client. The release profile
+disables demo mode; mock membership mode is development-only, and local flight
+reads require a development runtime. Production API errors are not replaced
+with mock/demo responses.
+
+### Checks and owner prerequisites before Build 7
+
+- PASS — status-only local Production preflight. Remote EAS environment
+  presence/value statuses remain unverified from this workspace.
+- PASS — `test:native-production-auth` (5 tests), `test:clerk-startup` (8
+  tests), Clerk auth configuration tests (11 tests), `test:production-auth-api`
+  (23 tests), and `test:production-flight-api`.
+- PASS — Bluebird `typecheck` after rebuilding the shared
+  `lib/api-client-react` TypeScript output. The first check used stale
+  composite output and reported 192 downstream errors; the rebuilt check
+  passed.
+- Source-only checks do not establish live Clerk sign-in, secure-session
+  restoration, Production token acceptance, response compatibility, or
+  physical iPhone behavior.
+
+Before creating Build 7, the owner should:
+
+1. In the authorized Expo account, verify the remote EAS `production`
+   environment by presence/status only: Production selector, canonical API
+   URL, Production Clerk key and matching API-owner-verified issuer, approval
+   gate, and `EXPO_PUBLIC_DOMAIN` absent or confirmed to be the approved
+   Production destination. Do not paste or store values in this report.
+2. Obtain current API- and Clerk-owner confirmation of the exact Production
+   pair, token acceptance, Clerk-to-account mapping, and the test account's
+   permission to sign in. Keep the approval gate off if any item is unknown.
+3. Have the API owner reconfirm that `GET /api/me` is read-only. Keep all
+   profile, membership, flight, queue, trip, passenger, and phone-status
+   requests blocked until their exact endpoint and response contract are
+   reviewed and their read-only behavior is explicitly approved.
+4. Confirm in App Store Connect that Build 6 is the latest uploaded build.
+   The EAS build list shows version `6`, but this audit did not inspect
+   App Store Connect/TestFlight upload state. Only if confirmed, update the
+   checked-in iOS build number from `1` to `7`; inspect existing signing
+   readiness through authorized read-only access.
+5. Once all gates and build-number evidence are confirmed, use the authorized
+   Expo build flow with the `production-auth-test` profile. Install Build 7 on
+   an owner-controlled iPhone, record the safe startup diagnostics, verify
+   cold start, existing-account phone sign-in, app restart/session restoration,
+   and sign-out, then request only the API-owner-approved `GET /api/me`.
+   Do not test sign-up, profile changes, purchases, queue actions, or any
+   other Production write in this test.
