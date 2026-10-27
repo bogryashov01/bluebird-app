@@ -51,6 +51,96 @@ The previously described TestFlight startup failure was not reproduced as part o
 
 Local verification: Bluebird TypeScript passed after rebuilding stale workspace declarations; the Clerk startup suite passed 8 tests; the Production auth-policy suite passed 5 tests; and the invalid-key browser check passed. The default startup browser run passed 8 tests with 2 expected skips. The Clerk-enabled local sign-in UI case could not reach the phone form because the test's placeholder `clerk.example.com` endpoint did not serve ClerkJS. That fixture limitation does not establish the cause of the separate TestFlight failure.
 
+## Build 7 startup diagnosis — 2026-10-27
+
+### Evidence sources and limits
+
+- **Checked-in profile:** `artifacts/bluebird/eas.json` defines
+  `production-auth-test` as a store-distributed profile using EAS
+  `environment: "production"`. Its explicit overrides select the Production
+  API, enable the restricted native-auth-test request policy, disable
+  Development Clerk and full-app demo, and select Production flight and
+  membership modes. It does not override the Production Clerk approval flag
+  or the Production API URL, Clerk key, or issuer.
+- **EAS record:** the connected Expo account's read-only build list and build
+  details show a finished iOS `production-auth-test` build, app version
+  `1.0.0`, iOS build version `7`, completed 2026-10-27. This verifies that the
+  matching build artifact exists; it does not independently prove that this
+  exact artifact was installed on the owner's iPhone during the reported
+  attempt.
+- **Owner-device report:** the task reports that the installed Build 7 reached
+  the Clerk phone screen and displayed “Bluebird couldn’t initialize secure
+  sign-in.” No Build 7 Apple Console export or sanitized event sequence was
+  present in the workspace or task evidence. The prior device evidence in this
+  file is for Build 6, not Build 7. The connected Expo tools provide EAS build
+  records and EAS Observe data, not the owner's Apple Console log. EAS Observe
+  returned no iOS app versions for the checked period.
+- **Remote EAS environment:** the selected environment name is verified from
+  the profile source, but the effective remote Production variable-presence
+  status is **unverified**. The available Expo connection exposes no
+  environment-variable listing, and EAS CLI is not installed in this
+  workspace. Workspace secret names and any local preflight are not evidence
+  of remote EAS values. No value was read, printed, or changed.
+
+### What the source says the screen can mean
+
+The Production configuration is evaluated from build-time environment values.
+The profile's `EXPO_PUBLIC_ENABLE_CLERK_AUTH=false` disables Development Clerk;
+it is not the Production approval gate. Production still requires the
+separate approval flag, Production API selection, a valid live Clerk key, a
+valid issuer, and matching key/issuer hosts before Clerk can be enabled. The
+runtime also checks that the selected Main API configuration uses the same
+Clerk key before mounting `ClerkProvider`. Production fails closed; it does
+not switch to Development Clerk or legacy authentication.
+
+When the phone screen shows the secure-sign-in startup error, the sign-in
+action has not been enabled and no phone-code request is implied. The same
+safe error presentation can result from distinct paths:
+
+1. The provider is not mounted, including the runtime API/Clerk-pairing gate.
+2. The provider mounted, but Clerk's auth snapshot did not become loaded
+   within 15 seconds. In this case the source logs `timeout`, followed by
+   `initialization_error` with category `timeout`.
+3. The Clerk provider throws and the provider error boundary renders its
+   startup-failure view. Its diagnostic records only a broad category:
+   `clerk`, `network`, `timeout`, or `unknown`.
+
+On a normal attempt, the source records `production_mode`,
+`provider_mount` when mounted, `initialization_start`, and
+`readiness_change` with the loaded boolean. A Retry increments the attempt
+counter and remounts Clerk, restarting the bounded readiness attempt.
+Sign-in/sign-up resource readiness is a separate condition: even after
+`isLoaded` becomes true, the phone fields and request button remain disabled
+until both resources are loaded. That disabled state alone does not show the
+startup error. The startup logger does not currently record whether the native
+Clerk configuration call returned, nor Clerk request stage/status details.
+
+### Finding and next safe diagnostic
+
+**Cause remains undetermined.** The screen confirms a fail-closed startup
+condition, not whether the cause was a Production EAS configuration mismatch,
+network failure, native/JavaScript Clerk bootstrap exception, or a missing
+provider. The matching EAS profile/build record does not establish the
+effective remote variable presence or the values embedded in Build 7, and no
+Build 7 device event sequence is available to distinguish provider-missing,
+timeout, or error-boundary paths. The generic device messages previously
+reported for Build 6 cannot be attributed to Build 7 or treated as evidence of
+a Keychain, TLS, or Clerk fault.
+
+The smallest safe next step is to obtain, through the owner, a redacted Apple
+Console excerpt from a fresh Build 7 launch through the displayed error and
+one Retry. Preserve only event order/timestamps at coarse resolution and the
+allowlisted diagnostic fields: event, Production boolean, attempt counter,
+provider-mounted and loaded booleans, signed-in boolean, and broad error
+category. Add only these sanitized observations if available: whether native
+Clerk configuration returned; whether a Clerk request started; coarse
+failure-stage and HTTP status or network category. Remove URLs, headers,
+bodies, keys, tokens, phone numbers, identities, session identifiers, and raw
+SDK/system error text. Separately, an authorized EAS environment view should
+report only presence/status for the Production inputs, without exposing their
+values. Until those observations exist, no configuration change, app-code
+change, authentication fallback, or new build is justified.
+
 ## Earlier route-guard finding
 
 The earlier diagnosis recorded a direct protected-tab startup race: tab screens could mount before legacy auth restoration finished. The tabs layout was subsequently changed to withhold those screens until restoration completes. That finding concerns protected-tab requests and is distinct from the current isolated hosted `/` and `/sign-in` checks above.

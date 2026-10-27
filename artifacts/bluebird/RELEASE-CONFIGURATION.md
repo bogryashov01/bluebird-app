@@ -371,6 +371,12 @@ submission was started for this audit.
 - No authenticated Production request, live sign-in, write, build, upload, or
   submission was performed. No Apple, Expo, Clerk, API, or remote environment
   setting was changed.
+- **Build 7 diagnostic update (2026-10-27):** a subsequent read-only EAS build
+  query confirms a finished iOS `production-auth-test` artifact
+  (`1.0.0`, build version `7`). The record does not prove that this binary was
+  installed during the reported iPhone attempt. The available Expo connection
+  cannot list remote EAS environment-variable presence, and no Build 7 Apple
+  Console event sequence was available; see `STARTUP-AUTH-DIAGNOSIS.md`.
 
 ### Clerk startup and request path
 
