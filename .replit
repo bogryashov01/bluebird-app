@@ -11,6 +11,27 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Bluebird Clerk Development Web"
+
+[[workflows.workflow]]
+name = "Bluebird Clerk Development Web"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/bluebird run dev:stage1-web"
+waitForPort = 5000
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = false

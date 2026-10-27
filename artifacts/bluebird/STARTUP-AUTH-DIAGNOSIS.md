@@ -312,3 +312,43 @@ before Clerk auth resources are ready.
   **passed**.
 - `git diff --check`: **passed**. The only project-file change is this
   diagnosis report; no app or auth code changed.
+
+## Clerk Development browser workflow — 2026-10-27
+
+### Workflow and pairing
+
+- Start the separate Replit workflow with
+  `pnpm --filter @workspace/bluebird run dev:stage1-web`.
+- Replit registers this command as **Bluebird Clerk Development Web** on port
+  5000. The launcher explicitly selects the Development API, enables real
+  Development Clerk auth, disables Full App Demo, and uses local flight reads.
+- Before Expo starts, a safe preflight requires a valid Development API `/api`
+  URL, a Development `pk_test_` Clerk key, an API-owner-provided Development
+  issuer matching the key's instance host, and Clerk enabled. It does not
+  return or log configured URLs, keys, issuer values, or tokens.
+- The workspace's Production default selector remains unchanged. The separate
+  launcher overrides it only within its process. The existing
+  `preview:expo-go` command and running Full App Demo workflow remain unchanged.
+
+### Fresh browser evidence
+
+The Development workflow served `/sign-in` to a fresh, isolated Chromium
+browser context at **402 × 874**. No account session was imported, no phone
+number was entered, and no sign-in action was submitted.
+
+| Safe check | Result |
+| --- | --- |
+| Development API and Clerk pair | Configured; issuer/key instance match verified |
+| Clerk auth enabled; Full App Demo | Yes; disabled |
+| `ClerkProvider` mounted | Yes |
+| `useAuth().isLoaded` became true | Yes |
+| Phone field and send-code button interactive | Yes |
+| JavaScript/page errors; failed requests; HTTP errors | 0; 0; 0 |
+| Sign-in attempt | None |
+
+This is a **browser workflow**; browser Clerk initialization does not require a
+native Development Build. This run does not verify iOS/Android native module,
+SecureStore, or Keychain initialization; those native-only checks require a
+native Development Build. No EAS build, Production configuration change, or
+deployment was made. Expo printed a non-fatal optional React Native DevTools
+host-library warning; the web server and browser check still completed.
