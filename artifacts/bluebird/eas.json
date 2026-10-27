@@ -18,6 +18,7 @@
     },
     "production-auth-test": {
       "extends": "production",
+      "autoIncrement": true,
       "environment": "production",
       "distribution": "store",
       "env": {
@@ -47,7 +48,9 @@
   },
   "submit": {
     "production": {
-      "ios": {}
+      "ios": {
+        "ascAppId": "6824955530"
+      }
     }
   },
   "cli": {
