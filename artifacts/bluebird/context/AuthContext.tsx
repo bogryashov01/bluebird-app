@@ -19,9 +19,17 @@ import {
   shouldAutomaticallyResolveClerkMember,
   type ClerkMemberResolution,
 } from '@/lib/clerkMemberResolution';
-import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
+import { useClerkAuthSnapshot, useClerkProviderMounted } from '@/lib/dormantClerkIntegration';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import type { ProductionCurrentUser } from '@/lib/productionAuthApi';
+import {
+  CLERK_STARTUP_TIMEOUT_MS,
+  getClerkStartupFailureReason,
+  getClerkStartupState,
+  logClerkStartupDiagnostic,
+  startClerkStartupTimeout,
+  type ClerkStartupState,
+} from '@/lib/clerkStartup';
 
 const TOKEN_KEY = 'bluebird_token';
 const USER_KEY = 'bluebird_user';
@@ -37,6 +45,8 @@ interface AuthContextType {
   clerkSignedIn: boolean;
   clerkUserId: string | null;
   clerkMemberResolution: ClerkMemberResolution;
+  clerkStartupState: ClerkStartupState;
+  retryClerkStartup: () => void;
   retryClerkMemberResolution: () => void;
   confirmClerkProfileCompletion: (currentUser: ProductionCurrentUser) => boolean;
   memberAccessResolved: boolean;
@@ -61,8 +71,23 @@ setAuthTokenGetter(createLegacyAuthTokenGetter(
   },
 ));
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  return <ActiveAuthProvider>{children}</ActiveAuthProvider>;
+export function AuthProvider({
+  children,
+  clerkStartupAttempt = 0,
+  onRetryClerkStartup = () => {},
+}: {
+  children: ReactNode;
+  clerkStartupAttempt?: number;
+  onRetryClerkStartup?: () => void;
+}) {
+  return (
+    <ActiveAuthProvider
+      clerkStartupAttempt={clerkStartupAttempt}
+      onRetryClerkStartup={onRetryClerkStartup}
+    >
+      {children}
+    </ActiveAuthProvider>
+  );
 }
 
 /**
@@ -79,6 +104,8 @@ export function DemoAuthProvider({ children }: { children: ReactNode }) {
     clerkSignedIn: false,
     clerkUserId: null,
     clerkMemberResolution: { status: 'signed_out' },
+    clerkStartupState: 'ready',
+    retryClerkStartup: () => {},
     retryClerkMemberResolution: () => {},
     confirmClerkProfileCompletion: () => false,
     memberAccessResolved: false,
@@ -91,21 +118,46 @@ export function DemoAuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-function ActiveAuthProvider({ children }: { children: ReactNode }) {
+function ActiveAuthProvider({
+  children,
+  clerkStartupAttempt,
+  onRetryClerkStartup,
+}: {
+  children: ReactNode;
+  clerkStartupAttempt: number;
+  onRetryClerkStartup: () => void;
+}) {
   const queryClient = useQueryClient();
   const clerkSession = useClerkAuthSnapshot();
+  const clerkProviderMounted = useClerkProviderMounted();
   // A requested-but-unconfigured Clerk environment remains closed; never
   // resurrect legacy tokens while showing the Clerk configuration blocker.
   const clerkMode = CLERK_AUTH_CONFIGURATION.authExpected;
   const clerkApiConfiguration = clerkMode ? getMainBluebirdApiConfigurationOrNull() : null;
+  const clerkStartupConfigurationValid =
+    CLERK_AUTH_CONFIGURATION.enabled &&
+    !!CLERK_AUTH_CONFIGURATION.publishableKey &&
+    (CLERK_AUTH_CONFIGURATION.environment !== 'production' ||
+      (clerkApiConfiguration?.environment === 'production' &&
+        clerkApiConfiguration.clerkPublishableKey === CLERK_AUTH_CONFIGURATION.publishableKey));
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [clerkStartupState, setClerkStartupState] = useState<ClerkStartupState>(() =>
+    getClerkStartupState({
+      authExpected: clerkMode,
+      configurationValid: clerkStartupConfigurationValid,
+      providerMounted: clerkProviderMounted,
+      isLoaded: clerkSession?.isLoaded === true,
+      timedOut: false,
+    }),
+  );
   const [pendingRegistrationGrant, setPendingRegistrationGrant] = useState<string | null>(null);
   const [clerkMemberResolution, setClerkMemberResolution] = useState<ClerkMemberResolution>({ status: 'resolving' });
   const [clerkResolutionRetry, setClerkResolutionRetry] = useState(0);
   const registerPushToken = useRegisterNetworkingPushToken();
   const previousClerkIdentity = useRef<string | null | undefined>(undefined);
+  const startupAttemptStartedRef = useRef<number | null>(null);
   const clerkSessionRef = useRef(clerkSession);
   clerkSessionRef.current = clerkSession;
   const verifiedProfileCompletionRef = useRef<{
@@ -114,6 +166,105 @@ function ActiveAuthProvider({ children }: { children: ReactNode }) {
     revision: number;
   } | null>(null);
   const profileCompletionRevisionRef = useRef(0);
+
+  useEffect(() => {
+    if (!clerkMode) return;
+    logClerkStartupDiagnostic({
+      event: 'production_mode',
+      production: CLERK_AUTH_CONFIGURATION.environment === 'production',
+      attempt: clerkStartupAttempt,
+      providerMounted: clerkProviderMounted,
+    });
+  }, [clerkMode, clerkStartupAttempt, clerkProviderMounted]);
+
+  useEffect(() => {
+    if (!clerkMode) {
+      setClerkStartupState('ready');
+      return;
+    }
+
+    const production = CLERK_AUTH_CONFIGURATION.environment === 'production';
+    const configurationValid = clerkStartupConfigurationValid;
+    const isLoaded = clerkSession?.isLoaded === true;
+    const state = getClerkStartupState({
+      authExpected: true,
+      configurationValid,
+      providerMounted: clerkProviderMounted,
+      isLoaded,
+      timedOut: false,
+    });
+    if (startupAttemptStartedRef.current !== clerkStartupAttempt) {
+      startupAttemptStartedRef.current = clerkStartupAttempt;
+      logClerkStartupDiagnostic({
+        event: 'initialization_start',
+        production,
+        attempt: clerkStartupAttempt,
+        providerMounted: clerkProviderMounted,
+      });
+    }
+    const failureReason = getClerkStartupFailureReason({
+      configurationValid,
+      providerMounted: clerkProviderMounted,
+      timedOut: false,
+    });
+    if (failureReason) {
+      setClerkStartupState('failed');
+      logClerkStartupDiagnostic({
+        event: 'initialization_error',
+        production,
+        attempt: clerkStartupAttempt,
+        providerMounted: clerkProviderMounted,
+        errorCategory: 'unknown',
+      });
+      return;
+    }
+
+    logClerkStartupDiagnostic({
+      event: 'readiness_change',
+      production,
+      attempt: clerkStartupAttempt,
+      providerMounted: clerkProviderMounted,
+      isLoaded,
+    });
+    if (state === 'ready') {
+      setClerkStartupState('ready');
+      return;
+    }
+
+    setClerkStartupState('loading');
+    if (!production) return;
+
+    return startClerkStartupTimeout(() => {
+      const timedOutState = getClerkStartupState({
+        authExpected: true,
+        configurationValid,
+        providerMounted: clerkProviderMounted,
+        isLoaded: false,
+        timedOut: true,
+      });
+      if (timedOutState !== 'failed') return;
+      setClerkStartupState('failed');
+      logClerkStartupDiagnostic({
+        event: 'timeout',
+        production: true,
+        attempt: clerkStartupAttempt,
+        providerMounted: clerkProviderMounted,
+      });
+      logClerkStartupDiagnostic({
+        event: 'initialization_error',
+        production: true,
+        attempt: clerkStartupAttempt,
+        providerMounted: clerkProviderMounted,
+        errorCategory: 'timeout',
+      });
+    }, CLERK_STARTUP_TIMEOUT_MS);
+  }, [
+    clerkMode,
+    clerkStartupAttempt,
+    clerkProviderMounted,
+    clerkSession?.isLoaded,
+    clerkStartupConfigurationValid,
+  ]);
 
   useEffect(() => {
     if (!clerkMode) return;
@@ -401,9 +552,15 @@ function ActiveAuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       token: clerkMode ? null : token,
       user: clerkMode ? null : user,
-      isLoading: clerkMode ? !clerkSession?.isLoaded : isLoading,
+      isLoading: clerkMode ? clerkStartupState === 'loading' : isLoading,
       demoMode: false,
       authMode: clerkMode ? 'clerk' : 'legacy',
+      clerkStartupState,
+      retryClerkStartup: () => {
+        if (clerkStartupState !== 'failed') return;
+        setClerkStartupState('loading');
+        onRetryClerkStartup();
+      },
       clerkSignedIn: clerkMode && clerkSession?.isLoaded ? clerkSession.isSignedIn === true : false,
       clerkUserId: clerkMode && clerkSession?.isLoaded && clerkSession.isSignedIn === true
         ? clerkSession.userId

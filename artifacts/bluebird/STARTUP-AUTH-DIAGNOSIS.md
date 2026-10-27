@@ -41,6 +41,16 @@ No app, auth, API, fixture, or queue code was changed. Bluebird TypeScript initi
 
 The Preview finding does **not** indicate an iOS startup defect or add an iOS build blocker. The existing, separate iOS readiness report still lists the missing approved bundle identifier, EAS project linkage, and owner-authorized Expo/Apple access as blockers; this task did not change or recheck those requirements. Queue safety gates and real-data behavior were not modified.
 
+## Bounded Clerk startup recovery — 2026-10-27
+
+Bluebird now distinguishes Clerk startup loading, ready, and failed states. A Production Clerk attempt that remains unready for 15 seconds shows a secure sign-in startup error with a Retry action instead of leaving the root route on its spinner. Retry remounts the Clerk provider for a fresh attempt. A provider that is missing or gated by the Production API/Clerk pairing remains blocked; it is not treated as a signed-out user and cannot reveal authenticated or legacy routes.
+
+Startup diagnostics use an allowlisted event name, a Production boolean, an attempt counter, provider/readiness booleans, and broad error categories only. They do not log SDK error messages, keys, tokens, session data, phone numbers, or member identifiers.
+
+The previously described TestFlight startup failure was not reproduced as part of this code change. The timeout and recovery behavior is implemented and covered by local tests, but an actual TestFlight/native installation was not available for verification. The underlying bootstrap cause therefore remains unknown; no EAS build or submission was performed.
+
+Local verification: Bluebird TypeScript passed after rebuilding stale workspace declarations; the Clerk startup suite passed 8 tests; the Production auth-policy suite passed 5 tests; and the invalid-key browser check passed. The default startup browser run passed 8 tests with 2 expected skips. The Clerk-enabled local sign-in UI case could not reach the phone form because the test's placeholder `clerk.example.com` endpoint did not serve ClerkJS. That fixture limitation does not establish the cause of the separate TestFlight failure.
+
 ## Earlier route-guard finding
 
 The earlier diagnosis recorded a direct protected-tab startup race: tab screens could mount before legacy auth restoration finished. The tabs layout was subsequently changed to withhold those screens until restoration completes. That finding concerns protected-tab requests and is distinct from the current isolated hosted `/` and `/sign-in` checks above.

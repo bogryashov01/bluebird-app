@@ -215,11 +215,8 @@ test("requested Clerk with a missing key shows configuration errors instead of d
   });
 
   await page.goto("/welcome");
-  await page.getByTestId("welcome-phone-entry").click();
-  await expect(page).toHaveURL(/\/sign-in$/);
-  await expect(page.getByTestId("clerk-configuration-error")).toHaveText(
-    "Sign-in is temporarily unavailable. Please try again later.",
-  );
+  await expect(page.getByTestId("clerk-configuration-error")).toBeVisible();
+  await expect(page.getByTestId("welcome-phone-entry")).toHaveCount(0);
   await expect(page.getByTestId("phone-input")).toHaveCount(0);
   await expect(page.getByTestId("verification-code-input")).toHaveCount(0);
 

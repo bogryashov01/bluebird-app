@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -32,6 +32,8 @@ import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
 import { canAccessClerkProfileOnboardingRoute } from '@/lib/clerkProfileOnboarding';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
+import { ClerkStartupStateView } from '@/components/ClerkStartupStateView';
+import { getNextClerkStartupAttempt } from '@/lib/clerkStartup';
 import {
   getMembershipDataModeConfiguration,
   isMembershipMockPreviewLocation,
@@ -76,8 +78,18 @@ const queryClient = new QueryClient({
 function RootLayoutNav() {
   const colors = useColors();
   const segments = useSegments();
-  const { authMode, clerkSignedIn, clerkMemberResolution, memberAccessResolved } = useAuth();
+  const {
+    authMode,
+    clerkSignedIn,
+    clerkMemberResolution,
+    memberAccessResolved,
+    clerkStartupState,
+    retryClerkStartup,
+  } = useAuth();
   const clerkSession = useClerkAuthSnapshot();
+  if (authMode === 'clerk' && clerkStartupState === 'failed') {
+    return <ClerkStartupStateView state={clerkStartupState} onRetry={retryClerkStartup} />;
+  }
   const isClerkProfileRoute = segments[0] === 'account' && segments[1] === 'bluebird-profile';
   if (isClerkProfileRoute && authMode !== 'clerk') {
     return <Redirect href="/(auth)/welcome" />;
@@ -323,6 +335,10 @@ export default function RootLayout() {
 }
 
 function RoutedRoot() {
+  const [clerkStartupAttempt, setClerkStartupAttempt] = useState(0);
+  const retryClerkStartup = useCallback(() => {
+    setClerkStartupAttempt((attempt) => getNextClerkStartupAttempt(attempt));
+  }, []);
   const segments = useSegments();
   const pathname = Platform.OS === 'web' && typeof window !== 'undefined'
     ? window.location.pathname
@@ -353,13 +369,24 @@ function RoutedRoot() {
   }
 
   const authenticatedApp = (
-    <AuthProvider>
+    <AuthProvider
+      clerkStartupAttempt={clerkStartupAttempt}
+      onRetryClerkStartup={retryClerkStartup}
+    >
       <RootLayoutNav />
     </AuthProvider>
   );
 
   return CLERK_AUTH_CONFIGURATION.enabled
-    ? <DormantClerkProvider>{authenticatedApp}</DormantClerkProvider>
+    ? (
+      <DormantClerkProvider
+        key={clerkStartupAttempt}
+        attempt={clerkStartupAttempt}
+        onRetryClerkStartup={retryClerkStartup}
+      >
+        {authenticatedApp}
+      </DormantClerkProvider>
+    )
     : authenticatedApp;
 }
 

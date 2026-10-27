@@ -1,6 +1,9 @@
-import React, { createContext, useContext, useMemo, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import { ClerkProvider, useAuth, useUser } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import type { ErrorFallbackProps } from '@/components/ErrorFallback';
+import { ClerkStartupStateView } from '@/components/ClerkStartupStateView';
 import {
   createClerkProductionTokenProvider,
   type ClerkProductionTokenProvider,
@@ -11,6 +14,10 @@ import {
   shouldMountClerkProvider,
 } from './clerkAuthConfig';
 import { getMainBluebirdApiConfigurationOrNull } from './mainBluebirdApiConfig';
+import {
+  logClerkStartupDiagnostic,
+  sanitizeClerkStartupError,
+} from './clerkStartup';
 
 export interface ClerkAuthSnapshot extends ClerkSessionSnapshot {
   userId: string | null;
@@ -18,6 +25,21 @@ export interface ClerkAuthSnapshot extends ClerkSessionSnapshot {
 }
 
 const ClerkAuthSnapshotContext = createContext<ClerkAuthSnapshot | null>(null);
+const ClerkProviderMountedContext = createContext(false);
+const ClerkStartupRetryContext = createContext<() => void>(() => {});
+
+function ClerkProviderStartupFailure({ resetError }: ErrorFallbackProps) {
+  const retry = useContext(ClerkStartupRetryContext);
+  return (
+    <ClerkStartupStateView
+      state="failed"
+      onRetry={() => {
+        resetError();
+        retry();
+      }}
+    />
+  );
+}
 
 function ClerkAuthSnapshotBridge({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -49,11 +71,17 @@ function ClerkAuthSnapshotBridge({ children }: { children: React.ReactNode }) {
  * Clerk mounts only after the selected environment's independent enable gate
  * and API/Clerk pairing checks pass. Clerk's SDK owns session persistence.
  */
-export function DormantClerkProvider({ children }: { children: React.ReactNode }) {
+export function DormantClerkProvider({
+  children,
+  attempt = 0,
+  onRetryClerkStartup = () => {},
+}: {
+  children: React.ReactNode;
+  attempt?: number;
+  onRetryClerkStartup?: () => void;
+}) {
   const { publishableKey } = CLERK_AUTH_CONFIGURATION;
-  if (!shouldMountClerkProvider(CLERK_AUTH_CONFIGURATION) || !publishableKey) {
-    return <>{children}</>;
-  }
+  let canMountProvider = shouldMountClerkProvider(CLERK_AUTH_CONFIGURATION) && !!publishableKey;
   if (CLERK_AUTH_CONFIGURATION.environment === 'production') {
     const apiConfiguration = getMainBluebirdApiConfigurationOrNull();
     if (
@@ -61,19 +89,58 @@ export function DormantClerkProvider({ children }: { children: React.ReactNode }
       apiConfiguration.environment !== 'production' ||
       apiConfiguration.clerkPublishableKey !== publishableKey
     ) {
-      return <>{children}</>;
+      canMountProvider = false;
     }
   }
 
+  useEffect(() => {
+    if (!canMountProvider) return;
+    logClerkStartupDiagnostic({
+      event: 'provider_mount',
+      production: CLERK_AUTH_CONFIGURATION.environment === 'production',
+      attempt,
+      providerMounted: true,
+    });
+  }, [attempt, canMountProvider]);
+
+  if (!canMountProvider || !publishableKey) {
+    return (
+      <ClerkProviderMountedContext.Provider value={false}>
+        {children}
+      </ClerkProviderMountedContext.Provider>
+    );
+  }
+
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <ClerkAuthSnapshotBridge>{children}</ClerkAuthSnapshotBridge>
-    </ClerkProvider>
+    <ClerkProviderMountedContext.Provider value>
+      <ClerkStartupRetryContext.Provider value={onRetryClerkStartup}>
+        <ErrorBoundary
+          FallbackComponent={ClerkProviderStartupFailure}
+          onError={(error) => {
+            logClerkStartupDiagnostic({
+              event: 'initialization_error',
+              production: CLERK_AUTH_CONFIGURATION.environment === 'production',
+              attempt,
+              providerMounted: true,
+              errorCategory: sanitizeClerkStartupError(error),
+            });
+          }}
+        >
+          <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+            <ClerkAuthSnapshotBridge>{children}</ClerkAuthSnapshotBridge>
+          </ClerkProvider>
+        </ErrorBoundary>
+      </ClerkStartupRetryContext.Provider>
+    </ClerkProviderMountedContext.Provider>
   );
 }
 
 export function useClerkAuthSnapshot(): ClerkAuthSnapshot | null {
   return useContext(ClerkAuthSnapshotContext);
+}
+
+export function useClerkProviderMounted(): boolean {
+  return useContext(ClerkProviderMountedContext);
 }
 
 /**
