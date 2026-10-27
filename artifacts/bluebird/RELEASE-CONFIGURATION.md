@@ -172,6 +172,33 @@ request, EAS build, or submission was made.
 - The exact Preview hostname above is session/workspace-specific; it is
   recorded only to identify the origin used for this observation.
 
+### Production Clerk owner confirmation and blocked browser test (2026-10-27)
+
+- **Owner-reported Production instance facts:** the authorized Clerk owner
+  reports the Production Frontend API URL is
+  `https://clerk.bluebirdjets.com`, the Production instance is accessible,
+  phone sign-in/sign-up and SMS verification are enabled, and the SMS
+  allowlist includes the United States and Canada. The owner also reports that
+  the Production Clerk environment endpoint returns JSON from Replit and
+  iPhone Safari. These checks do not establish that the Clerk SDK can complete
+  native iOS initialization.
+- **Current Dashboard origin policy: UNVERIFIED.** The owner confirms access
+  to Production but has not checked the exact allowed-origin rules. Replit
+  Preview is not confirmed as an approved origin.
+- **Historical browser evidence: BLOCKED.** On 2026-10-21, one specific
+  `*.expo.worf.replit.dev` Preview host received HTTP 400. Clerk's error named
+  `bluebirdjets.com` as the only allowed domain and said the browser `Origin`
+  must match or be a subdomain of the requesting URL. This is the exact
+  observed error rule, not confirmation of the current Dashboard allowlist or
+  its URL/port semantics. Treat that tested Replit host as blocked; do not
+  generalize it into a verified current allowlist.
+- **Web Preview test: BLOCKED.** The owner has not approved Replit Preview or
+  any new Production web hostname/path and explicitly declines such approval
+  at this stage. No Production web test or deployment is authorized. No Clerk
+  domain restriction, allowed origin, DNS, or credential was changed. Do not
+  request a new host or repeat Replit Web Preview checks; prioritize the
+  existing Build 8 native iOS initialization diagnosis.
+
 ### Native path and Production EAS environment
 
 - **Source/configuration: PARTIAL READY.** The existing Expo project is

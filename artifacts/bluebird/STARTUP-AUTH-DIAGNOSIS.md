@@ -154,6 +154,17 @@ The earlier diagnosis recorded a direct protected-tab startup race: tab screens 
   `useAuth().isLoaded` remained false through the 15-second startup timeout.
   This is evidence of a rendered Clerk provider subtree with an unready auth
   snapshot, not evidence that a native Clerk event or token was received.
+- The authorized owner reports the Production Frontend API URL is
+  `https://clerk.bluebirdjets.com` and that its environment endpoint returns
+  JSON from both Replit and iPhone Safari. The owner also confirms phone
+  sign-in/sign-up and SMS verification are enabled. Endpoint reachability and
+  phone-method configuration do not prove that Clerk Expo's native bootstrap,
+  native module configuration, or iOS auth snapshot completed on Build 8.
+- The owner has not checked whether Replit Preview origins are approved.
+  Separately, the retained browser HTTP 400 rejected the observed Replit web
+  origin. Do not use further Replit Web Preview tests to diagnose this iOS
+  stall; the browser origin policy does not account for the reported native
+  `isLoaded: No` timeout.
 - A read-only Expo build-list/build-info check confirms a finished iOS
   `production-auth-test` artifact, app version `1.0.0`, build version `8`,
   created and completed on 2026-10-27, with Expo SDK metadata `57.0.0`. The
@@ -172,13 +183,23 @@ The earlier diagnosis recorded a direct protected-tab startup race: tab screens 
   configured issuer host, and the selected API/key pair matched. This is an
   inference from the observed mounted provider and checked-in gates, not a
   read of remote EAS values or proof of API-owner approval.
-- The exact Production Clerk instance hostname is **not verifiable from the
-  available workspace evidence**. The EAS build record exposes profile/build
-  metadata, not the effective remote environment values. The connected Expo
-  tools cannot list the remote Production variables. No publishable key,
-  issuer value, URL value, token, or credential was read, printed, or saved.
-  The exact remote Production approval and key/issuer values therefore remain
-  owner-verifiable inputs.
+- **Build 8 embedded Production host: verified without exposing the key.** A
+  read-only inspection of the existing EAS Build 8 IPA found one embedded live
+  Clerk publishable key whose encoded Frontend API hostname is
+  `clerk.bluebirdjets.com`, matching the owner-reported Production Frontend
+  API URL. The bundle also contains the canonical
+  `https://bluebirdjets.com/api` Main API base. The publishable key itself was
+  not printed or retained. This verifies the host selected in that artifact,
+  not the current value or approval setting in remote EAS.
+- The IPA contains the linked `ClerkExpoModule`, `ClerkNativeBridge`, and
+  ClerkKit symbols, and its `MinimumOSVersion` is `17.0`. This confirms the
+  native Clerk module and required deployment target are present in the
+  inspected artifact; it does not prove that `configure()` ran or completed on
+  the phone.
+- The installed versions remain within declared peers:
+  `@clerk/expo` 4.10.1 accepts Expo `>=54 <58`, React `^18 || ^19`, and React
+  Native `>=0.75`; the workspace resolves Expo 57.0.31, React 19.2.3, and
+  React Native 0.86.3. No declared-peer mismatch is evident.
 
 ### Startup path and evidence
 
@@ -279,27 +300,39 @@ before Clerk auth resources are ready.
   write, or entitlement behavior; or an SDK/device-specific issue outside
   declared package peers. The snapshot and timeout alone cannot distinguish
   these causes. There is no evidence to claim any one of them caused Build 8.
+- The 15-second timer is Bluebird's readiness deadline; it does not cancel
+  Clerk's in-flight initialization. `initialization_timeout` proves only that
+  `isLoaded` was false at the deadline, not whether Clerk became ready later.
+  The current EAS query found no iOS Observe versions/sessions; fetching Build
+  8 logs timed out, the TestFlight crash list had no crash submissions, and
+  EAS Observe custom-event access was unavailable. No native configure
+  started/returned status, request status, or Keychain outcome is available.
 - **Code change:** none. No reproducible Mobile-owned defect was demonstrated,
   so auth gates, provider wiring, timeout, and phone flow were left unchanged.
-- **Exact owner checks before another build:** (1) inspect the remote EAS
-  `production` environment in an authorized view and report only presence and
-  status—never values—for the Production selector, approval flag, API base,
-  live key, and issuer; confirm the selected API host is
-  `bluebirdjets.com` and the key-host/issuer-host match; (2) on the existing
-  Build 8 device, reproduce one cold launch and one Retry while preserving a
-  redacted Apple Console timeline that records only startup event order,
-  provider-mounted/snapshot/isLoaded booleans, native module/configure
-  started/returned status, and broad error/network status categories; remove
-  raw SDK/system messages, URLs, headers, bodies, keys, tokens, phone numbers,
-  and identifiers; (3) confirm the built app's Clerk native module and iOS
-  deployment target are present (17.0 or newer) and that a SecureStore read
-  after the device has been unlocked does not throw. No phone sign-in or API
-  request is needed for these checks.
+- **Next diagnostic without a new build:** (1) use Apple Console with the
+  existing Build 8 installation for one cold launch and one Retry; preserve a redacted
+  event timeline and any available `ClerkExpo.configure` start/return or
+  rejection, Clerk request status/network category, and SecureStore result.
+  The current app logs only coarse provider/readiness events, so keep raw
+  SDK/system messages, URLs, headers, bodies, keys, tokens, phone numbers,
+  identities, and session identifiers out of the report. Also confirm the
+  installed app is Build 8; (2) only if these observations isolate a source
+  defect, make a focused fix and decide whether a new build is necessary; (3)
+  if the existing logs do not expose the missing native stage, the cause
+  cannot be identified from the current three-field snapshot alone.
 - **Build decision:** another iOS build is not justified yet. First collect
-  the owner-only configuration status and sanitized device timeline above.
-  Build only if those observations isolate a Mobile-owned source defect and a
-  focused regression fix is made; no build, upload, or deployment was
-  performed for this diagnosis.
+  the existing-device timeline above. Build only if that evidence isolates a
+  Mobile-owned source defect and a focused regression fix is made; no build,
+  upload, or deployment was performed for this diagnosis.
+- **Prior EAS environment check:** the remote EAS `production` variable
+  presence/value check remains separate and unverified from this workspace;
+  no environment variable or credential was read or changed. If needed, an
+  authorized owner should report only presence/status without values. The
+  already verified IPA host does not prove the current remote approval flag.
+- **Origin scope:** the owner has not checked the current Production
+  allowed-origin list and is not approving a new browser host/path. The prior
+  Replit web origin remains blocked by its recorded HTTP 400; no additional
+  Replit web testing is part of this iOS diagnosis.
 
 ### Local verification
 

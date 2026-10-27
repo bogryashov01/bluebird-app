@@ -116,6 +116,25 @@ behavior. For the full source comparison and evidence, see the
   sign-out. Any authenticated `/api/me` check must wait for API-owner approval
   of the controlled test. No EAS build or submission was started for this audit.
 
+## Production Clerk web-origin status (2026-10-27)
+
+- The authorized Clerk owner reports the Production Frontend API URL is
+  `https://clerk.bluebirdjets.com`, the Production instance is accessible,
+  phone sign-in/sign-up and SMS verification are enabled, and the SMS country
+  allowlist includes the United States and Canada. The owner also reports the
+  Clerk environment endpoint returns JSON from Replit and iPhone Safari.
+- The owner has not verified the Dashboard's exact Production allowed-origin
+  rules. Replit Preview is not confirmed as an approved Production origin.
+  The retained 2026-10-21 HTTP 400 rejected one observed
+  `*.expo.worf.replit.dev` host and reported `bluebirdjets.com` plus a
+  same-domain-or-subdomain Origin rule. That historical response does not
+  establish the current full allowlist or exact URL/port format.
+- **Browser test: BLOCKED.** The owner is not approving any new Production
+  hostname, Preview domain, or path now. No Production web test or deployment
+  is authorized. Do not change Clerk domains/origins, DNS, or credentials; do
+  not repeat Replit Preview tests or request host approval. Prioritize the
+  existing Build 8 native iOS initialization stall.
+
 The 2026-10-20 mock verification passed the Bluebird client/auth-gating suites,
 including signed-out `/api/me` handling and local HTTP 401-to-`session_expired`
 handling. Those tests use injected fetchers; they do not exercise the production
