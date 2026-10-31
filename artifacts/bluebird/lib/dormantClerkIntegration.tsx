@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ClerkProvider, useAuth, useUser } from '@clerk/expo';
-import { tokenCache } from '@clerk/expo/token-cache';
+import { tokenCache as clerkSecureTokenCache } from '@clerk/expo/token-cache';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import type { ErrorFallbackProps } from '@/components/ErrorFallback';
 import { ClerkStartupStateView } from '@/components/ClerkStartupStateView';
@@ -11,6 +11,7 @@ import {
 } from './clerkProductionTokenProvider';
 import {
   CLERK_AUTH_CONFIGURATION,
+  selectClerkTokenCache,
   shouldMountClerkProvider,
 } from './clerkAuthConfig';
 import { getMainBluebirdApiConfigurationOrNull } from './mainBluebirdApiConfig';
@@ -126,6 +127,13 @@ export function DormantClerkProvider({
       providerMounted: true,
     });
   }, [attempt, canMountProvider]);
+
+  const tokenCache = selectClerkTokenCache({
+    cache: clerkSecureTokenCache,
+    publishableKey: publishableKey ?? '',
+    isDevelopment: typeof __DEV__ !== 'undefined' && __DEV__ === true,
+    productionClerkDebug: process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG === 'true',
+  });
 
   if (!canMountProvider || !publishableKey) {
     return (

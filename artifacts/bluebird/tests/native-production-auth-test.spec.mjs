@@ -86,12 +86,14 @@ test('the restricted request policy allows the native auth-test reads and blocks
     ['/api/trips', 'GET'],
     ['https://bluebirdjets.com/api/me/referrals', 'GET'],
     ['/api/me/referrals', 'GET'],
+    ['https://bluebirdjets.com/api/membership', 'GET'],
+    ['/api/membership', 'GET'],
   ]) {
     assert.equal(isNativeProductionAuthTestRequestAllowed(...request), true, request.join(' '));
   }
 
   const blocked = [];
-  for (const path of ['/api/me', '/api/me/profile', '/api/empty-legs', '/api/empty-legs/123', '/api/airports', '/api/trips', '/api/me/referrals']) {
+  for (const path of ['/api/me', '/api/me/profile', '/api/empty-legs', '/api/empty-legs/123', '/api/airports', '/api/trips', '/api/me/referrals', '/api/membership']) {
     for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
       blocked.push([`https://bluebirdjets.com${path}`, method]);
     }
@@ -101,7 +103,7 @@ test('the restricted request policy allows the native auth-test reads and blocks
       [`http://bluebirdjets.com${path}`, 'GET'],
     );
   }
-  for (const path of ['/api/me', '/api/me/profile', '/api/empty-legs', '/api/empty-legs/123', '/api/trips', '/api/me/referrals']) {
+  for (const path of ['/api/me', '/api/me/profile', '/api/empty-legs', '/api/empty-legs/123', '/api/trips', '/api/me/referrals', '/api/membership']) {
     blocked.push([`https://bluebirdjets.com${path}?expand=1`, 'GET']);
   }
   const tooManyCodes = Array.from({ length: 201 }, (_, index) => `A${String(index).padStart(2, '0')}`).join(',');
@@ -150,8 +152,8 @@ test('the restricted request policy allows the native auth-test reads and blocks
     ['https://bluebirdjets.com/api/invites/validate', 'POST'],
     ['https://bluebirdjets.com/api/membership/preview-pricing', 'GET'],
     ['https://bluebirdjets.com/api/membership/preview-pricing', 'POST'],
+    ['https://bluebirdjets.com/api/membership/plans', 'GET'],
     ['https://preview.bluebirdjets.com/api/trips', 'GET'],
-    ['https://bluebirdjets.com/api/membership', 'GET'],
     ['https://preview.bluebirdjets.com/api/me', 'GET'],
     ['https://preview.bluebirdjets.com/api/empty-legs/123', 'GET'],
     ['https://bluebirdjets.com.evil.example/api/me', 'GET'],
@@ -224,7 +226,17 @@ test('the Production authenticated API permits /api/me, /api/me/profile, and /ap
             ? referralAccount
             : pathname === '/api/empty-legs/42/queue'
               ? [{ position: 2, initials: 'AB', tier: 'base', hasLineSkip: false, isViewer: true }]
-              : currentUser;
+              : pathname === '/api/membership'
+                ? {
+                    isMember: true,
+                    tier: 'base',
+                    status: 'active',
+                    paymentStatus: 'none',
+                    cancelAtPeriodEnd: false,
+                    currentPeriodEnd: '2027-01-15T00:00:00.000Z',
+                    recentEvents: [],
+                  }
+                : currentUser;
       return {
         ok: true,
         status: 200,
@@ -254,7 +266,12 @@ test('the Production authenticated API permits /api/me, /api/me/profile, and /ap
       hasLineSkip: false,
       isViewer: true,
     }]);
-    assert.equal(requests.length, 5);
+    const membership = await client.getMembership();
+    assert.equal(membership.isMember, true);
+    assert.equal(membership.tier, 'base');
+    assert.equal(membership.status, 'active');
+    assert.equal(membership.paymentStatus, 'none');
+    assert.equal(requests.length, 6);
     assert.deepEqual(requests[0], {
       url: 'https://bluebirdjets.com/api/me',
       method: 'GET',
@@ -290,6 +307,13 @@ test('the Production authenticated API permits /api/me, /api/me/profile, and /ap
       cookie: null,
       credentials: 'omit',
     });
+    assert.deepEqual(requests[5], {
+      url: 'https://bluebirdjets.com/api/membership',
+      method: 'GET',
+      authorization: 'Bearer test-session-token',
+      cookie: null,
+      credentials: 'omit',
+    });
     await assert.rejects(client.getInviteCode(), /permits only GET \/api\/me/);
     await assert.rejects(client.validateInvite({ code: 'BB-FRIEND2' }), /permits only GET \/api\/me/);
     await assert.rejects(client.getPhoneVerificationStatus('+15555550123'), /permits only GET \/api\/me/);
@@ -307,8 +331,7 @@ test('the Production authenticated API permits /api/me, /api/me/profile, and /ap
     await assert.rejects(client.confirmEmptyLegWinner(42), /permits only GET \/api\/me/);
     await assert.rejects(client.declineEmptyLegWinner(42), /permits only GET \/api\/me/);
     await assert.rejects(client.previewMembershipPricing({ tier: 'base' }), /permits only GET \/api\/me/);
-    await assert.rejects(client.getMembership(), /permits only GET \/api\/me/);
-    assert.equal(requests.length, 5, 'blocked API calls must not reach fetch');
+    assert.equal(requests.length, 6, 'blocked API calls must not reach fetch');
   } finally {
     const restore = (name, value) => {
       if (value === undefined) delete process.env[name];
@@ -348,10 +371,11 @@ test('the generated API client guard rejects legacy and mutating calls before to
     await customFetch(`/api/airports?${new URLSearchParams({ codes: 'SEA,DAL' }).toString()}`, { method: 'GET' });
     await customFetch('/api/trips', { method: 'GET' });
     await customFetch('/api/me/referrals', { method: 'GET' });
-    assert.equal(fetchCalls, 8);
-    assert.equal(tokenReads, 8);
+    await customFetch('/api/membership', { method: 'GET' });
+    assert.equal(fetchCalls, 9);
+    assert.equal(tokenReads, 9);
 
-    for (const path of ['/api/me', '/api/me/profile', '/api/empty-legs', '/api/empty-legs/123', '/api/trips', '/api/me/referrals']) {
+    for (const path of ['/api/me', '/api/me/profile', '/api/empty-legs', '/api/empty-legs/123', '/api/trips', '/api/me/referrals', '/api/membership']) {
       for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
         await assert.rejects(
           customFetch(`https://bluebirdjets.com${path}`, { method }),
@@ -448,7 +472,11 @@ test('the generated API client guard rejects legacy and mutating calls before to
       /does not allow the requested API operation/,
     );
     await assert.rejects(
-      customFetch('https://bluebirdjets.com/api/membership', { method: 'GET' }),
+      customFetch('https://bluebirdjets.com/api/membership', { method: 'POST' }),
+      /does not allow the requested API operation/,
+    );
+    await assert.rejects(
+      customFetch('https://bluebirdjets.com/api/membership?expand=1', { method: 'GET' }),
       /does not allow the requested API operation/,
     );
     await assert.rejects(
@@ -459,8 +487,8 @@ test('the generated API client guard rejects legacy and mutating calls before to
       customFetch('https://preview.bluebirdjets.com/api/empty-legs/123', { method: 'GET' }),
       /does not allow the requested API operation/,
     );
-    assert.equal(fetchCalls, 8);
-    assert.equal(tokenReads, 8, 'blocked operations must not retrieve a bearer token');
+    assert.equal(fetchCalls, 9);
+    assert.equal(tokenReads, 9, 'blocked operations must not retrieve a bearer token');
   } finally {
     setRequestGuard(null);
     setAuthTokenGetter(null);
@@ -509,6 +537,57 @@ test('EAS TestFlight profile is Production-only and keeps the existing approval 
   assert.match(layoutSource, /setBaseUrl\('https:\/\/bluebirdjets\.com'\)/);
   assert.match(layoutSource, /setRequestGuard\(isNativeProductionAuthTestRequestAllowed\)/);
   assert.match(layoutSource, /!isNativeProductionAuthTestEnabled\(\) && process\.env\.EXPO_PUBLIC_DOMAIN/);
+});
+
+test('the live internal TestFlight profile enables queue mutations, connections, and messages, and leaves auth-test unchanged', async () => {
+  const eas = JSON.parse(await readFile(new URL('../eas.json', import.meta.url), 'utf8'));
+  const authTest = eas.build['production-auth-test'];
+  const live = eas.build['production-live-internal'];
+
+  assert.deepEqual(authTest.env, {
+    EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: 'production',
+    EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST: 'true',
+    EXPO_PUBLIC_ENABLE_CLERK_AUTH: 'false',
+    EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO: 'false',
+    EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE: 'production',
+    EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE: 'production',
+  });
+  assert.equal(Object.hasOwn(authTest.env, 'EXPO_PUBLIC_BLUEBIRD_PRODUCTION_QUEUE_MUTATIONS'), false);
+
+  assert.equal(live.extends, 'production');
+  assert.equal(live.autoIncrement, true);
+  assert.equal(live.environment, 'production');
+  assert.equal(live.distribution, 'store');
+  assert.deepEqual(live.env, {
+    EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: 'production',
+    EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST: 'false',
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_QUEUE_MUTATIONS: 'true',
+    EXPO_PUBLIC_ENABLE_CLERK_AUTH: 'false',
+    EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH: 'true',
+    EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO: 'false',
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG: 'false',
+    EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE: 'production',
+    EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE: 'production',
+    EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS: 'true',
+    EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES: 'true',
+  });
+  const production = eas.build.production.env ?? {};
+  const clerkDebug = eas.build['production-clerk-debug'].env;
+  assert.notEqual(production.EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS, 'true');
+  assert.notEqual(production.EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES, 'true');
+  assert.notEqual(clerkDebug.EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS, 'true');
+  assert.notEqual(clerkDebug.EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES, 'true');
+  for (const forbiddenOverride of [
+    'EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL',
+    'EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_PUBLISHABLE_KEY',
+    'EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_CLERK_ISSUER',
+    'EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_BASE_URL',
+    'EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY',
+    'EXPO_PUBLIC_DOMAIN',
+  ]) {
+    assert.equal(Object.hasOwn(live.env, forbiddenOverride), false);
+  }
+  assert.doesNotMatch(JSON.stringify(live), /pk_(?:test|live)_|sk_(?:test|live)_/);
 });
 
 test('the Production Clerk debug EAS profile is isolated and preserves all Production gates', async () => {

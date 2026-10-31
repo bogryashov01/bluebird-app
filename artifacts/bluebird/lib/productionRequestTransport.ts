@@ -7,7 +7,7 @@ export interface ProductionTransportErrorFactory {
   timeout: (timeoutMs: number) => Error;
   cancelled: () => Error;
   network: () => Error;
-  http: (response: Response) => Error;
+  http: (response: Response) => Error | Promise<Error>;
   invalidJson: () => Error;
   schema: (error: unknown) => Error;
 }
@@ -134,7 +134,7 @@ export async function requestProductionJson<T>(
       throw options.errors.network();
     }
     options.onResponseStatus?.(response.status);
-    if (!response.ok) throw options.errors.http(response);
+    if (!response.ok) throw await Promise.resolve(options.errors.http(response));
 
     let json: unknown;
     try {

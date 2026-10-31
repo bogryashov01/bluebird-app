@@ -36,7 +36,7 @@ export function SettingsGroup({ title, rows, compact = false }: SettingsGroupPro
               disabled={!row.onPress || row.disabled}
               accessibilityState={row.disabled ? { disabled: true } : undefined}
             >
-              <Text style={[styles.label, { color: colors.textOnSurface }]}>{row.label}</Text>
+              <Text style={[styles.label, { color: colors.textOnSurface }]} numberOfLines={2}>{row.label}</Text>
               {row.hint ? (
                 <Text
                   style={[
@@ -44,7 +44,7 @@ export function SettingsGroup({ title, rows, compact = false }: SettingsGroupPro
                     compact && styles.compactHint,
                     { color: colors.mutedForegroundLight },
                   ]}
-                  numberOfLines={compact ? 2 : undefined}
+                  numberOfLines={2}
                 >
                   {row.hint}
                 </Text>
@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 8,
+    marginBottom: 10,
     paddingHorizontal: 4,
   },
   card: {
@@ -86,15 +86,19 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 16,
   },
   label: {
     flex: 1,
+    flexShrink: 1,
     fontFamily: 'Inter_500Medium',
-    fontSize: 15,
+    fontSize: 16,
   },
   hint: {
+    flexShrink: 1,
+    maxWidth: '46%',
+    textAlign: 'right',
     fontFamily: 'Inter_400Regular',
     fontSize: 12.5,
     marginRight: 6,

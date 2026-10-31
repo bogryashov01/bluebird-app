@@ -4,6 +4,7 @@ import {
   fetchProductionFlight,
   fetchProductionFlights,
   findProductionFlightById,
+  presentCachedDepartureClock,
   getFlightImagePresentation,
   getFlightAirportCodes,
   mapProductionAirport,
@@ -21,6 +22,7 @@ import {
   ProductionReadTimeoutError,
   ProductionReadUnsupportedError,
   resolveAircraftImageUrl,
+  isLocalFlightReadMode,
   resolveFlightReadConfiguration,
   shouldRetryProductionRead,
 } from "../scripts/.production-flights.test.mjs";
@@ -80,6 +82,15 @@ assert.deepEqual(
   resolveFlightReadConfiguration({ isDev: true, mode: "local", baseUrl: "http://localhost:5000/api" }),
   { mode: "local", baseUrl: "" },
 );
+assert.equal(isLocalFlightReadMode("local", true), false);
+{
+  const previousDemo = process.env.EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO;
+  process.env.EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO = "true";
+  assert.equal(isLocalFlightReadMode("local", true), true);
+  if (previousDemo === undefined) delete process.env.EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO;
+  else process.env.EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO = previousDemo;
+  assert.equal(isLocalFlightReadMode("local", true), false);
+}
 assert.deepEqual(
   resolveFlightReadConfiguration({ isDev: false, mode: "local" }),
   { mode: "production", baseUrl: PRODUCTION_API_BASE_URL },
@@ -116,6 +127,14 @@ assert.equal(mappedFlight.fromAirport, "TST");
 assert.equal(mappedFlight.originTz, "America/Chicago");
 assert.equal(mappedFlight.departureDate, "2026-10-08");
 assert.equal(mappedFlight.departureTime, "08:36");
+assert.equal(mappedFlight.departureInstant, "2026-10-08T13:36:00.000Z");
+assert.equal(presentCachedDepartureClock(mappedFlight.departureTime), "08:36");
+assert.equal(presentCachedDepartureClock("08:36:00"), null);
+assert.equal(presentCachedDepartureClock("2026-10-08T13:36:00.000Z"), null);
+assert.equal(presentCachedDepartureClock(null), null);
+assert.equal(findProductionFlightById([mappedFlight], 98765)?.seatsAvailable, null);
+assert.equal(findProductionFlightById(undefined, 98765), undefined);
+assert.equal(Object.hasOwn(mappedFlight, "description"), false);
 assert.ok(mappedFlight.departureTimeZone);
 assert.equal(mappedFlight.arrivalDate, "2026-10-08");
 assert.equal(mappedFlight.arrivalTime, "10:00");
@@ -124,6 +143,7 @@ assert.equal(mappedFlight.aircraftType, null);
 assert.equal(mappedFlight.aircraftTypeName, null);
 assert.equal(mappedFlight.aircraftTypeCode, null);
 assert.equal(mappedFlight.imageUrl, "https://bluebirdjets.com/fixtures/test-aircraft.jpg");
+assert.deepEqual(mappedFlight.aircraftGalleryUrls, ["https://bluebirdjets.com/fixtures/test-aircraft.jpg"]);
 assert.equal(mappedFlight.queueCount, 2);
 assert.equal(mappedFlight.memberQueueCount, null);
 assert.equal(mappedFlight.userInQueue, false);
@@ -276,6 +296,25 @@ assert.equal(fetchedFlights[0].id, "98765");
 assert.equal(requests[0].url, `${PRODUCTION_API_BASE_URL}/empty-legs`);
 assert.equal(requests[0].init.method, "GET");
 assert.equal(requests[0].init.headers.Authorization, undefined);
+const authorizedRequests = [];
+await fetchProductionFlights({
+  accessToken: "signed-in-token",
+  fetcher: async (url, init) => {
+    authorizedRequests.push({ url: String(url), authorization: init.headers.Authorization });
+    return new Response(JSON.stringify([rawFlight]), { status: 200 });
+  },
+});
+assert.equal(authorizedRequests[0].url, `${PRODUCTION_API_BASE_URL}/empty-legs`);
+assert.equal(authorizedRequests[0].authorization, "Bearer signed-in-token");
+const unsignedRequests = [];
+await fetchProductionFlights({
+  accessToken: "bad token",
+  fetcher: async (_url, init) => {
+    unsignedRequests.push(init.headers.Authorization);
+    return new Response(JSON.stringify([rawFlight]), { status: 200 });
+  },
+});
+assert.equal(unsignedRequests[0], undefined);
 await assert.rejects(
   () => fetchProductionFlights({
     fetcher: async () => new Response("temporarily unavailable", { status: 503 }),

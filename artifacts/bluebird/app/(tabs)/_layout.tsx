@@ -27,6 +27,10 @@ function NativeTabLayout({ unreadCount }: { unreadCount: number }) {
         <NativeTabs.Trigger.Icon sf={{ default: 'briefcase', selected: 'briefcase.fill' }} />
         <NativeTabs.Trigger.Label>Trips</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="connections">
+        <NativeTabs.Trigger.Icon sf={{ default: 'bubble.left.and.bubble.right', selected: 'bubble.left.and.bubble.right.fill' }} />
+        <NativeTabs.Trigger.Label>Connections</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="membership/index">
         <NativeTabs.Trigger.Icon sf={{ default: 'star', selected: 'star.fill' }} />
         <NativeTabs.Trigger.Label>Membership</NativeTabs.Trigger.Label>
@@ -120,6 +124,18 @@ function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
         }}
       />
       <Tabs.Screen
+        name="connections"
+        options={{
+          title: 'Connections',
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="bubble.left.and.bubble.right" tintColor={color} size={22} />
+            ) : (
+              <Feather name="message-circle" size={20} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
         name="membership/index"
         options={{
           title: 'Membership',
@@ -150,7 +166,6 @@ function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
             ),
         }}
       />
-      <Tabs.Screen name="connections" options={{ href: null }} />
     </Tabs>
   );
 }

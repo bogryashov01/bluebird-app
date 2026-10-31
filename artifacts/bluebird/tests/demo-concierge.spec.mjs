@@ -92,9 +92,10 @@ test("concierge navigation stays local and does not add a production request", (
   assert.match(flight, /joinFlightRouteParams\(productionFlightId, f\)/);
   assert.match(status, /pathname: '\/concierge'/);
   assert.match(status, /joinFlightRouteParams\(entry\.flightId/);
-  for (const source of [membership, discover, profile, help, trips]) {
+  for (const source of [membership, discover, profile, trips]) {
     assert.match(source, /\/concierge/);
   }
+  assert.doesNotMatch(help, /\/concierge|support@|router\.push\('\/concierge/);
   for (const source of [chat, engine]) {
     assert.doesNotMatch(source, /\bfetch\(|anthropic|openai|sendblue|useConciergeChat|joinEmptyLegQueue|skipLine\(/i);
   }

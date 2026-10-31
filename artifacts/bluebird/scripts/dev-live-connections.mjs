@@ -1,0 +1,17 @@
+import { startLiveMetro } from './live-metro.mjs';
+
+startLiveMetro({
+  EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT: 'production',
+  EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST: 'false',
+  EXPO_PUBLIC_BLUEBIRD_PRODUCTION_QUEUE_MUTATIONS: 'true',
+  EXPO_PUBLIC_ENABLE_CLERK_AUTH: 'false',
+  EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH: 'true',
+  EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO: 'false',
+  EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG: 'true',
+  EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE: 'production',
+  EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE: 'production',
+  EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS: 'true',
+  EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES: 'true',
+}, {
+  scope: 'Local Simulator Metro for Connections and Messages. Values are not printed.',
+});

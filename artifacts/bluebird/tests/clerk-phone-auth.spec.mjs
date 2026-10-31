@@ -61,7 +61,7 @@ function makeResources(overrides = {}) {
     create: async (params) => {
       calls.push(["create-sign-up", params]);
       if (overrides.createSignUpError) throw overrides.createSignUpError;
-      return signUpAttempt;
+      return overrides.signUpCreateResult ?? signUpAttempt;
     },
     preparePhoneNumberVerification: async (params) => {
       calls.push(["resend-sign-up-code", params]);
@@ -84,6 +84,10 @@ function makeResources(overrides = {}) {
     signIn,
     signUp,
     diagnostics: overrides.diagnostics,
+    signOut: async () => {
+      calls.push(["sign-out"]);
+      await overrides.signOut?.();
+    },
     setActive: async (params) => {
       calls.push(["set-active", params]);
       activationCalls += 1;
@@ -349,6 +353,52 @@ test("only Clerk's explicit account-not-found response starts sign-up and reques
   assert.match(other422.message, /could not start authentication/i);
   assert.doesNotMatch(other422.message, /No Clerk account was found/);
   assert.deepEqual(other422Fixture.calls.map(([name]) => name), ["create-sign-in"]);
+
+  const wrappedNotFoundFixture = makeResources({
+    createSignInError: {
+      status: 422,
+      code: "api_response_error",
+      errors: [{ code: "form_identifier_not_found" }],
+    },
+  });
+  const wrappedNotFound = await beginClerkPhoneAuth(
+    "sign-in",
+    "+15555550199",
+    wrappedNotFoundFixture.actions,
+  );
+  assert.equal(wrappedNotFound.ok, true);
+  assert.equal(wrappedNotFound.mode, "sign-up");
+
+  const completedSignUpFixture = makeResources({
+    createSignInError: {
+      status: 422,
+      code: "api_response_error",
+      errors: [{ code: "form_identifier_not_found" }],
+    },
+    signUpCreateResult: {
+      status: "complete",
+      createdSessionId: "mock-session-id",
+      verifications: { phoneNumber: { status: "unverified" } },
+      preparePhoneNumberVerification: async () => {
+        throw new Error("SMS preparation should not run");
+      },
+    },
+  });
+  const completedSignUp = await beginClerkPhoneAuth(
+    "sign-in",
+    "+15555550199",
+    completedSignUpFixture.actions,
+  );
+  assert.equal(completedSignUp.ok, false);
+  assert.equal(completedSignUp.stage, "response");
+  assert.match(completedSignUp.message, /did not send an SMS/);
+  assert.equal(completedSignUp.message.includes("+15555550199"), false);
+  assert.equal(completedSignUpFixture.getActivationCalls(), 0);
+  assert.deepEqual(completedSignUpFixture.calls.map(([name]) => name), [
+    "create-sign-in",
+    "create-sign-up",
+    "sign-out",
+  ]);
 
   const topLevelCodeFixture = makeResources({
     createSignInError: { status: 422, code: "form_identifier_not_found" },

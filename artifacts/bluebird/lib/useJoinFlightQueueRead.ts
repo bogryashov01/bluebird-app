@@ -14,6 +14,7 @@ import {
   type JoinFlightQueuePanel,
 } from '@/lib/joinFlightPresentation';
 import { createProductionQueueActions } from '@/lib/productionQueue';
+import { ProductionAuthHttpError } from '@/lib/productionAuthApi';
 import { parseProductionFlightId } from '@/lib/productionFlights';
 
 export function useJoinFlightQueueRead(
@@ -81,6 +82,7 @@ export function useJoinFlightQueueRead(
     signedIn,
     loading: ready && (query.isLoading || query.isFetching),
     failed: query.isError,
+    unauthorized: query.error instanceof ProductionAuthHttpError && query.error.status === 401,
     read: query.data ?? null,
   });
 }

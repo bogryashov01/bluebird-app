@@ -12,7 +12,7 @@ import {
   type JoinFlightDisplay,
   type QueueJoinSuccessModel,
 } from '@/lib/joinFlightPresentation';
-import type { DemoJoinEntry } from '@/lib/demoJoinFlow';
+import { demoPetConfirmation, type DemoJoinEntry } from '@/lib/demoJoinFlow';
 
 export type DemoJoinStageName = 'joined' | 'status' | 'winner' | 'confirmed';
 
@@ -55,6 +55,7 @@ export function DemoJoinStage({ stage }: { stage: DemoJoinStageName }) {
           {!!flightDetails(entry) && (
             <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>{flightDetails(entry)}</Text>
           )}
+          {stage === 'confirmed' ? <ConfirmedPetSummary entry={entry} /> : null}
           <View style={styles.chips}>
             <View style={[styles.chip, { backgroundColor: colors.offWhite }]}>
               <Text style={[styles.chipValue, { color: colors.primary }]}>#{entry.position}</Text>
@@ -136,6 +137,27 @@ function actionFor(
   );
 }
 
+function ConfirmedPetSummary({ entry }: { entry: DemoJoinEntry }) {
+  const colors = useColors();
+  const summary = demoPetConfirmation(entry);
+  if (!summary) return null;
+  return (
+    <View testID="demo-pet-summary" style={[styles.petSummary, { borderColor: colors.separator }]}>
+      <View style={styles.petRow}>
+        <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Pet weight</Text>
+        <Text testID="demo-pet-summary-weight" style={[styles.body, { color: colors.textOnSurface }]}>
+          {summary.weightLbs} lbs
+        </Text>
+      </View>
+      <View style={styles.petRow}>
+        <Text testID="demo-pet-summary-fee" style={[styles.body, { color: colors.textOnSurface }]}>
+          {summary.feeLabel}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function noticeFor(stage: DemoJoinStageName, phase: DemoJoinEntry['phase']): string {
   if (stage === 'joined') return 'DEMO — No real queue entry created';
   if (stage === 'status') return 'DEMO — This queue status is only on this device';
@@ -186,6 +208,8 @@ function toFlightDisplay(entry: DemoJoinEntry): JoinFlightDisplay {
     aircraft: entry.aircraft,
     international: entry.international,
     flightStatus: entry.flightStatus,
+    queueClosesAt: null,
+    internationalPassRequired: null,
   };
 }
 
@@ -202,4 +226,6 @@ const styles = StyleSheet.create({
   chip: { flex: 1, borderRadius: 16, paddingVertical: 14, alignItems: 'center', gap: 4 },
   chipValue: { fontFamily: 'Inter_700Bold', fontSize: 20 },
   chipLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.6 },
+  petSummary: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 8, paddingTop: 10, gap: 6 },
+  petRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
 });

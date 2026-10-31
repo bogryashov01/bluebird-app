@@ -1,23 +1,20 @@
-import React, { useState } from 'react';
-import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import type {
   NotificationChannel,
   ProductionNotificationPrefs,
   ProductionUserProfile,
 } from '@/lib/productionAuthApi';
-import { buildNotificationProfileUpdate } from '@/lib/clerkNotificationPreferences';
+import {
+  areNotificationPreferencesEqual,
+  canPrepareNotificationPreferenceEdit,
+} from '@/lib/clerkNotificationPreferences';
 
 const CHANNELS: { value: NotificationChannel; label: string }[] = [
   { value: 'email', label: 'Email' },
   { value: 'sms', label: 'SMS' },
   { value: 'both', label: 'Both' },
-];
-
-const MODES: { value: ProductionNotificationPrefs['mode']; label: string }[] = [
-  { value: 'off', label: 'Off' },
-  { value: 'all', label: 'All Flights' },
-  { value: 'specific', label: 'Specific Flights' },
 ];
 
 type ChannelPreferenceKey =
@@ -36,21 +33,6 @@ function getSmsUnavailableReason(profile: ProductionUserProfile): string | null 
     !profile.phoneVerificationRequired
   ) return null;
   return 'SMS requires consent and a verified phone number.';
-}
-
-function emailSafeCandidate(prefs: ProductionNotificationPrefs): ProductionNotificationPrefs {
-  const withoutSms = (channel: NotificationChannel | null) =>
-    channel === 'sms' || channel === 'both' ? 'email' : channel;
-  return {
-    ...prefs,
-    mode: 'off',
-    allChannels: withoutSms(prefs.allChannels),
-    emptyLegHomeAirport: withoutSms(prefs.emptyLegHomeAirport),
-    departingFavorite: withoutSms(prefs.departingFavorite),
-    arrivingFavorite: withoutSms(prefs.arrivingFavorite),
-    queueUpdates: withoutSms(prefs.queueUpdates) ?? 'email',
-    winningNotifications: withoutSms(prefs.winningNotifications) ?? 'email',
-  };
 }
 
 function Choice({
@@ -80,9 +62,9 @@ function Choice({
       onPress={onPress}
       testID={testID}
       style={{
-        minHeight: 42,
-        paddingHorizontal: 14,
-        borderRadius: 13,
+        minHeight: 32,
+        paddingHorizontal: 12,
+        borderRadius: 10,
         borderWidth: 1,
         borderColor: selected ? colors.primary : colors.border,
         backgroundColor: selected ? colors.primary : colors.surface,
@@ -94,7 +76,7 @@ function Choice({
       <Text style={{
         color: selected ? colors.primaryForeground : colors.textOnSurface,
         fontFamily: 'Inter_600SemiBold',
-        fontSize: 13,
+        fontSize: 12,
       }}>{label}</Text>
     </TouchableOpacity>
   );
@@ -117,8 +99,8 @@ function ChannelSelector({
 }) {
   const colors = useColors();
   return (
-    <View style={{ gap: 9 }}>
-      <Text style={{ color: colors.textOnSurface, fontFamily: 'Inter_500Medium', fontSize: 14 }}>
+    <View style={{ gap: 8, paddingLeft: 16, paddingRight: 12, paddingBottom: 12 }}>
+      <Text style={{ color: colors.mutedForegroundLight, fontFamily: 'Inter_500Medium', fontSize: 12 }}>
         {label}
       </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -143,50 +125,130 @@ function ChannelSelector({
   );
 }
 
-function PreferenceCard({
-  title,
-  children,
+type ExpandedRow = 'home' | 'all' | 'queue' | 'confirmations' | null;
+
+function ensuredChannel(channel: NotificationChannel | null): NotificationChannel {
+  return channel ?? 'email';
+}
+
+function withFlightMode(
+  prefs: ProductionNotificationPrefs,
+  mode: ProductionNotificationPrefs['mode'],
+): ProductionNotificationPrefs {
+  if (mode === 'all') {
+    return { ...prefs, mode, allChannels: ensuredChannel(prefs.allChannels) };
+  }
+  if (mode === 'specific') {
+    return { ...prefs, mode, emptyLegHomeAirport: ensuredChannel(prefs.emptyLegHomeAirport) };
+  }
+  return { ...prefs, mode: 'off' };
+}
+
+function SettingsSwitch({
+  label,
+  checked,
+  disabled,
+  onPress,
+  testID,
 }: {
-  title: string;
-  children: React.ReactNode;
+  label: string;
+  checked: boolean;
+  disabled: boolean;
+  onPress: () => void;
+  testID: string;
 }) {
   const colors = useColors();
   return (
-    <View style={{
-      padding: 16,
-      gap: 14,
-      borderRadius: 18,
-      backgroundColor: colors.surface,
-    }}>
-      <Text style={{
-        color: colors.textOnSurface,
-        fontFamily: 'Inter_700Bold',
-        fontSize: 15,
-      }}>{title}</Text>
-      {children}
-    </View>
+    <TouchableOpacity
+      accessibilityRole="switch"
+      accessibilityLabel={label}
+      accessibilityState={{ checked, disabled }}
+      aria-checked={checked}
+      disabled={disabled}
+      onPress={onPress}
+      testID={testID}
+      style={{
+        width: 46,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: checked ? colors.primary : colors.muted,
+        justifyContent: 'center',
+        opacity: disabled ? 0.45 : 1,
+      }}
+    >
+      <View style={{
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        marginLeft: checked ? 20 : 2,
+        backgroundColor: colors.primaryForeground,
+      }} />
+    </TouchableOpacity>
   );
 }
 
-export function NotificationPreferenceEditor({ profile, disabled, onSave, onRefresh }: {
+export function NotificationPreferenceEditor({
+  profile,
+  disabled,
+  persistence = 'account',
+  onSave,
+  onRefresh,
+}: {
   profile: ProductionUserProfile;
   disabled: boolean;
+  persistence?: 'account' | 'device';
   onSave: (prefs: ProductionNotificationPrefs) => Promise<void>;
-  onRefresh: () => Promise<void>;
+  onRefresh?: () => Promise<void>;
 }) {
   const colors = useColors();
-  const [draft, setDraft] = useState<ProductionNotificationPrefs | null>(null);
+  const [draft, setDraft] = useState<ProductionNotificationPrefs>(profile.notificationPrefs);
+  const [expanded, setExpanded] = useState<ExpandedRow>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [needsRefresh, setNeedsRefresh] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  // Validate that the profile itself can support a safe edit. Existing SMS
-  // values may now be ineligible, but must remain editable to Email.
-  const safe = !!buildNotificationProfileUpdate(
-    profile,
-    emailSafeCandidate(profile.notificationPrefs),
-  );
+  const latestDraft = useRef(draft);
+  const profileRef = useRef(profile);
+  const savingRef = useRef(false);
+  profileRef.current = profile;
+  latestDraft.current = draft;
+  const safe = canPrepareNotificationPreferenceEdit(profile);
   const smsUnavailableReason = getSmsUnavailableReason(profile);
+
+  const commit = (next: ProductionNotificationPrefs, nextExpanded: ExpandedRow) => {
+    if (disabled || !safe) return;
+    if (
+      areNotificationPreferencesEqual(next, latestDraft.current) &&
+      nextExpanded === expanded
+    ) return;
+    latestDraft.current = next;
+    setDraft(next);
+    setExpanded(nextExpanded);
+    setError(null);
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setPending(true);
+    void (async () => {
+      let current = next;
+      try {
+        while (true) {
+          await onSave(current);
+          if (areNotificationPreferencesEqual(latestDraft.current, current)) break;
+          current = latestDraft.current;
+        }
+        setError(null);
+      } catch {
+        const restored = profileRef.current.notificationPrefs;
+        latestDraft.current = restored;
+        setDraft(restored);
+        setExpanded(null);
+        setError(persistence === 'device'
+          ? 'Couldn’t save on this device.'
+          : 'Couldn’t save these preferences.');
+      } finally {
+        savingRef.current = false;
+        setPending(false);
+      }
+    })();
+  };
 
   if (!safe) return (
     <View style={{ gap: 8 }}>
@@ -201,191 +263,227 @@ export function NotificationPreferenceEditor({ profile, disabled, onSave, onRefr
     </View>
   );
 
-  if (!draft) return (
-    <View style={{ gap: 12 }}>
+  const blocked = pending || disabled;
+  const setMode = (mode: ProductionNotificationPrefs['mode']) => {
+    const turningOff = (mode === 'all' && draft.mode === 'all') || (mode === 'specific' && draft.mode === 'specific');
+    const nextMode = turningOff ? 'off' : mode;
+    commit(
+      withFlightMode(draft, nextMode),
+      nextMode === 'off' ? null : nextMode === 'all' ? 'all' : 'home',
+    );
+  };
+  const setChannel = (key: ChannelPreferenceKey, value: NotificationChannel) => {
+    commit({ ...draft, [key]: value }, expanded);
+  };
+  const toggleExpanded = (row: Exclude<ExpandedRow, null>) => {
+    setExpanded((current) => current === row ? null : row);
+  };
+
+  return (
+    <View style={{ gap: 8 }}>
+      {persistence === 'device' ? (
+        <Text style={{ color: colors.mutedForegroundLight, fontSize: 12, lineHeight: 16 }} testID="clerk-device-notification-preferences">
+          Saved on this device.
+        </Text>
+      ) : null}
+      <View style={{ borderRadius: 16, backgroundColor: colors.surface, overflow: 'hidden' }}>
+        <FlightRow
+          label="Flights from my Home Airport"
+          switchLabel="Flights from my Home Airport"
+          checked={draft.mode === 'specific'}
+          disabled={blocked}
+          expanded={expanded === 'home'}
+          onToggle={() => setMode('specific')}
+          onExpand={() => toggleExpanded('home')}
+          testID="clerk-notification-home-switch"
+        >
+          {draft.mode === 'specific' && expanded === 'home' ? (
+            <>
+              <ChannelSelector
+                label="Home airport flights"
+                value={draft.emptyLegHomeAirport}
+                profile={profile}
+                disabled={blocked}
+                onChange={(value) => setChannel('emptyLegHomeAirport', value)}
+                testPrefix="clerk-notification-home-channel"
+              />
+              <ChannelSelector
+                label="Departing from favorite airports"
+                value={draft.departingFavorite}
+                profile={profile}
+                disabled={blocked}
+                onChange={(value) => setChannel('departingFavorite', value)}
+                testPrefix="clerk-notification-departing-channel"
+              />
+              <ChannelSelector
+                label="Arriving at favorite airports"
+                value={draft.arrivingFavorite}
+                profile={profile}
+                disabled={blocked}
+                onChange={(value) => setChannel('arrivingFavorite', value)}
+                testPrefix="clerk-notification-arriving-channel"
+              />
+            </>
+          ) : null}
+        </FlightRow>
+        <FlightRow
+          label="All Flights"
+          switchLabel="All Flights"
+          checked={draft.mode === 'all'}
+          disabled={blocked}
+          expanded={expanded === 'all'}
+          onToggle={() => setMode('all')}
+          onExpand={() => toggleExpanded('all')}
+          testID="clerk-notification-all-switch"
+        >
+          {draft.mode === 'all' && expanded === 'all' ? (
+            <ChannelSelector
+              label="All flight alerts"
+              value={draft.allChannels}
+              profile={profile}
+              disabled={blocked}
+              onChange={(value) => setChannel('allChannels', value)}
+              testPrefix="clerk-notification-all-channel"
+            />
+          ) : null}
+        </FlightRow>
+        <FlightRow
+          label="International Flights"
+          switchLabel="International Flights"
+          hint="Coming soon"
+          checked={false}
+          disabled
+          expanded={false}
+          onToggle={() => undefined}
+          onExpand={() => undefined}
+          testID="clerk-notification-international-switch"
+        />
+        <FlightRow
+          label="Queue Updates"
+          switchLabel="Queue Updates"
+          checked
+          disabled={blocked}
+          expanded={expanded === 'queue'}
+          onToggle={() => toggleExpanded('queue')}
+          onExpand={() => toggleExpanded('queue')}
+          testID="clerk-notification-queue-switch"
+        >
+          {expanded === 'queue' ? (
+            <ChannelSelector
+              label="Queue Updates"
+              value={draft.queueUpdates}
+              profile={profile}
+              disabled={blocked}
+              onChange={(value) => setChannel('queueUpdates', value)}
+              testPrefix="clerk-notification-queue-channel"
+            />
+          ) : null}
+        </FlightRow>
+        <FlightRow
+          label="Flight Confirmations"
+          switchLabel="Flight Confirmations"
+          checked
+          disabled={blocked}
+          expanded={expanded === 'confirmations'}
+          onToggle={() => toggleExpanded('confirmations')}
+          onExpand={() => toggleExpanded('confirmations')}
+          testID="clerk-notification-confirmation-switch"
+          last
+        >
+          {expanded === 'confirmations' ? (
+            <ChannelSelector
+              label="Flight Confirmations"
+              value={draft.winningNotifications}
+              profile={profile}
+              disabled={blocked}
+              onChange={(value) => setChannel('winningNotifications', value)}
+              testPrefix="clerk-notification-confirmation-channel"
+            />
+          ) : null}
+        </FlightRow>
+      </View>
       {smsUnavailableReason ? (
-        <Text style={{ color: colors.mutedForegroundLight, fontSize: 12, lineHeight: 18 }}>
+        <Text style={{ color: colors.mutedForegroundLight, fontSize: 12, lineHeight: 16 }}>
           {smsUnavailableReason}
         </Text>
       ) : null}
-      {needsRefresh ? (
-        <Text style={{ color: colors.destructive, fontSize: 13 }}>
-          No save is confirmed. Refresh preferences before editing again.
-        </Text>
-      ) : null}
-      <TouchableOpacity
-        accessibilityRole="button"
-        testID="clerk-edit-notification-preferences"
-        disabled={disabled || needsRefresh}
-        onPress={() => setDraft({ ...profile.notificationPrefs })}
-        style={{
-          minHeight: 40,
-          alignSelf: 'flex-start',
-          justifyContent: 'center',
-          paddingHorizontal: 4,
-          opacity: disabled || needsRefresh ? 0.5 : 1,
-        }}
-      >
-        <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold', fontSize: 14 }}>
-          Edit preferences
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const blocked = pending || disabled || needsRefresh;
-  const setChannel = (key: ChannelPreferenceKey, value: NotificationChannel) => {
-    setDraft((current) => current ? { ...current, [key]: value } : current);
-  };
-  const modeLabel = MODES.find((mode) => mode.value === draft.mode)?.label ?? 'Off';
-
-  return (
-    <View style={{ gap: 12 }}>
-      <PreferenceCard title="Flights">
-        <View style={{ gap: 9 }}>
-          <Text style={{ color: colors.textOnSurface, fontFamily: 'Inter_500Medium', fontSize: 14 }}>
-            Flight alert mode
-          </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {MODES.map((mode) => (
-              <Choice
-                key={mode.value}
-                label={mode.label}
-                accessibilityLabel={`Flight alert mode: ${mode.value}`}
-                selected={draft.mode === mode.value}
-                disabled={blocked}
-                onPress={() => setDraft((current) => current ? { ...current, mode: mode.value } : current)}
-                testID={`clerk-notification-mode-${mode.value}`}
-              />
-            ))}
-          </View>
-          <Text style={{ color: colors.mutedForegroundLight, fontSize: 12 }}>
-            Current mode: {modeLabel}
-          </Text>
-        </View>
-        {draft.mode === 'all' ? (
-          <ChannelSelector
-            label="All flight alerts"
-            value={draft.allChannels}
-            profile={profile}
-            disabled={blocked}
-            onChange={(value) => setChannel('allChannels', value)}
-            testPrefix="clerk-notification-all-channel"
-          />
-        ) : null}
-        {draft.mode === 'specific' ? (
-          <>
-            <ChannelSelector
-              label="Home airport flights"
-              value={draft.emptyLegHomeAirport}
-              profile={profile}
-              disabled={blocked}
-              onChange={(value) => setChannel('emptyLegHomeAirport', value)}
-              testPrefix="clerk-notification-home-channel"
-            />
-            <ChannelSelector
-              label="Departing from favorite airports"
-              value={draft.departingFavorite}
-              profile={profile}
-              disabled={blocked}
-              onChange={(value) => setChannel('departingFavorite', value)}
-              testPrefix="clerk-notification-departing-channel"
-            />
-            <ChannelSelector
-              label="Arriving at favorite airports"
-              value={draft.arrivingFavorite}
-              profile={profile}
-              disabled={blocked}
-              onChange={(value) => setChannel('arrivingFavorite', value)}
-              testPrefix="clerk-notification-arriving-channel"
-            />
-          </>
-        ) : null}
-        {smsUnavailableReason ? (
-          <Text style={{ color: colors.mutedForegroundLight, fontSize: 12, lineHeight: 18 }}>
-            {smsUnavailableReason}
-          </Text>
-        ) : null}
-        <View style={{ height: 1, backgroundColor: colors.separator }} />
-        <ChannelSelector
-          label="Queue Updates"
-          value={draft.queueUpdates}
-          profile={profile}
-          disabled={blocked}
-          onChange={(value) => setChannel('queueUpdates', value)}
-          testPrefix="clerk-notification-queue-channel"
-        />
-        <View style={{ height: 1, backgroundColor: colors.separator }} />
-        <ChannelSelector
-          label="Flight Confirmations"
-          value={draft.winningNotifications}
-          profile={profile}
-          disabled={blocked}
-          onChange={(value) => setChannel('winningNotifications', value)}
-          testPrefix="clerk-notification-confirmation-channel"
-        />
-      </PreferenceCard>
-
       {error ? (
-        <Text accessibilityRole="alert" style={{ color: colors.destructive, fontSize: 13 }} testID="clerk-notification-save-error">
+        <Text accessibilityRole="alert" style={{ color: colors.destructive, fontSize: 12, lineHeight: 16 }} testID="clerk-notification-save-error">
           {error}
         </Text>
       ) : null}
-      {pending ? <ActivityIndicator color={colors.primary} /> : null}
-      <TouchableOpacity
-        accessibilityRole="button"
-        testID="clerk-save-notification-preferences"
-        disabled={blocked || !buildNotificationProfileUpdate(profile, draft)}
-        onPress={async () => {
-          setPending(true);
-          setError(null);
-          try {
-            await onSave(draft);
-            setDraft(null);
-          } catch {
-            setNeedsRefresh(true);
-            setError('Couldn’t verify your changes. Refresh preferences before trying again.');
-          } finally {
-            setPending(false);
-          }
-        }}
-        style={{ padding: 14, backgroundColor: colors.primary, borderRadius: 12, opacity: blocked ? 0.5 : 1 }}
-      >
-        <Text style={{ color: colors.primaryForeground, textAlign: 'center', fontFamily: 'Inter_600SemiBold' }}>
-          {pending ? 'Saving…' : 'Save preferences'}
-        </Text>
-      </TouchableOpacity>
-      {needsRefresh ? (
+      {onRefresh && error ? (
+        <TouchableOpacity accessibilityRole="button" onPress={() => { void onRefresh(); }} testID="clerk-refresh-notification-preferences-after-save">
+          <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>Refresh preferences</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
+function FlightRow({
+  label,
+  switchLabel,
+  hint,
+  checked,
+  disabled,
+  expanded,
+  onToggle,
+  onExpand,
+  testID,
+  last = false,
+  children,
+}: {
+  label: string;
+  switchLabel: string;
+  hint?: string;
+  checked: boolean;
+  disabled: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onExpand: () => void;
+  testID: string;
+  last?: boolean;
+  children?: React.ReactNode;
+}) {
+  const colors = useColors();
+  return (
+    <View>
+      <View style={{
+        minHeight: 48,
+        paddingLeft: 16,
+        paddingRight: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+      }}>
         <TouchableOpacity
           accessibilityRole="button"
-          testID="clerk-refresh-notification-preferences-after-save"
-          disabled={pending || refreshing || disabled}
-          onPress={async () => {
-            setRefreshing(true);
-            try {
-              await onRefresh();
-            } catch {
-              setError('Couldn’t refresh preferences. Try again.');
-            } finally {
-              setRefreshing(false);
-            }
-          }}
-          style={{ padding: 12 }}
+          accessibilityLabel={`${label} channels`}
+          accessibilityState={{ expanded, disabled }}
+          disabled={disabled && !checked}
+          onPress={onExpand}
+          style={{ flex: 1, paddingVertical: 10 }}
         >
-          <Text style={{ color: colors.primary, textAlign: 'center' }}>
-            {refreshing ? 'Refreshing…' : 'Refresh preferences'}
+          <Text style={{ color: colors.textOnSurface, fontFamily: 'Inter_500Medium', fontSize: 15 }}>
+            {label}
           </Text>
+          {hint ? (
+            <Text style={{ color: colors.mutedForegroundLight, fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 2 }}>
+              {hint}
+            </Text>
+          ) : null}
         </TouchableOpacity>
-      ) : (
-        <TouchableOpacity
-          accessibilityRole="button"
-          disabled={pending}
-          onPress={() => { setDraft(null); setError(null); }}
-          style={{ padding: 12 }}
-        >
-          <Text style={{ color: colors.primary, textAlign: 'center' }}>Cancel</Text>
-        </TouchableOpacity>
-      )}
+        <SettingsSwitch
+          label={switchLabel}
+          checked={checked}
+          disabled={disabled}
+          onPress={onToggle}
+          testID={testID}
+        />
+      </View>
+      {children}
+      {last ? null : <View style={{ height: 1, marginLeft: 16, backgroundColor: colors.separator }} />}
     </View>
   );
 }

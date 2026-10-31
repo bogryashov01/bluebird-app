@@ -1,13 +1,13 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Alert, ImageBackground, useWindowDimensions,
-  Modal, Pressable, Linking, TextInput, Switch,
+  Modal, Pressable, Linking, TextInput,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect, useLocalSearchParams, usePathname, router } from 'expo-router';
+import { useLocalSearchParams, usePathname, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useGetFlight, useGetFlightMyStatus, useCancelQueueEntry, useCancelTrip, useListAirports,
@@ -20,15 +20,34 @@ import { confirmDialog } from '@/lib/confirmDialog';
 import { fetchFullAppDemoFlight } from '@/lib/fullAppDemoLiveReads';
 import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
 import { shouldUseLocalFlightReadMode } from '@/lib/clerkAuthSession';
+import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
+import { createClerkProductionTokenProvider } from '@/lib/clerkProductionTokenProvider';
+import {
+  FLIGHT_DETAIL_QUERY_BEHAVIOR,
+  flightDetailHttpStatus,
+  flightDetailViewerScope,
+  isDiscoverFlightListKey,
+  isFlightDetailIdentityReady,
+  prepareFlightDetailRequest,
+  presentSeatsAvailable,
+  productionFlightDetailQueryKey,
+  selectDisplayedFlight,
+  type FlightDetailPhase,
+} from '@/lib/flightDetailPresentation';
+import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import { isProductionQueueVerified } from '@/lib/productionQueueReadiness';
 import { joinFlightRouteParams } from '@/lib/joinFlightPresentation';
 import { useDemoJoinFlow } from '@/lib/demoJoinFlowStore';
-import { JOIN_NAV_BUILD_MARKER, logJoinNav } from '@/lib/joinNavDiagnostics';
+import { logJoinNav } from '@/lib/joinNavDiagnostics';
 import { ClerkQueuePanel } from '@/components/ClerkQueuePanel';
+import { ProductionQueueLeaveControl } from '@/components/ProductionQueueLeaveControl';
+import { WinnerFlightNotice } from '@/components/WinnerFlightNotice';
 import {
   fetchProductionAirports,
   fetchProductionFlight,
   findProductionFlightById,
+  presentCachedDepartureClock,
+  PRODUCTION_FLIGHTS_QUERY_KEY,
   getFlightAirportCodes,
   getFlightImagePresentation,
   isLocalFlightReadMode,
@@ -137,12 +156,15 @@ export default function FlightDetailScreen() {
     user,
     updateUser,
     authMode,
-    clerkSignedIn,
-    clerkMemberResolution,
+    clerkUserId,
     demoMode,
   } = useAuth();
   const queryClient = useQueryClient();
+  const clerkSession = useClerkAuthSnapshot();
+  const clerkSessionRef = useRef(clerkSession);
+  clerkSessionRef.current = clerkSession;
   const localReadMode = !demoMode && shouldUseLocalFlightReadMode(authMode, isLocalFlightReadMode());
+  const [flightListVersion, setFlightListVersion] = useState(0);
   const demoQueue = useFullAppDemoQueueOptional();
   const demoJoin = useDemoJoinFlow();
   const numericFlightId = parseProductionFlightId(id);
@@ -151,35 +173,134 @@ export default function FlightDetailScreen() {
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const [networkMessage, setNetworkMessage] = useState('');
   const [networkError, setNetworkError] = useState('');
-  const [skipLineNavigationPending, setSkipLineNavigationPending] = useState(false);
-  const skipLineNavigationLock = useRef(false);
-  useFocusEffect(useCallback(() => {
-    skipLineNavigationLock.current = false;
-    setSkipLineNavigationPending(false);
-  }, []));
+  const joinNavAt = useRef(0);
+  const flightBackAt = useRef(0);
 
   const localFlightQuery = useGetFlight(id ?? '', {
     query: { enabled: localReadMode && !!id },
   });
+  const signedInClerk = authMode === 'clerk' &&
+    clerkSession?.isLoaded === true &&
+    clerkSession.isSignedIn === true &&
+    clerkSession.userId === clerkUserId;
+  const viewerScope = flightDetailViewerScope({
+    demoMode,
+    authMode,
+    signedIn: signedInClerk,
+    clerkUserId,
+  });
+  const identityReady = isFlightDetailIdentityReady({
+    demoMode,
+    authMode,
+    sessionLoaded: authMode !== 'clerk' || clerkSession?.isLoaded === true,
+    signedIn: clerkSession?.isSignedIn === true,
+    sessionUserId: clerkSession?.userId ?? null,
+    clerkUserId,
+  });
+  const detailQueryKey = numericFlightId === null
+    ? ['production-empty-leg', 'missing'] as const
+    : productionFlightDetailQueryKey(numericFlightId, viewerScope);
   const productionFlightQuery = useQuery({
-    queryKey: ['production-empty-leg', numericFlightId],
-    queryFn: ({ signal }) => demoMode
-      ? fetchFullAppDemoFlight(numericFlightId!, { signal })
-      : fetchProductionFlight(numericFlightId!, { signal }),
-    enabled: (demoMode || !localReadMode) && numericFlightId !== null,
+    queryKey: detailQueryKey,
+    queryFn: async ({ signal }) => {
+      const requestedScope = viewerScope;
+      const flightId = numericFlightId!;
+      if (demoMode) {
+        const flight = await fetchFullAppDemoFlight(flightId, { signal });
+        prepareFlightDetailRequest({ scope: 'demo', token: null, activeScope: 'demo' });
+        return { flight, viewerAuthenticated: false };
+      }
+      let token: string | null = null;
+      if (requestedScope !== 'anonymous') {
+        const configuration = getMainBluebirdApiConfigurationOrNull();
+        if (!configuration) throw new Error('Main API configuration is unavailable.');
+        const tokenProvider = createClerkProductionTokenProvider({
+          getCurrentSession: () => {
+            const current = clerkSessionRef.current;
+            if (!current || current.userId !== requestedScope || current.isSignedIn !== true) {
+              return {
+                isLoaded: true,
+                isSignedIn: false,
+                getToken: async () => null,
+                signOut: async () => {},
+              };
+            }
+            return current;
+          },
+        }, configuration.environment);
+        token = await tokenProvider.getVerifiedAccessToken();
+      }
+      const scopeFromSession = () => {
+        const current = clerkSessionRef.current;
+        return flightDetailViewerScope({
+          demoMode: false,
+          authMode,
+          signedIn: authMode === 'clerk' && current?.isSignedIn === true && !!current.userId,
+          clerkUserId: authMode === 'clerk' ? current?.userId ?? null : null,
+        });
+      };
+      const request = prepareFlightDetailRequest({
+        scope: requestedScope,
+        token,
+        activeScope: scopeFromSession(),
+      });
+      const flight = await fetchProductionFlight(flightId, {
+        signal,
+        accessToken: request.accessToken,
+      });
+      const scopeAfterRead = scopeFromSession();
+      prepareFlightDetailRequest({
+        scope: requestedScope,
+        token: request.accessToken,
+        activeScope: scopeAfterRead,
+      });
+      return { flight, viewerAuthenticated: request.viewerAuthenticated };
+    },
+    enabled: identityReady && (demoMode || !localReadMode) && numericFlightId !== null,
     retry: shouldRetryProductionRead,
     retryDelay: productionReadRetryDelay,
+    ...FLIGHT_DETAIL_QUERY_BEHAVIOR,
+  });
+  useEffect(() => {
+    return queryClient.getQueryCache().subscribe((event) => {
+      if (event.type !== 'updated') return;
+      if (isDiscoverFlightListKey(event.query.queryKey)) {
+        setFlightListVersion((value) => value + 1);
+      }
+    });
+  }, [queryClient]);
+  const discoverListKey = demoMode
+    ? ['full-app-demo', ...PRODUCTION_FLIGHTS_QUERY_KEY] as const
+    : PRODUCTION_FLIGHTS_QUERY_KEY;
+  const cachedProductionFlight = React.useMemo(
+    () => findProductionFlightById(
+      queryClient.getQueryData<FlightView[]>(discoverListKey),
+      numericFlightId,
+    ),
+    [discoverListKey, flightListVersion, numericFlightId, queryClient],
+  );
+  const detailPhase: FlightDetailPhase = productionFlightQuery.isSuccess
+    ? 'success'
+    : productionFlightQuery.isError
+      ? 'error'
+      : productionFlightQuery.fetchStatus === 'fetching' || !identityReady
+        ? 'pending'
+        : 'idle';
+  const detailFlight = productionFlightQuery.data?.flight.id === String(numericFlightId)
+    ? productionFlightQuery.data.flight
+    : undefined;
+  const displayedProduction = selectDisplayedFlight({
+    cached: cachedProductionFlight,
+    detail: detailFlight,
+    phase: detailPhase,
+    httpStatus: flightDetailHttpStatus(productionFlightQuery.error),
+    viewerAuthenticated: productionFlightQuery.data?.viewerAuthenticated === true &&
+      viewerScope !== 'anonymous' &&
+      viewerScope !== 'demo',
   });
   const flight: FlightView | undefined = localReadMode
     ? (localFlightQuery.data ? mapLocalFlight(localFlightQuery.data) : undefined)
-    : demoMode
-      ? productionFlightQuery.data?.id === String(numericFlightId)
-        ? productionFlightQuery.data
-        : undefined
-      : findProductionFlightById(
-        productionFlightQuery.data ? [productionFlightQuery.data] : undefined,
-        numericFlightId,
-      );
+    : displayedProduction.flight;
   React.useEffect(() => {
     if (!demoMode || !demoQueue || !demoEntry || !flight?.status) return;
     if (demoEntry.status !== 'waiting' && demoEntry.status !== 'changed-position') return;
@@ -213,8 +334,12 @@ export default function FlightDetailScreen() {
   const airportRecords: AirportDisplayRecord[] = localReadMode
     ? localAirportRecords
     : productionAirportsQuery.data ?? [];
-  const isLoading = localReadMode ? localFlightQuery.isLoading : productionFlightQuery.isLoading;
-  const isError = localReadMode ? localFlightQuery.isError : productionFlightQuery.isError;
+  const isLoading = localReadMode
+    ? localFlightQuery.isLoading
+    : !displayedProduction.flight && (!identityReady || productionFlightQuery.isLoading || productionFlightQuery.isFetching);
+  const isError = localReadMode
+    ? localFlightQuery.isError
+    : displayedProduction.refreshFailed && !displayedProduction.flight;
   const isRetryingFlight = localReadMode ? localFlightQuery.isFetching : productionFlightQuery.isFetching;
   const retryFlight = localReadMode ? localFlightQuery.refetch : productionFlightQuery.refetch;
 
@@ -321,6 +446,16 @@ export default function FlightDetailScreen() {
     );
   }
   if (!flight) {
+    if (!localReadMode && displayedProduction.confirmedMissing) {
+      return (
+        <View style={[styles.centered, { backgroundColor: colors.offWhite }]}>
+          <Text style={[styles.errText, { color: colors.mutedForegroundLight }]}>Flight unavailable</Text>
+          <Text testID="flight-detail-unavailable" style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
+            This flight is no longer available.
+          </Text>
+        </View>
+      );
+    }
     const canRetry = localReadMode ? !!id : numericFlightId !== null;
     return (
       <View style={[styles.centered, { backgroundColor: colors.offWhite }]}>
@@ -362,35 +497,6 @@ export default function FlightDetailScreen() {
     ? { uri: f.imageUrl! }
     : null;
   const readOnlyProduction = f.source === 'production';
-  const clerkMembership =
-    authMode === 'clerk' && clerkMemberResolution.status === 'profile_complete'
-      ? clerkMemberResolution.currentUser.isMember
-      : null;
-  const skipLineRequiresMembership =
-    authMode === 'clerk'
-      ? !clerkSignedIn || clerkMembership === false
-      : !user || String(user.membershipTier) === 'none';
-
-  const openSkipLinePass = () => {
-    if (skipLineNavigationLock.current) return;
-    skipLineNavigationLock.current = true;
-    setSkipLineNavigationPending(true);
-    if (skipLineRequiresMembership) {
-      router.push({
-        pathname: '/membership/join' as any,
-        params: { flightId: String(f.id) },
-      });
-      return;
-    }
-    router.push({
-      pathname: '/flight/skip-line-pass',
-      params: {
-        flightId: String(f.id),
-        route: routeSummary,
-        flightAvailable: flightAvailable ? 'true' : 'false',
-      },
-    } as any);
-  };
 
   const status = myStatus?.status ?? 'none';
   // Public flight responses intentionally omit FBO details. A confirmed
@@ -408,8 +514,16 @@ export default function FlightDetailScreen() {
   const toCity = f.toCity?.trim() || null;
   const fromLabel = fromAirport ?? fromCity;
   const toLabel = toAirport ?? toCity;
-  const departureTime = formatTime12(f.departureTime);
-  const arrivalTime = formatTime12(f.arrivalTime);
+  const departureTime = formatTime12(
+    f.source === 'production' ? presentCachedDepartureClock(f.departureTime) : f.departureTime,
+  );
+  const arrivalTime = formatTime12(
+    f.source === 'production' ? presentCachedDepartureClock(f.arrivalTime) : f.arrivalTime,
+  );
+  const viewerFieldsAuthenticated = productionFlightQuery.data?.viewerAuthenticated === true &&
+    !displayedProduction.showingCachedDiscover &&
+    viewerScope !== 'anonymous' &&
+    viewerScope !== 'demo';
   const dateLabel = formatDate(f.departureDate);
   const arrivalDateLabel = formatDate(f.arrivalDate);
   const distinctArrivalDate = arrivalDateLabel && arrivalDateLabel !== dateLabel
@@ -463,6 +577,7 @@ export default function FlightDetailScreen() {
       destination: departureFboAddress!.trim(),
     }
     : null;
+  const seatsAvailableLabel = presentSeatsAvailable(f.seatsAvailable);
   const flightInformation: FlightInfoItem[] = [
     ...(aircraftName
       ? [{
@@ -496,6 +611,14 @@ export default function FlightDetailScreen() {
         value: flightStatusText(f.status)!,
         testID: 'flight-info-status-card',
         valueTestID: 'flight-info-status',
+      }]
+      : []),
+    ...(seatsAvailableLabel
+      ? [{
+        label: 'Seats available',
+        value: seatsAvailableLabel,
+        testID: 'flight-info-seats-card',
+        valueTestID: 'flight-info-seats',
       }]
       : []),
   ];
@@ -642,7 +765,7 @@ export default function FlightDetailScreen() {
             </Text>
           </TouchableOpacity>
           <Text style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}>
-            Demo outcomes are saved on this device only. No queue request, booking, pass mutation, or payment is sent.
+            Demo outcomes stay on this device.
           </Text>
         </>
       );
@@ -661,57 +784,67 @@ export default function FlightDetailScreen() {
           />
         );
       }
-      return (
-        <>
-          <Text
-            testID="join-flight-details-hint"
-            style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}
-          >
-            Review what joining the queue means. No request is sent from this screen.
-          </Text>
-          {demoJoin.available ? (
-            <View style={styles.demoJoinSwitch}>
-              <Text style={[styles.unavailableHint, { color: colors.mutedForegroundLight, flex: 1 }]}>
-                Demo Join Flow
-              </Text>
-              <Switch
-                testID="demo-join-flow-switch"
-                value={demoJoin.enabled}
-                onValueChange={demoJoin.setEnabled}
-              />
-            </View>
-          ) : null}
+      const memberInQueue = f.userInQueue === true && productionFlightId !== null;
+      if (memberInQueue) {
+        return (
+          <>
           <TouchableOpacity
-            testID="production-queue-read-only-cta"
+            testID="flight-detail-view-queue"
             accessibilityRole="button"
-            accessibilityLabel="Join the Flight"
-            disabled={productionFlightId === null}
+            accessibilityLabel="View Queue Status"
             onPress={() => {
-              if (productionFlightId === null) return;
-              logJoinNav('join-button', {
-                screen: 'flight/[id]',
-                visibleLabel: 'Join the Flight',
-                currentPathname: pathname,
-                targetPathname: '/flight/join',
-                flightId: productionFlightId,
-                demoEnabled: demoJoin.enabled,
-                routerMethod: 'push',
-              });
+              const now = Date.now();
+              if (now - joinNavAt.current < 600) return;
+              joinNavAt.current = now;
               router.push({
-                pathname: '/flight/join',
-                params: joinFlightRouteParams(productionFlightId, f),
+                pathname: '/flight/queue-status',
+                params: { flightId: String(productionFlightId) },
               });
             }}
-            style={[
-              styles.viewTripBtn,
-              { backgroundColor: colors.primary, opacity: productionFlightId === null ? 0.5 : 1 },
-            ]}
+            style={[styles.viewTripBtn, { backgroundColor: colors.primary }]}
           >
             <Text style={[styles.viewTripBtnText, { color: colors.primaryForeground }]}>
-              Join the Flight
+              View Queue Status
             </Text>
           </TouchableOpacity>
+          <ProductionQueueLeaveControl flightId={productionFlightId} visible label="Leave the Queue" />
         </>
+        );
+      }
+      return (
+        <TouchableOpacity
+          testID="production-queue-read-only-cta"
+          accessibilityRole="button"
+          accessibilityLabel="Join the Flight"
+          disabled={productionFlightId === null}
+          onPress={() => {
+            if (productionFlightId === null) return;
+            const now = Date.now();
+            if (now - joinNavAt.current < 600) return;
+            joinNavAt.current = now;
+            logJoinNav('join-button', {
+              screen: 'flight/[id]',
+              visibleLabel: 'Join the Flight',
+              currentPathname: pathname,
+              targetPathname: '/flight/join',
+              flightId: productionFlightId,
+              demoEnabled: demoJoin.enabled,
+              routerMethod: 'push',
+            });
+            router.push({
+              pathname: '/flight/join',
+              params: joinFlightRouteParams(productionFlightId, f),
+            });
+          }}
+          style={[
+            styles.viewTripBtn,
+            { backgroundColor: colors.primary, opacity: productionFlightId === null ? 0.5 : 1 },
+          ]}
+        >
+          <Text style={[styles.viewTripBtnText, { color: colors.primaryForeground }]}>
+            Join the Flight
+          </Text>
+        </TouchableOpacity>
       );
     }
 
@@ -927,7 +1060,11 @@ export default function FlightDetailScreen() {
       {/* ── Frosted back button (floats above hero) ── */}
       <TouchableOpacity
         style={[styles.backBtn, { top: backTop, backgroundColor: colors.surface + 'CC' }]}
+        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         onPress={() => {
+          const now = Date.now();
+          if (now - flightBackAt.current < 600) return;
+          flightBackAt.current = now;
           const canGoBack = router.canGoBack();
           logJoinNav('flight-details-back', {
             currentPathname: pathname,
@@ -948,7 +1085,9 @@ export default function FlightDetailScreen() {
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: botPad + 180 }}
+        contentContainerStyle={{
+          paddingBottom: botPad + 128,
+        }}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Hero image with gradient ── */}
@@ -1021,7 +1160,30 @@ export default function FlightDetailScreen() {
               {scheduleParts.join(' · ')}
             </Text>
           )}
+          {displayedProduction.refreshFailed && (
+            <Text testID="flight-detail-refresh-error" style={[styles.dateText, { color: colors.mutedForegroundLight }]}>
+              Latest details could not be refreshed. Showing the flight already loaded on this device.
+            </Text>
+          )}
+          {productionFlightQuery.isFetching && displayedProduction.showingCachedDiscover && (
+            <Text testID="flight-detail-refreshing" style={[styles.dateText, { color: colors.mutedForegroundLight }]}>
+              Updating flight details
+            </Text>
+          )}
         </View>
+
+        {!demoMode && f.source === 'production' && viewerFieldsAuthenticated && numericFlightId !== null && (
+          <WinnerFlightNotice
+            flightId={numericFlightId}
+            viewerIsEffectiveWinner={f.viewerIsEffectiveWinner}
+            viewerConfirmationStatus={f.viewerConfirmationStatus}
+            queueClosesAt={f.queueClosesAt}
+            departureAirport={fromLabel ?? 'Departure unavailable'}
+            arrivalAirport={toLabel ?? 'Arrival unavailable'}
+            scheduleLabel={scheduleParts.length > 0 ? scheduleParts.join(' · ') : 'Departure time unavailable'}
+            aircraft={aircraftName}
+          />
+        )}
 
         {/* ── Compact route and local schedule ── */}
         <View
@@ -1090,32 +1252,6 @@ export default function FlightDetailScreen() {
             </View>
           </View>
         </View>
-
-        <TouchableOpacity
-          testID="flight-skip-line-pass-card"
-          accessibilityRole="button"
-          accessibilityLabel="Skip the Line Pass details"
-          accessibilityHint="Opens pass eligibility and availability information"
-          disabled={skipLineNavigationPending || demoMode}
-          onPress={openSkipLinePass}
-          activeOpacity={0.78}
-          style={[
-            styles.skipLineCard,
-            { backgroundColor: colors.surface, borderColor: colors.separator },
-            skipLineNavigationPending && { opacity: 0.7 },
-          ]}
-        >
-          <View style={[styles.skipLineIcon, { backgroundColor: colors.primary + '16' }]}>
-            <Feather name="fast-forward" size={19} color={colors.primary} />
-          </View>
-          <View style={styles.skipLineCopy}>
-            <Text style={[styles.skipLineTitle, { color: colors.textOnSurface }]}>Skip the Line Pass</Text>
-            <Text style={[styles.skipLineSubtitle, { color: colors.mutedForegroundLight }]}>
-              Check pass details, eligibility and availability
-            </Text>
-          </View>
-          <Feather name="chevron-right" size={19} color={colors.mutedForegroundLight} />
-        </TouchableOpacity>
 
         {/* ── Four supported flight facts ── */}
         {flightInformation.length > 0 && (
@@ -1300,11 +1436,6 @@ export default function FlightDetailScreen() {
       {/* ── Bottom sticky CTA ── */}
       {!directionsTarget && (
         <View style={[styles.ctaBar, { backgroundColor: colors.offWhite, borderTopColor: colors.separator, paddingBottom: botPad + 12 }]}>
-          {typeof __DEV__ !== 'undefined' && __DEV__ ? (
-            <Text testID="join-nav-build-marker" style={[styles.unavailableHint, { color: colors.mutedForegroundLight }]}>
-              {JOIN_NAV_BUILD_MARKER}
-            </Text>
-          ) : null}
           {renderCTA()}
           {!demoMode && (
             <TouchableOpacity
@@ -1361,33 +1492,28 @@ const styles = StyleSheet.create({
   },
   heroRouteBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, letterSpacing: 0.35 },
   // Aircraft and date header
-  flightHeader: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 10 },
+  flightHeader: { paddingHorizontal: 18, paddingTop: 2, paddingBottom: 6 },
   aircraftName: { fontFamily: 'Inter_700Bold', fontSize: 20 },
 
   // Date
   dateText: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 3 },
+  queueDetailCard: {
+    marginHorizontal: 18,
+    marginBottom: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  queueDetailText: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
+  queueDetailMeta: { fontFamily: 'Inter_400Regular', fontSize: 14 },
 
   // Compact route card
   routeCard: {
     marginHorizontal: 16, marginBottom: 12,
     borderRadius: 16, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 13,
   },
-  skipLineCard: {
-    minHeight: 74,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 15,
-    borderWidth: 1,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  skipLineIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  skipLineCopy: { flex: 1, minWidth: 0 },
-  skipLineTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
-  skipLineSubtitle: { fontFamily: 'Inter_400Regular', fontSize: 11, lineHeight: 16, marginTop: 3 },
   routeSummary: { fontFamily: 'Inter_700Bold', fontSize: 19, textAlign: 'center', letterSpacing: 0.2 },
   routeSchedule: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   routeEndpoint: { flex: 1, minWidth: 0, alignItems: 'flex-start' },
@@ -1517,7 +1643,6 @@ const styles = StyleSheet.create({
   },
   unavailableBadgeText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   unavailableHint: { fontFamily: 'Inter_400Regular', fontSize: 13, textAlign: 'center', paddingBottom: 4 },
-  demoJoinSwitch: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   queueReadOnlyLink: { minHeight: 46, borderRadius: 14, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
   queueReadOnlyLinkText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
 

@@ -41,6 +41,7 @@ import {
 } from '@/lib/productionFlights';
 import {
   buildHomeAirportProfileUpdate,
+  canSaveClerkNotificationPreferencesToAccount,
   getClerkNotificationPreferencesQueryKey,
   readClerkNotificationProfile,
   saveClerkHomeAirport,
@@ -160,6 +161,7 @@ function ClerkHomeAirportEditor({ clerkUserId }: { clerkUserId: string }) {
   const saveController = React.useRef<AbortController | null>(null);
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const accountWritesEnabled = canSaveClerkNotificationPreferencesToAccount();
   const canLoad = !!configuration &&
     session?.isLoaded === true &&
     session.isSignedIn === true &&
@@ -233,7 +235,7 @@ function ClerkHomeAirportEditor({ clerkUserId }: { clerkUserId: string }) {
     !!buildHomeAirportProfileUpdate(profile, selectedCode);
 
   const save = async () => {
-    if (!selectedAirport || !session?.userId || saving || !canLoad) return;
+    if (!accountWritesEnabled || !selectedAirport || !session?.userId || saving || !canLoad) return;
     if (currentIdentity.current !== clerkUserId) {
       setSaveError('Your signed-in account changed. Reopen Home Airport before saving.');
       return;
@@ -397,7 +399,9 @@ function ClerkHomeAirportEditor({ clerkUserId }: { clerkUserId: string }) {
       <View style={[styles.registrationFooter, { borderTopColor: colors.border, paddingBottom: bottomPad + 12 }]}>
         <Pressable
           accessibilityRole="button"
+          accessibilityState={{ disabled: !accountWritesEnabled }}
           disabled={
+            !accountWritesEnabled ||
             saving || !safeProfile || !selectedAirport ||
             selectedAirport.code === profile?.homeAirportCode ||
             !canLoad
@@ -406,15 +410,22 @@ function ClerkHomeAirportEditor({ clerkUserId }: { clerkUserId: string }) {
           style={[
             styles.actionButton,
             { backgroundColor: colors.primary },
-            (saving || !safeProfile || !selectedAirport || selectedAirport.code === profile?.homeAirportCode || !canLoad) &&
+            (!accountWritesEnabled || saving || !safeProfile || !selectedAirport || selectedAirport.code === profile?.homeAirportCode || !canLoad) &&
               { opacity: 0.5 },
           ]}
           testID="clerk-home-airport-save"
         >
           {saving
             ? <ActivityIndicator color={colors.primaryForeground} />
-            : <Text style={[styles.actionText, { color: colors.primaryForeground }]}>Save Home Airport</Text>}
+            : <Text style={[styles.actionText, { color: colors.primaryForeground }]}>
+              {accountWritesEnabled ? 'Save Home Airport' : 'Account save unavailable'}
+            </Text>}
         </Pressable>
+        {!accountWritesEnabled ? (
+          <Text testID="clerk-home-airport-account-save-unavailable" style={[styles.error, { color: colors.mutedForeground, textAlign: 'center', marginTop: 8 }]}>
+            Home airport changes are not saved to the account in this build. No request is sent.
+          </Text>
+        ) : null}
       </View>
     </View>
   );

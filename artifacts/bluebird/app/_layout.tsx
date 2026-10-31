@@ -22,12 +22,13 @@ import { AuthProvider, DemoAuthProvider } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { useColors } from '@/hooks/useColors';
 import { QueueConfirmationWatcher } from '@/lib/queueCelebration';
+import { ClerkPushCoordinator } from '@/components/ClerkPushCoordinator';
 import { DormantClerkProvider } from '@/lib/dormantClerkIntegration';
 import { CLERK_AUTH_CONFIGURATION, shouldShowClerkConfigurationError } from '@/lib/clerkAuthConfig';
 import { ClerkAuthConfigurationError } from '@/components/ClerkAuthConfigurationError';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '@/context/AuthContext';
-import { shouldRedirectClerkRoute } from '@/lib/clerkAuthSession';
+import { shouldRedirectClerkRoute, clerkLegacyConversationHref, isConnectionsPreviewDevelopmentEnabled } from '@/lib/clerkAuthSession';
 import { useJoinNavDecision } from '@/lib/joinNavDiagnostics';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
@@ -63,7 +64,8 @@ if (isNativeProductionAuthTestEnabled()) {
 }
 
 // Set API base URL for Expo (absolute URL needed outside web proxy).
-if (!isNativeProductionAuthTestEnabled() && process.env.EXPO_PUBLIC_DOMAIN) {
+if (!isNativeProductionAuthTestEnabled() && process.env.EXPO_PUBLIC_DOMAIN &&
+  process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT !== 'production') {
   setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
 }
 
@@ -102,15 +104,31 @@ function RootLayoutNav() {
       clerkSession.userId,
     );
   const profileRouteBlocked = isClerkProfileRoute && authMode !== 'clerk';
+  const connectionsPreviewEnabled = isConnectionsPreviewDevelopmentEnabled();
+  const legacyConversationHref = clerkLegacyConversationHref({
+    authMode,
+    segments,
+    pathname,
+    homeReady: registeredHomeReady,
+    developmentPreview: connectionsPreviewEnabled,
+  });
   const clerkRouteGuarded =
     authMode === 'clerk' &&
     !incompleteProfileOnboardingRoute &&
-    shouldRedirectClerkRoute(segments, memberAccessResolved, registeredHomeReady, pathname);
+    shouldRedirectClerkRoute(
+      segments,
+      memberAccessResolved,
+      registeredHomeReady,
+      pathname,
+      connectionsPreviewEnabled,
+    );
   const redirectDestination = profileRouteBlocked
     ? '/(auth)/welcome'
-    : clerkRouteGuarded
-      ? (clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(clerk-auth)/sign-in')
-      : 'none';
+    : legacyConversationHref
+      ? legacyConversationHref
+      : clerkRouteGuarded
+        ? (clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(clerk-auth)/sign-in')
+        : 'none';
   const redirectReason = profileRouteBlocked
     ? 'non-clerk-profile-route'
     : authMode !== 'clerk'
@@ -139,6 +157,9 @@ function RootLayoutNav() {
   if (profileRouteBlocked) {
     return <Redirect href="/(auth)/welcome" />;
   }
+  if (legacyConversationHref) {
+    return <Redirect href={legacyConversationHref} />;
+  }
   if (clerkRouteGuarded) {
     return <Redirect href={clerkSignedIn ? '/(clerk-auth)/signed-in' : '/(clerk-auth)/sign-in'} />;
   }
@@ -153,6 +174,7 @@ function RootLayoutNav() {
     {/* App-wide waiting→confirmed watcher: celebrates a confirmed seat even
         when the member isn't on the Queue Status screen. */}
     <QueueConfirmationWatcher />
+    <ClerkPushCoordinator />
     <Stack
       screenOptions={{
         contentStyle: { backgroundColor: colors.background },
@@ -181,6 +203,22 @@ function RootLayoutNav() {
       <Stack.Screen
         name="flight/join"
         options={{ headerShown: true, title: 'Join the Flight', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="flight/queue-status"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="flight/checklist"
+        options={{ headerShown: true, title: 'Flight checklist', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="flight/passengers"
+        options={{ headerShown: true, title: 'Passenger Information', ...headerOptions }}
+      />
+      <Stack.Screen
+        name="flight/policy-review"
+        options={{ headerShown: true, title: 'Flight Policy', ...headerOptions }}
       />
       <Stack.Screen name="flight/demo-policy" options={{ headerShown: false }} />
       <Stack.Screen name="flight/demo-intl" options={{ headerShown: false }} />
@@ -258,6 +296,8 @@ function RootLayoutNav() {
           header: (props: React.ComponentProps<typeof ConciergeHeader>) => <ConciergeHeader {...props} />,
         }}
       />
+      <Stack.Screen name="connections-preview" options={{ headerShown: false }} />
+      <Stack.Screen name="messages/[conversationId]" options={{ headerShown: false }} />
       <Stack.Screen
         name="referral"
         options={{ headerShown: true, title: 'Referral Program', ...headerOptions }}
@@ -340,11 +380,11 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="support/help-center"
-        options={{ headerShown: true, title: 'Help Center', ...headerOptions }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="support/legal"
-        options={{ headerShown: true, title: 'Legal', ...headerOptions }}
+        options={{ headerShown: false }}
       />
     </Stack>
     </>
@@ -488,6 +528,7 @@ function FullAppDemoRoot() {
             <Stack.Screen name="flight/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="flight/policy" options={{ headerShown: true, title: 'Flight Policy', ...headerOptions }} />
             <Stack.Screen name="flight/join" options={{ headerShown: true, title: 'Join the Flight', ...headerOptions }} />
+            <Stack.Screen name="flight/queue-status" options={{ headerShown: false }} />
             <Stack.Screen name="flight/confirmed" options={{ headerShown: false }} />
             <Stack.Screen name="queue/join" options={{ headerShown: false }} />
             <Stack.Screen name="queue/intl-notice" options={{ headerShown: false }} />

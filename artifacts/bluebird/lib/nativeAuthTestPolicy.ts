@@ -5,6 +5,7 @@ const AUTH_TEST_READ_PATHS = new Set([
   '/api/empty-legs',
   '/api/trips',
   '/api/me/referrals',
+  '/api/membership',
 ]);
 const EMPTY_LEG_DETAIL_PATH = /^\/api\/empty-legs\/([1-9]\d*)$/;
 const EMPTY_LEG_QUEUE_PATH = /^\/api\/empty-legs\/([1-9]\d*)\/queue$/;
@@ -60,9 +61,11 @@ function isAirportCodeLookup(url: URL): boolean {
 /**
  * The native auth test may read identity, profile details, the empty-leg list,
  * one numeric empty leg, that leg's queue ranking, airport coordinates for
- * those legs, the signed-in member's trip list, and that member's referral
- * account. The queue read does not authorize a join or any other change.
- * Every other request, including other GETs, stays blocked.
+ * those legs, the signed-in member's trip list, that member's referral
+ * account, and GET /api/membership with no query or fragment. The queue read
+ * does not authorize a join. The membership read does not authorize a
+ * purchase, upgrade, or any other change. Every other request, including
+ * other GETs and every non-GET, stays blocked.
  */
 export function isNativeProductionAuthTestRequestAllowed(
   rawUrl: string | URL,

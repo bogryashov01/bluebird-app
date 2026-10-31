@@ -85,7 +85,7 @@ export function ClerkStartupStateView({
         placeholderTextColor={colors.mutedForeground}
         style={[
           styles.phoneInput,
-          { backgroundColor: colors.input, borderColor: colors.border, color: colors.textOnBrand },
+          { backgroundColor: colors.input, borderColor: colors.border, color: colors.foreground },
         ]}
         testID="clerk-phone-input"
       />

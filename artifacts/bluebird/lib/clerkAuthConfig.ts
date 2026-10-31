@@ -275,6 +275,37 @@ function getVerifiedIssuerHost(value: unknown): string | null {
   }
 }
 
+export interface ClerkStoredTokenCache {
+  getToken: (key: string) => Promise<string | null | undefined>;
+  saveToken: (key: string, token: string) => Promise<void>;
+  clearToken?: (key: string) => void | Promise<void>;
+}
+
+/**
+ * A development client can keep a Clerk client from the pk_test instance in
+ * SecureStore. Production debug uses a host-scoped cache so that client is
+ * not presented to the pk_live instance. Release builds keep Clerk's cache.
+ */
+export function selectClerkTokenCache(input: {
+  cache: ClerkStoredTokenCache | undefined;
+  publishableKey: string;
+  isDevelopment: boolean;
+  productionClerkDebug: boolean;
+}): ClerkStoredTokenCache | undefined {
+  const cache = input.cache;
+  if (!cache || !input.isDevelopment || !input.productionClerkDebug) return cache;
+  const host = getClerkInstanceHost(input.publishableKey, 'pk_live_');
+  if (!host) return cache;
+  const prefix = `bb.${host}.`;
+  return {
+    getToken: (key) => cache.getToken(`${prefix}${key}`),
+    saveToken: (key, token) => cache.saveToken(`${prefix}${key}`, token),
+    clearToken: cache.clearToken
+      ? (key) => cache.clearToken?.(`${prefix}${key}`)
+      : undefined,
+  };
+}
+
 function getClerkInstanceHost(value: unknown, requiredPrefix: 'pk_test_' | 'pk_live_'): string | null {
   if (!isValidClerkPublishableKey(value)) return null;
   const key = value.trim();

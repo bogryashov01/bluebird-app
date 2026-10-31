@@ -7,17 +7,28 @@ interface StatCardProps {
   value: string | number;
   /** 'light' (default) — white card on #FAFAF8 surface; 'dark' — card token on navy surface */
   variant?: 'light' | 'dark';
+  accessibilityLabel?: string;
+  testID?: string;
 }
 
-export function StatCard({ label, value, variant = 'light' }: StatCardProps) {
+export function StatCard({
+  label,
+  value,
+  variant = 'light',
+  accessibilityLabel,
+  testID,
+}: StatCardProps) {
   const colors = useColors();
   const isLight = variant === 'light';
   return (
-    <View style={[
+    <View
+      testID={testID}
+      accessibilityLabel={accessibilityLabel ?? `${label}, ${value}`}
+      style={[
       styles.card,
       { backgroundColor: isLight ? colors.surface : colors.card },
     ]}>
-      <Text style={[styles.label, { color: isLight ? colors.mutedForegroundLight : colors.mutedForeground }]}>
+      <Text style={[styles.label, { color: isLight ? colors.mutedForegroundLight : colors.mutedForeground }]} numberOfLines={2}>
         {label}
       </Text>
       <Text style={[styles.value, { color: isLight ? colors.textOnSurface : colors.foreground }]}>

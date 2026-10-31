@@ -98,15 +98,31 @@ export function createClerkPhoneAuthActions(input: {
   signIn: ClerkSignInPhoneResource;
   signUp: ClerkSignUpPhoneResource;
   setActive: (params: { session: string }) => Promise<unknown>;
+  signOut?: () => Promise<unknown>;
   diagnostics?: ClerkPhoneAuthDiagnostics;
 }): ClerkPhoneAuthActions {
+  async function closeUnexpectedSession(): Promise<void> {
+    if (!input.signOut) return;
+    try {
+      await input.signOut();
+    } catch {
+      // The visible authentication error remains the result of this attempt.
+    }
+  }
+
   return {
     startSignIn: async (phoneNumber) => {
-      const attempt = await runClerkRequest(
-        'create',
-        () => input.signIn.create({ identifier: phoneNumber }),
-        input.diagnostics,
-      );
+      let attempt: ClerkSignInPhoneAttempt;
+      try {
+        attempt = await runClerkRequest(
+          'create',
+          () => input.signIn.create({ identifier: phoneNumber }),
+          input.diagnostics,
+        );
+      } catch (error) {
+        if (getClerkErrorCode(error) === 'session_exists') await closeUnexpectedSession();
+        throw error;
+      }
       let phoneNumberId: string;
       try {
         phoneNumberId = getRequiredPhoneNumberId(attempt.supportedFirstFactors);
@@ -133,6 +149,13 @@ export function createClerkPhoneAuthActions(input: {
         () => input.signUp.create({ phoneNumber }),
         input.diagnostics,
       );
+      if (attempt.status === 'complete') {
+        await closeUnexpectedSession();
+        throw new ClerkPhoneAuthStageError('response', Object.assign(
+          new Error('Phone verification was not started.'),
+          { code: 'phone_verification_not_started' },
+        ));
+      }
       await runClerkRequest(
         'code-preparation',
         () => attempt.preparePhoneNumberVerification({ strategy: 'phone_code' }),
@@ -315,6 +338,12 @@ export function getClerkAuthErrorMessage(
   const originalError = unwrapStageError(error);
   const code = getClerkErrorCode(originalError);
 
+  if (code === 'phone_verification_not_started') {
+    return 'Clerk did not send an SMS. Sign-in did not find this number, and production sign-up completes without a verification code. Sign out, then use the phone number saved on the Bluebird account.';
+  }
+  if (code === 'session_exists') {
+    return 'A Clerk session is already open. Sign out, then request a code for the phone number saved on the Bluebird account.';
+  }
   if (code === 'form_identifier_exists' || code === 'identifier_exists' || code === 'form_phone_number_exists') {
     return 'That phone number already has a Clerk account. Sign in instead.';
   }
@@ -549,19 +578,24 @@ export async function verifyClerkPhoneCode(
 function getClerkErrorCode(error: unknown): string | null {
   error = unwrapStageError(error);
   if (typeof error !== 'object' || error === null) return null;
-  if ('code' in error && typeof error.code === 'string') return error.code;
-  if ('errors' in error && Array.isArray(error.errors)) {
-    const firstError: unknown = error.errors[0];
-    if (
-      typeof firstError === 'object' &&
-      firstError !== null &&
-      'code' in firstError &&
-      typeof firstError.code === 'string'
-    ) {
-      return firstError.code;
-    }
+  const topLevelCode = 'code' in error && typeof error.code === 'string' ? error.code : null;
+  const firstErrorCode = firstClerkErrorCode(error);
+  if (firstErrorCode && (topLevelCode === null || topLevelCode === 'api_response_error')) return firstErrorCode;
+  return topLevelCode;
+}
+
+function firstClerkErrorCode(error: object): string | null {
+  if (!('errors' in error) || !Array.isArray(error.errors)) return null;
+  const firstError: unknown = error.errors[0];
+  if (
+    typeof firstError !== 'object' ||
+    firstError === null ||
+    !('code' in firstError) ||
+    typeof firstError.code !== 'string'
+  ) {
+    return null;
   }
-  return null;
+  return firstError.code;
 }
 
 export function isClerkNetworkFailure(error: unknown): boolean {

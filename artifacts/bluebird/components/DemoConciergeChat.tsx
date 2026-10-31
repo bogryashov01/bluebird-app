@@ -38,7 +38,7 @@ export function DemoConciergeChat() {
   const flight = parseJoinFlightDisplay(params);
   const routeLabel = demoConciergeRouteLabel(flight);
   const context = useMemo(() => ({ routeLabel }), [routeLabel]);
-  const [messages, setMessages] = useState<DemoConciergeMessage[]>(() => [
+  const [messages, setMessages] = useState<readonly DemoConciergeMessage[]>(() => [
     createDemoConciergeWelcome(new Date().toISOString()),
   ]);
   const [input, setInput] = useState('');

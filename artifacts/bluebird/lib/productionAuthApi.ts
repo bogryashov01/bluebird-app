@@ -487,12 +487,78 @@ export class ProductionAuthRequestError extends Error {
 }
 
 export class ProductionAuthHttpError extends ProductionAuthRequestError {
-  constructor(readonly status: number) {
+  readonly serverCode: string | null;
+  /** Sanitized code and conflict fields only. Server messages are not retained. */
+  readonly failureBody: unknown;
+
+  constructor(
+    readonly status: number,
+    details: { code: string | null; body: unknown } | null = null,
+  ) {
     super(
       `Authenticated Main API request failed (HTTP ${status}).`,
       status === 401 ? 'session_expired' : 'http',
     );
     this.name = 'ProductionAuthHttpError';
+    this.serverCode = details?.code ?? null;
+    this.failureBody = details?.body ?? null;
+  }
+}
+
+const PRODUCTION_ERROR_CODE = /^[a-z0-9_]{1,80}$/;
+const PRODUCTION_CONFLICT_FIELDS = [
+  'emptyLegId',
+  'id',
+  'originAirport',
+  'destinationAirport',
+  'fromAirport',
+  'toAirport',
+  'from',
+  'to',
+  'departureTime',
+] as const;
+
+/** Keeps the error code and route facts. Drops messages, tokens, and other payload fields. */
+export function sanitizeProductionHttpFailure(
+  value: unknown,
+): { code: string | null; body: unknown } | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const code = typeof record.code === 'string' && PRODUCTION_ERROR_CODE.test(record.code)
+    ? record.code
+    : null;
+  const rawConflict = record.conflict ?? record.conflictingFlight ?? record.existingFlight;
+  let conflict: Record<string, string | number> | null = null;
+  if (rawConflict && typeof rawConflict === 'object' && !Array.isArray(rawConflict)) {
+    const flight = rawConflict as Record<string, unknown>;
+    const picked: Record<string, string | number> = {};
+    for (const key of PRODUCTION_CONFLICT_FIELDS) {
+      const field = flight[key];
+      if (typeof field === 'number' && Number.isFinite(field)) picked[key] = field;
+      if (typeof field === 'string' && field.trim() && field.length <= 80 && !/[\u0000-\u001F]/.test(field)) {
+        picked[key] = field.trim();
+      }
+    }
+    conflict = Object.keys(picked).length > 0 ? picked : null;
+  }
+  if (!code && !conflict) return null;
+  return {
+    code,
+    body: {
+      ...(code ? { code } : {}),
+      ...(conflict ? { conflict } : {}),
+    },
+  };
+}
+
+async function readProductionHttpFailure(
+  response: Response,
+): Promise<{ code: string | null; body: unknown } | null> {
+  try {
+    if (typeof response.json !== 'function') return null;
+    return sanitizeProductionHttpFailure(await response.json());
+  } catch {
+    return null;
   }
 }
 
@@ -1407,7 +1473,10 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
         timeout: (duration) => new ProductionAuthTimeoutError(duration),
         cancelled: () => new ProductionAuthCancelledError(),
         network: () => new ProductionAuthNetworkError(),
-        http: (response) => new ProductionAuthHttpError(response.status),
+        http: async (response) => new ProductionAuthHttpError(
+          response.status,
+          await readProductionHttpFailure(response),
+        ),
         invalidJson: () => new ProductionAuthInvalidJsonError(),
         schema: (error) => error instanceof ProductionAuthRequestError
           ? error
@@ -1558,6 +1627,87 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
     },
     listTrips: (requestOptions?: ProductionRequestOptions) =>
       request(PRODUCTION_AUTH_PATHS.trips, 'GET', parseTrips, requestOptions),
+    /**
+     * Reads one trip. The service may create or repair checklist rows, so
+     * callers must use it only after the member opens that trip checklist.
+     */
+    getTrip: (legId: number, requestOptions?: ProductionRequestOptions) => {
+      validateLegId(legId, 'tripId');
+      return request(`/trips/${legId}`, 'GET', (value) => parseTrip(value, 'trip'), requestOptions);
+    },
+    /**
+     * Records winner confirmation for the signed-in member. No request body.
+     * The response is read with the same trip parser as GET /trips/:legId.
+     * A different live shape fails closed instead of being treated as success.
+     */
+    confirmTripChecklist: (legId: number, requestOptions?: ProductionRequestOptions) => {
+      validateLegId(legId, 'tripId');
+      return request(
+        `/trips/${legId}/checklist/confirmed`,
+        'POST',
+        (value) => parseTrip(value, 'trip'),
+        requestOptions,
+      );
+    },
+    /**
+     * Records FBO verification for the signed-in member. No request body.
+     * The response is read with the same trip parser as GET /trips/:legId.
+     * A different live shape fails closed instead of being treated as success.
+     */
+    verifyTripFbo: (legId: number, requestOptions?: ProductionRequestOptions) => {
+      validateLegId(legId, 'tripId');
+      return request(
+        `/trips/${legId}/checklist/fboVerified`,
+        'POST',
+        (value) => parseTrip(value, 'trip'),
+        requestOptions,
+      );
+    },
+    /**
+     * Records passenger-manifest acknowledgement. No request body.
+     * The response is read with the same trip parser as GET /trips/:legId.
+     * A different live shape fails closed instead of being treated as success.
+     */
+    acknowledgeTripManifest: (legId: number, requestOptions?: ProductionRequestOptions) => {
+      validateLegId(legId, 'tripId');
+      return request(
+        `/trips/${legId}/checklist/manifestAck`,
+        'POST',
+        (value) => parseTrip(value, 'trip'),
+        requestOptions,
+      );
+    },
+    /**
+     * Records flight-policy acknowledgement. No request body. The reviewed
+     * policy version is not sent because this contract has no version field.
+     * The response is read with the same trip parser as GET /trips/:legId.
+     * A different live shape fails closed instead of being treated as success.
+     */
+    acknowledgeTripPolicy: (legId: number, requestOptions?: ProductionRequestOptions) => {
+      validateLegId(legId, 'tripId');
+      return request(
+        `/trips/${legId}/checklist/policyAck`,
+        'POST',
+        (value) => parseTrip(value, 'trip'),
+        requestOptions,
+      );
+    },
+    /**
+     * Asks the service to send the boarding-pass link. No request body.
+     * The response is read with the same trip parser as GET /trips/:legId.
+     * passLinkSentAt records that the service accepted a send. It does not
+     * confirm that an SMS, email, or push notification was delivered.
+     * A different live shape fails closed instead of being treated as success.
+     */
+    sendTripBoardingPass: (legId: number, requestOptions?: ProductionRequestOptions) => {
+      validateLegId(legId, 'tripId');
+      return request(
+        `/trips/${legId}/boarding-pass/send`,
+        'POST',
+        (value) => parseTrip(value, 'trip'),
+        requestOptions,
+      );
+    },
     getEmptyLegQueue: (emptyLegId: number, requestOptions?: ProductionRequestOptions) =>
       request(`${emptyLegPath(emptyLegId)}/queue`, 'GET', (value) => {
         if (!Array.isArray(value)) return schemaFailure('publicQueue');

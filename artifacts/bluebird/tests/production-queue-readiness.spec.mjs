@@ -185,9 +185,12 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   await firstCard.click();
   await expect(page.getByTestId("production-queue-read-only-cta")).toBeVisible();
   await expect(page.getByTestId("production-queue-read-only-cta")).toHaveText("Join the Flight");
-  const joinHint = page.getByTestId("join-flight-details-hint");
-  await expect(joinHint).toHaveText("Review what joining the queue means. No request is sent from this screen.");
-  await expect(joinHint).not.toContainText(/Main API|Clerk|JWT|contract|verification/i);
+  await expect(page.getByTestId("join-flight-details-hint")).toHaveCount(0);
+  await expect(page.getByText("Review what joining the queue means. No request is sent from this screen.")).toHaveCount(0);
+  await expect(page.getByText("join-nav-bundle-2026-10-27-r2")).toHaveCount(0);
+  await expect(page.getByText("Demo Join Flow", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("flight-detail-gallery")).toHaveCount(0);
+  await expect(page.getByTestId("flight-skip-line-pass-card")).toHaveCount(0);
   await expect(page.getByTestId("flight-info-queue-count")).toHaveCount(0);
   await expect(page.getByTestId("flight-info-status")).toHaveText("Available");
   expect(new URL(page.url()).pathname).toMatch(new RegExp(`/flight/${flightId}$`));

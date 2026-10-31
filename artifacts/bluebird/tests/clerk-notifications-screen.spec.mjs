@@ -147,6 +147,7 @@ test.beforeAll(async () => {
       contents: `
         import React from 'react';
         import { createRoot } from 'react-dom/client';
+        if (window.process?.env) delete window.process.env.EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST;
         import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
         import NotificationsScreen from './app/notifications';
         import AirportPickerScreen from './app/airport-picker';
@@ -267,21 +268,52 @@ test.beforeEach(async ({ page }) => {
 test("loads the signed-in profile automatically and exposes mutually exclusive supported choices", async ({ page }) => {
   await expect(page.getByText("TEB", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.profileGetCount)).toBeGreaterThan(0);
-  await expect(page.getByText("JFK", { exact: true })).toBeVisible();
+  await expect(page.getByText("JFK", { exact: true })).toHaveCount(0);
 
-  await page.getByTestId("clerk-edit-notification-preferences").click();
-  const allMode = page.getByRole("radio", { name: "Flight alert mode: all", exact: true });
-  const specificMode = page.getByRole("radio", { name: "Flight alert mode: specific", exact: true });
+  const allMode = page.getByRole("switch", { name: "All Flights", exact: true });
+  const specificMode = page.getByRole("switch", { name: "Flights from my Home Airport", exact: true });
   await expect(specificMode).toHaveAttribute("aria-checked", "true");
   await expect(allMode).toHaveAttribute("aria-checked", "false");
-  await page.getByRole("radio", { name: "Flight alert mode: all", exact: true }).click();
+  await allMode.click();
   await expect(allMode).toHaveAttribute("aria-checked", "true");
   await expect(specificMode).toHaveAttribute("aria-checked", "false");
-  await expect(page.getByRole("radio", { name: "All flight alerts: both", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Queue Updates channels", exact: true }).click();
   await expect(page.getByRole("radio", { name: "Queue Updates: both", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Flight Confirmations channels", exact: true }).click();
   await expect(page.getByRole("radio", { name: "Flight Confirmations: email", exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: /Queue Updates: off/ })).toHaveCount(0);
   await expect(page.getByRole("radio", { name: /Flight Confirmations: off/ })).toHaveCount(0);
+  expect(await page.evaluate(() => window.lastProfileUpdate)).toBeNull();
+});
+
+test("keeps a device preference after leaving Notifications and does not write the account", async ({ page }) => {
+  await page.evaluate(() => {
+    const store = new Map();
+    const storage = {
+      getItem: (key) => (store.has(key) ? store.get(key) : null),
+      setItem: (key, value) => { store.set(String(key), String(value)); },
+      removeItem: (key) => { store.delete(String(key)); },
+      clear: () => { store.clear(); },
+      key: (index) => Array.from(store.keys())[index] ?? null,
+      get length() { return store.size; },
+    };
+    Object.defineProperty(window, "localStorage", { configurable: true, value: storage });
+    window.process = window.process || { env: {} };
+    window.process.env.EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST = "true";
+    window.mountNotifications();
+  });
+  const allFlights = page.getByRole("switch", { name: "All Flights", exact: true });
+  await expect(allFlights).toBeVisible();
+  await allFlights.click();
+  await expect(allFlights).toHaveAttribute("aria-checked", "true");
+  await expect(allFlights).not.toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByTestId("clerk-device-notification-preferences")).toHaveText("Saved on this device.");
+  await page.getByText("TEB", { exact: true }).click();
+  await expect(page.getByTestId("clerk-home-airport-editor")).toBeVisible();
+  await page.getByRole("button", { name: "Back to Notification Settings", exact: true }).click();
+  await expect(page.getByRole("switch", { name: "All Flights", exact: true })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("switch", { name: "Flights from my Home Airport", exact: true })).toHaveAttribute("aria-checked", "false");
+  expect(await page.evaluate(() => window.lastProfileUpdate)).toBeNull();
 });
 
 test("shows Choose airport for an unset home airport and opens the existing picker", async ({ page }) => {
@@ -323,9 +355,11 @@ test("Payment Methods returns to either Profile presentation and uses the stack 
     await page.getByRole("button", { name: "Open Payment Methods" }).click();
     await expect(page.getByTestId("payment-methods-screen")).toBeVisible();
     await expect(page.getByText("Payment Methods", { exact: true })).toBeVisible();
-    await expect(page.getByTestId("payment-methods-empty-state")).toBeVisible();
-    await expect(page.getByText("Your payment methods", { exact: true })).toBeVisible();
-    await expect(page.getByText("Payment method management is coming soon.", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("payment-methods-website")).toBeVisible();
+    await expect(page.getByText("Manage Your Payment Method", { exact: true })).toBeVisible();
+    await expect(page.getByText("Your membership payment method is securely managed through the Bluebird website. You can view or update your card details there.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open Bluebird Website" })).toBeVisible();
+    await expect(page.getByText("Payment method unavailable", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Unavailable for this account", { exact: true })).toHaveCount(0);
 
     await page.getByTestId("payment-methods-back").click();
@@ -380,8 +414,9 @@ test("keeps unsupported rows disabled, omits history and supports back navigatio
   await expect(page.getByText("Membership Updates", { exact: true })).toBeVisible();
   await expect(page.getByText("Notification history", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Push notifications", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("switch")).toHaveCount(0);
-  await page.getByText("International Flights", { exact: true }).click();
+  await expect(page.getByRole("switch", { name: "International Flights", exact: true })).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByText("Coming soon", { exact: true }).first()).toBeVisible();
+  await page.getByText("International Flights", { exact: true }).click({ force: true });
   expect(await page.evaluate(() => window.lastRoute)).toBeNull();
   await page.getByRole("button", { name: "Back" }).click();
   expect(await page.evaluate(() => window.lastRoute)).toBe("/(tabs)/profile");

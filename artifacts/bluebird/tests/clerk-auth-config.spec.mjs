@@ -9,6 +9,7 @@ import {
   resolveClerkAuthConfiguration,
   resolveClerkAuthConfigurationFromEnvironment,
   resolveRuntimeClerkAuthConfiguration,
+  selectClerkTokenCache,
   shouldShowClerkConfigurationError,
   shouldMountClerkProvider,
 } from "../scripts/.clerk-auth-config.test.mjs";
@@ -296,6 +297,55 @@ test("sign-out invokes only the injected Clerk action and reports failures witho
   } finally {
     globalThis.fetch = previousFetch;
   }
+});
+
+test("production debug on a development client isolates the Clerk token cache by host", async () => {
+  const keys = [];
+  const cache = {
+    getToken: async (key) => {
+      keys.push(["get", key]);
+      return null;
+    },
+    saveToken: async (key) => {
+      keys.push(["save", key]);
+    },
+    clearToken: (key) => {
+      keys.push(["clear", key]);
+    },
+  };
+  const release = selectClerkTokenCache({
+    cache,
+    publishableKey: validProductionKey,
+    isDevelopment: false,
+    productionClerkDebug: true,
+  });
+  await release.getToken("client");
+  assert.deepEqual(keys, [["get", "client"]]);
+
+  keys.length = 0;
+  const development = selectClerkTokenCache({
+    cache,
+    publishableKey: validProductionKey,
+    isDevelopment: true,
+    productionClerkDebug: false,
+  });
+  await development.saveToken("client", "value");
+  assert.deepEqual(keys, [["save", "client"]]);
+
+  keys.length = 0;
+  const isolated = selectClerkTokenCache({
+    cache,
+    publishableKey: validProductionKey,
+    isDevelopment: true,
+    productionClerkDebug: true,
+  });
+  await isolated.getToken("client");
+  await isolated.clearToken("client");
+  assert.deepEqual(keys, [
+    ["get", "bb.clerk.example.com.client"],
+    ["clear", "bb.clerk.example.com.client"],
+  ]);
+  assert.equal(JSON.stringify(keys).includes(validProductionKey), false);
 });
 
 test("unknown error shapes get a safe message and are not logged or rethrown", async () => {

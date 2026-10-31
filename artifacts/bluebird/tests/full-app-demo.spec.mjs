@@ -139,7 +139,7 @@ test("the regular Bluebird tabs and flight detail work in the identity-free demo
   await expect(page.getByTestId("flight-detail-route")).toContainText("SEA → SFO");
   await expect(page.getByTestId("flight-info-aircraft-type")).toContainText("Cessna Citation CJ3");
   await expect(page.getByTestId("full-app-demo-join-queue")).toBeVisible();
-  await expect(page.getByTestId("flight-skip-line-pass-card")).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByTestId("flight-skip-line-pass-card")).toHaveCount(0);
   await expect(page.getByText("Ask AI Concierge", { exact: true })).toHaveCount(0);
 
   await page.goto("/concierge");

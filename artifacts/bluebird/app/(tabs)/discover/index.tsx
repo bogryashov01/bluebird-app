@@ -101,6 +101,8 @@ function airportLabel(code: string | null, city: string | null): string {
 
 type FlightFilter = DiscoverFlightFilter;
 
+let lastFlightDetailsOpenAt = 0;
+
 function openFlightDetails(flight: FlightView, demoMode = false): void {
   const id = typeof flight.id === 'string' ? flight.id.trim() : '';
   if (!id || (flight.source === 'production' && parseProductionFlightId(id) === null)) {
@@ -112,6 +114,9 @@ function openFlightDetails(flight: FlightView, demoMode = false): void {
     }
     return;
   }
+  const now = Date.now();
+  if (now - lastFlightDetailsOpenAt < 600) return;
+  lastFlightDetailsOpenAt = now;
 
   router.push(demoMode
     ? { pathname: '/demo/flight/[id]' as any, params: { id } }
@@ -176,17 +181,19 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
           <BluebirdLogo variant="symbol" size="small" style={styles.logoImg} />
         </View>
         <TouchableOpacity
-          style={[styles.conciergeBtn, { backgroundColor: colors.card }]}
+          style={[styles.conciergeBtn, { backgroundColor: colors.card }, demoMode && { opacity: 0.45 }]}
           onPress={() => router.push('/concierge')}
           disabled={demoMode}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           accessibilityLabel={demoMode ? 'AI Concierge unavailable in demo' : 'AI Concierge'}
+          accessibilityState={{ disabled: demoMode }}
         >
           <Feather name="message-circle" size={18} color={colors.foreground} />
         </TouchableOpacity>
       </View>
 
       {/* Greeting */}
-      <Text testID="discover-greeting" style={[styles.greeting, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+      <Text testID="discover-greeting" numberOfLines={2} style={[styles.greeting, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
         {greetingText}{userName ? `, ${userName}` : ''}
       </Text>
       <Text testID="discover-result-count" style={[styles.subGreeting, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
@@ -226,7 +233,7 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
               </Text>
             </View>
             <View style={styles.featuredBottom}>
-              <Text style={[styles.featuredRoute, { color: colors.textOnBrand, fontFamily: 'Inter_700Bold' }]}>
+              <Text numberOfLines={2} style={[styles.featuredRoute, { color: colors.textOnBrand, fontFamily: 'Inter_700Bold' }]}>
                 {airportLabel(featured.fromAirport, featured.fromCity)} → {airportLabel(featured.toAirport, featured.toCity)}
               </Text>
               <Text testID="discover-featured-date" style={[styles.featuredMeta, { color: colors.mutedOnBrand, fontFamily: 'Inter_400Regular' }]}>

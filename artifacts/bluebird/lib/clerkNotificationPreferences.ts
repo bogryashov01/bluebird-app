@@ -1,4 +1,10 @@
-import type { ProductionNotificationPrefs, ProductionUserProfile, UpdateProductionUserProfileRequest } from './productionAuthApi';
+import { isNativeProductionAuthTestEnabled } from './nativeAuthTestPolicy';
+import type {
+  NotificationChannel,
+  ProductionNotificationPrefs,
+  ProductionUserProfile,
+  UpdateProductionUserProfileRequest,
+} from './productionAuthApi';
 
 export interface ClerkNotificationProfileSession {
   isLoaded: boolean;
@@ -47,6 +53,85 @@ export async function readClerkNotificationPreferences(
   input: Parameters<typeof readClerkNotificationProfile>[0],
 ): Promise<ProductionNotificationPrefs> {
   return (await readClerkNotificationProfile(input)).notificationPrefs;
+}
+
+const NOTIFICATION_MODES = new Set<ProductionNotificationPrefs['mode']>(['off', 'all', 'specific']);
+const NOTIFICATION_CHANNELS = new Set<NotificationChannel>(['email', 'sms', 'both']);
+
+function withoutSmsChannel(channel: NotificationChannel | null): NotificationChannel | null {
+  return channel === 'sms' || channel === 'both' ? 'email' : channel;
+}
+
+/** A candidate used only to ask whether any safe edit exists. It is never saved. */
+export function emailSafeNotificationPrefs(
+  prefs: ProductionNotificationPrefs,
+): ProductionNotificationPrefs {
+  return {
+    ...prefs,
+    mode: 'off',
+    allChannels: withoutSmsChannel(prefs.allChannels),
+    emptyLegHomeAirport: withoutSmsChannel(prefs.emptyLegHomeAirport),
+    departingFavorite: withoutSmsChannel(prefs.departingFavorite),
+    arrivingFavorite: withoutSmsChannel(prefs.arrivingFavorite),
+    queueUpdates: withoutSmsChannel(prefs.queueUpdates) ?? 'email',
+    winningNotifications: withoutSmsChannel(prefs.winningNotifications) ?? 'email',
+  };
+}
+
+export function canPrepareNotificationPreferenceEdit(profile: ProductionUserProfile): boolean {
+  return buildNotificationProfileUpdate(profile, emailSafeNotificationPrefs(profile.notificationPrefs)) !== null;
+}
+
+/**
+ * The current native auth test permits profile GET and rejects profile PUT.
+ * Account saves stay on the existing verified path only when that restriction is off.
+ */
+export function canSaveClerkNotificationPreferencesToAccount(): boolean {
+  if (typeof process === 'undefined') return true;
+  return !isNativeProductionAuthTestEnabled();
+}
+
+export function deviceNotificationPreferenceKey(clerkUserId: string): string {
+  return `bluebird.notification-preferences.device.${clerkUserId}`;
+}
+
+function storedChannel(value: unknown): NotificationChannel | null | undefined {
+  if (value === null) return null;
+  if (typeof value === 'string' && NOTIFICATION_CHANNELS.has(value as NotificationChannel)) {
+    return value as NotificationChannel;
+  }
+  return undefined;
+}
+
+export function parseStoredNotificationPrefs(value: unknown): ProductionNotificationPrefs | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.mode !== 'string' || !NOTIFICATION_MODES.has(raw.mode as ProductionNotificationPrefs['mode'])) {
+    return null;
+  }
+  const allChannels = storedChannel(raw.allChannels);
+  const emptyLegHomeAirport = storedChannel(raw.emptyLegHomeAirport);
+  const departingFavorite = storedChannel(raw.departingFavorite);
+  const arrivingFavorite = storedChannel(raw.arrivingFavorite);
+  const queueUpdates = storedChannel(raw.queueUpdates);
+  const winningNotifications = storedChannel(raw.winningNotifications);
+  if (
+    allChannels === undefined ||
+    emptyLegHomeAirport === undefined ||
+    departingFavorite === undefined ||
+    arrivingFavorite === undefined ||
+    queueUpdates == null ||
+    winningNotifications == null
+  ) return null;
+  return {
+    mode: raw.mode as ProductionNotificationPrefs['mode'],
+    allChannels,
+    emptyLegHomeAirport,
+    departingFavorite,
+    arrivingFavorite,
+    queueUpdates,
+    winningNotifications,
+  };
 }
 
 /** No defaults or registration drafts: every required value comes from GET. */
@@ -221,7 +306,7 @@ function areProfileSettingsPreserved(
     JSON.stringify(after.upgradeCreditBalances) === JSON.stringify(before.upgradeCreditBalances);
 }
 
-function areNotificationPreferencesEqual(
+export function areNotificationPreferencesEqual(
   left: ProductionNotificationPrefs,
   right: ProductionNotificationPrefs,
 ): boolean {

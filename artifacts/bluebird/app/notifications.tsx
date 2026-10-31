@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, RefreshControl,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -19,12 +20,16 @@ import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
 import { ProductionAuthHttpError } from '@/lib/productionAuthApi';
 import type { ProductionNotificationPrefs } from '@/lib/productionAuthApi';
 import {
+  canPrepareNotificationPreferenceEdit,
+  canSaveClerkNotificationPreferencesToAccount,
+  deviceNotificationPreferenceKey,
   getClerkNotificationPreferencesQueryKey,
-  notificationPreferenceRows,
+  parseStoredNotificationPrefs,
   readClerkNotificationProfile,
   saveClerkNotificationPreferences,
 } from '@/lib/clerkNotificationPreferences';
 import { NotificationPreferenceEditor } from '@/components/NotificationPreferenceEditor';
+import { ClerkPushPermissionStatus } from '@/components/ClerkPushPermissionStatus';
 import { SettingsGroup } from '@/components/SettingsGroup';
 import { NETWORKING_INBOX_ROUTE, notificationRoute } from '@/lib/notificationRoute';
 import { usePersistedState } from '@/hooks/usePersistedState';
@@ -66,19 +71,6 @@ const DELIVERY_CHANNELS = [
 ] as const;
 type DeliveryChannel = NonNullable<User['notificationChannel']>;
 
-function notificationChannelLabel(channel: string | null): string {
-  if (channel === 'email') return 'Email';
-  if (channel === 'sms') return 'SMS';
-  if (channel === 'both') return 'Email + SMS';
-  return 'Not set';
-}
-
-function notificationModeLabel(mode: ProductionNotificationPrefs['mode']): string {
-  if (mode === 'off') return 'Off';
-  if (mode === 'all') return 'All flights';
-  return 'Specific flights';
-}
-
 function notificationReadError(error: unknown): string {
   if (error instanceof ProductionAuthHttpError && error.status === 401) {
     return 'Your session has expired. Sign in and try again.';
@@ -102,8 +94,44 @@ function ClerkNotificationSettings() {
   sessionRef.current = session;
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
+  const [accountSaveError, setAccountSaveError] = useState<string | null>(null);
+  const [accountDraft, setAccountDraft] = useState<ProductionNotificationPrefs | null>(null);
+  const accountWritesEnabled = canSaveClerkNotificationPreferencesToAccount();
+  const [devicePrefs, setDevicePrefs] = useState<ProductionNotificationPrefs | null>(null);
+  const [deviceStorageReady, setDeviceStorageReady] = useState(accountWritesEnabled);
   const saveController = React.useRef<AbortController | null>(null);
   useEffect(() => () => saveController.current?.abort(), []);
+  useEffect(() => {
+    if (accountWritesEnabled || !session?.userId) {
+      setDevicePrefs(null);
+      setDeviceStorageReady(accountWritesEnabled || !session?.userId);
+      return undefined;
+    }
+    let cancelled = false;
+    setDeviceStorageReady(false);
+    AsyncStorage.getItem(deviceNotificationPreferenceKey(session.userId))
+      .then((raw) => {
+        if (cancelled) return;
+        if (!raw) {
+          setDevicePrefs(null);
+          return;
+        }
+        try {
+          setDevicePrefs(parseStoredNotificationPrefs(JSON.parse(raw)));
+        } catch {
+          setDevicePrefs(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDevicePrefs(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDeviceStorageReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountWritesEnabled, session?.userId]);
 
   const currentUser =
     clerkMemberResolution.status === 'profile_complete' &&
@@ -165,17 +193,32 @@ function ClerkNotificationSettings() {
   }, [canLoadPreferences, preferencesQuery.refetch]));
 
   const profile = canLoadPreferences ? preferencesQuery.data : undefined;
-  const prefs = profile?.notificationPrefs;
-  const prefRows = prefs ? notificationPreferenceRows(prefs).map(({ key, label, value }) => ({
-    key,
-    label,
-    hint: key === 'mode'
-      ? notificationModeLabel(value as ProductionNotificationPrefs['mode'])
-      : notificationChannelLabel(value),
-  })) : [];
-  const savePreferences = async (preferences: ProductionNotificationPrefs) => {
-    if (!session?.userId || saveController.current || preferencesQuery.isFetching) throw new Error('Refresh or save already in progress.');
+  const displayedProfile = profile
+    ? {
+      ...profile,
+      notificationPrefs: !accountWritesEnabled && devicePrefs
+        ? devicePrefs
+        : accountDraft ?? profile.notificationPrefs,
+    }
+    : profile;
+  const prefs = displayedProfile?.notificationPrefs;
+  const preferenceEditingAvailable = !!displayedProfile && canPrepareNotificationPreferenceEdit(displayedProfile);
+  const rememberPreferences = async (preferences: ProductionNotificationPrefs) => {
+    if (!session?.userId) throw new Error('Refresh or save already in progress.');
+    if (!accountWritesEnabled) {
+      await AsyncStorage.setItem(
+        deviceNotificationPreferenceKey(session.userId),
+        JSON.stringify(preferences),
+      );
+      setDevicePrefs(preferences);
+      return;
+    }
+    setAccountDraft(preferences);
+  };
+  const savePreferencesToAccount = async () => {
+    if (!accountWritesEnabled || !accountDraft || !session?.userId || saveController.current || preferencesQuery.isFetching) return;
     setSaving(true);
+    setAccountSaveError(null);
     const controller = new AbortController();
     saveController.current = controller;
     try {
@@ -185,12 +228,17 @@ function ClerkNotificationSettings() {
         requestedClerkUserId: session.userId,
         readProfile: (options) => api.authenticated.getProfile(options),
         updateProfile: (data, options) => api.authenticated.updateProfile(data, options),
-        preferences,
+        preferences: accountDraft,
         signal: controller.signal,
       });
-      queryClient.setQueryData(queryKey, refreshed);
-    } catch (error) {
-      throw new Error(notificationReadError(error).replace('load notification preferences', 'verify the preference update'));
+      if (!controller.signal.aborted) {
+        queryClient.setQueryData(queryKey, refreshed);
+        setAccountDraft(null);
+      }
+    } catch {
+      if (!controller.signal.aborted) {
+        setAccountSaveError('Couldn’t save these preferences to your account.');
+      }
     } finally {
       setSaving(false);
       saveController.current = null;
@@ -226,6 +274,7 @@ function ClerkNotificationSettings() {
         contentContainerStyle={[styles.clerkScroll, { paddingBottom: botPad + 40 }]}
         showsVerticalScrollIndicator={false}
       >
+        <ClerkPushPermissionStatus />
         <SettingsGroup compact title="Travel Preferences" rows={[
           {
             label: 'Home Airport',
@@ -234,38 +283,41 @@ function ClerkNotificationSettings() {
               : preferencesQuery.isError ? 'Unavailable' : 'Loading…',
             onPress: () => router.push('/airport-picker' as any),
           },
-          ...(profile ? [{
-            label: 'Favorite Airports',
-            hint: profile.favoriteAirportLabels.length
-              ? profile.favoriteAirportLabels.join(', ')
-              : profile.favoriteAirportCodes.join(', ') || 'Not set',
-          }] : []),
         ]} />
-        {preferencesQuery.isLoading ? (
+        {preferencesQuery.isLoading || (canLoadPreferences && !deviceStorageReady) ? (
           <View style={styles.loadingRow} testID="clerk-notification-preferences-loading">
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={[styles.noticeBody, { color: colors.mutedForegroundLight }]}>Loading preferences…</Text>
           </View>
         ) : null}
-        {prefs ? (
+        {prefs && deviceStorageReady ? (
           <>
-            <SettingsGroup
-              compact
-              title="Flights"
-              rows={[
-                ...prefRows.filter(({ key }) => key === 'mode' || key === 'allChannels' ||
-                  key === 'emptyLegHomeAirport' || key === 'departingFavorite' || key === 'arrivingFavorite'),
-                { label: 'International Flights', hint: 'Coming soon', disabled: true },
-                ...prefRows.filter(({ key }) => key === 'queueUpdates' || key === 'winningNotifications'),
-              ]}
-            />
-            {profile && <NotificationPreferenceEditor
+            <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight, marginTop: 8 }]}>FLIGHTS</Text>
+            {displayedProfile ? <NotificationPreferenceEditor
               key={preferencesQuery.dataUpdatedAt}
-              profile={profile}
-              disabled={saving || preferencesQuery.isFetching || preferencesQuery.isError}
-              onSave={savePreferences}
+              profile={displayedProfile}
+              persistence={accountWritesEnabled ? 'account' : 'device'}
+              disabled={!preferenceEditingAvailable || preferencesQuery.isFetching || preferencesQuery.isError || saving}
+              onSave={rememberPreferences}
               onRefresh={refreshPreferences}
-            />}
+            /> : null}
+            {accountWritesEnabled && accountDraft ? (
+              <TouchableOpacity
+                accessibilityRole="button"
+                testID="clerk-save-notification-preferences"
+                disabled={saving || preferencesQuery.isFetching}
+                onPress={() => { void savePreferencesToAccount(); }}
+              >
+                <Text style={[styles.retryText, { color: colors.primary }]}>
+                  {saving ? 'Saving…' : 'Save to account'}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+            {accountSaveError ? (
+              <Text accessibilityRole="alert" style={[styles.noticeError, { color: colors.destructive }]}>
+                {accountSaveError}
+              </Text>
+            ) : null}
           </>
         ) : null}
         {preferencesQuery.isError ? (
@@ -608,26 +660,26 @@ const styles = StyleSheet.create({
   headerTitle:  { fontFamily: 'Inter_700Bold', fontSize: 20 },
 
   clerkHeader: {
-    paddingHorizontal: 20,
-    paddingBottom: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 4,
     flexDirection: 'column',
     alignItems: 'flex-start',
-    gap: 14,
+    gap: 8,
   },
   clerkBackBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   clerkHeaderTitle: {
     fontFamily: 'Inter_700Bold',
-    fontSize: 32,
-    lineHeight: 38,
+    fontSize: 22,
+    lineHeight: 28,
   },
 
-  clerkScroll: { paddingHorizontal: 16, paddingTop: 12, gap: 12 },
+  clerkScroll: { paddingHorizontal: 16, paddingTop: 8, gap: 8 },
   scroll: { paddingHorizontal: 16, paddingTop: 20 },
 
   preferenceError: {

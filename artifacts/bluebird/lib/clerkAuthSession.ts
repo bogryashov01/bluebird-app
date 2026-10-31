@@ -76,11 +76,21 @@ export function isClerkJoinFlowPath(segments: readonly string[], pathname = ''):
     CLERK_JOIN_FLOW_ROUTES.has(segments[1] ?? '');
 }
 
+/** Queue Status is a read of the signed-in member's queue. Opening it does not join or leave. */
+export function isClerkQueueStatusPath(segments: readonly string[], pathname = ''): boolean {
+  const path = pathname.split(/[?#]/, 1)[0].replace(/\/+$/, '');
+  if (path === '/flight/queue-status') return true;
+  return segments[0] === 'flight' &&
+    segments[1] === 'queue-status' &&
+    segments.length === 2;
+}
+
 export function shouldRedirectClerkRoute(
   segments: readonly string[],
   memberAccessResolved: boolean,
   registeredHomeReady = false,
   pathname = '',
+  connectionsPreviewEnabled = false,
 ): boolean {
   if (memberAccessResolved) return false;
   const group = segments[0];
@@ -97,12 +107,34 @@ export function shouldRedirectClerkRoute(
     registeredHomeReady &&
     ((group === 'account' && route === 'personal-info' && segments.length === 2) ||
       (group === 'account' && route === 'payment-methods' && segments.length === 2) ||
+      (group === 'account' && route === 'contacts' && segments.length === 2) ||
+      (group === 'support' && (route === 'help-center' || route === 'legal') && segments.length === 2) ||
       (group === 'notifications' && segments.length === 1) ||
       (group === 'airport-picker' && segments.length === 1))
   ) return false;
-  // Flight details render the public flight read in Clerk mode. This does not
-  // authorize queue, booking, or other member-only operations on that screen.
+  // Flight details may read GET /api/empty-legs/:id for a complete Clerk profile.
+  // Opening the screen does not authorize queue joins, booking, or membership changes.
   if (registeredHomeReady && group === 'flight' && route === '[id]' && segments.length === 2) {
+    return false;
+  }
+  // The checklist is opened by the member. Its screen performs the trip read.
+  // Opening it does not confirm, decline, or award the flight.
+  if (registeredHomeReady && group === 'flight' && route === 'checklist' && segments.length === 2) {
+    return false;
+  }
+  // Passenger Information is opened from the checklist. Its screen reads the
+  // manifest. Opening it does not create, edit, or remove passengers.
+  if (registeredHomeReady && group === 'flight' && route === 'passengers' && segments.length === 2) {
+    return false;
+  }
+  // The active flight policy is a public document. Opening it does not
+  // acknowledge the checklist step.
+  if (registeredHomeReady && group === 'flight' && route === 'policy-review' && segments.length === 2) {
+    return false;
+  }
+  // Queue Status reads the member's server queue. A missing allowlist entry
+  // sends the signed-in member back through the home redirect.
+  if (registeredHomeReady && isClerkQueueStatusPath(segments, pathname)) {
     return false;
   }
   // The join review and development-only demo screens do not submit a
@@ -118,6 +150,22 @@ export function shouldRedirectClerkRoute(
   // The Concierge screen for a complete Clerk profile is a local demo. It does
   // not send messages or call the concierge API.
   if (registeredHomeReady && group === 'concierge' && segments.length === 1) return false;
+  // The device-local Connections Preview stays available only in a development
+  // build. Production Clerk sessions are redirected before the screen renders.
+  if (
+    connectionsPreviewEnabled &&
+    registeredHomeReady &&
+    isConnectionsPreviewPath(segments) &&
+    !pathnameHasLegacyConversationTarget(pathname)
+  ) return false;
+  // Member message threads use the messages client. Opening this route does
+  // not enable the feature or send a message. A demo or non-numeric id is not
+  // a member thread and is redirected with the other legacy conversation links.
+  if (
+    registeredHomeReady &&
+    isMemberMessagePath(segments) &&
+    !isInvalidMemberMessageLocation(segments, pathname)
+  ) return false;
   // This one account route is explicitly user-opened and reads only the
   // authenticated user's API profile; it does not grant member capabilities.
   if (group === 'account' && route === 'bluebird-profile') return false;
@@ -127,11 +175,110 @@ export function shouldRedirectClerkRoute(
   return true;
 }
 
+const CONNECTIONS_PREVIEW_ID = /^(?:\[id\]|demo-[A-Za-z0-9-]{1,80})$/;
+const MEMBER_MESSAGE_ID = /^(?:\[conversationId\]|[1-9]\d*)$/;
+const SAFE_MEMBER_MESSAGE_PATH = /^\/messages\/([1-9]\d*)$/;
+
+export const CLERK_CONNECTIONS_TAB = '/(tabs)/connections' as const;
+
+/** Development builds may open the device-local preview. Release builds cannot. */
+export function isConnectionsPreviewDevelopmentEnabled(
+  developmentBuild: boolean = typeof __DEV__ !== 'undefined' && __DEV__ === true,
+): boolean {
+  return developmentBuild === true;
+}
+
+function locationPath(pathname: string): string {
+  const path = pathname.split(/[?#]/, 1)[0].replace(/\/+$/, '');
+  return path || '/';
+}
+
+function pathnameHasLegacyConversationTarget(pathname: string): boolean {
+  const path = locationPath(pathname);
+  return path === '/networking' ||
+    path.startsWith('/networking/') ||
+    path === '/messages' ||
+    (path.startsWith('/messages/') && !SAFE_MEMBER_MESSAGE_PATH.test(path));
+}
+
+export function isLegacyNetworkingLocation(
+  segments: readonly string[],
+  pathname = '',
+): boolean {
+  if (segments[0] === 'networking') return true;
+  const path = locationPath(pathname);
+  return path === '/networking' || path.startsWith('/networking/');
+}
+
+export function isConnectionsPreviewLocation(
+  segments: readonly string[],
+  pathname = '',
+): boolean {
+  if (segments[0] === 'connections-preview') return true;
+  const path = locationPath(pathname);
+  return path === '/connections-preview' || path.startsWith('/connections-preview/');
+}
+
+export function isInvalidMemberMessageLocation(
+  segments: readonly string[],
+  pathname = '',
+): boolean {
+  const path = locationPath(pathname);
+  if (path === '/messages' || path.startsWith('/messages/')) {
+    return !SAFE_MEMBER_MESSAGE_PATH.test(path);
+  }
+  return segments[0] === 'messages' && !isMemberMessagePath(segments);
+}
+
+/**
+ * A ready Clerk home leaves legacy demo chats and local JWT networking for
+ * the Connections tab. Signed-out and incomplete sessions use the existing
+ * sign-in route. Legacy JWT sessions are unchanged.
+ */
+export function clerkLegacyConversationHref(input: {
+  authMode: 'legacy' | 'clerk';
+  segments: readonly string[];
+  pathname?: string;
+  homeReady: boolean;
+  developmentPreview: boolean;
+}): typeof CLERK_CONNECTIONS_TAB | null {
+  if (input.authMode !== 'clerk' || !input.homeReady) return null;
+  const pathname = input.pathname ?? '';
+  const legacyNetworking = isLegacyNetworkingLocation(input.segments, pathname);
+  const allowedPreview = input.developmentPreview &&
+    isConnectionsPreviewPath(input.segments) &&
+    !pathnameHasLegacyConversationTarget(pathname);
+  const demoPreview = isConnectionsPreviewLocation(input.segments, pathname) && !allowedPreview;
+  const invalidMessage = isInvalidMemberMessageLocation(input.segments, pathname);
+  if (!legacyNetworking && !demoPreview && !invalidMessage) return null;
+  return CLERK_CONNECTIONS_TAB;
+}
+
+export function isMemberMessagePath(segments: readonly string[]): boolean {
+  return segments.length === 2 &&
+    segments[0] === 'messages' &&
+    MEMBER_MESSAGE_ID.test(segments[1] ?? '');
+}
+
+export function isConnectionsPreviewPath(segments: readonly string[]): boolean {
+  if (segments[0] !== 'connections-preview') return false;
+  if (segments.length === 1 || (segments.length === 2 && segments[1] === 'index')) return true;
+  return segments.length === 3 &&
+    (segments[1] === 'member' || segments[1] === 'chat') &&
+    CONNECTIONS_PREVIEW_ID.test(segments[2] ?? '');
+}
+
 /** Safe navigation tabs available to a complete Clerk profile, not member capabilities. */
 export function isClerkCoreTabRoute(segments: readonly string[]): boolean {
   if (segments[0] !== '(tabs)') return false;
   const route = segments[1];
-  if (route !== 'discover' && route !== 'trips' && route !== 'membership' && route !== 'profile') return false;
+  if (
+    route !== 'discover' &&
+    route !== 'trips' &&
+    route !== 'connections' &&
+    route !== 'membership' &&
+    route !== 'profile'
+  ) return false;
   return segments.length === 2 || (segments.length === 3 && segments[2] === 'index');
 }
 

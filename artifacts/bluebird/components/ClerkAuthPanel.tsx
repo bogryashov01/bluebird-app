@@ -91,7 +91,7 @@ function ClerkAuthForm({
 }) {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { isLoaded, isSignedIn } = useClerkAuth();
+  const { isLoaded, isSignedIn, signOut } = useClerkAuth();
   const signInResource = useSignIn();
   const signUpResource = useSignUp();
   const [phone, setPhone] = useState('');
@@ -127,6 +127,9 @@ function ClerkAuthForm({
           const activate = signInResource.setActive ?? signUpResource.setActive;
           if (!activate) throw new Error('Clerk is not ready.');
           await activate({ session });
+        },
+        signOut: async () => {
+          await signOut();
         },
       })
     : null;
@@ -309,7 +312,7 @@ function ClerkAuthForm({
                     returnKeyType="go"
                     style={[
                       styles.input,
-                      { backgroundColor: colors.input, borderColor: error ? colors.destructive : colors.border, color: colors.textOnBrand },
+                      { backgroundColor: colors.input, borderColor: error ? colors.destructive : colors.border, color: colors.foreground },
                     ]}
                     textContentType="telephoneNumber"
                     value={phone}
@@ -342,7 +345,7 @@ function ClerkAuthForm({
                     returnKeyType="go"
                     style={[
                       styles.input,
-                      { backgroundColor: colors.input, borderColor: error ? colors.destructive : colors.border, color: colors.textOnBrand },
+                      { backgroundColor: colors.input, borderColor: error ? colors.destructive : colors.border, color: colors.foreground },
                     ]}
                     textContentType="oneTimeCode"
                     value={code}
@@ -477,7 +480,7 @@ const styles = StyleSheet.create({
   primaryButtonText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
   disabled: { opacity: 0.55 },
   codeActions: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 20, marginTop: 20 },
-  secondaryAction: { minHeight: 42, justifyContent: 'center' },
+  secondaryAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   linkText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
 });
 

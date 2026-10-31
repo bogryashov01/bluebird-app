@@ -1,5 +1,6 @@
-import React from 'react';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
@@ -9,13 +10,20 @@ import {
   canSubmitProductionQueueJoin,
   formatJoinFlightDate,
   formatJoinFlightTime,
-  JOIN_FLIGHT_QUEUE_EMPTY,
-  JOIN_FLIGHT_QUEUE_FOOTNOTE,
+  formatQueueClosingTime,
+  JOIN_FLIGHT_MEMBERSHIP_NOTE,
+  JOIN_FLIGHT_CONSENT_REQUIRED,
+  JOIN_FLIGHT_CREDIT_CONFIRM_REQUIRED,
+  JOIN_FLIGHT_PASS_UNKNOWN,
+  QUEUE_LEFT_CONFIRMED,
+  joinFlightConfirmNote,
+  joinFlightPassNote,
   joinFlightDisclosures,
-  joinFlightQueueCountLabel,
-  joinFlightQueuePositionLabel,
+  presentJoinQueueWindow,
+  reviewProductionQueueJoin,
   type JoinFlightDisplay,
-  type JoinFlightQueuePanel,
+  type JoinFlightFailure,
+  type QueueJoinConsent,
   type QueueJoinSuccessModel,
 } from '@/lib/joinFlightPresentation';
 import { logJoinNav } from '@/lib/joinNavDiagnostics';
@@ -23,28 +31,39 @@ import { logJoinNav } from '@/lib/joinNavDiagnostics';
 export function QueueJoinConfirmation({
   flight,
   success,
-  queue,
   demoAvailable = false,
   demoEnabled = false,
   onDemoEnabledChange,
   onDemoConfirm,
+  onJoin,
+  submitting = false,
+  leftMessage = null,
+  failure = null,
 }: {
   flight: JoinFlightDisplay;
   success: QueueJoinSuccessModel | null;
-  queue: JoinFlightQueuePanel;
   demoAvailable?: boolean;
   demoEnabled?: boolean;
   onDemoEnabledChange?: (enabled: boolean) => void;
   onDemoConfirm?: () => void;
+  onJoin?: (consent: QueueJoinConsent, creditConfirmed: boolean) => void;
+  submitting?: boolean;
+  leftMessage?: string | null;
+  failure?: JoinFlightFailure | null;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const [consent, setConsent] = useState<QueueJoinConsent>('none');
+  const [creditConfirmed, setCreditConfirmed] = useState(false);
+  const [consentNotice, setConsentNotice] = useState<string | null>(null);
+  const queueWindow = presentJoinQueueWindow(flight.queueClosesAt, Date.now());
   const route = [flight.fromAirport, flight.toAirport].filter(Boolean).join(' → ');
   const cities = [flight.fromCity, flight.toCity].filter(Boolean).join(' → ');
   const when = [formatJoinFlightDate(flight.departureDate), formatJoinFlightTime(flight.departureTime)]
     .filter(Boolean)
     .join(' · ');
+  const queueCloses = formatQueueClosingTime(flight.queueClosesAt);
   const disclosures = joinFlightDisclosures(flight.international);
 
   if (success) {
@@ -71,9 +90,77 @@ export function QueueJoinConfirmation({
           {!!cities && <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>{cities}</Text>}
           {!!when && <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>{when}</Text>}
           {!!flight.aircraft && <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>{flight.aircraft}</Text>}
+          <Text testID="join-flight-queue-window" style={[styles.meta, { color: colors.textOnSurface }]}>
+            {queueWindow.label}
+          </Text>
+          <Text testID="join-flight-queue-closes" style={[styles.meta, { color: colors.mutedForegroundLight }]}>
+            {queueCloses ? `Queue closes ${queueCloses}` : 'Queue closing time is not available for this flight.'}
+          </Text>
         </View>
 
-        <QueueInformation queue={queue} />
+        <View
+          testID="join-flight-membership"
+          style={[styles.flightCard, { backgroundColor: colors.surface, borderColor: colors.separator }]}
+        >
+          <Text style={[styles.kicker, { color: colors.primary }]}>MEMBERSHIP</Text>
+          <Text style={[styles.disclosure, { color: colors.textOnSurface }]}>{JOIN_FLIGHT_MEMBERSHIP_NOTE}</Text>
+        </View>
+
+        {flight.internationalPassRequired === true ? (
+          <View
+            testID="join-flight-pass"
+            style={[styles.flightCard, { backgroundColor: colors.surface, borderColor: colors.separator }]}
+          >
+            <Text style={[styles.kicker, { color: colors.primary }]}>INTERNATIONAL PASS</Text>
+            <Text style={[styles.disclosure, { color: colors.textOnSurface }]}>
+              This flight requires an International Pass choice before a join can be prepared. Nothing is selected until you choose.
+            </Text>
+            <PassChoice
+              testID="join-flight-pass-authorize"
+              label="Authorize an International Pass"
+              selected={consent === 'authorize-pass'}
+              onPress={() => {
+                setCreditConfirmed(false);
+                setConsent((current) => current === 'authorize-pass' ? 'none' : 'authorize-pass');
+              }}
+            />
+            <PassChoice
+              testID="join-flight-pass-credit"
+              label="Use an available International Pass credit"
+              selected={consent === 'use-credit'}
+              onPress={() => {
+                setCreditConfirmed(false);
+                setConsent((current) => current === 'use-credit' ? 'none' : 'use-credit');
+              }}
+            />
+            {consent === 'use-credit' ? (
+              <PassChoice
+                testID="join-flight-credit-confirm"
+                label="I confirm this join uses an International Pass credit. No payment is started."
+                selected={creditConfirmed}
+                onPress={() => setCreditConfirmed((current) => !current)}
+              />
+            ) : null}
+            <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>{joinFlightPassNote()}</Text>
+          </View>
+        ) : flight.international === true ? (
+          <Text testID="join-flight-pass-unknown" style={[styles.disclosure, { color: colors.textOnSurface }]}>
+            {JOIN_FLIGHT_PASS_UNKNOWN}
+          </Text>
+        ) : null}
+
+        {leftMessage === QUEUE_LEFT_CONFIRMED ? (
+          <Text testID="join-flight-left" style={[styles.disclosure, { color: colors.textOnSurface }]}>
+            {leftMessage}
+          </Text>
+        ) : null}
+
+        {consentNotice ? (
+          <Text testID="join-flight-consent-required" style={[styles.disclosure, { color: colors.textOnSurface }]}>
+            {consentNotice}
+          </Text>
+        ) : null}
+        {failure ? <JoinFailureNotice failure={failure} /> : null}
 
         <View style={styles.disclosures}>
           {disclosures.map((line) => (
@@ -101,68 +188,102 @@ export function QueueJoinConfirmation({
           </View>
         ) : null}
         <PrimaryButton
-          label="Confirm queue join"
-          disabled={!canSubmitProductionQueueJoin() && !demoEnabled}
+          label="Join Flight"
+          disabled={(!canSubmitProductionQueueJoin() && !demoEnabled) || submitting}
+          loading={submitting && canSubmitProductionQueueJoin()}
           onPress={() => {
+            if (submitting) return;
+            const decision = reviewProductionQueueJoin({
+              consent,
+              internationalPassRequired: flight.internationalPassRequired,
+              creditConfirmed,
+            });
             logJoinNav('join-button', {
               screen: 'QueueJoinConfirmation',
-              visibleLabel: 'Confirm queue join',
+              visibleLabel: 'Join Flight',
               demoEnabled: demoEnabled === true,
               routerMethod: 'none',
               targetPathname: 'none',
             });
-            if (canSubmitProductionQueueJoin()) return;
-            if (demoEnabled) onDemoConfirm?.();
+            if (decision.status === 'consent-required') {
+              setConsentNotice(consent === 'use-credit'
+                ? JOIN_FLIGHT_CREDIT_CONFIRM_REQUIRED
+                : JOIN_FLIGHT_CONSENT_REQUIRED);
+              return;
+            }
+            setConsentNotice(null);
+            if (decision.status === 'ready') {
+              onJoin?.(consent, creditConfirmed);
+              return;
+            }
+            if (decision.status === 'disabled' && demoEnabled && !canSubmitProductionQueueJoin()) onDemoConfirm?.();
           }}
           testID="join-flight-confirm"
           accessibilityRole="button"
         />
         <Text testID="join-flight-confirm-note" style={[styles.note, { color: colors.mutedForegroundLight }]}>
-          {demoEnabled
-            ? 'DEMO — No real queue entry will be created.'
-            : 'Queue joining is not available in this build. No request is sent.'}
+          {joinFlightConfirmNote(demoEnabled)}
         </Text>
+        {demoEnabled ? null : (
+          <TouchableOpacity
+            testID="join-flight-view-trips"
+            accessibilityRole="button"
+            accessibilityLabel="View My Trips"
+            onPress={() => router.navigate('/(tabs)/trips')}
+          >
+            <Text style={[styles.tripsLink, { color: colors.primary }]}>View My Trips</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
 }
 
-function QueueInformation({ queue }: { queue: JoinFlightQueuePanel }) {
+function PassChoice({
+  label,
+  selected,
+  onPress,
+  testID,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  testID: string;
+}) {
   const colors = useColors();
-  const countLabel = queue.kind === 'participants' ? joinFlightQueueCountLabel(queue.participantCount) : null;
-  const positionLabel = queue.kind === 'participants' && queue.viewerPosition !== null
-    ? joinFlightQueuePositionLabel(queue.viewerPosition)
-    : null;
-  let body = 'Queue information is shown for published flights.';
-  if (queue.kind === 'loading') body = 'Loading queue…';
-  if (queue.kind === 'signed-out') body = 'Sign in to see this queue.';
-  if (queue.kind === 'unavailable') body = 'Queue information is unavailable right now. No join request was sent.';
-  if (queue.kind === 'empty') body = JOIN_FLIGHT_QUEUE_EMPTY;
+  return (
+    <TouchableOpacity
+      testID={testID}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={[styles.passChoice, { borderColor: selected ? colors.primary : colors.separator }]}
+    >
+      <View style={[styles.passMark, { borderColor: colors.primary, backgroundColor: selected ? colors.primary : 'transparent' }]} />
+      <Text style={[styles.disclosure, { color: colors.textOnSurface }]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
 
+function JoinFailureNotice({ failure }: { failure: JoinFlightFailure }) {
+  const colors = useColors();
+  const route = [failure.conflict?.originAirport, failure.conflict?.destinationAirport].filter(Boolean).join(' → ');
   return (
     <View
-      testID="join-flight-queue"
+      testID="join-flight-error"
       style={[styles.flightCard, { backgroundColor: colors.surface, borderColor: colors.separator }]}
     >
-      <Text style={[styles.kicker, { color: colors.primary }]}>QUEUE</Text>
-      {queue.kind === 'loading' ? <ActivityIndicator color={colors.primary} /> : null}
-      {queue.kind === 'participants' && countLabel ? (
-        <Text testID="join-flight-queue-count" style={[styles.route, styles.queueCount, { color: colors.textOnSurface }]}>
-          {countLabel}
+      <Text style={[styles.kicker, { color: colors.primary }]}>{failure.title}</Text>
+      <Text style={[styles.disclosure, { color: colors.textOnSurface }]}>{failure.body}</Text>
+      {failure.conflict ? (
+        <Text testID="join-flight-conflict" style={[styles.meta, { color: colors.textOnSurface }]}>
+          {[route, failure.conflict.departureTime].filter(Boolean).join(' · ') || 'The conflicting flight did not include route details.'}
         </Text>
-      ) : (
-        <Text style={[styles.meta, { color: colors.textOnSurface }]}>{body}</Text>
-      )}
-      {!!positionLabel && (
-        <Text testID="join-flight-queue-position" style={[styles.meta, { color: colors.textOnSurface }]}>
-          {positionLabel}
-        </Text>
-      )}
-      {(queue.kind === 'empty' || queue.kind === 'participants') && (
-        <Text testID="join-flight-queue-footnote" style={[styles.meta, { color: colors.mutedForegroundLight }]}>
-          {JOIN_FLIGHT_QUEUE_FOOTNOTE}
-        </Text>
-      )}
+      ) : null}
+      {failure.keepsExistingQueue ? (
+        <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>The existing queue stays in place.</Text>
+      ) : null}
     </View>
   );
 }
@@ -191,4 +312,32 @@ const styles = StyleSheet.create({
   demoTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   demoHint: { textAlign: 'left' },
   note: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  tripsLink: { fontFamily: 'Inter_600SemiBold', fontSize: 15, textAlign: 'center', paddingVertical: 4 },
+  rosterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 8,
+  },
+  rosterPosition: { fontFamily: 'Inter_700Bold', fontSize: 15, width: 36 },
+  rosterInitials: { flex: 1, fontFamily: 'Inter_600SemiBold', fontSize: 15 },
+  rosterTier: { fontFamily: 'Inter_500Medium', fontSize: 13 },
+  rosterSkip: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
+  rosterYou: { fontFamily: 'Inter_700Bold', fontSize: 13 },
+  passChoice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginTop: 8,
+    minHeight: 44,
+  },
+  passMark: { width: 16, height: 16, borderRadius: 8, borderWidth: 2 },
 });

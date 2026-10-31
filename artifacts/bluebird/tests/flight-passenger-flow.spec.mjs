@@ -215,8 +215,7 @@ test("flight details explain when membership is required without opening purchas
   await page.goto("/flight/flight-1");
 
   await expect(page.getByText("Membership required", { exact: true })).toBeVisible();
-  await page.getByTestId("flight-skip-line-pass-card").click();
-  await expect(page).toHaveURL(/\/membership\/join$/);
+  await expect(page.getByTestId("flight-skip-line-pass-card")).toHaveCount(0);
   await expect(page.getByText("Request to Join", { exact: true })).toHaveCount(0);
   expect(getPassMutationRequests()).toEqual([]);
   expect(getJoinBody()).toBeUndefined();
@@ -229,13 +228,8 @@ test("members see safe pass details without inferring ownership, and repeated ta
     trips: [],
   });
   await page.goto("/flight/flight-1");
-
-  const passCard = page.getByTestId("flight-skip-line-pass-card");
-  await expect(passCard).toBeVisible();
-  await passCard.evaluate((element) => {
-    element.click();
-    element.click();
-  });
+  await expect(page.getByTestId("flight-skip-line-pass-card")).toHaveCount(0);
+  await page.goto("/flight/skip-line-pass?flightId=flight-1&route=BFI%20%E2%86%92%20SFO&flightAvailable=true");
   await expect.poll(() => new URL(page.url()).pathname).toBe("/flight/skip-line-pass");
   await expect(page.getByTestId("skip-line-instant-booking-notice")).toHaveText("Instant booking is coming soon.");
   await expect(page.getByTestId("skip-line-purchase-notice")).toHaveText("Purchasing will be available soon.");
@@ -246,7 +240,7 @@ test("members see safe pass details without inferring ownership, and repeated ta
   await expect(page.locator("input")).toHaveCount(0);
 
   await page.getByTestId("skip-line-pass-back").click();
-  await expect(page.getByTestId("flight-skip-line-pass-card")).toBeVisible();
+  await expect(page.getByTestId("flight-skip-line-pass-card")).toHaveCount(0);
   expect(getPassMutationRequests()).toEqual([]);
   expect(getJoinBody()).toBeUndefined();
 });
@@ -258,7 +252,8 @@ test("a member with no pass can see pass terms without checkout or reservation r
     trips: [],
   });
   await page.goto("/flight/flight-1");
-  await page.getByTestId("flight-skip-line-pass-card").click();
+  await expect(page.getByTestId("flight-skip-line-pass-card")).toHaveCount(0);
+  await page.goto("/flight/skip-line-pass?flightId=flight-1&flightAvailable=true");
 
   await expect(page.getByTestId("skip-line-instant-booking-notice")).toHaveText("Instant booking is coming soon.");
   await expect(page.getByTestId("skip-line-purchase-notice")).toHaveText("Purchasing will be available soon.");
@@ -274,7 +269,8 @@ test("flight details state does not offer pass booking when a flight is ineligib
     trips: [],
   });
   await page.goto("/flight/flight-1");
-  await page.getByTestId("flight-skip-line-pass-card").click();
+  await expect(page.getByTestId("flight-skip-line-pass-card")).toHaveCount(0);
+  await page.goto("/flight/skip-line-pass?flightId=flight-1&flightAvailable=false");
 
   await expect(page.getByText("This flight is not currently accepting requests.", { exact: true })).toBeVisible();
   await expect(page.getByTestId("skip-line-instant-booking-notice")).toHaveText("Instant booking is coming soon.");

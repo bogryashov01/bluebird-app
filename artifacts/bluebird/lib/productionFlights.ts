@@ -121,6 +121,7 @@ export interface FlightView {
   destinationTz: string | null;
   departureDate: string | null;
   departureTime: string | null;
+  departureInstant: string | null;
   departureTimeZone: string | null;
   arrivalDate: string | null;
   arrivalTime: string | null;
@@ -130,6 +131,7 @@ export interface FlightView {
   aircraftTypeName: string | null;
   aircraftTypeCode: string | null;
   imageUrl: string | null;
+  aircraftGalleryUrls: string[];
   featured: boolean | null;
   international: boolean | null;
   internationalFeeUsd: number | null;
@@ -157,6 +159,7 @@ export interface ReadRequestOptions {
   environment?: MainBluebirdApiEnvironment;
   fetcher?: typeof fetch;
   timeoutMs?: number;
+  accessToken?: string | null;
 }
 
 export const PRODUCTION_READ_TIMEOUT_MS = 10_000;
@@ -406,6 +409,12 @@ export function isLocalFlightReadMode(
   mode = process.env.EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE,
   isDev = typeof __DEV__ !== 'undefined' && __DEV__,
 ): boolean {
+  if (
+    process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT === 'production' &&
+    process.env.EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO !== 'true'
+  ) {
+    return false;
+  }
   return isDev && mode === 'local';
 }
 
@@ -436,6 +445,13 @@ function getBoolean(value: unknown, field: string): boolean | null {
 function getAirportCode(value: unknown, field: string): string | null {
   const code = getString(value, field)?.trim().toUpperCase();
   return code || null;
+}
+
+function productionInstant(value: string | null): string | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    return null;
+  }
+  return Number.isFinite(Date.parse(value)) ? value : null;
 }
 
 function dateTimeParts(
@@ -510,6 +526,16 @@ export function resolveAircraftImageUrl(
   }
 }
 
+function galleryImageUrls(values: Array<string | null> | null): string[] {
+  if (!values) return [];
+  const urls: string[] = [];
+  for (const value of values) {
+    const resolved = resolveAircraftImageUrl(value);
+    if (resolved && !urls.includes(resolved)) urls.push(resolved);
+  }
+  return urls;
+}
+
 function nullableStringArray(
   value: unknown,
   field: string,
@@ -540,8 +566,8 @@ export function mapProductionFlight(value: unknown): FlightView {
   const arrivalAt = getString(raw.arrivalTime, 'arrivalTime');
   const departure = dateTimeParts(departureAt, originTz);
   const arrival = dateTimeParts(arrivalAt, destinationTz);
-  const gallery = nullableStringArray(raw.aircraftGalleryUrls, 'aircraftGalleryUrls');
-  const imageUrl = gallery?.find((url) => !!url);
+  const gallery = galleryImageUrls(nullableStringArray(raw.aircraftGalleryUrls, 'aircraftGalleryUrls'));
+  const imageUrl = gallery[0] ?? null;
   const durationHours = getNumber(raw.durationHours, 'durationHours');
 
   return {
@@ -572,6 +598,7 @@ export function mapProductionFlight(value: unknown): FlightView {
     destinationTz,
     departureDate: departure?.date ?? null,
     departureTime: departure?.time ?? null,
+    departureInstant: productionInstant(departureAt),
     departureTimeZone: departure?.zone ?? null,
     arrivalDate: arrival?.date ?? null,
     arrivalTime: arrival?.time ?? null,
@@ -580,7 +607,8 @@ export function mapProductionFlight(value: unknown): FlightView {
     aircraftType: getString(raw.aircraftType, 'aircraftType'),
     aircraftTypeName: getString(raw.aircraftTypeName, 'aircraftTypeName'),
     aircraftTypeCode: getString(raw.aircraftTypeCode, 'aircraftTypeCode'),
-    imageUrl: resolveAircraftImageUrl(imageUrl),
+    imageUrl,
+    aircraftGalleryUrls: gallery,
     featured: null,
     international: getBoolean(raw.isInternational, 'isInternational'),
     internationalFeeUsd: null,
@@ -742,6 +770,7 @@ export function mapLocalFlight(flight: Flight): FlightView {
     destinationTz: null,
     departureDate: flight.departureDate ?? null,
     departureTime: flight.departureTime ?? null,
+    departureInstant: null,
     departureTimeZone: null,
     arrivalDate: null,
     arrivalTime: null,
@@ -751,6 +780,7 @@ export function mapLocalFlight(flight: Flight): FlightView {
     aircraftTypeName: null,
     aircraftTypeCode: null,
     imageUrl: resolveAircraftImageUrl(flight.imageUrl, localApiOrigin),
+    aircraftGalleryUrls: [],
     featured: !!flight.featured,
     international: flight.international ?? null,
     internationalFeeUsd: flight.internationalFeeUsd ?? null,
@@ -786,11 +816,16 @@ export async function fetchProductionJson(
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new RangeError('Production read timeout must be a positive finite number.');
   }
+  const accessToken = options.accessToken;
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (typeof accessToken === 'string' && accessToken.length > 0 && !/\s/.test(accessToken)) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
   return requestProductionJson({
     url: `${baseUrl}${path}`,
     fetcher,
     method: 'GET',
-    headers: { Accept: 'application/json' },
+    headers,
     credentials: 'omit',
     timeoutMs,
     signal: options.signal,
@@ -811,11 +846,23 @@ export async function fetchProductionJson(
   });
 }
 
+export const UPCOMING_MEMBER_FLIGHTS_PATH = '/empty-legs?past=false';
+
 export async function fetchProductionFlights(
   options: ReadRequestOptions = {},
 ): Promise<FlightView[]> {
   return mapReadSchema(
     await fetchProductionJson('/empty-legs', options),
+    mapProductionFlights,
+  );
+}
+
+/** Upcoming member flights, including that member's queue and winner fields. */
+export async function fetchUpcomingMemberFlights(
+  options: ReadRequestOptions = {},
+): Promise<FlightView[]> {
+  return mapReadSchema(
+    await fetchProductionJson(UPCOMING_MEMBER_FLIGHTS_PATH, options),
     mapProductionFlights,
   );
 }
@@ -836,6 +883,11 @@ export function parseProductionFlightId(id: string | number | null | undefined):
   if (!/^[1-9]\d*$/.test(text)) return null;
   const numericId = Number(text);
   return Number.isSafeInteger(numericId) ? numericId : null;
+}
+
+export function presentCachedDepartureClock(value: string | null | undefined): string | null {
+  if (typeof value !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
+  return value;
 }
 
 export function findProductionFlightById(

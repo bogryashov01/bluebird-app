@@ -1,4 +1,5 @@
 import baseActiveFixture from '../fixtures/production-membership-base-active.json';
+import { isProductionMemberDataSelected } from './productionMemberRuntime';
 import type { ProductionMembership } from './productionAuthApi';
 
 export type MembershipDataMode = 'mock' | 'production';
@@ -35,6 +36,9 @@ export function resolveMembershipDataMode(
 }
 
 export function getMembershipDataModeConfiguration(): MembershipDataModeConfiguration {
+  if (isProductionMemberDataSelected()) {
+    return { mode: 'production', mockPreviewAllowed: false, error: null };
+  }
   return resolveMembershipDataMode(
     process.env.EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE,
     typeof __DEV__ !== 'undefined' && __DEV__,

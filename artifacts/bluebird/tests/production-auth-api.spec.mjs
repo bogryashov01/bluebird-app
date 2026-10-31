@@ -658,6 +658,51 @@ test("trip list handles successful empty arrays and keeps request, authorization
   await assert.rejects(networkFailure.listTrips(), { code: "network" });
 });
 
+test("membership parser accepts omitted payment fields and rejects a different contract", async () => {
+  const { paymentStatus, status, paymentMethod, ...withoutPaymentDetails } = membership;
+  const parsed = await makeClient(async () => jsonResponse({
+    ...withoutPaymentDetails,
+    internalNote: "do not keep",
+  })).getMembership();
+  assert.equal(parsed.isMember, true);
+  assert.equal(parsed.tier, "plus");
+  assert.equal(parsed.cancelAtPeriodEnd, false);
+  assert.equal("status" in parsed, false);
+  assert.equal("paymentStatus" in parsed, false);
+  assert.equal("paymentMethod" in parsed, false);
+  assert.equal("internalNote" in parsed, false);
+  assert.equal(paymentStatus, "succeeded");
+  assert.equal(status, "active");
+  assert.equal(paymentMethod.last4, "4242");
+
+  const missingEvents = makeClient(async () => jsonResponse({ ...membership, recentEvents: undefined }));
+  await assert.rejects(missingEvents.getMembership(), (error) => {
+    assert.ok(error instanceof ProductionAuthSchemaError);
+    assert.equal(error.field, "membership.recentEvents");
+    assert.equal(error.message.includes("4242"), false);
+    return true;
+  });
+
+  const manualPayment = makeClient(async () => jsonResponse({ ...membership, paymentStatus: "manual" }));
+  await assert.rejects(manualPayment.getMembership(), (error) => {
+    assert.ok(error instanceof ProductionAuthSchemaError);
+    assert.equal(error.field, "membership.paymentStatus");
+    return true;
+  });
+
+  const partialCard = makeClient(async () => jsonResponse({
+    ...membership,
+    paymentMethod: { brand: "visa", last4: "4242" },
+  }));
+  await assert.rejects(partialCard.getMembership(), (error) => {
+    assert.ok(error instanceof ProductionAuthSchemaError);
+    assert.equal(error.field, "membership.paymentMethod.expMonth");
+    assert.equal(error.field.includes("4242"), false);
+    assert.equal(error.message.includes("4242"), false);
+    return true;
+  });
+});
+
 test("membership and profile parsers reject fields with the wrong documented shape", async () => {
   const badMembership = makeClient(async () => jsonResponse({ ...membership, tier: "concierge" }));
   await assert.rejects(badMembership.getMembership(), ProductionAuthSchemaError);

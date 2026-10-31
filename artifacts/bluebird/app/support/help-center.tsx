@@ -1,153 +1,141 @@
-import React from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import React, { useState } from 'react';
+import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { SupportPage } from '@/components/SupportPage';
+import {
+  EXTERNAL_RESOURCE_OPEN_ERROR,
+  openVerifiedSupportResource,
+  verifiedSupportResource,
+  type SupportResource,
+  type SupportResourceId,
+} from '@/lib/supportResources';
 
-interface FaqItem { q: string; a: string }
-interface FaqTopic { title: string; items: FaqItem[] }
+const SECTION_IDS: SupportResourceId[] = ['faq', 'support-email', 'support-phone', 'contact-page'];
 
-const TOPICS: FaqTopic[] = [
-  {
-    title: 'Flights & Booking',
-    items: [
-      {
-        q: 'What is an empty-leg flight?',
-        a: 'When a private jet flies without passengers to reposition for its next charter, those seats become available at a steep discount. Bluebird surfaces these empty legs so members can book them.',
-      },
-      {
-        q: 'How does the queue work?',
-        a: 'Each flight has a waitlist queue. Join the queue for any flight you want, and as seats are confirmed you move up. When you reach the front, the seat is yours and the trip is confirmed.',
-      },
-      {
-        q: 'What is a Skip the Line pass?',
-          a: 'A Skip the Line pass moves you to the front of a flight queue instantly. Plus members receive 5 per month, while Family/Corporate members receive 7.',
-      },
-      {
-        q: 'Can I bring guests?',
-          a: 'Base members can bring up to 5 guests, subject to seat availability on the aircraft.',
-      },
-    ],
-  },
-  {
-    title: 'Membership & Billing',
-    items: [
-      {
-        q: 'How do I upgrade my membership?',
-        a: 'Open the Membership tab and choose the plan you want. Upgrades take effect immediately, including any bonus Skip the Line passes.',
-      },
-      {
-        q: 'When am I billed?',
-          a: 'Membership renews annually on the date you joined. You can review your renewal date in the Membership tab.',
-      },
-      {
-        q: 'Can I cancel anytime?',
-          a: 'Yes. Memberships can be cancelled at any time; access continues through the end of the paid annual period.',
-      },
-    ],
-  },
-  {
-    title: 'Account & Security',
-    items: [
-      {
-        q: 'How do I update my personal details?',
-        a: 'Go to Profile → Personal Information to edit your name and email. Your phone number is your sign-in identity and cannot be changed in the app.',
-      },
-      {
-        q: 'How do referrals work?',
-        a: 'Share your referral code from the Referral screen. When a friend joins with your code, you both receive rewards.',
-      },
-    ],
-  },
-];
+function actionIcon(url: string): 'external-link' | 'mail' | 'phone' {
+  if (url.startsWith('mailto:')) return 'mail';
+  if (url.startsWith('tel:')) return 'phone';
+  return 'external-link';
+}
 
 export default function HelpCenterScreen() {
-  const insets = useSafeAreaInsets();
   const colors = useColors();
-  const [openId, setOpenId] = React.useState<string | null>(null);
+  const [openError, setOpenError] = useState(false);
+  const [openingId, setOpeningId] = useState<SupportResourceId | null>(null);
 
-  const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const openResource = async (resource: SupportResource) => {
+    if (openingId) return;
+    setOpeningId(resource.id);
+    setOpenError(false);
+    const result = await openVerifiedSupportResource(resource, (url) => Linking.openURL(url));
+    setOpeningId(null);
+    if (result === 'unavailable') setOpenError(true);
+  };
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.offWhite }]}>
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: botPad + 40 }]}
-        showsVerticalScrollIndicator={false}
+    <SupportPage title="Help Center" testID="help-center-screen" backTestID="help-center-back">
+      <Text style={[styles.introTitle, { color: colors.textOnSurface }]}>How can we help?</Text>
+      <Text style={[styles.introBody, { color: colors.mutedForegroundLight }]}>
+        Find answers to common questions or get in touch with the Bluebird team.
+      </Text>
+      <View
+        style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        testID="help-center-resources"
       >
-        {TOPICS.map((topic) => (
-          <View key={topic.title}>
-            <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>{topic.title}</Text>
-            <View style={[styles.card, { backgroundColor: colors.surface }]}>
-              {topic.items.map((item, i) => {
-                const id = `${topic.title}-${i}`;
-                const open = openId === id;
-                return (
-                  <View
-                    key={id}
-                    style={i < topic.items.length - 1 ? { borderBottomWidth: 1, borderBottomColor: colors.separator } : undefined}
-                  >
-                    <TouchableOpacity
-                      style={styles.qRow}
-                      activeOpacity={0.6}
-                      onPress={() => setOpenId(open ? null : id)}
-                    >
-                      <Text style={[styles.qText, { color: colors.textOnSurface }]}>{item.q}</Text>
-                      <Text style={[styles.qChevron, { color: colors.mutedForegroundLight }]}>{open ? '−' : '+'}</Text>
-                    </TouchableOpacity>
-                    {open && (
-                      <Text style={[styles.aText, { color: colors.mutedForegroundLight }]}>{item.a}</Text>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        ))}
-
-        <View style={[styles.contactCard, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.contactTitle, { color: colors.textOnSurface }]}>Still need help?</Text>
-          <Text style={[styles.contactBody, { color: colors.mutedForegroundLight }]}>
-            Ask the AI Concierge anytime, or email us at support@bluebird.com.
-          </Text>
-          <TouchableOpacity
-            style={[styles.contactBtn, { backgroundColor: colors.primary }]}
-            activeOpacity={0.85}
-            onPress={() => router.push('/concierge')}
+        {SECTION_IDS.map((id, index) => {
+          const resource = verifiedSupportResource(id);
+          const divider = index > 0 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator } : null;
+          if (!resource) {
+            return (
+              <View key={id} style={[styles.row, divider]} testID={`help-center-${id}`}>
+                <Text style={[styles.rowTitle, { color: colors.textOnSurface }]}>Unavailable</Text>
+              </View>
+            );
+          }
+          return (
+            <TouchableOpacity
+              key={id}
+              onPress={() => { void openResource(resource); }}
+              disabled={openingId !== null}
+              accessibilityRole="link"
+              accessibilityLabel={resource.label}
+              testID={`help-center-${id}`}
+              style={[styles.row, styles.linkRow, divider, { opacity: openingId === resource.id ? 0.7 : 1 }]}
+            >
+              <View style={styles.copy}>
+                <Text style={[styles.rowTitle, { color: colors.textOnSurface }]}>{resource.label}</Text>
+                {resource.description ? (
+                  <Text style={[styles.rowBody, { color: colors.mutedForegroundLight }]}>{resource.description}</Text>
+                ) : null}
+              </View>
+              <Feather name={actionIcon(resource.url)} size={16} color={colors.primary} />
+            </TouchableOpacity>
+          );
+        })}
+        {openError ? (
+          <Text
+            accessibilityRole="alert"
+            style={[styles.error, { color: colors.mutedForegroundLight }]}
+            testID="help-center-open-error"
           >
-            <Text style={[styles.contactBtnText, { color: colors.primaryForeground }]}>Chat with AI Concierge</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </View>
+            {EXTERNAL_RESOURCE_OPEN_ERROR}
+          </Text>
+        ) : null}
+      </View>
+    </SupportPage>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  scroll: { paddingHorizontal: 16, paddingTop: 20 },
-  sectionLabel: {
-    fontFamily: 'Inter_600SemiBold', fontSize: 12,
-    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10,
+  introTitle: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.3,
+  },
+  introBody: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 8,
+    marginBottom: 18,
   },
   card: {
-    borderRadius: 18, overflow: 'hidden', marginBottom: 22,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 18,
+    overflow: 'hidden',
   },
-  qRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 16, paddingVertical: 14,
+  row: {
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    gap: 4,
   },
-  qText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 14.5 },
-  qChevron: { fontFamily: 'Inter_600SemiBold', fontSize: 18, lineHeight: 20 },
-  aText: {
-    fontFamily: 'Inter_400Regular', fontSize: 13.5, lineHeight: 20,
-    paddingHorizontal: 16, paddingBottom: 14, marginTop: -4,
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  contactCard: { borderRadius: 18, padding: 20 },
-  contactTitle: { fontFamily: 'Inter_700Bold', fontSize: 16, marginBottom: 6 },
-  contactBody: { fontFamily: 'Inter_400Regular', fontSize: 13.5, lineHeight: 19, marginBottom: 14 },
-  contactBtn: { borderRadius: 999, paddingVertical: 13, alignItems: 'center' },
-  contactBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  copy: {
+    flex: 1,
+    gap: 4,
+  },
+  rowTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  rowBody: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  error: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    lineHeight: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 16,
+  },
 });

@@ -24,6 +24,8 @@ import { getClerkBluebirdProfileEffectDependencies, isClerkBluebirdProfileResult
 import { loadClerkPersonalInfo } from '@/lib/clerkPersonalInfo';
 import type { ProductionUserProfile } from '@/lib/productionAuthApi';
 import { getFullAppDemoProfile } from '@/lib/fullAppDemo';
+import { presentClerkMembershipDesign } from '@/lib/clerkMembershipDesign';
+import { isMemberConnectionsIntegrationEnabled } from '@/lib/memberConnections';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; hint: string }[] = [
   { value: 'light',  label: 'Light',  hint: 'Always use the light theme' },
@@ -102,6 +104,22 @@ export default function ProfileScreen() {
     localDemoFlow,
     hasLegacyUser: !!user,
   });
+  const signOutPromptOpen = React.useRef(false);
+  const confirmSignOut = async () => {
+    if (signOutPromptOpen.current) return;
+    signOutPromptOpen.current = true;
+    try {
+      const ok = await confirmDialog(
+        'Sign out?',
+        'Are you sure you want to sign out?',
+        'Sign out',
+        true,
+      );
+      if (ok) signOut();
+    } finally {
+      signOutPromptOpen.current = false;
+    }
+  };
   const [appearanceOpen, setAppearanceOpen] = React.useState(false);
   const [profileLoadState, setProfileLoadState] = React.useState<ClerkProfileLoadState>({ kind: 'loading' });
   const [profileLoadAttempt, setProfileLoadAttempt] = React.useState(0);
@@ -254,15 +272,18 @@ export default function ProfileScreen() {
       clerkMemberResolution.clerkUserId === clerkSession?.userId
         ? clerkMemberResolution.currentUser
         : null;
-    const membershipStatus = !memberProjection
-      ? 'Membership status unavailable'
-      : !memberProjection.isMember
-        ? 'Not a member'
-        : memberProjection.memberTier === 'plus'
-          ? 'Plus Member'
-          : memberProjection.memberTier === 'base'
-            ? 'Base Member'
-            : 'Member tier unavailable';
+    const membershipStatus = presentClerkMembershipDesign({
+      verifiedFirstName: firstName,
+      verifiedLastName: lastName,
+      membership: null,
+      account: memberProjection
+        ? {
+            resolved: true,
+            isMember: memberProjection.isMember,
+            memberTier: memberProjection.memberTier,
+          }
+        : { resolved: false },
+    }).tierBadge;
     return (
       <View style={[styles.container, { backgroundColor: colors.offWhite }]} testID="clerk-profile">
         <ScrollView
@@ -280,11 +301,11 @@ export default function ProfileScreen() {
                   : '—'}
               </Text>
             </View>
-            <View>
-              <Text style={[styles.name, { color: colors.textOnSurface }]}>
+            <View style={styles.identityCopy}>
+              <Text style={[styles.name, { color: colors.textOnSurface }]} numberOfLines={2}>
                 {fullName || 'Name unavailable'}
               </Text>
-              <Text style={[styles.memberSince, { color: colors.mutedForegroundLight }]}>
+              <Text style={[styles.memberSince, { color: colors.mutedForegroundLight }]} numberOfLines={2}>
                 {membershipStatus}
               </Text>
             </View>
@@ -305,12 +326,11 @@ export default function ProfileScreen() {
             rows={[
               {
                 label: 'Personal Information',
-                hint: 'Account details',
                 onPress: () => router.push('/account/personal-info' as any),
               },
               {
                 label: 'Connect Contacts',
-                hint: 'Unavailable for this account',
+                hint: 'Invite friends',
                 onPress: () => router.push('/account/contacts' as any),
               },
               {
@@ -338,7 +358,6 @@ export default function ProfileScreen() {
             rows={[
               {
                 label: 'Notification Settings',
-                hint: 'Travel preferences and alerts',
                 onPress: () => router.push('/notifications'),
               },
               {
@@ -349,16 +368,27 @@ export default function ProfileScreen() {
             ]}
           />
           <SettingsGroup
+            title="Connections"
+            rows={[
+              {
+                label: 'Connections',
+                hint: isMemberConnectionsIntegrationEnabled() ? undefined : 'Not available yet',
+                testID: 'clerk-connections-preview',
+                onPress: () => router.navigate('/(tabs)/connections' as never),
+              },
+            ]}
+          />
+          <SettingsGroup
             title="Support"
             rows={[
               {
                 label: 'Community',
-                hint: 'Unavailable for this account',
+                hint: 'Not available yet',
                 onPress: () => router.push('/community'),
               },
               {
                 label: 'AI Concierge',
-                hint: 'Unavailable for this account',
+                hint: 'On this device',
                 onPress: () => router.push('/concierge'),
               },
               { label: 'Help Center', onPress: () => router.push('/support/help-center' as any) },
@@ -369,15 +399,7 @@ export default function ProfileScreen() {
             rows={[
               {
                 label: 'Sign Out',
-                onPress: async () => {
-                  const ok = await confirmDialog(
-                    'Sign out?',
-                    'Are you sure you want to sign out?',
-                    'Sign out',
-                    true,
-                  );
-                  if (ok) signOut();
-                },
+                onPress: confirmSignOut,
                 right: <Text style={[styles.signOutChevron, { color: colors.mutedForegroundLight }]}>›</Text>,
               },
             ]}
@@ -547,15 +569,7 @@ export default function ProfileScreen() {
             {
               label: 'Sign Out',
               disabled: demoMode,
-              onPress: async () => {
-                const ok = await confirmDialog(
-                  'Sign out?',
-                  'Are you sure you want to sign out?',
-                  'Sign out',
-                  true,
-                );
-                if (ok) signOut();
-              },
+              onPress: confirmSignOut,
               right: <Text style={[styles.signOutChevron, { color: colors.mutedForegroundLight }]}>›</Text>,
             },
           ]}
@@ -600,7 +614,7 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scroll: { paddingHorizontal: 20, gap: 18 },
+  scroll: { paddingHorizontal: 20, gap: 22 },
   clerkProfileLoading: {
     flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10,
   },
@@ -615,13 +629,14 @@ const styles = StyleSheet.create({
     gap: 14, paddingBottom: 4,
   },
   avatar: {
-    width: 58, height: 58, borderRadius: 29,
+    width: 64, height: 64, borderRadius: 32,
     alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
   },
   avatarText: { fontFamily: 'Inter_700Bold', fontSize: 20 },
-  name: { fontFamily: 'Inter_700Bold', fontSize: 20, letterSpacing: -0.4 },
-  memberSince: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 2 },
+  identityCopy: { flex: 1 },
+  name: { fontFamily: 'Inter_700Bold', fontSize: 24, letterSpacing: -0.5, lineHeight: 30 },
+  memberSince: { fontFamily: 'Inter_400Regular', fontSize: 14, marginTop: 4, lineHeight: 20 },
 
   signOutChevron: { fontSize: 20, lineHeight: 22 },
 

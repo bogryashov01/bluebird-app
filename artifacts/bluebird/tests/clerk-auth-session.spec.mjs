@@ -13,6 +13,9 @@ import {
   shouldUseLocalFlightReadMode,
   shouldRedirectClerkRoute,
   shouldClearClerkMemberCache,
+  CLERK_CONNECTIONS_TAB,
+  clerkLegacyConversationHref,
+  isConnectionsPreviewDevelopmentEnabled,
 } from "../scripts/.clerk-auth-session.test.mjs";
 import {
   customFetch,
@@ -101,13 +104,13 @@ test("central Clerk resolution states gate member screens and distinguish outcom
     memberResolution: { status: "profile_incomplete", clerkUserId: "clerk-user-a" },
   }), "profile-required");
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], false, true), false);
-  for (const route of ["discover", "trips", "membership", "profile"]) {
+  for (const route of ["discover", "trips", "connections", "membership", "profile"]) {
     assert.equal(shouldRedirectClerkRoute(["(tabs)", route], false, true), false);
     assert.equal(shouldRedirectClerkRoute(["(tabs)", route, "index"], false, true), false);
     assert.equal(shouldRedirectClerkRoute(["(tabs)", route], false, false), true);
   }
   assert.equal(isClerkCoreTabRoute(["(tabs)", "trips"]), true);
-  assert.equal(isClerkCoreTabRoute(["(tabs)", "connections"]), false);
+  assert.equal(isClerkCoreTabRoute(["(tabs)", "connections"]), true);
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "trips"], false, true), false);
   assert.equal(canAccessClerkMemberScreens({
     isLoaded: true,
@@ -138,23 +141,62 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["notifications"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["account", "payment-methods"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["account", "contacts"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["support", "help-center"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["support", "legal"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["support", "help-center"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["support", "legal"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["support", "help-center", "extra"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["support", "legal", "extra"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["concierge"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["concierge"], false, false), true);
   assert.equal(shouldRedirectClerkRoute(["concierge", "extra"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["connections-preview"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["connections-preview", "member", "demo-avery-lang"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["connections-preview", "chat", "demo-conversation-ellis"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["connections-preview"], false, true, "", true), false);
+  assert.equal(shouldRedirectClerkRoute(["connections-preview", "member", "demo-avery-lang"], false, true, "", true), false);
+  assert.equal(shouldRedirectClerkRoute(["connections-preview", "chat", "demo-conversation-ellis"], false, true, "", true), false);
+  assert.equal(shouldRedirectClerkRoute(["messages", "[conversationId]"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["messages", "42"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["messages", "42"], false, true, "/messages/42"), false);
+  assert.equal(shouldRedirectClerkRoute(["messages", "demo-ellis"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["messages", "[conversationId]"], false, true, "/messages/demo-ellis"), true);
+  assert.equal(shouldRedirectClerkRoute(["messages", "42"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["connections-preview"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["connections-preview", "extra"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["airport-picker"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["account", "payment-methods"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["account", "contacts"], false, false), true);
   assert.equal(shouldRedirectClerkRoute(["airport-picker"], false, false), true);
   assert.equal(shouldRedirectClerkRoute(["account", "payment-methods"], false), true);
+  assert.equal(shouldRedirectClerkRoute(["account", "contacts"], false), true);
   assert.equal(shouldRedirectClerkRoute(["airport-picker"], false), true);
   assert.equal(shouldRedirectClerkRoute(["account", "payment-methods", "extra"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["account", "contacts", "extra"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["airport-picker", "extra"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false, false), true);
   assert.equal(shouldRedirectClerkRoute(["notifications"], false, false), true);
-  assert.equal(shouldRedirectClerkRoute(["(tabs)", "connections"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["(tabs)", "connections"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["flight", "[id]"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["flight", "[id]"], false, false), true);
   assert.equal(shouldRedirectClerkRoute(["flight", "join"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["flight", "join"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "checklist"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["flight", "checklist"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "checklist", "extra"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "passengers"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["flight", "passengers"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "passengers", "extra"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "queue-status"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["flight", "queue-status"], false, true, "/flight/queue-status"), false);
+  assert.equal(shouldRedirectClerkRoute(["flight", "queue-status"], false, true, "/flight/queue-status?flightId=42"), false);
+  assert.equal(shouldRedirectClerkRoute(["+not-found"], false, true, "/flight/queue-status?flightId=42"), false);
+  assert.equal(shouldRedirectClerkRoute(["flight", "queue-status"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "queue-status", "extra"], false, true), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "policy-review"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["flight", "policy-review"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["flight", "policy-review", "extra"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["flight", "join", "extra"], false, true), true);
   for (const route of ["demo-policy", "demo-intl", "demo-joined", "demo-status", "demo-pass", "demo-purchase", "demo-winner", "demo-confirmed"]) {
     assert.equal(shouldRedirectClerkRoute(["flight", route], false, true), false);
@@ -201,7 +243,9 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   ), false);
   const rootLayoutSource = readFileSync(resolve(projectRoot, "app/_layout.tsx"), "utf8");
   const discoverSource = readFileSync(resolve(projectRoot, "app/(tabs)/discover/index.tsx"), "utf8");
-  assert.match(rootLayoutSource, /shouldRedirectClerkRoute\(segments, memberAccessResolved, registeredHomeReady, pathname\)/);
+  assert.match(rootLayoutSource, /shouldRedirectClerkRoute\(\s*segments,\s*memberAccessResolved,\s*registeredHomeReady,\s*pathname,\s*connectionsPreviewEnabled,\s*\)/);
+  assert.match(rootLayoutSource, /clerkLegacyConversationHref\(/);
+  assert.match(rootLayoutSource, /if \(legacyConversationHref\)/);
   assert.match(discoverSource, /router\.push\(demoMode[\s\S]*pathname: '\/flight\/\[id\]'/);
   for (const path of [
     ["(tabs)", "discover"],
@@ -211,6 +255,9 @@ test("central Clerk resolution states gate member screens and distinguish outcom
     ["account", "personal-info"],
     ["notifications"],
     ["concierge"],
+    ["connections-preview"],
+    ["support", "help-center"],
+    ["support", "legal"],
     ["flight", "join"],
   ]) {
     assert.equal(shouldRedirectClerkRoute(path, false, false), true, `${path.join("/")} must deny an incomplete Clerk profile`);
@@ -221,7 +268,110 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["(tabs)", "discover"], true), false);
 });
 
-test("both tab bars expose exactly Discover, Trips, Membership, and Profile", () => {
+test("production Clerk sessions leave legacy chats and JWT networking for Connections", () => {
+  assert.equal(isConnectionsPreviewDevelopmentEnabled(false), false);
+  assert.equal(isConnectionsPreviewDevelopmentEnabled(true), true);
+  const home = {
+    authMode: "clerk",
+    homeReady: true,
+    developmentPreview: false,
+  };
+  const legacyRoutes = [
+    { segments: ["connections-preview"], pathname: "/connections-preview" },
+    { segments: ["connections-preview", "chat", "demo-conversation-ellis"], pathname: "/connections-preview/chat/demo-conversation-ellis" },
+    { segments: ["connections-preview", "member", "demo-avery-lang"], pathname: "/connections-preview/member/demo-avery-lang" },
+    { segments: ["+not-found"], pathname: "/connections-preview/chat/demo-conversation-ellis" },
+    { segments: ["networking", "requests"], pathname: "/networking/requests" },
+    { segments: ["networking", "connections"], pathname: "/networking/connections" },
+    { segments: ["networking", "connections", "[id]"], pathname: "/networking/connections/9" },
+    { segments: ["networking", "profile"], pathname: "/networking/profile" },
+    { segments: ["+not-found"], pathname: "/networking/connections/9?token=clerk" },
+    { segments: ["messages", "demo-ellis"], pathname: "/messages/demo-ellis" },
+    { segments: ["messages", "[conversationId]"], pathname: "/messages/demo-ellis" },
+    { segments: ["messages"], pathname: "/messages" },
+  ];
+  for (const route of legacyRoutes) {
+    assert.equal(clerkLegacyConversationHref({ ...home, ...route }), CLERK_CONNECTIONS_TAB, route.pathname);
+    assert.equal(shouldRedirectClerkRoute(route.segments, false, true, route.pathname, false), true, route.pathname);
+  }
+  assert.equal(clerkLegacyConversationHref({
+    ...home,
+    segments: ["messages", "42"],
+    pathname: "/messages/42",
+  }), null);
+  assert.equal(shouldRedirectClerkRoute(["messages", "42"], false, true, "/messages/42", false), false);
+  assert.equal(clerkLegacyConversationHref({
+    ...home,
+    segments: ["(tabs)", "connections"],
+    pathname: "/connections",
+  }), null);
+  assert.equal(clerkLegacyConversationHref({
+    authMode: "clerk",
+    segments: ["connections-preview", "chat", "demo-conversation-ellis"],
+    pathname: "/connections-preview/chat/demo-conversation-ellis",
+    homeReady: false,
+    developmentPreview: false,
+  }), null);
+  assert.equal(shouldRedirectClerkRoute(
+    ["connections-preview", "chat", "demo-conversation-ellis"],
+    false,
+    false,
+    "/connections-preview/chat/demo-conversation-ellis",
+    false,
+  ), true);
+  assert.equal(clerkLegacyConversationHref({
+    authMode: "legacy",
+    segments: ["networking", "connections", "[id]"],
+    pathname: "/networking/connections/9",
+    homeReady: true,
+    developmentPreview: false,
+  }), null);
+  assert.equal(clerkLegacyConversationHref({
+    authMode: "legacy",
+    segments: ["connections-preview", "chat", "demo-conversation-ellis"],
+    pathname: "/connections-preview/chat/demo-conversation-ellis",
+    homeReady: true,
+    developmentPreview: false,
+  }), null);
+  assert.equal(clerkLegacyConversationHref({
+    authMode: "clerk",
+    segments: ["connections-preview", "chat", "demo-conversation-ellis"],
+    pathname: "/connections-preview/chat/demo-conversation-ellis",
+    homeReady: true,
+    developmentPreview: true,
+  }), null);
+  assert.equal(shouldRedirectClerkRoute(
+    ["connections-preview", "chat", "demo-conversation-ellis"],
+    false,
+    true,
+    "/connections-preview/chat/demo-conversation-ellis",
+    true,
+  ), false);
+  assert.equal(clerkLegacyConversationHref({
+    authMode: "clerk",
+    segments: ["networking", "requests"],
+    pathname: "/networking/requests",
+    homeReady: true,
+    developmentPreview: true,
+  }), CLERK_CONNECTIONS_TAB);
+
+  const messages = readFileSync(resolve(projectRoot, "lib/memberMessages.ts"), "utf8");
+  const connections = readFileSync(resolve(projectRoot, "lib/memberConnections.ts"), "utf8");
+  assert.match(messages, /export function isMemberMessagesIntegrationEnabled/);
+  assert.match(messages, /return flag === 'true' && nativeAuthTest !== true/);
+  assert.match(connections, /export function isMemberConnectionsIntegrationEnabled/);
+  assert.match(connections, /return flag === 'true' && nativeAuthTest !== true/);
+  const notifications = readFileSync(resolve(projectRoot, "app/notifications.tsx"), "utf8");
+  const clerkNotifications = notifications.slice(
+    notifications.indexOf("function ClerkNotificationSettings"),
+    notifications.indexOf("function LegacyNotificationsScreen"),
+  );
+  assert.equal(clerkNotifications.includes("notificationRoute"), false);
+  assert.equal(clerkNotifications.includes("connections-preview"), false);
+  assert.equal(clerkNotifications.includes("/networking/"), false);
+});
+
+test("both tab bars expose Discover, Trips, Connections, Membership, and Profile", () => {
   const source = readFileSync(resolve(projectRoot, "app/(tabs)/_layout.tsx"), "utf8");
   const nativeTriggers = [...source.matchAll(/<NativeTabs\.Trigger name="([^"]+)"([^>]*)>/g)]
     .filter(([, , attributes]) => !attributes.includes("hidden"))
@@ -229,9 +379,11 @@ test("both tab bars expose exactly Discover, Trips, Membership, and Profile", ()
   assert.deepEqual(nativeTriggers, [
     "discover/index",
     "trips/index",
+    "connections",
     "membership/index",
     "profile/index",
   ]);
+  assert.equal(nativeTriggers[2], "connections");
   const classicScreens = source.slice(source.indexOf("<Tabs\n")).split("<Tabs.Screen");
   const visibleClassicScreens = classicScreens
     .filter((screen) => !/options=\{\{\s*href:\s*null\s*\}\}/.test(screen))
@@ -240,12 +392,16 @@ test("both tab bars expose exactly Discover, Trips, Membership, and Profile", ()
   assert.deepEqual(visibleClassicScreens, [
     "discover/index",
     "trips/index",
+    "connections",
     "membership/index",
     "profile/index",
   ]);
+  assert.equal(visibleClassicScreens[2], "connections");
   assert.match(source, /NativeTabs\.Trigger\.Label>Discover/);
+  assert.match(source, /NativeTabs\.Trigger\.Label>Connections/);
   assert.match(source, /title: 'Discover'/);
-  assert.match(source, /<Tabs\.Screen name="connections" options=\{\{ href: null \}\} \/>/);
+  assert.match(source, /title: 'Connections'/);
+  assert.doesNotMatch(source, /<Tabs\.Screen name="connections" options=\{\{ href: null \}\} \/>/);
   const profileSource = readFileSync(resolve(projectRoot, "app/(tabs)/profile/index.tsx"), "utf8");
   assert.doesNotMatch(profileSource, /router\.push\(['"]\/\(tabs\)\/connections/);
   const unreadHookSource = readFileSync(resolve(projectRoot, "hooks/useUnreadNotifications.ts"), "utf8");
@@ -304,23 +460,37 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.doesNotMatch(clerkProfile, /recentActivity/);
 
   const contactsSource = readFileSync(resolve(projectRoot, "app/account/contacts.tsx"), "utf8");
+  const connectContactsSource = readFileSync(resolve(projectRoot, "lib/connectContacts.ts"), "utf8");
   const communitySource = readFileSync(resolve(projectRoot, "app/community.tsx"), "utf8");
   const conciergeSource = readFileSync(resolve(projectRoot, "app/concierge.tsx"), "utf8");
-  for (const [source, unavailableTitle] of [
-    [contactsSource, "Connect Contacts unavailable"],
-    [communitySource, "Community unavailable"],
-  ]) {
-    assert.match(source, /authMode === 'clerk'/);
-    assert.match(source, new RegExp(unavailableTitle));
-    assert.match(source, /ProductionAuthenticatedUnavailableNotice/);
-  }
+  assert.match(contactsSource, /authMode === 'clerk'/);
+  assert.match(contactsSource, /Connect Contacts/);
+  assert.match(contactsSource, /FamilyMembershipScreen/);
+  assert.match(contactsSource, /useReferralProgram/);
+  assert.match(contactsSource, /Share\.share/);
+  assert.match(contactsSource, /pickDeviceContact/);
+  assert.match(contactsSource, /expo-contacts\/legacy/);
+  assert.match(contactsSource, /presentContactPickerAsync/);
+  assert.match(contactsSource, /expo-sms/);
+  assert.match(contactsSource, /sendSMSAsync/);
+  assert.match(contactsSource, /Share Another Way/);
+  assert.doesNotMatch(contactsSource, /ProductionAuthenticatedUnavailableNotice|from 'expo-contacts'|getContactsAsync|requestPermissionsAsync|sms:|mailto:|console\.(log|info|debug|warn)/);
+  assert.match(connectContactsSource, /status: 'unavailable'/);
+  assert.doesNotMatch(connectContactsSource, /expo-contacts|getContactsAsync|requestPermissionsAsync|fetch\(|XMLHttpRequest/);
+  assert.match(communitySource, /authMode === 'clerk'/);
+  assert.match(communitySource, /Community unavailable/);
+  assert.match(communitySource, /ProductionAuthenticatedUnavailableNotice/);
   assert.match(conciergeSource, /authMode === 'clerk'/);
   assert.match(conciergeSource, /<DemoConciergeChat \/>/);
   assert.doesNotMatch(conciergeSource, /AI Concierge unavailable/);
   const paymentMethodsSource = readFileSync(resolve(projectRoot, "app/account/payment-methods.tsx"), "utf8");
-  assert.match(paymentMethodsSource, /Your payment methods/);
-  assert.match(paymentMethodsSource, /Payment method management is coming soon\./);
-  assert.doesNotMatch(paymentMethodsSource, /authMode === 'clerk'/);
+  assert.match(paymentMethodsSource, /Manage Your Payment Method/);
+  assert.match(paymentMethodsSource, /DESTINATION\.label/);
+  assert.match(paymentMethodsSource, /openMembershipPaymentWebsite/);
+  const paymentWebsiteSource = readFileSync(resolve(projectRoot, "lib/membershipPaymentMethod.ts"), "utf8");
+  assert.match(paymentWebsiteSource, /Open Bluebird Website/);
+  assert.match(paymentWebsiteSource, /https:\/\/bluebirdjets\.com/);
+  assert.doesNotMatch(paymentMethodsSource, /Payment method unavailable|authMode === 'clerk'|getMembership|fetch\(|4242|5100/);
   const personalInfoSource = readFileSync(resolve(projectRoot, "app/account/personal-info.tsx"), "utf8");
   assert.match(personalInfoSource, /authMode === 'clerk'/);
   assert.match(personalInfoSource, /<ClerkPersonalInfoScreen \/>/);
@@ -349,33 +519,38 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(clerkNotifications, /enabled: canLoadPreferences/);
   assert.match(clerkNotifications, /useFocusEffect\(React\.useCallback/);
   assert.match(clerkNotifications, /clerk-retry-notification-preferences/);
-  assert.match(clerkNotifications, /label: 'International Flights', hint: 'Coming soon', disabled: true/);
   assert.match(clerkNotifications, /label: 'Membership Updates', hint: 'Coming soon', disabled: true/);
   assert.doesNotMatch(clerkNotifications, /synchronize phone information|Notification History|Push Delivery|clerk-load-notification-preferences|clerk-refresh-notification-preferences/);
   assert.match(clerkNotifications, /api\.authenticated\.updateProfile/);
   assert.match(clerkNotifications, /saveClerkNotificationPreferences/);
   assert.doesNotMatch(clerkNotifications, /useUpdateMe|useMarkNotificationRead|useListNotifications/);
   assert.match(notificationsSource, /authMode === 'clerk'/);
-  assert.match(clerkNotifications, /key === 'winningNotifications'/);
   assert.match(clerkNotifications, /Choose airport/);
   assert.match(clerkNotifications, /router\.push\('\/airport-picker'/);
   assert.match(clerkNotifications, /title="Travel Preferences"/);
   assert.match(clerkNotifications, /router\.canGoBack\(\) \? router\.back\(\)/);
-  assert.match(clerkNotifications, /key === 'queueUpdates'/);
   const preferenceEditorSource = readFileSync(resolve(projectRoot, "components/NotificationPreferenceEditor.tsx"), "utf8");
-  assert.match(preferenceEditorSource, /Flight alert mode/);
+  assert.match(preferenceEditorSource, /International Flights/);
+  assert.match(preferenceEditorSource, /Coming soon/);
+  assert.match(preferenceEditorSource, /Queue Updates/);
+  assert.match(preferenceEditorSource, /Flight Confirmations/);
+  assert.match(preferenceEditorSource, /Flights from my Home Airport/);
   assert.match(preferenceEditorSource, /All Flights/);
-  assert.match(preferenceEditorSource, /Specific Flights/);
+  assert.match(preferenceEditorSource, /mode === 'specific'/);
   const airportPickerSource = readFileSync(resolve(projectRoot, "app/airport-picker.tsx"), "utf8");
   assert.match(airportPickerSource, /fetchProductionAirportSearch/);
   assert.match(airportPickerSource, /saveClerkHomeAirport/);
+  assert.match(airportPickerSource, /canSaveClerkNotificationPreferencesToAccount/);
+  assert.match(airportPickerSource, /if \(!accountWritesEnabled \|\| !selectedAirport/);
+  assert.match(airportPickerSource, /No request is sent/);
   assert.match(airportPickerSource, /buildHomeAirportProfileUpdate/);
   assert.match(airportPickerSource, /Loading the saved profile may synchronize phone information/);
   assert.match(airportPickerSource, /Read-only: required profile details are incomplete/);
   assert.match(notificationsSource, /router\.canGoBack\(\) \? router\.back\(\)/);
-  assert.match(membershipSource, /loadPreparedMobileMembership/);
+  assert.match(membershipSource, /loadDashboardProductionMembership/);
+  assert.doesNotMatch(membershipSource, /loadPreparedMobileMembership|\/api\/mobile\/membership|\/api\/mobile\/plans|readApprovedDashboardMembership/);
   assert.doesNotMatch(clerkMembership, /loadClerkBluebirdMembership|getMembership\(/);
-  assert.match(clerkMembership, /presentClerkMembershipDesign/);
+  assert.match(clerkMembership, /presentMembershipDashboard/);
   assert.match(clerkMembership, /router\.push\('\/concierge'/);
   assert.doesNotMatch(clerkMembership, /router\.(push|replace)\('\/\(tabs\)\/discover'/);
   assert.match(clerkMembership, /clerk-membership-retry/);
@@ -396,8 +571,9 @@ test("Clerk Trips uses the selected account-scoped read-only Main API contract w
   assert.match(clerkTripsSource, /query\.isError/);
   assert.match(clerkTripsSource, /items\?\.length === 0/);
   assert.match(clerkTripsSource, /Your trip information is unavailable right now/);
-  assert.doesNotMatch(clerkTripsSource, /useListTrips|useGetQueueStatus|useCancelTrip|useMutation|router\.push|router\.replace/);
-  assert.doesNotMatch(clerkTripsSource, /getEmptyLegQueue|joinEmptyLegQueue|leaveEmptyLegQueue|updateProfile|getMembership|passengers|manifest|boardingPass/);
+  assert.doesNotMatch(clerkTripsSource, /useListTrips|useGetQueueStatus|useCancelTrip|useMutation|router\.replace/);
+  assert.match(clerkTripsSource, /router\.push\(target\)/);
+  assert.doesNotMatch(clerkTripsSource, /getEmptyLegQueue|joinEmptyLegQueue|leaveEmptyLegQueue|updateProfile|getMembership|passengers|manifest|boardingPass|getTrip\(/);
   assert.match(tripsSource, /authMode === 'legacy' && isLocalFlightReadMode\(\)/);
   assert.match(tripsSource, /enabled: memberQueryEnabled/);
 });
@@ -408,8 +584,8 @@ test("member-data query gates require local demo mode and a legacy-auth member",
   assert.equal(shouldUseLocalFlightReadMode("legacy", false), false);
   const flightDetailSource = readFileSync(resolve(projectRoot, "app/flight/[id].tsx"), "utf8");
   assert.match(flightDetailSource, /shouldUseLocalFlightReadMode\(authMode, isLocalFlightReadMode\(\)\)/);
-  assert.match(flightDetailSource, /queryKey: \['production-empty-leg', numericFlightId\]/);
-  assert.match(flightDetailSource, /fetchProductionFlight\(numericFlightId!/);
+  assert.match(flightDetailSource, /productionFlightDetailQueryKey\(numericFlightId, viewerScope\)/);
+  assert.match(flightDetailSource, /fetchProductionFlight\(flightId, \{/);
   assert.doesNotMatch(flightDetailSource, /fetchProductionFlights/);
   assert.equal(isLegacyMemberQueryEnabled({
     authMode: "clerk",

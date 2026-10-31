@@ -43,7 +43,7 @@ export function PrimaryButton({
     >
       {loading
         ? <ActivityIndicator color={fg} />
-        : <Text style={[styles.primaryText, { color: fg }]}>{label}</Text>}
+        : <Text style={[styles.primaryText, { color: fg }]} numberOfLines={2}>{label}</Text>}
     </TouchableOpacity>
   );
 }
@@ -66,21 +66,23 @@ export function SecondaryButton({
     >
       {loading
         ? <ActivityIndicator color={fg} size="small" />
-        : <Text style={[styles.secondaryText, { color: fg }]}>{label}</Text>}
+        : <Text style={[styles.secondaryText, { color: fg }]} numberOfLines={2}>{label}</Text>}
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   primary: {
-    height: 54, borderRadius: 999,
+    minHeight: 54, borderRadius: 999,
     justifyContent: 'center', alignItems: 'center',
+    paddingHorizontal: 18, paddingVertical: 12,
   },
-  primaryText: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
+  primaryText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', textAlign: 'center' },
   secondary: {
-    height: 48, borderRadius: 999,
+    minHeight: 48, borderRadius: 999,
     justifyContent: 'center', alignItems: 'center',
+    paddingHorizontal: 18, paddingVertical: 10,
   },
-  secondaryText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+  secondaryText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', textAlign: 'center' },
   dimmed: { opacity: 0.6 },
 });

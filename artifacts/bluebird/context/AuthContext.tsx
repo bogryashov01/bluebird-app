@@ -25,6 +25,9 @@ import {
   useClerkStartupSnapshotStatus,
 } from '@/lib/dormantClerkIntegration';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
+import { clearMemberConnectionsCache } from '@/lib/memberConnections';
+import { clearMemberMessagesCache } from '@/lib/memberMessages';
+import { clearDashboardMembershipCache } from '@/lib/membershipDashboardRead';
 import type { ProductionCurrentUser } from '@/lib/productionAuthApi';
 import {
   CLERK_STARTUP_TIMEOUT_MS,
@@ -313,6 +316,9 @@ function ActiveAuthProvider({
       nextIdentity,
       clerkSession.isLoaded,
     )) {
+      clearDashboardMembershipCache();
+      clearMemberConnectionsCache();
+      clearMemberMessagesCache();
       previousClerkIdentity.current = nextIdentity;
     }
     setToken(null);
@@ -467,6 +473,9 @@ function ActiveAuthProvider({
   }, [clerkMode]);
 
   useEffect(() => {
+    // Legacy local JWT sessions only. A Clerk session has no local user token,
+    // and this effect must not call POST /api/networking/push-tokens for one.
+    if (clerkMode) return;
     if (!user || !token || user.membershipTier === 'none' || Platform.OS === 'web') return;
     let cancelled = false;
     (async () => {
@@ -491,7 +500,7 @@ function ActiveAuthProvider({
       }
     })();
     return () => { cancelled = true; };
-  }, [user?.id, user?.membershipTier, token]);
+  }, [clerkMode, user?.id, user?.membershipTier, token]);
 
   const signIn = async (newToken: string, newUser: AuthUser) => {
     if (clerkMode) throw new Error('Legacy Bluebird sign-in is disabled while Clerk migration mode is active.');
@@ -507,6 +516,9 @@ function ActiveAuthProvider({
 
   const signOut = async () => {
     if (clerkMode) {
+      clearDashboardMembershipCache();
+      clearMemberConnectionsCache();
+      clearMemberMessagesCache();
       queryClient.clear();
       setClerkMemberResolution({ status: 'signed_out' });
       await clerkSession?.signOut();
@@ -533,6 +545,9 @@ function ActiveAuthProvider({
     setPendingRegistrationGrant(null);
     // Wipe all cached member data (flights, queues, notifications, profile)
     // so a different account signing in on this device sees nothing stale.
+    clearDashboardMembershipCache();
+    clearMemberConnectionsCache();
+    clearMemberMessagesCache();
     queryClient.clear();
     router.replace('/(auth)/welcome');
   };

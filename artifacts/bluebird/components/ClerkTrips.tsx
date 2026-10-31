@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLocalSearchParams, router } from 'expo-router';
 import {
   ActivityIndicator,
   Platform,
@@ -8,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
@@ -22,8 +23,12 @@ import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConf
 import type { ProductionTrip, ProductionTrips } from '@/lib/productionAuthApi';
 import { useDemoJoinFlow } from '@/lib/demoJoinFlowStore';
 import { separateDemoTrip } from '@/lib/demoJoinFlow';
+import { MyQueuesPanel } from '@/components/MyQueuesPanel';
+import { awardedCurrentFlightIds } from '@/lib/myQueuesPresentation';
+import { currentTripChecklistTarget, presentTripChecklistStatus, resolveCurrentTripChecklistNavigation } from '@/lib/winnerChecklist';
+import { queueRosterQueryPrefix, queueViewerListQueryKey } from '@/lib/useMyQueues';
 
-type TripList = 'current' | 'past';
+type TripList = 'current' | 'queues' | 'past';
 
 function formatDeparture(value: string): string {
   const date = new Date(value);
@@ -37,20 +42,66 @@ function formatDeparture(value: string): string {
   });
 }
 
-function ClerkTripCard({ trip, colors }: { trip: ProductionTrip; colors: ReturnType<typeof useColors> }) {
+function ClerkTripCard({
+  trip,
+  list,
+  colors,
+  onOpenChecklist,
+}: {
+  trip: ProductionTrip;
+  list: 'current' | 'past';
+  colors: ReturnType<typeof useColors>;
+  onOpenChecklist: (legId: number) => void;
+}) {
   const { leg } = trip;
   const origin = leg.originCity || leg.originAirport || 'Origin unavailable';
   const destination = leg.destinationCity || leg.destinationAirport || 'Destination unavailable';
-  return (
-    <View style={[styles.tripCard, { backgroundColor: colors.card }]} testID="clerk-trip-card">
+  const status = presentTripChecklistStatus({
+    list,
+    awarded: trip.checklist.awarded,
+    remainingSteps: trip.checklist.remainingSteps,
+  });
+  const checklistTarget = currentTripChecklistTarget({
+    list,
+    awarded: trip.checklist.awarded,
+    legId: leg.id,
+  });
+  const body = (
+    <>
       <View style={[styles.badge, { backgroundColor: colors.primary }]}>
         <Text style={[styles.badgeText, { color: colors.primaryForeground }]}>TRIP</Text>
       </View>
-      <Text style={[styles.route, { color: colors.foreground }]}>{origin} → {destination}</Text>
-      <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+      <Text style={[styles.route, { color: colors.foreground }]} numberOfLines={2}>{origin} → {destination}</Text>
+      <Text testID="clerk-trip-status" style={[styles.meta, { color: colors.foreground }]}>{status}</Text>
+      <Text style={[styles.meta, { color: colors.mutedForeground }]} numberOfLines={2}>
         {[leg.aircraftType, formatDeparture(leg.departureTime)].filter(Boolean).join(' · ')}
       </Text>
-    </View>
+      {checklistTarget ? (
+        <Text testID="clerk-trip-checklist-label" style={[styles.meta, { color: colors.primary }]}>
+          Winner checklist
+        </Text>
+      ) : null}
+    </>
+  );
+  if (!checklistTarget) {
+    return (
+      <View style={[styles.tripCard, { backgroundColor: colors.card }]} testID="clerk-trip-card">
+        {body}
+      </View>
+    );
+  }
+  return (
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={`${origin} to ${destination}. Winner checklist`}
+      accessibilityHint="Opens the winner checklist"
+      testID="clerk-trip-open-checklist"
+      style={[styles.tripCard, { backgroundColor: colors.card }]}
+      activeOpacity={0.85}
+      onPress={() => { onOpenChecklist(leg.id); }}
+    >
+      {body}
+    </TouchableOpacity>
   );
 }
 
@@ -63,7 +114,29 @@ export function ClerkTrips() {
   const sessionRef = React.useRef(session);
   sessionRef.current = session;
   const configuration = getMainBluebirdApiConfigurationOrNull();
-  const [activeList, setActiveList] = React.useState<TripList>('current');
+  const queryClient = useQueryClient();
+  const params = useLocalSearchParams<{ list?: string }>();
+  const [activeList, setActiveList] = React.useState<TripList>(
+    params.list === 'queues' ? 'queues' : 'current',
+  );
+  const [keepQueues, setKeepQueues] = React.useState(params.list === 'queues');
+  React.useEffect(() => {
+    if (params.list === 'queues') setActiveList('queues');
+  }, [params.list]);
+  if (activeList === 'queues' && !keepQueues) setKeepQueues(true);
+  const previousClerkUserId = React.useRef<string | null>(null);
+  const checklistNavAt = React.useRef(0);
+  const clerkUserIdRef = React.useRef(clerkUserId);
+  clerkUserIdRef.current = clerkUserId;
+  React.useEffect(() => {
+    const current = session?.isSignedIn === true ? session.userId : null;
+    const previous = previousClerkUserId.current;
+    if (previous && previous !== current && configuration) {
+      queryClient.removeQueries({ queryKey: queueRosterQueryPrefix(configuration.environment, previous) });
+      queryClient.removeQueries({ queryKey: queueViewerListQueryKey(configuration.environment, previous) });
+    }
+    previousClerkUserId.current = current;
+  }, [configuration, queryClient, session?.isSignedIn, session?.userId]);
   const ready = authMode === 'clerk' &&
     !!configuration &&
     session?.isLoaded === true &&
@@ -143,7 +216,31 @@ export function ClerkTrips() {
     );
   }
 
-  const items = query.data?.[activeList];
+  const openChecklist = (legId: number) => {
+    const active = sessionRef.current;
+    if (!configuration) return;
+    const accountUserId = clerkUserIdRef.current;
+    if (!accountUserId) return;
+    const cachedTrips = queryClient.getQueryData<ProductionTrips>(
+      mainBluebirdAuthenticatedQueryKey(configuration.environment, accountUserId, 'trips'),
+    ) ?? null;
+    const target = resolveCurrentTripChecklistNavigation({
+      signedIn: active?.isSignedIn === true,
+      activeUserId: active?.isSignedIn === true ? active.userId : null,
+      accountUserId,
+      cachedTrips,
+      legId,
+    });
+    if (!target) return;
+    const now = Date.now();
+    if (now - checklistNavAt.current < 600) return;
+    checklistNavAt.current = now;
+    router.push(target);
+  };
+  const items = activeList === 'current' || activeList === 'past'
+    ? query.data?.[activeList]
+    : undefined;
+  const awardedFlightIds = awardedCurrentFlightIds(query.isSuccess ? query.data.current : []);
   const demoTrip = query.data ? separateDemoTrip(query.data, demo.entry).demo : demo.demoTrip;
   let state: React.ReactNode;
   if (query.isPending) {
@@ -173,9 +270,9 @@ export function ClerkTrips() {
   } else if (items?.length === 0) {
     state = (
       <StateMessage
-        title={activeList === 'current' ? 'No current trips' : 'No past trips'}
+        title={activeList === 'current' ? 'No upcoming trips' : 'No past trips'}
         description={activeList === 'current'
-          ? 'Current trips will appear here when available.'
+          ? 'Upcoming trips will appear here when available.'
           : 'Past trips will appear here when available.'}
         colors={colors}
         testID={`clerk-trips-empty-${activeList}`}
@@ -189,7 +286,15 @@ export function ClerkTrips() {
         showsVerticalScrollIndicator={false}
         testID={`clerk-trips-list-${activeList}`}
       >
-        {(items ?? []).map((trip) => <ClerkTripCard key={trip.leg.id} trip={trip} colors={colors} />)}
+        {(items ?? []).map((trip) => (
+          <ClerkTripCard
+            key={trip.leg.id}
+            trip={trip}
+            list={activeList === 'past' ? 'past' : 'current'}
+            colors={colors}
+            onOpenChecklist={openChecklist}
+          />
+        ))}
       </ScrollView>
     );
   }
@@ -200,19 +305,26 @@ export function ClerkTrips() {
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Trips</Text>
         <View style={[styles.tabRow, { backgroundColor: colors.card }]}>
           {([
-            { id: 'current' as const, label: 'Current' },
+            { id: 'current' as const, label: 'Upcoming' },
+            { id: 'queues' as const, label: 'In Queue' },
             { id: 'past' as const, label: 'Past' },
           ]).map((tab) => (
             <TouchableOpacity
               key={tab.id}
               accessibilityRole="button"
+              accessibilityLabel={tab.label}
               accessibilityState={{ selected: activeList === tab.id }}
               testID={`clerk-trips-tab-${tab.id}`}
               style={[styles.tabButton, activeList === tab.id && { backgroundColor: colors.primary }]}
               onPress={() => setActiveList(tab.id)}
               activeOpacity={0.75}
             >
-              <Text style={[styles.tabLabel, { color: activeList === tab.id ? colors.primaryForeground : colors.mutedForeground }]}>
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+                style={[styles.tabLabel, { color: activeList === tab.id ? colors.primaryForeground : colors.mutedForeground }]}
+              >
                 {tab.label}
               </Text>
             </TouchableOpacity>
@@ -235,7 +347,16 @@ export function ClerkTrips() {
           </View>
         </View>
       ) : null}
-      {state}
+      {keepQueues ? (
+        <View
+          style={activeList === 'queues' ? styles.queuesPane : styles.queuesHidden}
+          accessibilityElementsHidden={activeList !== 'queues'}
+          importantForAccessibility={activeList === 'queues' ? 'auto' : 'no-hide-descendants'}
+        >
+          <MyQueuesPanel awardedFlightIds={awardedFlightIds} active={activeList === 'queues'} />
+        </View>
+      ) : null}
+      {activeList === 'queues' ? null : state}
     </View>
   );
 }
@@ -279,8 +400,10 @@ const styles = StyleSheet.create({
   headerTitle: { fontFamily: 'Inter_700Bold', fontSize: 30, letterSpacing: -0.7, marginBottom: 14 },
   tabRow: { flexDirection: 'row', gap: 4, borderRadius: 14, padding: 4 },
   tabButton: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999 },
-  tabLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  tabLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
   body: { flex: 1 },
+  queuesPane: { flex: 1 },
+  queuesHidden: { display: 'none' },
   list: { gap: 14, paddingHorizontal: 20 },
   demoSection: { paddingHorizontal: 20, paddingBottom: 4 },
   tripCard: { borderRadius: 20, padding: 18, gap: 8 },

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+  Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,12 +12,23 @@ import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import { QueueJoinSuccess } from '@/components/QueueJoinSuccess';
 import { useDemoJoinFlow } from '@/lib/demoJoinFlowStore';
 import {
+  DEMO_PET_FEE_ACKNOWLEDGEMENT,
+  DEMO_PET_FEE_LABEL,
+  DEMO_PET_QUESTION,
   DEMO_POLICY_ACKNOWLEDGEMENTS,
+  acknowledgeDemoPetFee,
+  canContinueDemoPet,
   canContinueDemoPolicy,
+  chooseDemoPet,
+  demoPetValidationMessage,
+  planDemoQueueExit,
   shouldShowDemoInternationalNotice,
   simulatedInternationalFeeLabel,
   simulatedQueueMovement,
+  updateDemoPetWeight,
   type DemoJoinEntry,
+  type DemoPetSelection,
+  type DemoQueueExitDestination,
 } from '@/lib/demoJoinFlow';
 import {
   joinFlightRouteParams,
@@ -25,6 +36,37 @@ import {
   type JoinFlightDisplay,
 } from '@/lib/joinFlightPresentation';
 import { logJoinNav, useJoinNavMount } from '@/lib/joinNavDiagnostics';
+
+function exitDemoQueue(destination: DemoQueueExitDestination) {
+  const plan = planDemoQueueExit({
+    destination,
+    canDismiss: typeof router.canDismiss === 'function' && router.canDismiss(),
+  });
+  logJoinNav('demo-queue-exit', {
+    routerMethod: plan.dismissAll ? 'dismissAll+navigate' : 'navigate',
+    targetPathname: plan.href,
+  });
+  if (plan.dismissAll) router.dismissAll();
+  router.navigate(plan.href);
+}
+
+function DemoQueueCloseButton({ onPress }: { onPress: () => void }) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const topPad = Platform.OS === 'web' ? 67 : insets.top;
+  return (
+    <TouchableOpacity
+      testID="demo-queue-close"
+      accessibilityRole="button"
+      accessibilityLabel="Close"
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      onPress={onPress}
+      style={[styles.closeButton, { top: topPad + 14, backgroundColor: colors.muted }]}
+    >
+      <Feather name="x" size={20} color={colors.textOnSurface} />
+    </TouchableOpacity>
+  );
+}
 
 function useSimulatedClose(joinedAt: string | null): string {
   const [label, setLabel] = useState('Simulated');
@@ -68,7 +110,7 @@ export function DemoPolicyScreen({ params }: { params: Record<string, string | s
   const demo = useDemoJoinFlow();
   const flight = parseJoinFlightDisplay(params);
   const [checked, setChecked] = useState([false, false, false]);
-  const ready = canContinueDemoPolicy(checked);
+  const ready = canContinueDemoPolicy(checked) && canContinueDemoPet(demo.petDraft);
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   if (!demo.available || !demo.enabled || !flight) return <OffState />;
@@ -138,6 +180,7 @@ export function DemoPolicyScreen({ params }: { params: Record<string, string | s
             <Text style={[styles.checkText, { color: colors.textOnSurface }]}>{label}</Text>
           </TouchableOpacity>
         ))}
+        <DemoPetSection selection={demo.petDraft} onChange={demo.setPetDraft} />
       </ScrollView>
       <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
         {!ready ? <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>Check all items above to continue</Text> : null}
@@ -200,7 +243,9 @@ export function DemoInternationalScreen({ params }: { params: Record<string, str
           testID="demo-intl-continue"
           backgroundColor={colors.textOnBrand + '14'}
           textColor={colors.textOnBrand}
+          disabled={!canContinueDemoPet(demo.petDraft)}
           onPress={() => {
+            if (!canContinueDemoPet(demo.petDraft)) return;
             const created = demo.join(flight);
             if (created) router.replace('/flight/demo-joined');
           }}
@@ -223,6 +268,7 @@ export function DemoQueueJoinedScreen() {
   const flight = toDisplay(entry);
   return (
     <View style={[styles.screen, { backgroundColor: colors.offWhite, paddingTop: topPad, paddingBottom: bottomPad + 16 }]} testID="demo-joined-screen">
+      <DemoQueueCloseButton onPress={() => exitDemoQueue('discover')} />
       <View style={styles.joinedBody}>
         <QueueJoinSuccess
           flight={flight}
@@ -257,7 +303,8 @@ export function DemoQueueStatusScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: colors.offWhite }]} testID="demo-status-screen">
       <FloatingBackButton />
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: topPad + 72, paddingBottom: bottomPad + 150, alignItems: 'center' }]}>
+      <DemoQueueCloseButton onPress={() => exitDemoQueue('discover')} />
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: topPad + 72, paddingBottom: bottomPad + 220, alignItems: 'center' }]}>
         <Text style={[styles.demoMark, { color: colors.primary }]}>DEMO</Text>
         <Text style={[styles.route, { color: colors.textOnSurface }]}>{route}</Text>
         <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>Simulated position. Not a production queue position.</Text>
@@ -296,6 +343,17 @@ export function DemoQueueStatusScreen() {
         </View>
       </ScrollView>
       <View style={[styles.footer, styles.statusFooter, { backgroundColor: colors.offWhite, paddingBottom: bottomPad + 12 }]}>
+        <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>This simulated queue is not a trip.</Text>
+        <TouchableOpacity
+          testID="demo-status-view-trips"
+          accessibilityRole="button"
+          accessibilityLabel="View My Trips"
+          onPress={() => exitDemoQueue('trips')}
+          style={styles.tripsLink}
+        >
+          <Text style={[styles.tripsLinkText, { color: colors.primary }]}>View My Trips</Text>
+          <Feather name="arrow-right" size={16} color={colors.primary} />
+        </TouchableOpacity>
         <PrimaryButton label="Use Skip the Line Pass" testID="demo-status-skip-line" onPress={() => router.push('/flight/demo-pass')} />
         <SecondaryButton label="Ask AI Concierge" testID="demo-status-concierge" onPress={() => router.push({
           pathname: '/concierge',
@@ -423,6 +481,97 @@ export function DemoPurchaseScreen() {
   );
 }
 
+function DemoPetSection({
+  selection,
+  onChange,
+}: {
+  selection: DemoPetSelection;
+  onChange: (selection: DemoPetSelection) => void;
+}) {
+  const colors = useColors();
+  const bringingPet = selection.bringingPet === true;
+  const message = demoPetValidationMessage(selection);
+  return (
+    <View
+      style={[styles.petCard, { backgroundColor: colors.surface, borderColor: colors.separator }]}
+      testID="demo-pet-section"
+    >
+      <Text style={[styles.cardTitle, { color: colors.textOnSurface }]}>{DEMO_PET_QUESTION}</Text>
+      <View style={styles.choiceRow} accessibilityRole="radiogroup">
+        {([true, false] as const).map((value) => {
+          const selected = selection.bringingPet === value;
+          return (
+            <TouchableOpacity
+              key={value ? 'yes' : 'no'}
+              testID={value ? 'demo-pet-yes' : 'demo-pet-no'}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              style={[styles.choice, {
+                borderColor: selected ? colors.primary : colors.border,
+                backgroundColor: selected ? colors.primary + '14' : colors.offWhite,
+              }]}
+              onPress={() => onChange(chooseDemoPet(selection, value))}
+            >
+              <Text style={[styles.choiceText, { color: selected ? colors.primary : colors.textOnSurface }]}>
+                {value ? 'Yes' : 'No'}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      {bringingPet ? (
+        <View style={styles.petFields}>
+          <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Pet Weight (lbs)</Text>
+          <TextInput
+            value={selection.weightLbs}
+            onChangeText={(value) => onChange(updateDemoPetWeight(selection, value))}
+            keyboardType="number-pad"
+            inputMode="numeric"
+            placeholder="lbs"
+            placeholderTextColor={colors.mutedForegroundLight}
+            style={[styles.weightInput, {
+              color: colors.textOnSurface,
+              borderColor: colors.border,
+              backgroundColor: colors.offWhite,
+            }]}
+            accessibilityLabel="Pet Weight (lbs)"
+            testID="demo-pet-weight"
+          />
+          <View style={[styles.feeLine, { borderColor: colors.separator }]}>
+            <Text style={[styles.checkText, { color: colors.textOnSurface }]}>{DEMO_PET_FEE_LABEL}</Text>
+          </View>
+          <TouchableOpacity
+            testID="demo-pet-fee-ack"
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: selection.feeAcknowledged }}
+            style={styles.ackRow}
+            onPress={() => onChange(acknowledgeDemoPetFee(selection, !selection.feeAcknowledged))}
+          >
+            <View style={[styles.checkbox, {
+              borderColor: selection.feeAcknowledged ? colors.primary : colors.border,
+              backgroundColor: selection.feeAcknowledged ? colors.primary : 'transparent',
+            }]}>
+              {selection.feeAcknowledged ? <Feather name="check" size={14} color={colors.primaryForeground} /> : null}
+            </View>
+            <Text style={[styles.checkText, { color: colors.textOnSurface }]}>{DEMO_PET_FEE_ACKNOWLEDGEMENT}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+      {message ? (
+        <Text
+          testID="demo-pet-validation"
+          style={[styles.hint, {
+            color: bringingPet ? colors.destructive : colors.mutedForegroundLight,
+            textAlign: 'left',
+          }]}
+        >
+          {message}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 function toDisplay(entry: DemoJoinEntry): JoinFlightDisplay {
   return {
     flightId: entry.flightId,
@@ -435,6 +584,8 @@ function toDisplay(entry: DemoJoinEntry): JoinFlightDisplay {
     aircraft: entry.aircraft,
     international: entry.international,
     flightStatus: entry.flightStatus,
+    queueClosesAt: null,
+    internationalPassRequired: null,
   };
 }
 
@@ -453,6 +604,15 @@ const styles = StyleSheet.create({
   checkText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 14, lineHeight: 19 },
   footer: { paddingHorizontal: 22, paddingTop: 12, gap: 10 },
   statusFooter: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  closeButton: {
+    position: 'absolute', right: 16, zIndex: 20,
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tripsLink: {
+    minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+  },
+  tripsLinkText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
   hint: { fontFamily: 'Inter_500Medium', fontSize: 12, textAlign: 'center' },
   globe: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
   feeRow: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 18, paddingVertical: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -470,6 +630,21 @@ const styles = StyleSheet.create({
   chipLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 11, letterSpacing: 0.5 },
   card: { width: '100%', borderRadius: 16, padding: 16, gap: 10 },
   cardTitle: { fontFamily: 'Inter_700Bold', fontSize: 16 },
+  petCard: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 12 },
+  choiceRow: { flexDirection: 'row', gap: 8 },
+  choice: {
+    flex: 1, minHeight: 40, borderRadius: 12, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  choiceText: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
+  petFields: { gap: 8 },
+  fieldLabel: { fontFamily: 'Inter_500Medium', fontSize: 13 },
+  weightInput: {
+    minHeight: 44, borderWidth: 1, borderRadius: 12,
+    paddingHorizontal: 14, fontFamily: 'Inter_400Regular', fontSize: 16,
+  },
+  feeLine: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10 },
+  ackRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   logRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   notice: { width: '100%', borderRadius: 14, padding: 14 },
   buyMore: { borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9 },

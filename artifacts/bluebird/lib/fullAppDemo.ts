@@ -52,7 +52,7 @@ export function isFullAppDemoAllowedRoute(pathname: string, segments: readonly s
   const isAllowedPath = (path: string) =>
     path === '/' ||
     path === '/referral' ||
-    /^\/(?:discover|membership|profile|trips)(?:\/index)?$/.test(path) ||
+    /^\/(?:discover|connections|membership|profile|trips)(?:\/index)?$/.test(path) ||
     /^\/demo\/flight\/[1-9]\d*$/.test(path) ||
     /^\/flight\/[1-9]\d*$/.test(path) ||
     /^\/flight\/(?:policy|confirmed)$/.test(path) ||
@@ -73,7 +73,7 @@ export function isFullAppDemoAllowedRoute(pathname: string, segments: readonly s
   if (route === 'upgrade' && segments.length === 2 &&
     ['base', 'plus', 'family', 'corporate', '[tier]'].includes(segments[1] ?? '')) return true;
   if (route === '(tabs)') {
-    return ['index', 'discover', 'membership', 'profile', 'trips'].includes(segments[1] ?? '');
+    return ['index', 'discover', 'connections', 'membership', 'profile', 'trips'].includes(segments[1] ?? '');
   }
   if (route === 'referral' && segments.length === 1) return true;
   if (route === 'membership') {

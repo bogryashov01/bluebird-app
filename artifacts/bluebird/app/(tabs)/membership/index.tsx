@@ -4,8 +4,10 @@ import {
   ActivityIndicator, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { useGetMembership } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
 import { isLegacyMemberQueryEnabled } from '@/lib/clerkAuthSession';
@@ -29,14 +31,26 @@ import {
   getClerkBluebirdProfileEffectDependencies,
   isClerkBluebirdProfileResultCurrent,
 } from '@/lib/clerkBluebirdProfile';
+import { getClerkNotificationPreferencesQueryKey } from '@/lib/clerkNotificationPreferences';
 import { getFullAppDemoMemberOverview } from '@/lib/fullAppDemo';
-import { presentClerkMembershipDesign } from '@/lib/clerkMembershipDesign';
+import { presentMembershipDashboard } from '@/lib/clerkMembershipDesign';
 import {
-  loadPreparedMobileMembership,
-  type MobileMembershipErrorCode,
-  type MobileMembershipSnapshot,
-  type MobilePlanCatalog,
-} from '@/lib/mobileMembership';
+  clearDashboardMembershipCache,
+  loadDashboardProductionMembership,
+  loadDashboardSkipTheLinePasses,
+  logMembershipDashboardDiagnostic,
+  logMembershipDashboardPresentation,
+  logMembershipNormalizedFields,
+  membershipDiagnostic,
+  readFreshDashboardMembership,
+  readFreshSkipTheLinePasses,
+  rememberDashboardMembership,
+  rememberSkipTheLinePasses,
+  retainDashboardMembershipForAccount,
+  shouldDisplayDashboardMembership,
+  type DashboardMembershipErrorCode,
+  type DashboardMembershipProjection,
+} from '@/lib/membershipDashboardRead';
 
 // ── Tier config ───────────────────────────────────────────────────────────────
 const TIER_META: Record<string, { label: string }> = {
@@ -57,12 +71,11 @@ type ClerkMembershipLoadState =
   | {
       kind: 'loaded' | 'refreshing' | 'stale_error';
       clerkUserId: string;
-      membership: MobileMembershipSnapshot;
-      plans: MobilePlanCatalog | null;
+      membership: DashboardMembershipProjection;
       message?: string;
     };
 
-function membershipLoadErrorMessage(code: MobileMembershipErrorCode): string {
+function membershipLoadErrorMessage(code: DashboardMembershipErrorCode): string {
   if (code === 'network' || code === 'timeout') {
     return 'Bluebird could not be reached. Check your connection and try again.';
   }
@@ -105,12 +118,13 @@ export default function MembershipScreen() {
       queryKey: ['/api/membership', user?.id ?? 'no-local-account'],
     },
   });
+  const queryClient = useQueryClient();
   const [clerkMembershipState, setClerkMembershipState] = React.useState<ClerkMembershipLoadState>({ kind: 'loading' });
+  const [skipTheLinePasses, setSkipTheLinePasses] = React.useState<{ clerkUserId: string; count: number } | null>(null);
   const [clerkMembershipAttempt, setClerkMembershipAttempt] = React.useState(0);
   const cachedClerkMembership = React.useRef<{
     clerkUserId: string;
-    membership: MobileMembershipSnapshot;
-    plans: MobilePlanCatalog | null;
+    membership: DashboardMembershipProjection;
   } | null>(null);
   const currentClerkIdentity = React.useRef<string | null>(clerkSession?.userId ?? null);
   currentClerkIdentity.current = clerkSession?.userId ?? null;
@@ -129,6 +143,31 @@ export default function MembershipScreen() {
       !clerkSession.userId
     ) return;
     const requestedClerkUserId = clerkSession.userId;
+    retainDashboardMembershipForAccount(requestedClerkUserId);
+    const freshMembership = mainApiConfiguration && clerkMembershipAttempt === 0
+      ? readFreshDashboardMembership({
+          environment: mainApiConfiguration.environment,
+          apiBaseUrl: mainApiConfiguration.apiBaseUrl,
+          clerkUserId: requestedClerkUserId,
+        })
+      : null;
+    if (freshMembership && mainApiConfiguration) {
+      logMembershipDashboardDiagnostic(membershipDiagnostic({
+        requestAttempted: false,
+        environment: mainApiConfiguration.environment,
+        failure: null,
+        cacheHit: true,
+        parseSucceeded: true,
+        hasIsMember: true,
+        hasTier: freshMembership.tier !== null,
+        hasStatus: freshMembership.status !== null,
+        hasPaymentStatus: freshMembership.paymentStatus !== null,
+      }));
+      const confirmed = { clerkUserId: requestedClerkUserId, membership: freshMembership };
+      cachedClerkMembership.current = confirmed;
+      setClerkMembershipState({ kind: 'loaded', ...confirmed });
+      return;
+    }
     const cached = cachedClerkMembership.current?.clerkUserId === requestedClerkUserId
       ? cachedClerkMembership.current
       : null;
@@ -136,9 +175,9 @@ export default function MembershipScreen() {
       ? { kind: 'refreshing', ...cached }
       : { kind: 'loading' });
     try {
-      const loaded = await loadPreparedMobileMembership({
-        apiBaseUrl: mainApiConfiguration?.apiBaseUrl ?? null,
+      const loaded = await loadDashboardProductionMembership({
         signal,
+        configuration: mainApiConfiguration,
         getAccessToken: async () => {
           const activeSession = currentClerkSession.current;
           if (
@@ -166,6 +205,13 @@ export default function MembershipScreen() {
         setClerkMembershipState({ kind: 'unavailable' });
         return;
       }
+      if (loaded.kind === 'invalid') {
+        const message = membershipLoadErrorMessage('schema');
+        setClerkMembershipState(cached
+          ? { kind: 'stale_error', ...cached, message }
+          : { kind: 'error', message });
+        return;
+      }
       if (loaded.kind === 'error') {
         const message = membershipLoadErrorMessage(loaded.code);
         setClerkMembershipState(cached
@@ -176,8 +222,15 @@ export default function MembershipScreen() {
       const confirmed = {
         clerkUserId: requestedClerkUserId,
         membership: loaded.membership,
-        plans: loaded.plans,
       };
+      if (mainApiConfiguration) {
+        rememberDashboardMembership({
+          environment: mainApiConfiguration.environment,
+          apiBaseUrl: mainApiConfiguration.apiBaseUrl,
+          clerkUserId: requestedClerkUserId,
+          membership: loaded.membership,
+        });
+      }
       cachedClerkMembership.current = confirmed;
       setClerkMembershipState({ kind: 'loaded', ...confirmed });
     } catch (error) {
@@ -193,16 +246,84 @@ export default function MembershipScreen() {
         : { kind: 'error', message });
     }
   }, [authMode, ...membershipRequestDependencies]);
+  const loadSkipTheLinePasses = React.useCallback(async (signal: AbortSignal) => {
+    if (
+      authMode !== 'clerk' ||
+      !clerkSession?.isLoaded ||
+      clerkSession.isSignedIn !== true ||
+      !clerkSession.userId ||
+      !mainApiConfiguration
+    ) return;
+    const requestedClerkUserId = clerkSession.userId;
+    const freshPasses = clerkMembershipAttempt === 0
+      ? readFreshSkipTheLinePasses({
+          environment: mainApiConfiguration.environment,
+          apiBaseUrl: mainApiConfiguration.apiBaseUrl,
+          clerkUserId: requestedClerkUserId,
+        })
+      : null;
+    if (freshPasses) {
+      setSkipTheLinePasses({ clerkUserId: requestedClerkUserId, count: freshPasses.count });
+      return;
+    }
+    const loaded = await loadDashboardSkipTheLinePasses({
+      signal,
+      configuration: mainApiConfiguration,
+      cachedProfiles: [
+        queryClient.getQueryData(getClerkNotificationPreferencesQueryKey(
+          mainApiConfiguration.environment,
+          mainApiConfiguration.apiBaseUrl,
+          requestedClerkUserId,
+        )),
+        queryClient.getQueryData([
+          'clerk-home-airport-profile',
+          mainApiConfiguration.environment,
+          mainApiConfiguration.apiBaseUrl,
+          requestedClerkUserId,
+        ]),
+      ],
+      getAccessToken: async () => {
+        const activeSession = currentClerkSession.current;
+        if (
+          !activeSession ||
+          activeSession.isLoaded !== true ||
+          activeSession.isSignedIn !== true ||
+          activeSession.userId !== requestedClerkUserId
+        ) return null;
+        return activeSession.getToken();
+      },
+    });
+    if (!isClerkBluebirdProfileResultCurrent({
+      requestedClerkUserId,
+      currentClerkUserId: currentClerkIdentity.current,
+      aborted: signal.aborted,
+    })) return;
+    if (loaded.kind !== 'loaded') {
+      setSkipTheLinePasses((current) => current?.clerkUserId === requestedClerkUserId ? null : current);
+      return;
+    }
+    rememberSkipTheLinePasses({
+      environment: mainApiConfiguration.environment,
+      apiBaseUrl: mainApiConfiguration.apiBaseUrl,
+      clerkUserId: requestedClerkUserId,
+      count: loaded.count,
+    });
+    setSkipTheLinePasses({ clerkUserId: requestedClerkUserId, count: loaded.count });
+  }, [authMode, clerkMembershipAttempt, queryClient, ...membershipRequestDependencies]);
   React.useEffect(() => {
     if (authMode !== 'clerk') return;
     if (!clerkSession?.isLoaded || clerkSession.isSignedIn !== true || !clerkSession.userId) {
+      cachedClerkMembership.current = null;
+      clearDashboardMembershipCache();
+      setSkipTheLinePasses(null);
       setClerkMembershipState({ kind: 'not_authenticated' });
       return;
     }
     const controller = new AbortController();
     void loadClerkMembership(controller.signal);
+    void loadSkipTheLinePasses(controller.signal);
     return () => controller.abort();
-  }, [authMode, loadClerkMembership, ...membershipRequestDependencies]);
+  }, [authMode, loadClerkMembership, loadSkipTheLinePasses, ...membershipRequestDependencies]);
   const plansQuery = useProductionMembershipPlans({
     enabled: !demoMode && authMode !== 'clerk',
   });
@@ -212,20 +333,46 @@ export default function MembershipScreen() {
       clerkMembershipState.clerkUserId !== clerkSession?.userId
       ? { kind: 'loading' as const }
       : clerkMembershipState;
-    const confirmedMembership = visibleState.kind === 'loaded' ||
+    const signedIn = clerkSession?.isSignedIn === true && visibleState.kind !== 'not_authenticated';
+    const confirmedMembership = shouldDisplayDashboardMembership({
+      signedIn,
+      membershipClerkUserId: 'clerkUserId' in visibleState ? visibleState.clerkUserId : null,
+      activeClerkUserId: clerkSession?.userId ?? null,
+    }) && (
+      visibleState.kind === 'loaded' ||
       visibleState.kind === 'refreshing' ||
       visibleState.kind === 'stale_error'
-      ? visibleState.membership
+    )
+      ? {
+          ...visibleState.membership,
+          skipTheLinePasses: skipTheLinePasses !== null && skipTheLinePasses.clerkUserId === clerkSession?.userId
+            ? skipTheLinePasses.count
+            : null,
+        }
       : null;
     const verifiedAccount = 'currentUser' in clerkMemberResolution &&
       clerkMemberResolution.clerkUserId === clerkSession?.userId
       ? clerkMemberResolution.currentUser
       : null;
-    const design = presentClerkMembershipDesign({
+    const completedAccount = clerkMemberResolution.status === 'profile_complete' &&
+      clerkMemberResolution.clerkUserId === clerkSession?.userId
+      ? clerkMemberResolution.currentUser
+      : null;
+    const design = presentMembershipDashboard({
+      signedIn,
       verifiedFirstName: verifiedAccount?.firstName,
       verifiedLastName: verifiedAccount?.lastName,
       membership: confirmedMembership,
+      account: completedAccount
+        ? {
+            resolved: true,
+            isMember: completedAccount.isMember,
+            memberTier: completedAccount.memberTier,
+          }
+        : { resolved: false },
     });
+    logMembershipDashboardPresentation(visibleState.kind, design.tierBadge);
+    if (confirmedMembership) logMembershipNormalizedFields(confirmedMembership);
     const clerkRows = [
       { label: 'AI Concierge', onPress: () => router.push('/concierge' as any) },
       { label: 'Referral Program', onPress: () => router.push('/referral' as any) },
@@ -234,24 +381,38 @@ export default function MembershipScreen() {
     return (
       <View style={[styles.root, { backgroundColor: colors.offWhite }]} testID="clerk-membership">
         <ScrollView
-          contentContainerStyle={[styles.scroll, { paddingTop: topPad + 16, paddingBottom: botPad + 80 }]}
+          contentContainerStyle={[styles.scroll, styles.clerkScroll, { paddingTop: topPad + 8, paddingBottom: botPad + 96 }]}
           showsVerticalScrollIndicator={false}
         >
-          <Text
-            style={[styles.headerName, { color: colors.textOnSurface }]}
-            numberOfLines={1}
-            testID="clerk-membership-name"
-          >
-            {design.displayName}
-          </Text>
-          <View style={[styles.tierPill, { backgroundColor: colors.backgroundMid }]}>
-            <Text
-              style={[styles.tierPillText, { color: colors.primaryForeground }]}
-              numberOfLines={1}
-              testID="clerk-membership-tier"
-            >
-              {design.tierBadge}
-            </Text>
+          <View style={styles.clerkHeader}>
+            <View style={styles.clerkNameRow}>
+              <Text
+                style={[styles.headerName, styles.clerkName, { color: colors.textOnSurface }]}
+                numberOfLines={2}
+                testID="clerk-membership-name"
+              >
+                {design.displayName}
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Settings"
+                testID="membership-settings"
+                onPress={() => router.push('/(tabs)/profile' as any)}
+                hitSlop={8}
+                style={styles.clerkSettingsButton}
+              >
+                <Feather name="settings" size={22} color={colors.textOnSurface} />
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.tierPill, styles.clerkTierPill, { backgroundColor: colors.primary }]}>
+              <Text
+                style={[styles.tierPillText, { color: colors.primaryForeground }]}
+                numberOfLines={1}
+                testID="clerk-membership-tier"
+              >
+                {design.tierBadge}
+              </Text>
+            </View>
           </View>
           {visibleState.kind === 'loading' || visibleState.kind === 'refreshing' ? (
             <ActivityIndicator color={colors.primary} style={{ marginBottom: 12 }} testID="clerk-membership-loading" />
@@ -287,49 +448,54 @@ export default function MembershipScreen() {
             </>
           ) : null}
           {design.statusNote ? (
-            <Text
-              style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginBottom: 16 }]}
-              testID="clerk-membership-unverified"
-            >
-              {design.statusNote}
-            </Text>
-          ) : null}
-
-          <View style={styles.statRow}>
-            <StatCard label="Flights Flown" value={design.flightsFlown} />
-            <StatCard label="Total Saved" value={design.totalSaved} />
-          </View>
-          <View style={[styles.statRow, { marginTop: 10 }]}>
-            <StatCard label="Skip the Line Passes" value={design.skipTheLinePasses} />
-            <StatCard label="Referral Balance" value={design.referralBalance} />
-          </View>
-
-          <View style={[styles.usageCard, { backgroundColor: colors.surface }]} testID="clerk-membership-usage">
-            <View style={styles.usageHeader}>
-              <Text style={[styles.usageTitle, { color: colors.textOnSurface }]}>This Year's Usage</Text>
-              <Text style={[styles.usageCount, { color: colors.mutedForegroundLight }]}>
-                {design.usageLabel}
+            <View style={[styles.clerkNoteCard, { backgroundColor: colors.surface }]} testID="clerk-membership-unverified">
+              <Text style={[styles.clerkNoteText, { color: colors.mutedForegroundLight }]}>
+                {design.statusNote}
               </Text>
             </View>
-            <View style={[styles.usageTrack, { backgroundColor: colors.muted }]}>
-              <View style={[styles.usageFill, { backgroundColor: colors.primary, width: `${design.usageProgress * 100}%` }]} />
+          ) : null}
+
+          <View style={styles.statGrid} testID="clerk-membership-stats">
+            {[design.metrics.slice(0, 2), design.metrics.slice(2, 4)].map((row) => (
+              <View key={row.map((metric) => metric.label).join('-')} style={styles.statRow}>
+                {row.map((metric) => (
+                  <StatCard
+                    key={metric.label}
+                    label={metric.label}
+                    value={metric.value}
+                    testID={`membership-stat-${metric.label.toLowerCase().replace(/[^a-z]+/g, '-')}`}
+                    accessibilityLabel={metric.accessibilityLabel}
+                  />
+                ))}
+              </View>
+            ))}
+          </View>
+
+          {design.upgrade ? (
+            <View testID="clerk-membership-upgrade" accessibilityLabel="Base to Plus upgrade">
+              <LinearGradient
+                colors={['#0A1128', '#1259F2']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.dashboardUpgrade}
+              >
+                <Text style={styles.upgradeEyebrow}>{design.upgrade.eyebrow}</Text>
+                <Text style={styles.dashboardUpgradeTitle}>{design.upgrade.title}</Text>
+                <Text style={styles.upgradeBody}>{design.upgrade.description}</Text>
+                <View
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: true }}
+                  accessibilityLabel="Upgrade available soon. Membership upgrades are not available in the app."
+                  testID="membership-upgrade-soon"
+                  style={[styles.upgradeBtn, { backgroundColor: colors.surface, opacity: 0.92 }]}
+                >
+                  <Text style={[styles.upgradeBtnText, { color: colors.textOnSurface }]}>{design.upgrade.buttonLabel}</Text>
+                </View>
+              </LinearGradient>
             </View>
-          </View>
+          ) : null}
 
-          <View testID="clerk-membership-upgrade">
-            <LinearGradient
-              colors={['#0A1128', '#1259F2']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1.2 }}
-              style={styles.upgradeCard}
-            >
-              <Text style={styles.upgradeEyebrow}>UPGRADE</Text>
-              <Text style={styles.upgradeTitle}>{design.upgradeTitle}</Text>
-              <Text style={styles.upgradeBody}>{design.upgradeBody}</Text>
-            </LinearGradient>
-          </View>
-
-          <View style={[styles.linkCard, { backgroundColor: colors.surface }]}>
+          <View style={[styles.linkCard, styles.clerkLinkCard, { backgroundColor: colors.surface }]}>
             {clerkRows.map((row, i) => (
               <TouchableOpacity
                 key={row.label}
@@ -431,7 +597,7 @@ export default function MembershipScreen() {
                 Your access to exclusive private aviation. Review verified public plans and benefits below.
               </Text>
               <View style={[styles.upgradeBtn, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.upgradeBtnText, { color: '#0A1128' }]}>Browse plans</Text>
+                <Text style={[styles.upgradeBtnText, { color: colors.textOnSurface }]}>Browse plans</Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>
@@ -760,7 +926,7 @@ export default function MembershipScreen() {
                 : `You have Family Plus access and ${family.members?.[0]?.availablePasses ?? 0} assigned Skip the Line passes.`}
             </Text>
             <View style={[styles.upgradeBtn, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.upgradeBtnText, { color: '#0A1128' }]}>Open Family management</Text>
+              <Text style={[styles.upgradeBtnText, { color: colors.textOnSurface }]}>Open Family management</Text>
             </View>
           </LinearGradient>
         ) : (
@@ -816,6 +982,7 @@ const styles = StyleSheet.create({
   tierPillText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
 
   statRow: { flexDirection: 'row', gap: 10 },
+  statGrid: { gap: 10, marginBottom: 14 },
   valueCard: {
     borderRadius: 24,
     paddingHorizontal: 20,
@@ -856,6 +1023,8 @@ const styles = StyleSheet.create({
   pendingBannerSub: { fontFamily: 'Inter_400Regular', fontSize: 12.5, lineHeight: 18 },
 
   upgradeCard: { borderRadius: 24, padding: 22, marginTop: 18 },
+  dashboardUpgrade: { borderRadius: 20, padding: 16, marginTop: 2 },
+  dashboardUpgradeTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, color: '#FFFFFF', marginBottom: 6 },
   upgradeEyebrow: {
     fontFamily: 'Inter_600SemiBold', fontSize: 11, letterSpacing: 1.4,
     color: 'rgba(255,255,255,0.65)', marginBottom: 8,
@@ -903,6 +1072,19 @@ const styles = StyleSheet.create({
   clerkMembershipDetailValue: { fontFamily: 'Inter_500Medium', fontSize: 13, flex: 1, textAlign: 'right' },
   clerkMembershipEvents: { marginTop: 16, gap: 7 },
 
+  clerkScroll: { paddingHorizontal: 20, gap: 12 },
+  clerkHeader: { gap: 8 },
+  clerkNameRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  clerkName: { flex: 1, fontSize: 32, lineHeight: 38, letterSpacing: -0.6 },
+  clerkSettingsButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  clerkTierPill: { marginTop: 0, marginBottom: 0, paddingHorizontal: 14, paddingVertical: 7 },
+  clerkNoteCard: { borderRadius: 18, paddingHorizontal: 16, paddingVertical: 14 },
+  clerkNoteText: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },
+  clerkPlanCard: { borderRadius: 18, paddingHorizontal: 16, paddingVertical: 14 },
+  clerkPlanTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15, marginBottom: 4 },
+  clerkPlanBody: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },
+  clerkLinkCard: { marginTop: 0 },
+
   linkCard: {
     borderRadius: 18, overflow: 'hidden', marginTop: 4,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.04, elevation: 2,
@@ -911,6 +1093,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 16,
   },
-  linkLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 14.5 },
+  linkLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 16, flex: 1, marginRight: 12 },
   linkChevron: { fontSize: 22, fontFamily: 'Inter_400Regular', lineHeight: 22 },
 });

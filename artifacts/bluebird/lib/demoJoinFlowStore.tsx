@@ -1,19 +1,24 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isProductionMemberDataSelected } from '@/lib/productionMemberRuntime';
 import {
   DEMO_JOIN_FLOW_SETTING_VALUE,
   DEMO_SIMULATED_PASS_BALANCE,
+  EMPTY_DEMO_PET,
   applySimulatedSkipLine,
+  canContinueDemoPet,
   confirmDemoFlight,
   createDemoJoin,
   demoTripFromEntry,
   isDemoJoinFlowAllowed,
   parseStoredDemoEntry,
   readDemoJoinSetting,
+  sanitizeDemoPetSelection,
   simulateDemoWinner,
   type DemoJoinEntry,
   type DemoJoinFlightInput,
   type DemoJoinTrip,
+  type DemoPetSelection,
 } from '@/lib/demoJoinFlow';
 
 const SETTING_KEY = 'bluebird.demo-join-flow.enabled';
@@ -26,7 +31,9 @@ interface DemoJoinFlowContextValue {
   entry: DemoJoinEntry | null;
   demoTrip: DemoJoinTrip | null;
   passBalance: number;
+  petDraft: DemoPetSelection;
   setEnabled: (enabled: boolean) => void;
+  setPetDraft: (selection: DemoPetSelection) => void;
   join: (flight: DemoJoinFlightInput) => DemoJoinEntry | null;
   simulateWinner: () => DemoJoinEntry | null;
   confirmFlight: () => DemoJoinEntry | null;
@@ -39,7 +46,9 @@ const unavailable: DemoJoinFlowContextValue = {
   entry: null,
   demoTrip: null,
   passBalance: 0,
+  petDraft: EMPTY_DEMO_PET,
   setEnabled: () => undefined,
+  setPetDraft: () => undefined,
   join: () => null,
   simulateWinner: () => null,
   confirmFlight: () => null,
@@ -53,10 +62,12 @@ function isDevelopmentBuild(): boolean {
 }
 
 export function DemoJoinFlowProvider({ children }: { children: React.ReactNode }) {
-  const available = isDevelopmentBuild();
+  const productionMemberData = isProductionMemberDataSelected();
+  const available = isDevelopmentBuild() && !productionMemberData;
   const [setting, setSetting] = useState(false);
   const [entry, setEntry] = useState<DemoJoinEntry | null>(null);
   const [passBalance, setPassBalance] = useState(DEMO_SIMULATED_PASS_BALANCE);
+  const [petDraft, setPetDraftState] = useState<DemoPetSelection>(EMPTY_DEMO_PET);
 
   useEffect(() => {
     if (!available) return undefined;
@@ -77,7 +88,7 @@ export function DemoJoinFlowProvider({ children }: { children: React.ReactNode }
     };
   }, [available]);
 
-  const enabled = isDemoJoinFlowAllowed(available, setting);
+  const enabled = isDemoJoinFlowAllowed(available, setting, productionMemberData);
   const visibleEntry = enabled ? entry : null;
 
   const persistEntry = useCallback((next: DemoJoinEntry | null) => {
@@ -95,14 +106,19 @@ export function DemoJoinFlowProvider({ children }: { children: React.ReactNode }
     entry: visibleEntry,
     demoTrip: demoTripFromEntry(visibleEntry),
     passBalance: enabled ? passBalance : 0,
+    petDraft,
     setEnabled: (next: boolean) => {
       if (!available) return;
       setSetting(next);
       void AsyncStorage.setItem(SETTING_KEY, next ? DEMO_JOIN_FLOW_SETTING_VALUE : 'disabled').catch(() => undefined);
     },
+    setPetDraft: (next: DemoPetSelection) => {
+      if (!available) return;
+      setPetDraftState(sanitizeDemoPetSelection(next));
+    },
     join: (flight: DemoJoinFlightInput) => {
-      if (!isDemoJoinFlowAllowed(available, setting)) return null;
-      const created = createDemoJoin(flight);
+      if (!isDemoJoinFlowAllowed(available, setting, productionMemberData) || !canContinueDemoPet(petDraft)) return null;
+      const created = createDemoJoin(flight, Date.now(), petDraft);
       if (!created) return null;
       persistEntry(created);
       return created;
@@ -131,7 +147,7 @@ export function DemoJoinFlowProvider({ children }: { children: React.ReactNode }
       persistEntry(next);
       return next;
     },
-  }), [available, enabled, passBalance, persistEntry, setting, visibleEntry]);
+  }), [available, enabled, passBalance, persistEntry, petDraft, productionMemberData, setting, visibleEntry]);
 
   return <DemoJoinFlowContext.Provider value={value}>{children}</DemoJoinFlowContext.Provider>;
 }

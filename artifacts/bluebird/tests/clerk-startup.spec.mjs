@@ -296,6 +296,9 @@ test('the live auth layout remounts Clerk on Retry and keeps startup on the phon
   assert.match(startupLogic, /Clerk isLoaded:/);
   assert.match(provider, /failureReason="error_boundary"/);
   assert.match(configErrorView, /failureReason="configuration_invalid"/);
+  assert.match(panel, /backgroundColor: colors\.input, borderColor: error \? colors\.destructive : colors\.border, color: colors\.foreground/);
+  assert.doesNotMatch(panel, /backgroundColor: colors\.input[\s\S]{0,160}color: colors\.textOnBrand/);
+  assert.match(startupView, /backgroundColor: colors\.input, borderColor: colors\.border, color: colors\.foreground/);
   assert.match(nativeAuthPolicy, /input\.platformOS === 'ios'/);
   assert.match(nativeAuthPolicy, /input\.apiEnvironment === 'production'/);
 });
