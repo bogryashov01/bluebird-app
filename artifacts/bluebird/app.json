@@ -73,7 +73,12 @@
           "appleSignIn": false
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "mode": "production"
+        }
+      ],
       [
         "expo-image-picker",
         {

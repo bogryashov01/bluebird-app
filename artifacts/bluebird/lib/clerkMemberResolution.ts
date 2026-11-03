@@ -133,6 +133,53 @@ export function getClerkResolutionForIdentity(
   return resolution;
 }
 
+export interface ClerkSessionProjection {
+  isLoaded: boolean;
+  isSignedIn?: boolean;
+  userId?: string | null;
+}
+
+/**
+ * An unloaded Clerk snapshot is session restoration, not a sign-out.
+ * A loaded signed-out snapshot is a real sign-out.
+ */
+export function projectClerkResolutionForSession(
+  resolution: ClerkMemberResolution,
+  session: ClerkSessionProjection | null,
+): ClerkMemberResolution {
+  if (!session?.isLoaded) {
+    return resolution.status === 'signed_out' ? { status: 'resolving' } : resolution;
+  }
+  if (session.isSignedIn !== true) return { status: 'signed_out' };
+  return getClerkResolutionForIdentity(resolution, session.userId ?? null);
+}
+
+export function isClerkAccountPending(resolution: ClerkMemberResolution): boolean {
+  return resolution.status === 'resolving' || resolution.status === 'not_checked';
+}
+
+export function shouldRetryClerkMemberResolution(
+  resolution: ClerkMemberResolution,
+  attempts: number,
+): boolean {
+  return resolution.status === 'error' &&
+    attempts < 1 &&
+    (resolution.reason === 'network' ||
+      resolution.reason === 'unknown' ||
+      resolution.reason === 'backend');
+}
+
+export function clerkColdStartDestination(input: {
+  startup: 'loading' | 'ready' | 'failed';
+  signedIn: boolean;
+  resolution: ClerkMemberResolution;
+}): 'loading' | 'sign-in' | 'continue' {
+  if (input.startup === 'loading') return 'loading';
+  if (input.startup === 'failed' || !input.signedIn) return 'sign-in';
+  if (isClerkAccountPending(input.resolution)) return 'loading';
+  return 'continue';
+}
+
 export function isClerkMemberResolutionCurrent(input: {
   requestedClerkUserId: string;
   currentClerkUserId: string | null;

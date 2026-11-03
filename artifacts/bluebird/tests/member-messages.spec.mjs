@@ -150,6 +150,21 @@ test("conversation parsing keeps the contract fields", () => {
   const empty = parseMessageConversation({ ...conversation(), latestMessage: null, unreadCount: 0 }, "conversation");
   assert.equal(empty.latestMessage, null);
   assert.throws(() => parseMessageConversation({ ...conversation(), unreadCount: -1 }, "conversation"));
+  const nested = { ...message(4, 7) };
+  delete nested.conversationId;
+  const listed = parseMessageConversation({ ...conversation(), latestMessage: nested }, "conversation");
+  assert.equal(listed.latestMessage.conversationId, 7);
+  const history = parseMessageHistory({
+    messages: [nested],
+    nextCursor: null,
+    hasMore: false,
+  }, 7);
+  assert.equal(history.messages[0].conversationId, 7);
+  assert.throws(() => parseMessageHistory({
+    messages: [nested],
+    nextCursor: null,
+    hasMore: false,
+  }));
   assert.equal(conversationTitle("user_from", new Map([["user_from", "Ava Stone"]])), "Ava Stone");
   assert.equal(conversationTitle("user_other", new Map()), "Bluebird member");
 });
@@ -198,6 +213,16 @@ test("message history uses cursor pagination", async () => {
   assert.equal(fetches, 0);
   const parsed = parseMessageHistory({ messages: [message(1)], nextCursor: null, hasMore: false });
   assert.equal(parsed.messages[0].id, 1);
+  const withoutConversationId = { ...message(9) };
+  delete withoutConversationId.conversationId;
+  const nested = client(async () => jsonResponse({
+    messages: [withoutConversationId],
+    nextCursor: null,
+    hasMore: false,
+  }));
+  const nestedPage = await nested.history({ conversationId: 7 });
+  assert.equal(nestedPage.kind, "loaded");
+  assert.equal(nestedPage.data.messages[0].conversationId, 7);
 });
 
 test("sending uses the text body contract and the Unicode length limit", async () => {
@@ -375,7 +400,8 @@ test("the messages screens stay off the demo store and the networking API", () =
   const hook = readFileSync(resolve(projectRoot, "lib/useMemberMessages.ts"), "utf8");
   assert.equal(hook.match(/setInterval\(/g).length, 2);
   assert.match(hook, /AppState/);
-  assert.match(hook, /MEMBER_MESSAGE_POLL_MS/);
+  assert.match(hook, /memberMessagePollIntervalMs/);
+  assert.match(readFileSync(resolve(projectRoot, "lib/memberMessageRealtime.ts"), "utf8"), /MEMBER_MESSAGE_POLL_MS/);
   assert.match(hook, /if \(!active \|\| !focused \|\| !foreground\) return;/);
   assert.match(hook, /clearMemberMessagesCache\(\)/);
   const auth = readFileSync(resolve(projectRoot, "context/AuthContext.tsx"), "utf8");

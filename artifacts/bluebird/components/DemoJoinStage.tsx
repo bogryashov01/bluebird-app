@@ -207,9 +207,12 @@ function toFlightDisplay(entry: DemoJoinEntry): JoinFlightDisplay {
     departureTime: entry.departureTime,
     aircraft: entry.aircraft,
     international: entry.international,
+    fromCountry: null,
+    toCountry: null,
     flightStatus: entry.flightStatus,
     queueClosesAt: null,
     internationalPassRequired: null,
+    internationalPassPriceUsd: null,
   };
 }
 

@@ -16,6 +16,7 @@ import {
   rememberMemberConnectionsSnapshot,
   retainMemberConnectionsForAccount,
 } from "../scripts/.member-connections.test.mjs";
+import { formatMemberActivityTime, memberInitials, presentDiscoveredMember } from "../scripts/.member-connect-presentation.test.mjs";
 
 process.env.EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST = "false";
 
@@ -239,6 +240,15 @@ test("connection snapshots stay with the signed-in account", () => {
   clearMemberConnectionsCache();
   assert.equal(connectionMemberLabel(member("user_to", null, null)), "Bluebird member");
   assert.equal(connectionMemberLabel(member("user_to", "Noah", "Bennett")), "Noah Bennett");
+  assert.equal(memberInitials("Amber Moore"), "AM");
+  assert.equal(memberInitials("Bluebird member"), "BM");
+  assert.equal(memberInitials(""), "B");
+  const noon = new Date(2026, 9, 2, 15, 0).getTime();
+  assert.equal(formatMemberActivityTime(new Date(2026, 9, 2, 10, 15).toISOString(), noon), "10:15 AM");
+  assert.equal(formatMemberActivityTime(new Date(2026, 9, 1, 18, 0).toISOString(), noon), "Yesterday");
+  assert.equal(formatMemberActivityTime(new Date(2026, 8, 29, 18, 0).toISOString(), noon), "Tue");
+  assert.equal(formatMemberActivityTime(new Date(2026, 8, 3, 18, 0).toISOString(), noon), "Sep 3");
+  assert.equal(formatMemberActivityTime("not-a-date", noon), "");
 });
 
 test("the connections screen does not present demo members as real people", () => {
@@ -248,6 +258,31 @@ test("the connections screen does not present demo members as real people", () =
   assert.match(screen, /member-connections-unavailable/);
   assert.match(screen, /Messages are not available yet/);
   assert.match(screen, /member-connections-discover/);
+  assert.match(screen, /MemberProfileSheet/);
+  assert.match(screen, /Find Member/);
+  assert.match(screen, /Incoming Requests/);
+  assert.match(screen, /My Connections/);
+  assert.match(screen, /discover\(\{ phoneE164: phone \}\)/);
+  assert.match(screen, /connections\.decline\(request\.id\)/);
+  assert.match(screen, /member-connections-requests-badge/);
+  assert.match(screen, /member-connections-incoming-empty/);
+  assert.doesNotMatch(screen, /keyboardType="email-address"|member-connections-email|Exact email address/);
+  assert.equal(presentDiscoveredMember({
+    userId: "user_a",
+    acceptedUserIds: ["user_a"],
+    incomingRequesterIds: [],
+  }), "connected");
+  assert.equal(presentDiscoveredMember({
+    userId: "user_b",
+    acceptedUserIds: [],
+    incomingRequesterIds: ["user_b"],
+  }), "incoming");
+  assert.equal(presentDiscoveredMember({
+    userId: "user_c",
+    acceptedUserIds: ["user_a"],
+    incomingRequesterIds: ["user_b"],
+  }), "available");
+  assert.doesNotMatch(screen, /Find contacts|RSVP|skill level|EVENT CHATS|favorite/);
   assert.doesNotMatch(screen, /Avery Lang|demo-avery|useListNetworking|\/api\/networking|\/networking\/connections/);
   assert.match(tab, /MemberConnectionsScreen/);
   assert.doesNotMatch(tab, /ConnectionsHome/);

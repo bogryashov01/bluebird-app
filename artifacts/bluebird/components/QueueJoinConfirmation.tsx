@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -14,11 +13,9 @@ import {
   JOIN_FLIGHT_MEMBERSHIP_NOTE,
   JOIN_FLIGHT_CONSENT_REQUIRED,
   JOIN_FLIGHT_CREDIT_CONFIRM_REQUIRED,
-  JOIN_FLIGHT_PASS_UNKNOWN,
   QUEUE_LEFT_CONFIRMED,
   joinFlightConfirmNote,
   joinFlightPassNote,
-  joinFlightDisclosures,
   presentJoinQueueWindow,
   reviewProductionQueueJoin,
   type JoinFlightDisplay,
@@ -57,6 +54,8 @@ export function QueueJoinConfirmation({
   const [consent, setConsent] = useState<QueueJoinConsent>('none');
   const [creditConfirmed, setCreditConfirmed] = useState(false);
   const [consentNotice, setConsentNotice] = useState<string | null>(null);
+  const joinLock = useRef(false);
+  const passChoiceRequired = false;
   const queueWindow = presentJoinQueueWindow(flight.queueClosesAt, Date.now());
   const route = [flight.fromAirport, flight.toAirport].filter(Boolean).join(' → ');
   const cities = [flight.fromCity, flight.toCity].filter(Boolean).join(' → ');
@@ -64,7 +63,9 @@ export function QueueJoinConfirmation({
     .filter(Boolean)
     .join(' · ');
   const queueCloses = formatQueueClosingTime(flight.queueClosesAt);
-  const disclosures = joinFlightDisclosures(flight.international);
+  useEffect(() => {
+    if (!submitting) joinLock.current = false;
+  }, [submitting]);
 
   if (success) {
     return (
@@ -106,7 +107,7 @@ export function QueueJoinConfirmation({
           <Text style={[styles.disclosure, { color: colors.textOnSurface }]}>{JOIN_FLIGHT_MEMBERSHIP_NOTE}</Text>
         </View>
 
-        {flight.internationalPassRequired === true ? (
+        {passChoiceRequired ? (
           <View
             testID="join-flight-pass"
             style={[styles.flightCard, { backgroundColor: colors.surface, borderColor: colors.separator }]}
@@ -143,10 +144,6 @@ export function QueueJoinConfirmation({
             ) : null}
             <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>{joinFlightPassNote()}</Text>
           </View>
-        ) : flight.international === true ? (
-          <Text testID="join-flight-pass-unknown" style={[styles.disclosure, { color: colors.textOnSurface }]}>
-            {JOIN_FLIGHT_PASS_UNKNOWN}
-          </Text>
         ) : null}
 
         {leftMessage === QUEUE_LEFT_CONFIRMED ? (
@@ -161,15 +158,6 @@ export function QueueJoinConfirmation({
           </Text>
         ) : null}
         {failure ? <JoinFailureNotice failure={failure} /> : null}
-
-        <View style={styles.disclosures}>
-          {disclosures.map((line) => (
-            <View key={line} style={styles.disclosureRow}>
-              <Feather name="info" size={16} color={colors.primary} />
-              <Text style={[styles.disclosure, { color: colors.textOnSurface }]}>{line}</Text>
-            </View>
-          ))}
-        </View>
       </ScrollView>
       <View style={[styles.footer, { borderTopColor: colors.separator, backgroundColor: colors.offWhite, paddingBottom: bottomPad + 12 }]}>
         {demoAvailable ? (
@@ -192,10 +180,10 @@ export function QueueJoinConfirmation({
           disabled={(!canSubmitProductionQueueJoin() && !demoEnabled) || submitting}
           loading={submitting && canSubmitProductionQueueJoin()}
           onPress={() => {
-            if (submitting) return;
+            if (submitting || joinLock.current) return;
             const decision = reviewProductionQueueJoin({
               consent,
-              internationalPassRequired: flight.internationalPassRequired,
+              internationalPassRequired: passChoiceRequired,
               creditConfirmed,
             });
             logJoinNav('join-button', {
@@ -213,6 +201,7 @@ export function QueueJoinConfirmation({
             }
             setConsentNotice(null);
             if (decision.status === 'ready') {
+              joinLock.current = true;
               onJoin?.(consent, creditConfirmed);
               return;
             }
@@ -303,8 +292,6 @@ const styles = StyleSheet.create({
   route: { fontFamily: 'Inter_700Bold', fontSize: 22, letterSpacing: -0.3 },
   queueCount: { fontSize: 18 },
   meta: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },
-  disclosures: { gap: 14 },
-  disclosureRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   disclosure: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21 },
   footer: { borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 12, gap: 10 },
   demoSwitch: { flexDirection: 'row', alignItems: 'center', gap: 12 },

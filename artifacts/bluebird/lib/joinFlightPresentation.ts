@@ -3,13 +3,15 @@ import { productionFlightDetailQueryKey } from './flightDetailPresentation';
 import { mainBluebirdAuthenticatedQueryKey } from './mainBluebirdApi';
 import type { MainBluebirdApiEnvironment } from './mainBluebirdApiConfig';
 import { isProductionQueueMutationsEnabled } from './productionQueueCapability';
+import { canonicalCountryCode } from './countryIdentity';
 import { parseProductionFlightId } from './productionFlights';
 import { isProductionQueueVerified } from './productionQueueReadiness';
 import { validateProductionQueueJoin, type ProductionQueueRead } from './productionQueue';
 
 /**
- * Display facts already shown for a loaded flight. This object never carries
- * a price, a queue position, or a claim about the signed-in member.
+ * Display facts already shown for a loaded flight. The International Pass
+ * price is the API value. This object never carries a queue position or a
+ * claim about the signed-in member.
  */
 export interface JoinFlightDisplay {
   flightId: number;
@@ -21,9 +23,12 @@ export interface JoinFlightDisplay {
   departureTime: string | null;
   aircraft: string | null;
   international: boolean | null;
+  fromCountry: string | null;
+  toCountry: string | null;
   flightStatus: 'published' | null;
   queueClosesAt: string | null;
   internationalPassRequired: boolean | null;
+  internationalPassPriceUsd: number | null;
 }
 
 export interface JoinFlightSource {
@@ -39,6 +44,7 @@ export interface JoinFlightSource {
   status: string | null;
   queueClosesAt?: string | null;
   internationalPassRequired?: boolean | null;
+  internationalPassPriceUsd?: number | null;
 }
 
 export interface QueueRosterRow {
@@ -81,6 +87,7 @@ export function canSubmitProductionQueueJoin(): boolean {
 export function joinFlightRouteParams(
   flightId: number,
   flight: JoinFlightSource,
+  airports?: { originCountry?: string | null; destinationCountry?: string | null },
 ): Record<string, string> {
   const parsedId = parseProductionFlightId(flightId);
   if (parsedId === null) return {};
@@ -94,6 +101,8 @@ export function joinFlightRouteParams(
     departureTime: flight.departureTime ?? '',
     aircraft: flight.aircraftTypeName ?? flight.aircraftType ?? '',
     international: flight.international === true ? '1' : flight.international === false ? '0' : '',
+    ...countryParam('fromCountry', airports?.originCountry),
+    ...countryParam('toCountry', airports?.destinationCountry),
     flightStatus: flight.status === 'published' ? 'published' : '',
     ...(isoTimestamp(flight.queueClosesAt) ? { queueClosesAt: isoTimestamp(flight.queueClosesAt)! } : {}),
     ...(flight.internationalPassRequired === true
@@ -101,6 +110,7 @@ export function joinFlightRouteParams(
       : flight.internationalPassRequired === false
         ? { internationalPassRequired: '0' }
         : {}),
+    ...usdParam(flight.internationalPassPriceUsd),
   };
 }
 
@@ -119,9 +129,12 @@ export function parseJoinFlightDisplay(
     departureTime: clockTime(params.departureTime),
     aircraft: displayText(params.aircraft),
     international: internationalFlag(params.international),
+    fromCountry: airportCountry(params.fromCountry),
+    toCountry: airportCountry(params.toCountry),
     flightStatus: firstParam(params.flightStatus) === 'published' ? 'published' : null,
     queueClosesAt: isoTimestamp(firstParam(params.queueClosesAt)),
     internationalPassRequired: requiredFlag(params.internationalPassRequired),
+    internationalPassPriceUsd: usdAmount(params.internationalPassPriceUsd),
   };
 }
 
@@ -137,6 +150,10 @@ export function joinFlightQueueCountLabel(count: number): string | null {
 export function joinFlightQueuePositionLabel(position: number): string | null {
   if (!Number.isSafeInteger(position) || position < 1) return null;
   return `Your position is #${position}.`;
+}
+
+export function queueRosterLabel(initials: string | null | undefined): string {
+  return typeof initials === 'string' && initials.trim() ? initials.trim() : 'Member';
 }
 
 export function queueRosterTierLabel(tier: QueueRosterRow['tier']): string {
@@ -256,10 +273,15 @@ export type QueueJoinReview =
   | { status: 'consent-required'; body: null }
   | { status: 'ready'; body: JoinProductionQueueRequest };
 
-/** Standard join sends an empty object. A pass flag is included only after an explicit choice. */
+/**
+ * Cash authorization sends only the authorization flag.
+ * A credit-backed join sends that flag and the credit flag together.
+ */
 export function prepareProductionQueueJoinBody(consent: QueueJoinConsent): JoinProductionQueueRequest {
   if (consent === 'authorize-pass') return { internationalPassAuthorized: true };
-  if (consent === 'use-credit') return { useInternationalPassCredit: true };
+  if (consent === 'use-credit') {
+    return { internationalPassAuthorized: true, useInternationalPassCredit: true };
+  }
   return {};
 }
 
@@ -273,16 +295,14 @@ export function assessProductionQueueJoin(input: {
   creditConfirmed?: boolean;
 }): Exclude<QueueJoinReview, { status: 'disabled' }> {
   if (input.consent === 'use-credit') {
-    if (input.internationalPassRequired !== true || input.creditConfirmed !== true) {
-      return { status: 'consent-required', body: null };
-    }
-    return { status: 'ready', body: { useInternationalPassCredit: true } };
+    if (input.creditConfirmed !== true) return { status: 'consent-required', body: null };
+    return { status: 'ready', body: prepareProductionQueueJoinBody('use-credit') };
   }
-  if (input.internationalPassRequired === true && input.consent === 'none') {
-    return { status: 'consent-required', body: null };
+  if (input.consent === 'authorize-pass') {
+    return { status: 'ready', body: prepareProductionQueueJoinBody('authorize-pass') };
   }
-  if (input.internationalPassRequired !== true) return { status: 'ready', body: {} };
-  return { status: 'ready', body: prepareProductionQueueJoinBody(input.consent) };
+  if (input.internationalPassRequired === true) return { status: 'consent-required', body: null };
+  return { status: 'ready', body: {} };
 }
 
 /**
@@ -298,17 +318,113 @@ export function reviewProductionQueueJoin(input: {
   return assessProductionQueueJoin(input);
 }
 
-export type ProductionInternationalJoinStep = 'skip' | 'not-required' | 'required' | 'unknown';
+export type AirportCountryAvailability = 'loading' | 'resolved' | 'unavailable';
 
-/** Domestic flights skip the international notice. The server pass flag chooses the international actions. */
+export type AirportCountryComparison = 'loading' | 'different-country' | 'same-country' | 'unavailable';
+
+export interface AirportCountryRead {
+  status: AirportCountryAvailability;
+  originCountry: string | null;
+  destinationCountry: string | null;
+}
+
+export interface AirportCountryRecord {
+  code: string;
+  country: string | null;
+}
+
+/**
+ * A pending airport read stays loading. A settled read is resolved only when
+ * both requested airports have a country value.
+ */
+export function presentAirportCountryRead(input: {
+  originCode: string | null;
+  destinationCode: string | null;
+  isPending: boolean;
+  isError: boolean;
+  records: readonly AirportCountryRecord[] | undefined;
+}): AirportCountryRead {
+  const originCode = airportCode(input.originCode ?? undefined);
+  const destinationCode = airportCode(input.destinationCode ?? undefined);
+  if (!originCode || !destinationCode) {
+    return { status: 'unavailable', originCountry: null, destinationCountry: null };
+  }
+  if (input.isPending && !input.records) {
+    return { status: 'loading', originCountry: null, destinationCountry: null };
+  }
+  if (input.isError || !input.records) {
+    return { status: 'unavailable', originCountry: null, destinationCountry: null };
+  }
+  const originCountry = countryForCode(input.records, originCode);
+  const destinationCountry = countryForCode(input.records, destinationCode);
+  if (!originCountry || !destinationCountry) {
+    return { status: 'unavailable', originCountry, destinationCountry };
+  }
+  return { status: 'resolved', originCountry, destinationCountry };
+}
+
+/**
+ * Compares country values from the airport directory after ISO 3166-1 normalization.
+ * Loading and unavailable reads are not classified as domestic or international.
+ */
+export function compareAirportCountries(
+  originCountry: string | null | undefined,
+  destinationCountry: string | null | undefined,
+  availability: AirportCountryAvailability,
+): AirportCountryComparison {
+  if (availability === 'loading') return 'loading';
+  if (availability === 'unavailable') return 'unavailable';
+  const origin = canonicalCountryCode(originCountry);
+  const destination = canonicalCountryCode(destinationCountry);
+  if (!origin || !destination) return 'unavailable';
+  return origin === destination ? 'same-country' : 'different-country';
+}
+
+export type ProductionInternationalJoinStep = 'pending' | 'skip' | 'not-required' | 'required' | 'unknown';
+
+/** The public plan catalog name for the server's internationalUnlimited entitlement. */
+export const INTERNATIONAL_UNLIMITED_FEATURE = 'International Empty Legs';
+
+/**
+ * A boolean true on the member's tier means international flights are included.
+ * Any other catalog value means the entitlement is not unlimited.
+ * A missing tier or feature stays unknown.
+ */
+export function readInternationalUnlimited(
+  features: readonly { label: string; values: Readonly<Record<string, boolean | string>> }[] | null | undefined,
+  tier: string | null | undefined,
+): boolean | null {
+  if (!tier) return null;
+  const feature = features?.find((item) => item.label === INTERNATIONAL_UNLIMITED_FEATURE);
+  if (!feature || !Object.prototype.hasOwnProperty.call(feature.values, tier)) return null;
+  return feature.values[tier] === true;
+}
+
+/**
+ * The stored isInternational flag decides whether the notice appears.
+ * Pass choices appear only when that flight is international and the member's
+ * internationalUnlimited entitlement is false. Airport countries are not used.
+ */
 export function productionInternationalJoinStep(input: {
-  international: boolean | null;
-  internationalPassRequired: boolean | null;
+  isInternational: boolean | null;
+  internationalUnlimited: boolean | null;
+  entitlementPending?: boolean;
 }): ProductionInternationalJoinStep {
-  if (input.international !== true) return 'skip';
-  if (input.internationalPassRequired === true) return 'required';
-  if (input.internationalPassRequired === false) return 'not-required';
+  if (input.isInternational !== true) return 'skip';
+  if (input.entitlementPending === true) return 'pending';
+  if (input.internationalUnlimited === true) return 'not-required';
+  if (input.internationalUnlimited === false) return 'required';
   return 'unknown';
+}
+
+/** Formats the API price. A missing or invalid amount stays hidden. */
+export function formatInternationalPassPrice(value: number | null | undefined): string | null {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) return null;
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 /** Countdown uses the server queue closing time. A missing or invalid time stays hidden. */
@@ -378,12 +494,22 @@ export function presentJoinFlightFailure(input: {
   if (status === 401) {
     return failure(status, code, 'Sign in required', 'Sign in again before joining. No queue change was made.', null, false);
   }
+  if (status === 402 && code === 'insufficient_credit') {
+    return failure(
+      status,
+      code,
+      'International Pass credit unavailable',
+      'That International Pass credit is not available. Authorize an International Pass instead. No card was charged, and your choices are still here.',
+      null,
+      false,
+    );
+  }
   if (status === 402) {
     return failure(
       status,
       code,
       'International Pass required',
-      'An International Pass authorization or an available credit is required before joining. No card was charged.',
+      'Authorize an International Pass or use an available credit before joining. No card was charged, and your choices are still here.',
       null,
       false,
     );
@@ -485,6 +611,73 @@ export const QUEUE_LEAVE_UNAVAILABLE = 'Leaving the queue is not available in th
 export const QUEUE_JOIN_UNCONFIRMED = 'Bluebird did not confirm a queue position. No position was saved on this device.';
 export const QUEUE_LEAVE_UNCONFIRMED = 'Bluebird did not confirm that you left the queue. Your place was not changed on this device.';
 export const QUEUE_LEFT_CONFIRMED = 'Bluebird confirmed that you left this queue.';
+export const QUEUE_SKIP_UNAVAILABLE = 'Skip the Line is not available in this build. No pass is used.';
+export const QUEUE_SKIP_NONE = 'No Skip the Line passes are available.';
+export const QUEUE_SKIP_ALREADY_USED = 'A Skip the Line pass is already applied to this flight.';
+export const QUEUE_SKIP_WINNER = 'You are the current winner for this flight. Skip the Line is not offered again.';
+export const QUEUE_SKIP_CONFIRMED = 'Skip the Line was confirmed. You are the current winner for this flight. This does not award the flight or confirm the seat.';
+export const QUEUE_SKIP_NOTE = 'Using a pass applies one existing credit. A confirmed pass makes you the current winner. It does not award the flight or only change your queue number.';
+export const QUEUE_SKIP_UNCONFIRMED = 'Bluebird did not confirm Skip the Line. No pass use was confirmed.';
+export const QUEUE_SKIP_BALANCE_UNAVAILABLE = 'Skip the Line pass balance could not be loaded.';
+
+export type QueueSkipLineBalance = 'loading' | 'unavailable' | { count: number };
+
+export type QueueSkipLineOffer =
+  | { kind: 'hidden' }
+  | { kind: 'winner' }
+  | { kind: 'already-used' }
+  | { kind: 'closed' }
+  | { kind: 'loading' }
+  | { kind: 'unavailable' }
+  | { kind: 'none' }
+  | { kind: 'ready'; count: number };
+
+/**
+ * A pass is offered only to a member who is already in the queue, has a known
+ * remaining credit, and is not already the current winner or pass holder.
+ * The confirmed result is current-winner status, not a new queue number.
+ */
+export function presentQueueSkipLineOffer(input: {
+  inQueue: boolean;
+  mutationsEnabled: boolean;
+  balance: QueueSkipLineBalance;
+  passAlreadyApplied: boolean;
+  viewerIsEffectiveWinner: boolean | null;
+}): QueueSkipLineOffer {
+  if (input.inQueue !== true) return { kind: 'hidden' };
+  if (input.viewerIsEffectiveWinner === true) return { kind: 'winner' };
+  if (input.passAlreadyApplied === true) return { kind: 'already-used' };
+  if (input.mutationsEnabled !== true) return { kind: 'closed' };
+  if (input.balance === 'loading') return { kind: 'loading' };
+  if (input.balance === 'unavailable' || !('count' in input.balance)) return { kind: 'unavailable' };
+  if (!Number.isSafeInteger(input.balance.count) || input.balance.count < 1) return { kind: 'none' };
+  return { kind: 'ready', count: input.balance.count };
+}
+
+export function presentQueueSkipFailure(input: {
+  status?: number | null;
+  code?: string | null;
+  body?: unknown;
+}): JoinFlightFailure {
+  const status = Number.isInteger(input.status) ? input.status! : null;
+  const code = readErrorCode(input.code, input.body);
+  if (status === 401) {
+    return failure(status, code, 'Sign in required', 'Sign in again before using a Skip the Line pass. No pass use was confirmed.', null, true);
+  }
+  if (status === 404) {
+    return failure(status, code, 'Flight unavailable', 'This flight is no longer available. No pass use was confirmed.', null, true);
+  }
+  if (status === 409) {
+    return failure(status, code, 'Pass not applied', 'Bluebird did not apply a Skip the Line pass. Your place in this queue was not changed on this device.', null, true);
+  }
+  if (status === 400) {
+    return failure(status, code, 'Request not accepted', 'Bluebird did not accept this Skip the Line request. No pass use was confirmed.', null, true);
+  }
+  if (status === null || status === 0) {
+    return failure(null, code, 'Connection problem', 'The Skip the Line request could not reach Bluebird. No pass use was confirmed.', null, true);
+  }
+  return failure(status, code, 'Pass not confirmed', QUEUE_SKIP_UNCONFIRMED, null, true);
+}
 
 export function formatQueueClosingTime(value: string | null): string | null {
   const timestamp = isoTimestamp(value);
@@ -655,6 +848,35 @@ function calendarDate(value: string | string[] | undefined): string | null {
 function clockTime(value: string | string[] | undefined): string | null {
   const text = displayText(value);
   return text && /^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(text) ? text : null;
+}
+
+function usdParam(value: number | null | undefined): Record<string, string> {
+  const amount = typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+  return amount === null ? {} : { internationalPassPriceUsd: String(amount) };
+}
+
+function usdAmount(value: string | string[] | undefined): number | null {
+  const text = firstParam(value)?.trim() ?? '';
+  if (!/^(?:0|[1-9]\d*)$/.test(text)) return null;
+  const amount = Number(text);
+  return Number.isSafeInteger(amount) ? amount : null;
+}
+
+function countryParam(key: 'fromCountry' | 'toCountry', value: string | null | undefined): Record<string, string> {
+  const country = airportCountry(value);
+  return country ? { [key]: country } : {};
+}
+
+function countryForCode(records: readonly AirportCountryRecord[], code: string): string | null {
+  const record = records.find((item) => item.code.trim().toUpperCase() === code);
+  const country = record?.country?.trim().replace(/\s+/g, ' ') ?? '';
+  return country.length > 0 ? country : null;
+}
+
+function airportCountry(value: string | string[] | null | undefined): string | null {
+  const text = firstParam(value ?? undefined)?.trim().replace(/\s+/g, ' ') ?? '';
+  if (!/^\p{L}[\p{L} .'-]{1,55}$/u.test(text)) return null;
+  return text;
 }
 
 function internationalFlag(value: string | string[] | undefined): boolean | null {

@@ -11,6 +11,7 @@ import {
   getClerkEntryState,
   isLegacyMemberQueryEnabled,
   shouldUseLocalFlightReadMode,
+  shouldApplyClerkRouteRedirect,
   shouldRedirectClerkRoute,
   shouldClearClerkMemberCache,
   CLERK_CONNECTIONS_TAB,
@@ -193,6 +194,19 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["flight", "queue-status"], false, true, "/flight/queue-status?flightId=42"), false);
   assert.equal(shouldRedirectClerkRoute(["+not-found"], false, true, "/flight/queue-status?flightId=42"), false);
   assert.equal(shouldRedirectClerkRoute(["flight", "queue-status"], false, false), true);
+  const queueStatusWouldRedirect = shouldRedirectClerkRoute(["flight", "queue-status"], false, false);
+  assert.equal(shouldApplyClerkRouteRedirect({
+    sessionLoaded: false,
+    routeRequiresRedirect: queueStatusWouldRedirect,
+  }), false);
+  assert.equal(shouldApplyClerkRouteRedirect({
+    sessionLoaded: true,
+    routeRequiresRedirect: queueStatusWouldRedirect,
+  }), true);
+  assert.equal(shouldApplyClerkRouteRedirect({
+    sessionLoaded: true,
+    routeRequiresRedirect: shouldRedirectClerkRoute(["flight", "queue-status"], false, true, "/flight/queue-status"),
+  }), false);
   assert.equal(shouldRedirectClerkRoute(["flight", "queue-status", "extra"], false, true), true);
   assert.equal(shouldRedirectClerkRoute(["flight", "policy-review"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["flight", "policy-review"], false, false), true);

@@ -1,4 +1,5 @@
 import React from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
   ActivityIndicator,
   Modal,
@@ -8,7 +9,6 @@ import {
   Share,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -213,7 +213,7 @@ export function ConnectionsHome({ showBack = false }: { showBack?: boolean }) {
               </TouchableOpacity>
               {finding ? (
                 <>
-                  <TextInput
+                  <ThemedTextInput
                     value={search}
                     onChangeText={setSearch}
                     placeholder="Search demo profiles by name"

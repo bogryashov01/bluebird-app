@@ -1,24 +1,35 @@
 import React from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MemberConversationList } from '@/components/MemberConversationList';
+import { MemberInitialsAvatar, MemberProfileSheet } from '@/components/MemberProfileSheet';
 import { useColors } from '@/hooks/useColors';
-import { connectionMemberLabel } from '@/lib/memberConnections';
+import { connectionMemberLabel, discoverConnectionQuery, type AcceptedConnection, type ConnectionRelationship } from '@/lib/memberConnections';
+import { presentDiscoveredMember } from '@/lib/memberConnectPresentation';
 import { isMemberMessagesIntegrationEnabled } from '@/lib/memberMessages';
 import { useMemberConnections } from '@/lib/useMemberConnections';
 import { useOpenAcceptedConversation } from '@/lib/useMemberMessages';
-import { MemberConversationList } from '@/components/MemberConversationList';
+
+type ProfileSheet =
+  | { kind: 'accepted'; id: number }
+  | { kind: 'incoming'; id: number }
+  | { kind: 'discovery' };
 
 export function MemberConnectionsScreen({ showBack = false }: { showBack?: boolean }) {
   const colors = useColors();
@@ -27,10 +38,14 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
   const messages = useOpenAcceptedConversation();
   const messagesEnabled = isMemberMessagesIntegrationEnabled();
   const [pane, setPane] = React.useState<'connections' | 'chats'>('connections');
-  const [email, setEmail] = React.useState('');
   const [phone, setPhone] = React.useState('');
+  const [phoneError, setPhoneError] = React.useState<string | null>(null);
+  const [findOpen, setFindOpen] = React.useState(false);
+  const [requestsOpen, setRequestsOpen] = React.useState(false);
+  const [sheet, setSheet] = React.useState<ProfileSheet | null>(null);
   const topInset = Platform.OS === 'web' ? 20 : insets.top;
   const bottomInset = Platform.OS === 'web' ? 96 : insets.bottom + 88;
+  const wash = colors.scheme === 'dark' ? colors.background : colors.secondary;
 
   const names = React.useMemo(() => {
     const map = new Map<string, string>();
@@ -41,21 +56,81 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
   }, [connections.accepted]);
 
   React.useEffect(() => {
-    setEmail('');
     setPhone('');
+    setPhoneError(null);
+    setFindOpen(false);
+    setRequestsOpen(false);
     setPane('connections');
+    setSheet(null);
   }, [connections.accountId, connections.enabled]);
+
+  const accepted = sheet?.kind === 'accepted'
+    ? connections.accepted.find((connection) => connection.id === sheet.id) ?? null
+    : null;
+  const incoming = sheet?.kind === 'incoming'
+    ? connections.incoming.find((request) => request.id === sheet.id) ?? null
+    : null;
+  const discovery = sheet?.kind === 'discovery' && connections.discovery ? connections.discovery : null;
+  const foundMember = connections.discovery ? connections.discovery : null;
+
+  const openFind = () => {
+    setPhoneError(null);
+    connections.clearDiscovery();
+    setFindOpen(true);
+  };
+  const searchByPhone = () => {
+    const query = discoverConnectionQuery({ phoneE164: phone });
+    if (!query.ok) {
+      setPhoneError('Enter a phone number in international format, such as +15551234567.');
+      return;
+    }
+    setPhoneError(null);
+    void connections.discover({ phoneE164: phone });
+  };
+  const discoveredState = foundMember
+    ? presentDiscoveredMember({
+      userId: foundMember.userId,
+      acceptedUserIds: connections.accepted.map((connection) => connection.member.userId),
+      incomingRequesterIds: connections.incoming.map((request) => request.requester.userId),
+    })
+    : null;
+
+  const openConversation = (userId: string) => {
+    void messages.open(userId).then((result) => {
+      if (result?.kind === 'loaded') {
+        setSheet(null);
+        router.push({
+          pathname: '/messages/[conversationId]',
+          params: { conversationId: String(result.data.conversation.id) },
+        });
+      }
+    });
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.offWhite }]} testID="member-connections-screen">
+      <LinearGradient colors={[wash, colors.offWhite]} locations={[0, 0.55]} style={StyleSheet.absoluteFill} />
       <View style={[styles.header, { paddingTop: topInset + 8 }]}>
         {showBack ? (
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.back}>
             <Feather name="chevron-left" size={22} color={colors.primary} />
           </TouchableOpacity>
         ) : null}
-        <Text style={[styles.title, { color: colors.textOnSurface }]}>Connections</Text>
-        <View accessibilityRole="tablist" style={[styles.tabs, { borderBottomColor: colors.border }]}>
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, { color: colors.textOnSurface }]}>Connect</Text>
+          {connections.enabled && connections.status !== 'signed-out' && connections.status !== 'disabled' ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Find a member"
+              testID="member-connections-compose"
+              onPress={() => { setPane('connections'); openFind(); }}
+              style={[styles.compose, { backgroundColor: colors.primary }]}
+            >
+              <Feather name="edit-2" size={18} color={colors.primaryForeground} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        <View accessibilityRole="tablist" style={styles.tabs}>
           {(['chats', 'connections'] as const).map((item) => {
             const selected = pane === item;
             const label = item === 'chats' ? 'Chats' : 'Connections';
@@ -68,16 +143,26 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
                 onPress={() => setPane(item)}
                 style={styles.tab}
               >
-                <Text style={[styles.tabLabel, { color: selected ? colors.textOnSurface : colors.mutedForegroundLight }]}>{label}</Text>
+                <View style={styles.tabLabelRow}>
+                  <Feather
+                    name={item === 'chats' ? 'message-circle' : 'users'}
+                    size={16}
+                    color={selected ? colors.textOnSurface : colors.mutedForegroundLight}
+                  />
+                  <Text style={[styles.tabLabel, { color: selected ? colors.textOnSurface : colors.mutedForegroundLight }]}>{label}</Text>
+                </View>
                 <View style={[styles.underline, { backgroundColor: selected ? colors.primary : 'transparent' }]} />
               </TouchableOpacity>
             );
           })}
         </View>
+        <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>
+          {pane === 'chats' ? 'Your direct messages.' : 'Message members after you connect.'}
+        </Text>
       </View>
       {pane === 'chats' ? (
         messagesEnabled ? (
-          <MemberConversationList names={names} active={pane === 'chats'} />
+          <MemberConversationList names={names} active={pane === 'chats'} bottomInset={bottomInset} />
         ) : (
           <View style={styles.state} testID="member-connections-messages-unavailable">
             <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Messages are not available yet</Text>
@@ -104,6 +189,7 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
         </View>
       ) : (
         <ScrollView
+          style={{ backgroundColor: colors.offWhite }}
           contentContainerStyle={[styles.list, { paddingBottom: bottomInset }]}
           keyboardShouldPersistTaps="handled"
           refreshControl={(
@@ -111,6 +197,7 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
               refreshing={connections.refreshing}
               onRefresh={() => { void connections.refresh(); }}
               tintColor={colors.primary}
+              progressBackgroundColor={colors.surface}
             />
           )}
         >
@@ -128,135 +215,375 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
           {connections.message && connections.status !== 'error' ? (
             <Text style={[styles.feedback, { color: colors.textOnSurface }]} testID="member-connections-feedback">{connections.message}</Text>
           ) : null}
-          <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>Find a member</Text>
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            placeholder="Exact email address"
-            placeholderTextColor={colors.mutedForegroundLight}
-            testID="member-connections-email"
-            style={[styles.search, { color: colors.textOnSurface, backgroundColor: colors.surface }]}
-          />
-          <TextInput
-            value={phone}
-            onChangeText={setPhone}
-            autoCorrect={false}
-            keyboardType="phone-pad"
-            placeholder="Exact phone, +15551234567"
-            placeholderTextColor={colors.mutedForegroundLight}
-            testID="member-connections-phone"
-            style={[styles.search, { color: colors.textOnSurface, backgroundColor: colors.surface }]}
-          />
-          <TouchableOpacity
-            accessibilityRole="button"
-            disabled={connections.pending}
-            testID="member-connections-discover"
-            onPress={() => { void connections.discover({ email, phoneE164: phone }); }}
-            style={[styles.primary, { backgroundColor: colors.primary, opacity: connections.pending ? 0.55 : 1 }]}
-          >
-            <Text style={[styles.primaryLabel, { color: colors.primaryForeground }]}>Find member</Text>
-          </TouchableOpacity>
-          {connections.discovery ? (
-            <View style={[styles.card, { backgroundColor: colors.surface }]} testID="member-connections-match">
-              <Text style={[styles.name, { color: colors.textOnSurface }]}>{connectionMemberLabel(connections.discovery)}</Text>
-              <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>Bluebird member</Text>
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Find Member"
+              testID="member-connections-find"
+              onPress={openFind}
+              style={[styles.actionCard, { backgroundColor: colors.surface }]}
+            >
+              <Feather name="search" size={18} color={colors.primary} />
+              <Text style={[styles.actionLabel, { color: colors.textOnSurface }]}>Find Member</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={connections.incoming.length > 0 ? `Incoming Requests, ${connections.incoming.length}` : 'Incoming Requests'}
+              testID="member-connections-requests"
+              onPress={() => setRequestsOpen(true)}
+              style={[styles.actionCard, { backgroundColor: colors.surface }]}
+            >
+              <Feather name="inbox" size={18} color={colors.primary} />
+              <Text style={[styles.actionLabel, { color: colors.textOnSurface }]}>Incoming Requests</Text>
+              {connections.incoming.length > 0 ? (
+                <View style={[styles.badge, { backgroundColor: colors.primary }]} testID="member-connections-requests-badge">
+                  <Text style={[styles.badgeLabel, { color: colors.primaryForeground }]}>{connections.incoming.length}</Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>My Connections</Text>
+          {connections.accepted.length === 0 ? (
+            <Text style={[styles.meta, styles.inset, { color: colors.mutedForegroundLight }]} testID="member-connections-empty">No accepted connections.</Text>
+          ) : connections.accepted.map((connection) => (
+            <AcceptedRow
+              key={connection.id}
+              connection={connection}
+              colors={colors}
+              onPress={() => setSheet({ kind: 'accepted', id: connection.id })}
+            />
+          ))}
+        </ScrollView>
+      )}
+      <MemberProfileSheet
+        visible={accepted !== null || incoming !== null || discovery !== null}
+        name={
+          accepted
+            ? connectionMemberLabel(accepted.member)
+            : incoming
+              ? connectionMemberLabel(incoming.requester)
+              : discovery
+                ? connectionMemberLabel(discovery)
+                : ''
+        }
+        lines={sheetLines(accepted, incoming, discovery)}
+        primary={sheetPrimary({
+          accepted,
+          incoming,
+          discovery,
+          messagesEnabled: messages.enabled,
+          pending: connections.pending || messages.opening,
+          onMessage: () => { if (accepted) openConversation(accepted.member.userId); },
+          onAccept: () => { if (incoming) { setSheet(null); void connections.accept(incoming.id); } },
+          onConnect: () => {
+            if (!discovery || discoveredState !== 'available') return;
+            void connections.sendRequest(discovery).then((sent) => {
+              if (!sent) return;
+              setSheet(null);
+              setFindOpen(false);
+              setPhone('');
+            });
+          },
+        })}
+        secondary={incoming ? {
+          label: 'Decline',
+          testID: `member-connections-sheet-decline-${incoming.id}`,
+          disabled: connections.pending,
+          onPress: () => { setSheet(null); void connections.decline(incoming.id); },
+        } : null}
+        footnote={accepted ? {
+          label: 'Remove',
+          testID: `member-connections-remove-${accepted.id}`,
+          disabled: connections.pending,
+          onPress: () => { setSheet(null); void connections.remove(accepted.id); },
+        } : null}
+        onClose={() => setSheet(null)}
+      />
+      <Modal visible={findOpen} animationType="slide" transparent onRequestClose={() => setFindOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modal}>
+          <Pressable accessibilityLabel="Close find member" style={styles.backdrop} onPress={() => setFindOpen(false)} />
+          <View testID="member-connections-find-sheet" style={[styles.sheet, { backgroundColor: colors.offWhite, paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+            <Text style={[styles.sheetTitle, { color: colors.textOnSurface }]}>Find Member</Text>
+            <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>Search by phone number.</Text>
+            <ThemedTextInput
+              value={phone}
+              onChangeText={(value) => { setPhone(value); setPhoneError(null); }}
+              autoCorrect={false}
+              keyboardType="phone-pad"
+              textContentType="telephoneNumber"
+              placeholder="+15551234567"
+              placeholderTextColor={colors.mutedForegroundLight}
+              testID="member-connections-phone"
+              style={[styles.search, { color: colors.textOnSurface, backgroundColor: colors.surface }]}
+            />
+            {phoneError ? <Text style={[styles.meta, { color: colors.textOnSurface }]} testID="member-connections-phone-error">{phoneError}</Text> : null}
+            <TouchableOpacity
+              accessibilityRole="button"
+              disabled={connections.pending}
+              testID="member-connections-discover"
+              onPress={searchByPhone}
+              style={[styles.primary, { backgroundColor: colors.primary, opacity: connections.pending ? 0.55 : 1 }]}
+            >
+              {connections.pending ? <ActivityIndicator color={colors.primaryForeground} /> : (
+                <Text style={[styles.primaryLabel, { color: colors.primaryForeground }]}>Search</Text>
+              )}
+            </TouchableOpacity>
+            {connections.discovery === null ? (
+              <Text style={[styles.meta, { color: colors.mutedForegroundLight }]} testID="member-connections-no-match">No member matched that phone number.</Text>
+            ) : null}
+            {foundMember ? (
+              <View testID="member-connections-match" style={[styles.matchRow, { backgroundColor: colors.surface }]}>
+                <MemberInitialsAvatar name={connectionMemberLabel(foundMember)} />
+                <View style={styles.rowCopy}>
+                  <Text style={[styles.name, { color: colors.textOnSurface }]}>{connectionMemberLabel(foundMember)}</Text>
+                  <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>
+                    {discoveredState === 'connected'
+                      ? 'Already connected'
+                      : discoveredState === 'incoming'
+                        ? 'This member already sent you a request'
+                        : 'Bluebird member'}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+            {foundMember && discoveredState === 'available' ? (
               <TouchableOpacity
                 accessibilityRole="button"
                 disabled={connections.pending}
                 testID="member-connections-request"
-                onPress={() => { if (connections.discovery) void connections.sendRequest(connections.discovery); }}
-                style={[styles.cardButton, { backgroundColor: colors.primary, opacity: connections.pending ? 0.55 : 1 }]}
+                onPress={() => {
+                  void connections.sendRequest(foundMember).then((sent) => {
+                    if (!sent) return;
+                    setFindOpen(false);
+                    setPhone('');
+                    setPhoneError(null);
+                  });
+                }}
+                style={[styles.primary, { backgroundColor: colors.primary, opacity: connections.pending ? 0.55 : 1 }]}
               >
-                <Text style={[styles.primaryLabel, { color: colors.primaryForeground }]}>Connect</Text>
+                <Text style={[styles.primaryLabel, { color: colors.primaryForeground }]}>Send request</Text>
               </TouchableOpacity>
-            </View>
-          ) : null}
-          <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>Incoming requests</Text>
-          {connections.incoming.length === 0 ? (
-            <Text style={[styles.meta, styles.inset, { color: colors.mutedForegroundLight }]} testID="member-connections-incoming-empty">No incoming requests.</Text>
-          ) : connections.incoming.map((request) => (
-            <View key={request.id} style={[styles.card, { backgroundColor: colors.surface }]} testID={`member-connections-incoming-${request.id}`}>
-              <Text style={[styles.name, { color: colors.textOnSurface }]}>{connectionMemberLabel(request.requester)}</Text>
-              <View style={styles.actions}>
-                <TouchableOpacity accessibilityRole="button" disabled={connections.pending} testID={`member-connections-accept-${request.id}`} onPress={() => { void connections.accept(request.id); }} style={[styles.cardButton, { backgroundColor: colors.primary, opacity: connections.pending ? 0.55 : 1 }]}>
-                  <Text style={[styles.primaryLabel, { color: colors.primaryForeground }]}>Accept</Text>
-                </TouchableOpacity>
-                <TouchableOpacity accessibilityRole="button" disabled={connections.pending} testID={`member-connections-decline-${request.id}`} onPress={() => { void connections.decline(request.id); }} style={[styles.outline, { borderColor: colors.border }]}>
-                  <Text style={[styles.outlineLabel, { color: colors.textOnSurface }]}>Decline</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-          <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>My connections</Text>
-          {connections.accepted.length === 0 ? (
-            <Text style={[styles.meta, styles.inset, { color: colors.mutedForegroundLight }]} testID="member-connections-empty">No accepted connections.</Text>
-          ) : connections.accepted.map((connection) => (
-            <View key={connection.id} style={[styles.row, { borderBottomColor: colors.border }]} testID={`member-connections-accepted-${connection.id}`}>
-              <View style={styles.rowCopy}>
-                <Text style={[styles.name, { color: colors.textOnSurface }]}>{connectionMemberLabel(connection.member)}</Text>
-                <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>Bluebird member</Text>
-              </View>
-              <View style={styles.rowActions}>
-                {messages.enabled ? (
-                  <TouchableOpacity
-                    accessibilityRole="button"
-                    disabled={messages.opening || connections.pending}
-                    testID={`member-connections-message-${connection.id}`}
-                    onPress={() => {
-                      void messages.open(connection.member.userId).then((result) => {
-                        if (result?.kind === 'loaded') {
-                          router.push({
-                            pathname: '/messages/[conversationId]',
-                            params: { conversationId: String(result.data.conversation.id) },
-                          });
-                        }
-                      });
-                    }}
-                  >
-                    <Text style={[styles.link, { color: colors.primary }]}>Message</Text>
-                  </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity accessibilityRole="button" disabled={connections.pending} testID={`member-connections-remove-${connection.id}`} onPress={() => { void connections.remove(connection.id); }}>
-                  <Text style={[styles.link, { color: colors.primary }]}>Remove</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      )}
+            ) : null}
+            {foundMember && discoveredState === 'incoming' ? (
+              <TouchableOpacity
+                accessibilityRole="button"
+                testID="member-connections-open-requests"
+                onPress={() => { setFindOpen(false); setRequestsOpen(true); }}
+                style={[styles.primary, { backgroundColor: colors.primary }]}
+              >
+                <Text style={[styles.primaryLabel, { color: colors.primaryForeground }]}>View request</Text>
+              </TouchableOpacity>
+            ) : null}
+            {connections.message && connections.status !== 'error' ? (
+              <Text style={[styles.meta, { color: colors.textOnSurface }]}>{connections.message}</Text>
+            ) : null}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+      <Modal visible={requestsOpen} animationType="slide" transparent onRequestClose={() => setRequestsOpen(false)}>
+        <View style={styles.modal}>
+          <Pressable accessibilityLabel="Close incoming requests" style={styles.backdrop} onPress={() => setRequestsOpen(false)} />
+          <View testID="member-connections-requests-sheet" style={[styles.sheet, { backgroundColor: colors.offWhite, paddingBottom: Math.max(insets.bottom, 16), maxHeight: '80%' }]}>
+            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+            <Text style={[styles.sheetTitle, { color: colors.textOnSurface }]}>Incoming Requests</Text>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {connections.incoming.length === 0 ? (
+                <Text style={[styles.meta, { color: colors.mutedForegroundLight }]} testID="member-connections-incoming-empty">
+                  No incoming requests right now.
+                </Text>
+              ) : connections.incoming.map((request) => (
+                <IncomingRequest
+                  key={request.id}
+                  request={request}
+                  colors={colors}
+                  pending={connections.pending}
+                  onOpen={() => setSheet({ kind: 'incoming', id: request.id })}
+                  onAccept={() => { void connections.accept(request.id); }}
+                  onDecline={() => { void connections.decline(request.id); }}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
+  );
+}
+
+function sheetLines(
+  accepted: AcceptedConnection | null,
+  incoming: ConnectionRelationship | null,
+  discovery: { userId: string } | null,
+): string[] {
+  if (accepted) return ['Bluebird member', 'Connected'];
+  if (incoming) return ['Bluebird member', 'Incoming request'];
+  if (discovery) return ['Bluebird member', 'Not connected'];
+  return [];
+}
+
+function sheetPrimary(input: {
+  accepted: AcceptedConnection | null;
+  incoming: ConnectionRelationship | null;
+  discovery: { userId: string } | null;
+  messagesEnabled: boolean;
+  pending: boolean;
+  onMessage: () => void;
+  onAccept: () => void;
+  onConnect: () => void;
+}) {
+  if (input.accepted && input.messagesEnabled) {
+    return {
+      label: 'Message',
+      testID: `member-connections-message-${input.accepted.id}`,
+      disabled: input.pending,
+      onPress: input.onMessage,
+    };
+  }
+  if (input.incoming) {
+    return {
+      label: 'Accept',
+      testID: `member-connections-sheet-accept-${input.incoming.id}`,
+      disabled: input.pending,
+      onPress: input.onAccept,
+    };
+  }
+  if (input.discovery) {
+    return {
+      label: 'Connect',
+      testID: 'member-connections-request',
+      disabled: input.pending,
+      onPress: input.onConnect,
+    };
+  }
+  return null;
+}
+
+function IncomingRequest({
+  request,
+  colors,
+  pending,
+  onOpen,
+  onAccept,
+  onDecline,
+}: {
+  request: ConnectionRelationship;
+  colors: ReturnType<typeof useColors>;
+  pending: boolean;
+  onOpen: () => void;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  const label = connectionMemberLabel(request.requester);
+  return (
+    <View style={[styles.requestRow, { borderBottomColor: colors.separator }]}>
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel={`Open request from ${label}`}
+        testID={`member-connections-incoming-${request.id}`}
+        onPress={onOpen}
+        style={styles.requestIdentity}
+      >
+        <MemberInitialsAvatar name={label} />
+        <View style={styles.rowCopy}>
+          <Text style={[styles.name, { color: colors.textOnSurface }]}>{label}</Text>
+          <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>Incoming request</Text>
+        </View>
+      </TouchableOpacity>
+      <View style={styles.requestActions}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          disabled={pending}
+          testID={`member-connections-accept-${request.id}`}
+          onPress={onAccept}
+          style={[styles.requestButton, { backgroundColor: colors.primary, opacity: pending ? 0.55 : 1 }]}
+        >
+          <Text style={[styles.requestButtonLabel, { color: colors.primaryForeground }]}>Accept</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
+          disabled={pending}
+          testID={`member-connections-decline-${request.id}`}
+          onPress={onDecline}
+          style={[styles.requestButton, { backgroundColor: colors.surface, opacity: pending ? 0.55 : 1 }]}
+        >
+          <Text style={[styles.requestButtonLabel, { color: colors.textOnSurface }]}>Decline</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+function AcceptedRow({
+  connection,
+  colors,
+  onPress,
+}: {
+  connection: AcceptedConnection;
+  colors: ReturnType<typeof useColors>;
+  onPress: () => void;
+}) {
+  const label = connectionMemberLabel(connection.member);
+  return (
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={`Open profile for ${label}`}
+      testID={`member-connections-accepted-${connection.id}`}
+      onPress={onPress}
+      style={[styles.row, { borderBottomColor: colors.separator }]}
+    >
+      <MemberInitialsAvatar name={label} />
+      <View style={styles.rowCopy}>
+        <Text style={[styles.name, { color: colors.textOnSurface }]}>{label}</Text>
+        <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>Tap to view</Text>
+      </View>
+      <Feather name="chevron-right" size={18} color={colors.mutedForegroundLight} />
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { paddingHorizontal: 20, gap: 6 },
+  header: { paddingHorizontal: 20, gap: 4 },
   back: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
-  title: { fontFamily: 'Inter_700Bold', fontSize: 34, letterSpacing: -0.6 },
-  tabs: { flexDirection: 'row', marginTop: 8, borderBottomWidth: StyleSheet.hairlineWidth },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 52 },
+  title: { fontFamily: 'Inter_700Bold', fontSize: 40, letterSpacing: -1 },
+  compose: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  tabs: { flexDirection: 'row', marginTop: 8 },
   tab: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
-  tabLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
+  tabLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tabLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
   underline: { height: 2, alignSelf: 'stretch', borderRadius: 2 },
-  list: { paddingTop: 8 },
-  feedback: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, paddingHorizontal: 20, paddingBottom: 8 },
-  sectionLabel: { fontFamily: 'Inter_700Bold', fontSize: 12, letterSpacing: 0.6, textTransform: 'uppercase', marginTop: 22, marginBottom: 6, paddingHorizontal: 20 },
-  search: { marginHorizontal: 16, marginTop: 10, borderRadius: 14, minHeight: 48, paddingHorizontal: 14, fontFamily: 'Inter_400Regular', fontSize: 16 },
-  card: { marginHorizontal: 16, marginTop: 8, borderRadius: 16, padding: 14, gap: 6 },
-  row: { minHeight: 72, paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  hint: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20, marginTop: 10, marginBottom: 6 },
+  list: { paddingTop: 8, gap: 8 },
+  actionRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 16 },
+  actionCard: { position: 'relative', flex: 1, minHeight: 74, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, justifyContent: 'center', gap: 8 },
+  matchRow: { minHeight: 64, borderRadius: 16, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  actionLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
+  badge: { position: 'absolute', top: 10, right: 10, minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  badgeLabel: { fontFamily: 'Inter_700Bold', fontSize: 12 },
+  modal: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.4)' },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 10, gap: 12 },
+  handle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center' },
+  sheetTitle: { fontFamily: 'Inter_700Bold', fontSize: 22 },
+  requestRow: { paddingVertical: 12, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  requestIdentity: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  requestActions: { flexDirection: 'row', gap: 8 },
+  requestButton: { minHeight: 40, borderRadius: 12, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
+  requestButtonLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  feedback: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, paddingHorizontal: 20 },
+  sectionLabel: { fontFamily: 'Inter_700Bold', fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 18, marginBottom: 2, paddingHorizontal: 20 },
+  entry: { marginHorizontal: 16, minHeight: 58, borderRadius: 16, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  entryLabel: { flex: 1, fontFamily: 'Inter_600SemiBold', fontSize: 16 },
+  search: { borderRadius: 16, minHeight: 50, paddingHorizontal: 14, fontFamily: 'Inter_400Regular', fontSize: 16 },
+  row: { minHeight: 76, paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth },
   rowCopy: { flex: 1, gap: 2 },
-  rowActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   name: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
   meta: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18 },
   inset: { paddingHorizontal: 20 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  primary: { minHeight: 48, borderRadius: 14, marginHorizontal: 16, marginTop: 12, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
-  cardButton: { minHeight: 48, borderRadius: 14, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
+  primary: { minHeight: 50, borderRadius: 16, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
   primaryLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
-  outline: { minHeight: 48, borderRadius: 14, borderWidth: 1, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
-  outlineLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
   link: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
   state: { alignItems: 'center', justifyContent: 'center', padding: 28, gap: 8 },
   stateTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, textAlign: 'center' },

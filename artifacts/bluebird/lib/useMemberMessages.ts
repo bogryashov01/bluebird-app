@@ -8,7 +8,6 @@ import {
   clearMemberMessagesCache,
   createMemberMessagesClient,
   isMemberMessagesIntegrationEnabled,
-  MEMBER_MESSAGE_POLL_MS,
   nextMemberMessageSend,
   readMemberMessagesSnapshot,
   rememberMemberMessagesSnapshot,
@@ -17,6 +16,14 @@ import {
   type MemberMessagesFailure,
   type MessageConversation,
 } from '@/lib/memberMessages';
+import {
+  isMemberMessageRealtimeEnabled,
+  memberMessagePollIntervalMs,
+  realtimeHintRequestsHistory,
+  realtimeHintRequestsInbox,
+  subscribeMemberMessageHints,
+  subscribeMemberMessageSocketLive,
+} from '@/lib/memberMessageRealtime';
 
 const FAILURE_COPY: Record<MemberMessagesFailure, string> = {
   configuration: 'Messages are not available yet.',
@@ -88,6 +95,7 @@ export function useMemberConversations(active: boolean) {
   );
   const [message, setMessage] = React.useState<string | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
+  const [socketLive, setSocketLive] = React.useState(false);
   const inFlight = React.useRef<string | null>(null);
 
   if (accountRef.current !== accountId) {
@@ -199,11 +207,26 @@ export function useMemberConversations(active: boolean) {
       setStatus('ready');
     }
     void load(requestedAccountId, requestedGeneration);
+    const pollMs = memberMessagePollIntervalMs({
+      realtimeEnabled: isMemberMessageRealtimeEnabled(),
+      socketLive,
+    });
+    if (pollMs === null) return;
     const timer = setInterval(() => {
       void load(requestedAccountId, requestedGeneration);
-    }, MEMBER_MESSAGE_POLL_MS);
+    }, pollMs);
     return () => clearInterval(timer);
-  }, [accountId, active, enabled, focused, foreground, load]);
+  }, [accountId, active, enabled, focused, foreground, load, socketLive]);
+
+  React.useEffect(() => subscribeMemberMessageSocketLive(setSocketLive), []);
+
+  React.useEffect(() => {
+    if (!enabled || !accountId) return;
+    return subscribeMemberMessageHints((hint) => {
+      if (!realtimeHintRequestsInbox(hint) || hint.clerkUserId !== accountId) return;
+      void load(accountId, generationRef.current);
+    });
+  }, [accountId, enabled, load]);
 
   const refresh = React.useCallback(async () => {
     if (!enabled || !accountId) return;
@@ -235,6 +258,7 @@ export function useMemberMessageThread(conversationId: number | null) {
   const inFlight = React.useRef(false);
   const sendLock = React.useRef(false);
   const markedId = React.useRef<number | null>(null);
+  const [socketLive, setSocketLive] = React.useState(false);
   const paged = React.useRef(false);
   const activeRef = React.useRef(false);
   const messagesRef = React.useRef(messages);
@@ -331,11 +355,27 @@ export function useMemberMessageThread(conversationId: number | null) {
     const requestedAccountId = accountId;
     const requestedGeneration = generationRef.current;
     void loadLatest(requestedAccountId, requestedGeneration);
+    const pollMs = memberMessagePollIntervalMs({
+      realtimeEnabled: isMemberMessageRealtimeEnabled(),
+      socketLive,
+    });
+    if (pollMs === null) return;
     const timer = setInterval(() => {
       void loadLatest(requestedAccountId, requestedGeneration);
-    }, MEMBER_MESSAGE_POLL_MS);
+    }, pollMs);
     return () => clearInterval(timer);
-  }, [accountId, conversationId, enabled, focused, foreground, loadLatest]);
+  }, [accountId, conversationId, enabled, focused, foreground, loadLatest, socketLive]);
+
+  React.useEffect(() => subscribeMemberMessageSocketLive(setSocketLive), []);
+
+  React.useEffect(() => {
+    if (!enabled || !accountId || conversationId === null) return;
+    const requestedConversationId = conversationId;
+    return subscribeMemberMessageHints((hint) => {
+      if (hint.clerkUserId !== accountId || !realtimeHintRequestsHistory(hint, requestedConversationId)) return;
+      void loadLatest(accountId, generationRef.current);
+    });
+  }, [accountId, conversationId, enabled, loadLatest]);
 
   const loadEarlier = React.useCallback(async () => {
     if (!enabled || !accountId || conversationId === null || !hasMore || !nextCursor || inFlight.current) return;

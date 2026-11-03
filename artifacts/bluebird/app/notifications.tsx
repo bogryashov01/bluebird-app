@@ -472,11 +472,11 @@ function LegacyNotificationsScreen() {
       </View>
 
       <ScrollView
-        style={{ flex: 1 }}
+        style={{ flex: 1, backgroundColor: colors.offWhite }}
         contentContainerStyle={[styles.scroll, { paddingBottom: botPad + 40 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} progressBackgroundColor={colors.surface} />
         }
       >
         {/* Travel Preferences */}

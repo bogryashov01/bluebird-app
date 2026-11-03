@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
   ActivityIndicator,
   Platform,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -312,7 +312,7 @@ function ClerkHomeAirportEditor({ clerkUserId }: { clerkUserId: string }) {
         </Text>
         <View style={[styles.searchWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.searchGlyph, { color: colors.mutedForeground }]}>⌕</Text>
-          <TextInput
+          <ThemedTextInput
             style={[styles.searchInput, { color: colors.foreground }]}
             placeholder="Search airports by name, city, or code"
             placeholderTextColor={colors.mutedForeground}
@@ -536,6 +536,24 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
     setSelectionError(null);
   };
 
+  const draftSelectionError = validateClerkAirportCitySelection({
+    homeAirportCode: draft.homeAirportCode,
+    favoriteCityKeys: draft.favoriteCityKeys,
+    catalogKeys,
+  });
+  const canContinue = draftSelectionError === null;
+  const waitingToCheckCities =
+    draft.homeAirportCode.length > 0 &&
+    draft.favoriteCityKeys.length > 0 &&
+    catalogKeys.length === 0;
+  const continueBlockedReason = canContinue
+    ? null
+    : waitingToCheckCities && citiesQuery.isLoading
+      ? 'The city list is still loading. Continue opens after the selected cities are checked.'
+      : waitingToCheckCities && citiesQuery.isError
+        ? (cityReadFailure?.message ?? 'The city list could not be loaded. Try again before continuing.')
+        : draftSelectionError;
+
   const continueToReview = () => {
     const error = validateClerkAirportCitySelection({
       homeAirportCode: draft.homeAirportCode,
@@ -614,7 +632,7 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
       >
         <View style={[styles.searchWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.searchGlyph, { color: colors.mutedForeground }]}>⌕</Text>
-          <TextInput
+          <ThemedTextInput
             style={[styles.searchInput, { color: colors.foreground }]}
             placeholder={activeTab === 'airports' ? 'Search airports by name, city, or code' : 'Search cities or country'}
             placeholderTextColor={colors.mutedForeground}
@@ -756,22 +774,26 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
                   {selected ? <Text style={[styles.selectedLabel, { color: colors.primary }]}>Selected</Text> : null}
                 </Pressable>
               );
-            }) : null}
+            }            ) : null}
           </>
         )}
-        {selectionError ? (
-          <Text accessibilityLiveRegion="polite" style={[styles.error, { color: colors.destructive }]} testID="airport-selection-error">
-            {selectionError}
-          </Text>
-        ) : null}
       </KeyboardAwareScrollViewCompat>
 
       <View style={[styles.registrationFooter, { borderTopColor: colors.border, paddingBottom: bottomPad + 12 }]}>
+        {selectionError ? (
+          <Text accessibilityLiveRegion="polite" style={[styles.error, styles.footerNotice, { color: colors.destructive }]} testID="airport-selection-error">
+            {selectionError}
+          </Text>
+        ) : continueBlockedReason ? (
+          <Text accessibilityLiveRegion="polite" style={[styles.error, styles.footerNotice, { color: colors.destructive }]} testID="continue-to-registration-review-reason">
+            {continueBlockedReason}
+          </Text>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           onPress={continueToReview}
-          disabled={airportSearchState.kind === 'loading' || citiesQuery.isLoading || citiesQuery.isError}
-          style={[styles.actionButton, { backgroundColor: colors.primary }]}
+          disabled={!canContinue}
+          style={[styles.actionButton, { backgroundColor: colors.primary, opacity: canContinue ? 1 : 0.45 }]}
           testID="continue-to-registration-review"
         >
           <Text style={[styles.actionText, { color: colors.primaryForeground }]}>Continue to Review &amp; Save</Text>
@@ -894,6 +916,7 @@ const styles = StyleSheet.create({
   error: { fontSize: 13, lineHeight: 19, fontFamily: 'Inter_500Medium' },
   retryText: { fontFamily: 'Inter_600SemiBold', padding: 8 },
   registrationFooter: { borderTopWidth: 1, paddingHorizontal: 18, paddingTop: 12 },
+  footerNotice: { marginBottom: 8 },
   actionButton: { minHeight: 52, borderRadius: 999, paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center' },
   actionText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', textAlign: 'center' },
 });

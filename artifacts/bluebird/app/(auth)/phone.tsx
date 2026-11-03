@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  View, Text, TouchableOpacity, StyleSheet,
   ActivityIndicator, Platform,
 } from 'react-native';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
@@ -105,7 +106,7 @@ export default function PhoneScreen() {
 
         <View style={styles.fieldGroup}>
           <Text style={[styles.label, { color: colors.mutedOnBrand }]}>Phone number</Text>
-          <TextInput
+          <ThemedTextInput
             style={[
               styles.input,
               { backgroundColor: colors.input, borderColor: error ? colors.destructive : colors.border, color: colors.foreground },

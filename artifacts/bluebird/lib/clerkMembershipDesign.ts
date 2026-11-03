@@ -139,6 +139,18 @@ export interface MembershipDashboardMembership {
   skipTheLinePasses: number | null;
 }
 
+export function membershipDashboardPhase(input: {
+  sessionLoaded: boolean;
+  signedIn: boolean;
+  load: 'loading' | 'refreshing' | 'loaded' | 'stale_error' | 'error' | 'unavailable' | 'not_authenticated';
+}): 'loading' | 'signed-out' | 'error' | 'empty' | 'ready' {
+  if (!input.sessionLoaded || input.load === 'loading') return 'loading';
+  if (!input.signedIn || input.load === 'not_authenticated') return 'signed-out';
+  if (input.load === 'error') return 'error';
+  if (input.load === 'unavailable') return 'empty';
+  return 'ready';
+}
+
 export function presentMembershipDashboard(input: {
   signedIn: boolean;
   verifiedFirstName?: string | null;

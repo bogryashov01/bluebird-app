@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  View, Text, TouchableOpacity, StyleSheet,
   ActivityIndicator, Platform, Pressable,
+  type TextInput,
 } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -153,7 +155,7 @@ export default function VerifyCodeScreen() {
       {/* Hidden input drives the six visual boxes — enables the native numeric
           keypad and iOS one-time-code autofill. */}
       <Pressable style={styles.boxesWrap} onPress={() => inputRef.current?.focus()}>
-        <TextInput
+        <ThemedTextInput
           ref={inputRef}
           style={styles.hiddenInput}
           value={code}

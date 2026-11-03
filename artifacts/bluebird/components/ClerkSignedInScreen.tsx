@@ -7,9 +7,11 @@ import { useAuth as useClerkAuth } from '@clerk/expo';
 import { useColors } from '@/hooks/useColors';
 import { getClerkAuthErrorMessage, performClerkSignOut } from '@/lib/clerkAuthConfig';
 import { useQueryClient } from '@tanstack/react-query';
+import { ClerkAccountLoading } from '@/components/ClerkAccountLoading';
 import { useAuth as useBluebirdAuth } from '@/context/AuthContext';
 import {
   getClerkPostLoginJourney,
+  isClerkAccountPending,
 } from '@/lib/clerkMemberResolution';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { logClerkStartupDiagnostic } from '@/lib/clerkStartup';
@@ -74,12 +76,8 @@ export function ClerkSignedInScreen() {
     router.replace('/(auth)/welcome');
   };
 
-  if (!isLoaded) {
-    return (
-      <View style={[styles.container, styles.centered, { backgroundColor: colors.backgroundMid }]}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
-    );
+  if (!isLoaded || isClerkAccountPending(clerkMemberResolution)) {
+    return <ClerkAccountLoading />;
   }
   if (!isSignedIn) return <Redirect href="/(clerk-auth)/sign-in" />;
   if (postLoginJourney.kind === 'profile') {

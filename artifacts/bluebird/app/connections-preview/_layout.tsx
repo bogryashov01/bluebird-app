@@ -1,5 +1,7 @@
 import { Stack } from 'expo-router';
+import { useBluebirdStackScreenOptions } from '@/lib/bluebirdNavigationTheme';
 
 export default function ConnectionsPreviewLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  const stackScreenOptions = useBluebirdStackScreenOptions();
+  return <Stack screenOptions={{ ...stackScreenOptions, headerShown: false }} />;
 }

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import { useQuery } from '@tanstack/react-query';
 import {
   ActivityIndicator,
@@ -6,7 +7,6 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -189,7 +189,7 @@ export function AirportMultiSelect({
     <View style={styles.container}>
       <View style={[styles.searchWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Feather name="search" size={16} color={colors.mutedForeground} />
-        <TextInput
+        <ThemedTextInput
           style={[styles.searchInput, { color: colors.foreground }]}
           placeholder="Search airport, code, or city"
           placeholderTextColor={colors.mutedForeground}
@@ -259,6 +259,7 @@ export function AirportMultiSelect({
       ) : (
         <FlatList
           data={rows}
+          style={{ backgroundColor: 'transparent' }}
           keyExtractor={(row) => row.kind === 'group' ? `group-${row.group.city}` : row.airport.code}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={[styles.listContent, { paddingBottom: 16 }]}

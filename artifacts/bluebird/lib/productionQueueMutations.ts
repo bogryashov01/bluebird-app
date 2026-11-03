@@ -1,7 +1,9 @@
 import type {
   JoinProductionQueueRequest,
+  ProductionEmptyLeg,
   ProductionQueueEntry,
   ProductionQueueStatus,
+  PurchaseProductionLineSkipRequest,
 } from './productionAuthApi';
 import {
   ProductionAuthHttpError,
@@ -13,9 +15,11 @@ import {
   assessProductionQueueJoin,
   presentJoinFlightFailure,
   presentQueueLeaveFailure,
+  presentQueueSkipFailure,
   QUEUE_JOIN_DUPLICATE,
   QUEUE_JOIN_UNCONFIRMED,
   QUEUE_LEAVE_UNCONFIRMED,
+  QUEUE_SKIP_UNCONFIRMED,
   type JoinFlightFailure,
   type QueueJoinConsent,
 } from './joinFlightPresentation';
@@ -36,6 +40,7 @@ import {
   ProductionQueueContractError,
   validateProductionQueueJoin,
   validateProductionQueueLeave,
+  validateProductionSkipLine,
 } from './productionQueue';
 
 export interface ProductionQueueMutationClient {
@@ -57,6 +62,19 @@ type LeaveSubmission =
   | { status: 'duplicate'; failure: JoinFlightFailure }
   | { status: 'left'; queueStatus: ProductionQueueStatus }
   | { status: 'failed'; failure: JoinFlightFailure };
+
+type SkipSubmission =
+  | { status: 'disabled' | 'needs-confirmation' | 'needs-credit' }
+  | { status: 'duplicate'; failure: JoinFlightFailure }
+  | { status: 'applied'; flight: ProductionEmptyLeg }
+  | { status: 'failed'; failure: JoinFlightFailure };
+
+export interface ProductionQueueSkipClient {
+  skipLine: (
+    emptyLegId: number,
+    data?: PurchaseProductionLineSkipRequest,
+  ) => Promise<ProductionEmptyLeg>;
+}
 
 function duplicateFailure(): JoinFlightFailure {
   return {
@@ -110,6 +128,38 @@ function presentQueueJoinError(error: unknown): JoinFlightFailure {
     return presentJoinFlightFailure({ status: 401 });
   }
   return presentJoinFlightFailure({ status: null });
+}
+
+function unconfirmedSkip(): JoinFlightFailure {
+  return {
+    status: null,
+    code: 'invalid_transition',
+    title: 'Pass not confirmed',
+    body: QUEUE_SKIP_UNCONFIRMED,
+    conflict: null,
+    keepsExistingQueue: true,
+  };
+}
+
+function presentQueueSkipError(error: unknown): JoinFlightFailure {
+  if (error instanceof ProductionQueueContractError) return unconfirmedSkip();
+  if (error instanceof ProductionAuthHttpError) {
+    return presentQueueSkipFailure({
+      status: error.status,
+      code: error.serverCode,
+      body: error.failureBody,
+    });
+  }
+  if (error instanceof ProductionAuthNetworkError || error instanceof ProductionAuthTimeoutError) {
+    return presentQueueSkipFailure({ status: null });
+  }
+  if (
+    error instanceof ProductionAuthRequestError &&
+    (error.code === 'token' || error.code === 'session_expired')
+  ) {
+    return presentQueueSkipFailure({ status: 401 });
+  }
+  return presentQueueSkipFailure({ status: null });
 }
 
 function presentQueueLeaveError(error: unknown): JoinFlightFailure {
@@ -200,6 +250,44 @@ export async function submitProductionQueueLeave(input: {
     return { status: 'left', queueStatus };
   } catch (error) {
     return { status: 'failed', failure: presentQueueLeaveError(error) };
+  } finally {
+    input.inFlight.current = false;
+  }
+}
+
+/**
+ * POST /api/empty-legs/:id/skip-line for a member who is already queued.
+ * useCredit spends an existing pass. A closed gate, a missing confirmation,
+ * or a missing credit returns before the client is created. Success is the
+ * server marking the viewer as the current winner, not a new queue position.
+ */
+export async function submitProductionQueueSkipLine(input: {
+  gateOpen: boolean;
+  flightId: number;
+  explicitConfirm: boolean;
+  existingCreditCount: number;
+  signedIn: boolean;
+  inFlight: { current: boolean };
+  createClient: () => ProductionQueueSkipClient;
+}): Promise<SkipSubmission> {
+  if (input.gateOpen !== true) return { status: 'disabled' };
+  const flightId = parseProductionFlightId(input.flightId);
+  if (flightId === null) return { status: 'failed', failure: presentQueueSkipFailure({ status: 400 }) };
+  if (input.signedIn !== true) return { status: 'failed', failure: presentQueueSkipFailure({ status: 401 }) };
+  if (input.explicitConfirm !== true) return { status: 'needs-confirmation' };
+  if (!Number.isSafeInteger(input.existingCreditCount) || input.existingCreditCount < 1) {
+    return { status: 'needs-credit' };
+  }
+  if (input.inFlight.current) return { status: 'duplicate', failure: duplicateFailure() };
+  input.inFlight.current = true;
+  try {
+    const flight = validateProductionSkipLine(
+      flightId,
+      await input.createClient().skipLine(flightId, { useCredit: true }),
+    );
+    return { status: 'applied', flight };
+  } catch (error) {
+    return { status: 'failed', failure: presentQueueSkipError(error) };
   } finally {
     input.inFlight.current = false;
   }

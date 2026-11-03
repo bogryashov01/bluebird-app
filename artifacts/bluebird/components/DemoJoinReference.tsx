@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
-  Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -522,7 +523,7 @@ function DemoPetSection({
       {bringingPet ? (
         <View style={styles.petFields}>
           <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Pet Weight (lbs)</Text>
-          <TextInput
+          <ThemedTextInput
             value={selection.weightLbs}
             onChangeText={(value) => onChange(updateDemoPetWeight(selection, value))}
             keyboardType="number-pad"
@@ -583,9 +584,12 @@ function toDisplay(entry: DemoJoinEntry): JoinFlightDisplay {
     departureTime: entry.departureTime,
     aircraft: entry.aircraft,
     international: entry.international,
+    fromCountry: null,
+    toCountry: null,
     flightStatus: entry.flightStatus,
     queueClosesAt: null,
     internationalPassRequired: null,
+    internationalPassPriceUsd: null,
   };
 }
 

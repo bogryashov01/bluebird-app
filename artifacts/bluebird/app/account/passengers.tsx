@@ -1,4 +1,5 @@
 import React from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
   ActivityIndicator,
   Modal,
@@ -6,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -237,7 +237,7 @@ export default function PassengersScreen() {
                 <Text style={[styles.label, { color: colors.mutedForegroundLight }]}>
                   {field === 'firstName' ? 'First name' : field === 'lastName' ? 'Last name' : field === 'phone' ? 'Phone (optional)' : 'Email (optional)'}
                 </Text>
-                <TextInput
+                <ThemedTextInput
                   testID={`saved-passenger-${field}`}
                   value={String(form[field] ?? '')}
                   onChangeText={(value) => setField(field, value)}
@@ -251,7 +251,7 @@ export default function PassengersScreen() {
             ))}
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.mutedForegroundLight }]}>Weight (kg)</Text>
-              <TextInput
+              <ThemedTextInput
                 testID="saved-passenger-weight-kg"
                 value={String(form.weightKg ?? '')}
                 onChangeText={(value) => setField('weightKg', value.replace(/[^0-9.]/g, ''))}

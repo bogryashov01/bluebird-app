@@ -79,12 +79,14 @@ const light: typeof dark = {
   backgroundMid:  '#0A1128',   // brand navy — still used for avatars / hero blocks
   card:           '#FFFFFF',
   cardHigh:       '#FFFFFF',
-  discoverBackground: '#060B1F',
-  discoverCard: '#0D1636',
-  discoverMuted: '#1A2744',
-  discoverForeground: '#FFFFFF',
-  discoverMutedForeground: '#8896B3',
-  discoverBorder: '#1E2D4F',
+  // Discover uses the same surfaces as the other tabs. Hero overlays stay
+  // on the featured flight image, which remains brand navy.
+  discoverBackground: '#F2F5FB',
+  discoverCard: '#FFFFFF',
+  discoverMuted: '#EDF1F9',
+  discoverForeground: '#0A1128',
+  discoverMutedForeground: 'rgba(10,17,40,0.55)',
+  discoverBorder: '#DFE6F3',
   discoverHeroOverlayTop: 'rgba(6,11,31,0)',
   discoverHeroOverlayBottom: 'rgba(6,11,31,0.92)',
   offWhite:       '#FAFAF8',

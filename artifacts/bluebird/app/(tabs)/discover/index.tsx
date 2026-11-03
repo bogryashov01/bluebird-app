@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
-  AppState, View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert,
+  AppState, View, Text, StyleSheet, FlatList, TouchableOpacity, Alert,
   RefreshControl, ActivityIndicator, Platform, Image, ScrollView,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -252,7 +253,7 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
       {/* Search */}
       <View style={[styles.searchWrap, { backgroundColor: colors.card }]}>
         <Feather name="search" size={16} color={colors.mutedForeground} />
-        <TextInput
+        <ThemedTextInput
           style={[styles.searchInput, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
           placeholder="Search routes, airports, aircraft"
           placeholderTextColor={colors.mutedForeground}
@@ -408,16 +409,7 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
 });
 
 export default function DiscoverScreen() {
-  const activeColors = useColors();
-  const colors = {
-    ...activeColors,
-    background: activeColors.discoverBackground,
-    card: activeColors.discoverCard,
-    muted: activeColors.discoverMuted,
-    foreground: activeColors.discoverForeground,
-    mutedForeground: activeColors.discoverMutedForeground,
-    border: activeColors.discoverBorder,
-  };
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user, isLoading: authLoading, authMode, demoMode } = useAuth();
   const [search, setSearch] = useState('');
@@ -625,6 +617,7 @@ export default function DiscoverScreen() {
           data={view === 'list' ? filteredFlights : []}
           keyExtractor={(item) => item.id}
           renderItem={renderCard}
+          style={{ backgroundColor: colors.background }}
           contentContainerStyle={{ paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -634,6 +627,7 @@ export default function DiscoverScreen() {
               refreshing={flightsRefetching || airportQuery.isRefetching}
               onRefresh={onRefresh}
               tintColor={colors.primary}
+              progressBackgroundColor={colors.surface}
             />
           }
           ListHeaderComponent={

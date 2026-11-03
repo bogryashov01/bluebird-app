@@ -250,7 +250,7 @@ export default function TripsScreen() {
           </View>
         ) : activeTab === 'upcoming' && wonDemoEntries.length > 0 ? (
           <ScrollView
-            style={{ flex: 1 }}
+            style={{ flex: 1, backgroundColor: colors.background }}
             contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 100 }]}
             showsVerticalScrollIndicator={false}
           >
@@ -273,7 +273,7 @@ export default function TripsScreen() {
           </ScrollView>
         ) : activeTab === 'pending' && pendingDemoEntries.length > 0 ? (
           <ScrollView
-            style={{ flex: 1 }}
+            style={{ flex: 1, backgroundColor: colors.background }}
             contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 100 }]}
             showsVerticalScrollIndicator={false}
           >
@@ -296,7 +296,7 @@ export default function TripsScreen() {
           </ScrollView>
         ) : activeTab === 'past' && endedDemoEntries.length > 0 ? (
           <ScrollView
-            style={{ flex: 1 }}
+            style={{ flex: 1, backgroundColor: colors.background }}
             contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 100 }]}
             showsVerticalScrollIndicator={false}
           >
@@ -421,7 +421,7 @@ export default function TripsScreen() {
       }
       return (
         <ScrollView
-          style={{ flex: 1 }}
+          style={{ flex: 1, backgroundColor: colors.background }}
           contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 100 }]}
           showsVerticalScrollIndicator={false}
         >
@@ -462,7 +462,7 @@ export default function TripsScreen() {
       }
       return (
         <ScrollView
-          style={{ flex: 1 }}
+          style={{ flex: 1, backgroundColor: colors.background }}
           contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 100 }]}
           showsVerticalScrollIndicator={false}
         >
@@ -493,7 +493,7 @@ export default function TripsScreen() {
     }
     return (
       <ScrollView
-        style={{ flex: 1 }}
+        style={{ flex: 1, backgroundColor: colors.background }}
         contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 100 }]}
         showsVerticalScrollIndicator={false}
       >

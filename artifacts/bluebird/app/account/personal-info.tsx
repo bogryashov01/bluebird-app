@@ -1,7 +1,7 @@
 import React from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
-  ActivityIndicator, Alert, Image, Linking, Platform, StyleSheet, Text, TextInput,
-  TouchableOpacity, View,
+  ActivityIndicator, Alert, Image, Linking, Platform, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -333,7 +333,7 @@ function ClerkPersonalInfoForm({
       <View style={[styles.clerkInfoGroup, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.groupTitle, { color: colors.textOnSurface }]}>Personal details</Text>
         <ClerkInfoField label="First name">
-          <TextInput
+          <ThemedTextInput
             style={fieldStyle('firstName')}
             onFocus={() => setFocusedField('firstName')}
             onBlur={() => setFocusedField(null)}
@@ -349,7 +349,7 @@ function ClerkPersonalInfoForm({
           />
         </ClerkInfoField>
         <ClerkInfoField label="Last name">
-          <TextInput
+          <ThemedTextInput
             style={fieldStyle('lastName')}
             onFocus={() => setFocusedField('lastName')}
             onBlur={() => setFocusedField(null)}
@@ -365,7 +365,7 @@ function ClerkPersonalInfoForm({
           />
         </ClerkInfoField>
         <ClerkInfoField label="Date of birth">
-          <TextInput
+          <ThemedTextInput
             style={fieldStyle('dob')}
             value={dobFocused ? values.dob : formatClerkDateOfBirth(values.dob)}
             onFocus={() => {
@@ -414,7 +414,7 @@ function ClerkPersonalInfoForm({
           </View>
         </ClerkInfoField>
         <ClerkInfoField label="Weight (lbs)">
-          <TextInput
+          <ThemedTextInput
             style={fieldStyle('weightLbs')}
             onFocus={() => setFocusedField('weightLbs')}
             onBlur={() => setFocusedField(null)}
@@ -856,7 +856,7 @@ export default function PersonalInfoScreen() {
   ) => (
     <React.Fragment key={label}>
       <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>{label}</Text>
-      <TextInput
+      <ThemedTextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -947,7 +947,7 @@ export default function PersonalInfoScreen() {
         {photoSaved && <Text style={[styles.savedText, { color: colors.success }]}>Profile photo updated.</Text>}
 
         <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Full name</Text>
-        <TextInput
+        <ThemedTextInput
           style={fieldStyle}
           value={name}
           onChangeText={setName}
@@ -957,7 +957,7 @@ export default function PersonalInfoScreen() {
         />
 
         <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Email (optional)</Text>
-        <TextInput
+        <ThemedTextInput
           style={fieldStyle}
           value={email}
           onChangeText={setEmail}
@@ -969,7 +969,7 @@ export default function PersonalInfoScreen() {
         />
 
         <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Phone</Text>
-        <TextInput
+        <ThemedTextInput
           style={[...fieldStyle, { opacity: 0.6 }]}
           value={user?.phone ?? ''}
           editable={false}
@@ -979,7 +979,7 @@ export default function PersonalInfoScreen() {
         </Text>
 
         <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Weight (kg)</Text>
-        <TextInput
+        <ThemedTextInput
           style={fieldStyle}
           value={weightKg}
           onChangeText={setWeightKg}

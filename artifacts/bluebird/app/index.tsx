@@ -1,8 +1,9 @@
 import { Redirect } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
+import { ClerkAccountLoading } from '@/components/ClerkAccountLoading';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
-import { getClerkAuthRootDestination } from '@/lib/clerkMemberResolution';
+import { clerkColdStartDestination, getClerkAuthRootDestination } from '@/lib/clerkMemberResolution';
 import { useJoinNavDecision } from '@/lib/joinNavDiagnostics';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 
@@ -58,7 +59,13 @@ export default function Index() {
   if (demoMode) return <Redirect href="/(tabs)/discover" />;
 
   if (authMode === 'clerk') {
-    if (clerkStartupState !== 'ready' || !clerkSignedIn) {
+    const coldStart = clerkColdStartDestination({
+      startup: clerkStartupState,
+      signedIn: clerkSignedIn,
+      resolution: clerkMemberResolution,
+    });
+    if (coldStart === 'loading') return <ClerkAccountLoading />;
+    if (coldStart === 'sign-in') {
       return <Redirect href="/(clerk-auth)/sign-in" />;
     }
     const destination = getClerkAuthRootDestination({

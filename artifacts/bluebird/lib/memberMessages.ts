@@ -205,15 +205,23 @@ export function messageHistoryPath(input: {
   return { ok: true, path: `${MEMBER_MESSAGE_PATHS.history}?${params.toString()}` };
 }
 
-export function parseMemberMessage(value: unknown, field: string): MemberMessage {
+export function parseMemberMessage(
+  value: unknown,
+  field: string,
+  fallbackConversationId?: number,
+): MemberMessage {
   const raw = objectValue(value, field);
   const senderUserId = stringValue(raw.senderUserId, `${field}.senderUserId`).trim();
   if (!USER_ID.test(senderUserId)) schemaFailure(`${field}.senderUserId`);
   const body = stringValue(raw.body, `${field}.body`);
   if (memberMessageBodyIssue(body) !== null) schemaFailure(`${field}.body`);
+  const conversationId = Object.prototype.hasOwnProperty.call(raw, 'conversationId')
+    ? positiveId(raw.conversationId, `${field}.conversationId`)
+    : fallbackConversationId;
+  if (conversationId === undefined) schemaFailure(`${field}.conversationId`);
   return {
     id: positiveId(raw.id, `${field}.id`),
-    conversationId: positiveId(raw.conversationId, `${field}.conversationId`),
+    conversationId,
     senderUserId,
     body,
     createdAt: dateTime(raw.createdAt, `${field}.createdAt`),
@@ -225,12 +233,15 @@ export function parseMessageConversation(value: unknown, field: string): Message
   const participantUserId = stringValue(raw.participantUserId, `${field}.participantUserId`).trim();
   if (!USER_ID.test(participantUserId)) schemaFailure(`${field}.participantUserId`);
   if (!Object.prototype.hasOwnProperty.call(raw, 'latestMessage')) schemaFailure(`${field}.latestMessage`);
+  const id = positiveId(raw.id, `${field}.id`);
   return {
-    id: positiveId(raw.id, `${field}.id`),
+    id,
     participantUserId,
     createdAt: dateTime(raw.createdAt, `${field}.createdAt`),
     updatedAt: dateTime(raw.updatedAt, `${field}.updatedAt`),
-    latestMessage: raw.latestMessage === null ? null : parseMemberMessage(raw.latestMessage, `${field}.latestMessage`),
+    latestMessage: raw.latestMessage === null
+      ? null
+      : parseMemberMessage(raw.latestMessage, `${field}.latestMessage`, id),
     unreadCount: nonNegativeInteger(raw.unreadCount, `${field}.unreadCount`),
   };
 }
@@ -253,21 +264,21 @@ export function parseMessageUnreadCount(value: unknown): { unreadCount: number }
   return { unreadCount: nonNegativeInteger(raw.unreadCount, 'unreadCount.unreadCount') };
 }
 
-export function parseMessageHistory(value: unknown): MessageHistoryPage {
+export function parseMessageHistory(value: unknown, conversationId?: number): MessageHistoryPage {
   const raw = objectValue(value, 'history');
   if (!Array.isArray(raw.messages)) schemaFailure('history.messages');
   if (typeof raw.hasMore !== 'boolean') schemaFailure('history.hasMore');
   if (!Object.prototype.hasOwnProperty.call(raw, 'nextCursor')) schemaFailure('history.nextCursor');
   return {
-    messages: raw.messages.map((item, index) => parseMemberMessage(item, `history.messages.${index}`)),
+    messages: raw.messages.map((item, index) => parseMemberMessage(item, `history.messages.${index}`, conversationId)),
     nextCursor: parseCursor(raw.nextCursor, 'history.nextCursor'),
     hasMore: raw.hasMore,
   };
 }
 
-export function parseMemberMessageResponse(value: unknown): { message: MemberMessage } {
+export function parseMemberMessageResponse(value: unknown, conversationId?: number): { message: MemberMessage } {
   const raw = objectValue(value, 'message');
-  return { message: parseMemberMessage(raw.message, 'message.message') };
+  return { message: parseMemberMessage(raw.message, 'message.message', conversationId) };
 }
 
 export function parseMessageReadState(value: unknown): MessageReadState {
@@ -351,7 +362,7 @@ export function createMemberMessagesClient(options: MemberMessagesClientOptions)
       if (!live) return Promise.resolve({ kind: 'disabled' } as const);
       const path = messageHistoryPath(input);
       if (!path.ok) return Promise.resolve({ kind: 'error', code: path.code } as const);
-      return request(path.path, 'GET', parseMessageHistory);
+      return request(path.path, 'GET', (value) => parseMessageHistory(value, input.conversationId));
     },
     send: (conversationId: number, body: string) => {
       if (!live) return Promise.resolve({ kind: 'disabled' } as const);
@@ -360,7 +371,12 @@ export function createMemberMessagesClient(options: MemberMessagesClientOptions)
       }
       const issue = memberMessageBodyIssue(body);
       if (issue) return Promise.resolve({ kind: 'error', code: 'invalid_message' } as const);
-      return request(MEMBER_MESSAGE_PATHS.messages(conversationId), 'POST', parseMemberMessageResponse, { body });
+      return request(
+        MEMBER_MESSAGE_PATHS.messages(conversationId),
+        'POST',
+        (value) => parseMemberMessageResponse(value, conversationId),
+        { body },
+      );
     },
     markRead: (conversationId: number) => {
       if (!live) return Promise.resolve({ kind: 'disabled' } as const);

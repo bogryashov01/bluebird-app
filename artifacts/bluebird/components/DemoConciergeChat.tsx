@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
   FlatList,
   Keyboard,
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -140,7 +140,7 @@ export function DemoConciergeChat() {
           ))}
         </View>
         <View style={styles.inputRow}>
-          <TextInput
+          <ThemedTextInput
             testID="demo-concierge-input"
             value={input}
             onChangeText={setInput}

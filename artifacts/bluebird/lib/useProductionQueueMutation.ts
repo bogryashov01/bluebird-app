@@ -2,6 +2,7 @@ import React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { confirmDialog } from '@/lib/confirmDialog';
+import { markCurrentWinnerCelebration } from '@/lib/currentWinnerCelebration';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { createClerkProductionTokenProvider, type ClerkSessionSnapshot } from '@/lib/clerkProductionTokenProvider';
 import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
@@ -11,6 +12,7 @@ import {
   canSubmitProductionQueueJoin,
   queueJoinSuccessModel,
   QUEUE_LEFT_CONFIRMED,
+  QUEUE_SKIP_CONFIRMED,
   type JoinFlightFailure,
   type QueueJoinConsent,
   type QueueJoinSuccessModel,
@@ -18,6 +20,7 @@ import {
 import {
   submitProductionQueueJoin,
   submitProductionQueueLeave,
+  submitProductionQueueSkipLine,
 } from '@/lib/productionQueueMutations';
 
 export function useProductionQueueMutation(
@@ -35,11 +38,15 @@ export function useProductionQueueMutation(
   const [failure, setFailure] = React.useState<JoinFlightFailure | null>(null);
   const [success, setSuccess] = React.useState<QueueJoinSuccessModel | null>(null);
   const [leftMessage, setLeftMessage] = React.useState<string | null>(null);
+  const [skipMessage, setSkipMessage] = React.useState<string | null>(null);
+  const [skipFailure, setSkipFailure] = React.useState<JoinFlightFailure | null>(null);
 
   React.useEffect(() => {
     setFailure(null);
     setSuccess(null);
     setLeftMessage(null);
+    setSkipMessage(null);
+    setSkipFailure(null);
   }, [clerkUserId]);
 
   const signedIn = authMode === 'clerk' &&
@@ -158,6 +165,8 @@ export function useProductionQueueMutation(
         setSuccess(null);
         setFailure(null);
         setLeftMessage(QUEUE_LEFT_CONFIRMED);
+        setSkipMessage(null);
+        setSkipFailure(null);
         refresh(requestedUserId);
         return;
       }
@@ -170,5 +179,51 @@ export function useProductionQueueMutation(
     }
   }, [createClient, flightId, refresh, signedIn]);
 
-  return { submitting, failure, success, leftMessage, join, leave };
+  const skip = React.useCallback(async (existingCreditCount: number) => {
+    if (!canSubmitProductionQueueJoin()) return;
+    if (!Number.isSafeInteger(existingCreditCount) || existingCreditCount < 1) return;
+    const confirmed = await confirmDialog(
+      'Use 1 Skip the Line Pass?',
+      'This uses one existing pass for this flight. Bluebird confirms the pass by making you the current winner. It does not award the flight, confirm the seat, or only change your queue number.',
+      'Use Pass',
+    );
+    if (!confirmed) return;
+    const requestedUserId = sessionRef.current?.userId ?? '';
+    setSubmitting(true);
+    try {
+      const result = await submitProductionQueueSkipLine({
+        gateOpen: canSubmitProductionQueueJoin(),
+        flightId,
+        explicitConfirm: true,
+        existingCreditCount,
+        signedIn,
+        inFlight,
+        createClient: () => createClient(requestedUserId),
+      });
+      if (sessionRef.current?.userId !== requestedUserId && requestedUserId) return;
+      if (result.status === 'applied') {
+        const closing = result.flight.queueClosesAt;
+        markCurrentWinnerCelebration({
+          clerkUserId: requestedUserId,
+          flightId: result.flight.id,
+          queueClosesAt: typeof closing === 'string' && closing.trim() ? closing : null,
+          viewerIsEffectiveWinner: result.flight.viewerIsEffectiveWinner === true,
+        });
+        setFailure(null);
+        setSkipFailure(null);
+        setLeftMessage(null);
+        setSkipMessage(QUEUE_SKIP_CONFIRMED);
+        refresh(requestedUserId);
+        return;
+      }
+      if (result.status === 'failed' || result.status === 'duplicate') {
+        setSkipMessage(null);
+        setSkipFailure(result.failure);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }, [createClient, flightId, refresh, signedIn]);
+
+  return { submitting, failure, success, leftMessage, skipMessage, skipFailure, join, leave, skip };
 }

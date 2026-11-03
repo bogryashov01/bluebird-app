@@ -2,6 +2,11 @@ import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { isNativeProductionAuthTestEnabled } from '@/lib/nativeAuthTestPolicy';
+import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
+import {
+  registerClerkPushToken,
+  revokeClerkPushToken,
+} from '@/lib/clerkPushRegistration';
 import {
   acceptRetrievedPushToken,
   canRetrievePushToken,
@@ -9,10 +14,17 @@ import {
   describePushPermission,
   foregroundPresentation,
   interpretPushPermission,
+  isClerkPushRegistrationEnabled,
+  planClerkPushRegistration,
   planExpoPushTokenRetrieval,
+  PUSH_DELIVERY_UNAVAILABLE,
+  PUSH_REGISTRATION_FAILED,
+  PUSH_REGISTRATION_REGISTERED,
   resolveExpoProjectId,
   shouldOfferNotificationSettings,
   shouldPromptForPushPermission,
+  shouldRegisterPushToken,
+  shouldRevokeHeldPushToken,
   syncHeldPushRegistration,
   type HeldPushRegistration,
   type PushPermissionState,
@@ -34,7 +46,13 @@ const listeners = new Set<Listener>();
 let presentedIds: string[] = [];
 let promptAttempted = false;
 let promptInFlight = false;
+let tokenRetrieval: Promise<void> | null = null;
+let foregroundConfigured = false;
 let held: HeldPushRegistration | null = null;
+let registeredToken: { clerkUserId: string; token: string } | null = null;
+let deliveryStatus: 'disabled' | 'registered' | 'unavailable' = 'disabled';
+let focusPath: string | null = null;
+let accessTokenReader: () => Promise<string | null> = async () => null;
 let session: {
   ready: boolean;
   signedIn: boolean;
@@ -65,6 +83,19 @@ export function subscribeClerkPushUi(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+function registrationEnabled(): boolean {
+  return isClerkPushRegistrationEnabled({
+    nativeAuthTest: isNativeProductionAuthTestEnabled(),
+  });
+}
+
+function currentDeliveryLabel(): string {
+  if (!registrationEnabled()) return PUSH_DELIVERY_UNAVAILABLE;
+  if (deliveryStatus === 'registered') return PUSH_REGISTRATION_REGISTERED;
+  if (deliveryStatus === 'unavailable') return PUSH_REGISTRATION_FAILED;
+  return PUSH_DELIVERY_UNAVAILABLE;
+}
+
 function publish(permission: PushPermissionState | 'checking') {
   const registration = syncHeldPushRegistration({
     held,
@@ -78,7 +109,7 @@ function publish(permission: PushPermissionState | 'checking') {
   emit({
     permission,
     permissionLabel: describePushPermission(permission),
-    deliveryLabel: uiState.deliveryLabel,
+    deliveryLabel: currentDeliveryLabel(),
     accountPreferencesLabel: uiState.accountPreferencesLabel,
     promptAvailable: permission !== 'checking' && shouldPromptForPushPermission({
       sessionLoaded: session.ready,
@@ -92,7 +123,8 @@ function publish(permission: PushPermissionState | 'checking') {
 }
 
 export function configureClerkForegroundNotifications(): void {
-  if (Platform.OS === 'web') return;
+  if (Platform.OS === 'web' || foregroundConfigured) return;
+  foregroundConfigured = true;
   Notifications.setNotificationHandler({
     handleNotification: async (notification) => {
       const current = await readPushPermission();
@@ -100,6 +132,8 @@ export function configureClerkForegroundNotifications(): void {
         notificationId: notification.request.identifier,
         alreadyPresented: presentedIds,
         permission: current,
+        payload: notification.request.content.data,
+        pathname: focusPath,
       });
       presentedIds = decision.presentedIds;
       return {
@@ -144,6 +178,9 @@ async function retrieveTokenForCurrentAccount(): Promise<void> {
     publish(permission);
     return;
   }
+  const registrationPlan = planClerkPushRegistration({
+    enabled: registrationEnabled(),
+  });
   const plan = planExpoPushTokenRetrieval({
     permission,
     isPhysicalDevice: readPhysicalDevice(),
@@ -173,6 +210,46 @@ async function retrieveTokenForCurrentAccount(): Promise<void> {
     token,
   });
   held = registration.held;
+  if (
+    registrationPlan.status === 'ready' &&
+    held &&
+    shouldRegisterPushToken({
+      enabled: true,
+      clerkUserId: held.clerkUserId,
+      token: held.token,
+      registeredUserId: registeredToken?.clerkUserId ?? null,
+      registeredToken: registeredToken?.token ?? null,
+    }) &&
+    session.clerkUserId === held.clerkUserId
+  ) {
+    const requestedUserId = held.clerkUserId;
+    const requestedToken = held.token;
+    const configuration = getMainBluebirdApiConfigurationOrNull();
+    if (!configuration) {
+      deliveryStatus = 'unavailable';
+    } else {
+      try {
+        const result = await registerClerkPushToken({
+          enabled: true,
+          nativeAuthTest: false,
+          environment: configuration.environment,
+          baseUrl: configuration.apiBaseUrl,
+          token: requestedToken,
+          getAccessToken: accessTokenReader,
+        });
+        if (session.clerkUserId === requestedUserId && held?.token === requestedToken) {
+          if (result.kind === 'registered') {
+            registeredToken = { clerkUserId: requestedUserId, token: requestedToken };
+            deliveryStatus = 'registered';
+          } else if (result.kind !== 'disabled') {
+            deliveryStatus = 'unavailable';
+          }
+        }
+      } catch {
+        if (session.clerkUserId === requestedUserId) deliveryStatus = 'unavailable';
+      }
+    }
+  }
   publish(permission);
 }
 
@@ -204,7 +281,7 @@ export async function requestClerkPushPermission(): Promise<void> {
       iosStatus: settings.ios?.status ?? null,
     });
     publish(permission);
-    if (canRetrievePushToken(permission)) await retrieveTokenForCurrentAccount();
+    if (canRetrievePushToken(permission)) await syncClerkPushToken();
   } catch {
     publish(await readPushPermission());
   } finally {
@@ -212,13 +289,55 @@ export async function requestClerkPushPermission(): Promise<void> {
   }
 }
 
+export function setClerkPushFocusPath(pathname: string | null): void {
+  focusPath = pathname;
+}
+
+export async function revokeHeldClerkPushToken(): Promise<void> {
+  const current = held;
+  const reader = accessTokenReader;
+  held = null;
+  registeredToken = null;
+  deliveryStatus = 'disabled';
+  if (!current || !registrationEnabled()) return;
+  const configuration = getMainBluebirdApiConfigurationOrNull();
+  if (!configuration) return;
+  try {
+    await revokeClerkPushToken({
+      enabled: true,
+      nativeAuthTest: false,
+      environment: configuration.environment,
+      baseUrl: configuration.apiBaseUrl,
+      token: current.token,
+      getAccessToken: reader,
+    });
+  } catch {
+    // Sign-out and account changes continue when revocation cannot finish.
+  }
+}
+
 export function setClerkPushSession(input: {
   ready: boolean;
   signedIn: boolean;
   clerkUserId: string | null;
+  getAccessToken?: () => Promise<string | null>;
 }): void {
-  const accountChanged = session.clerkUserId !== input.clerkUserId;
-  session = input;
+  const previousUserId = session.clerkUserId;
+  const accountChanged = previousUserId !== input.clerkUserId;
+  if (shouldRevokeHeldPushToken({
+    previousUserId,
+    nextUserId: input.clerkUserId,
+    nextSignedIn: input.signedIn,
+    heldUserId: held?.clerkUserId ?? null,
+  })) {
+    void revokeHeldClerkPushToken();
+  }
+  if (input.getAccessToken) accessTokenReader = input.getAccessToken;
+  session = {
+    ready: input.ready,
+    signedIn: input.signedIn,
+    clerkUserId: input.clerkUserId,
+  };
   if (!input.ready || !input.signedIn || accountChanged) {
     held = syncHeldPushRegistration({
       held: accountChanged ? null : held,
@@ -239,7 +358,11 @@ export function setClerkPushSession(input: {
 
 export async function syncClerkPushToken(): Promise<void> {
   if (!session.ready || !session.signedIn) return;
-  await retrieveTokenForCurrentAccount();
+  if (tokenRetrieval) return tokenRetrieval;
+  tokenRetrieval = retrieveTokenForCurrentAccount().finally(() => {
+    tokenRetrieval = null;
+  });
+  return tokenRetrieval;
 }
 
 export function clearClerkPushSession(): void {

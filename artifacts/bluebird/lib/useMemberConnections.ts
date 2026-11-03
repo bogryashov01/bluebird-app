@@ -170,22 +170,23 @@ export function useMemberConnections() {
   const runMutation = React.useCallback(async (
     work: () => Promise<{ ok: true; notice: string | null } | { ok: false; message: string }>,
   ) => {
-    if (!enabled || !accountId || pendingRef.current) return;
+    if (!enabled || !accountId || pendingRef.current) return false;
     pendingRef.current = true;
     setPending(true);
     const requestedAccountId = accountId;
     const requestedGeneration = generationRef.current;
     try {
       const outcome = await work();
-      if (!current(requestedAccountId, requestedGeneration, false)) return;
+      if (!current(requestedAccountId, requestedGeneration, false)) return false;
       if (!outcome.ok) {
         setMessage(outcome.message);
-        return;
+        return false;
       }
       await load(requestedAccountId, requestedGeneration, new AbortController().signal);
       if (current(requestedAccountId, requestedGeneration, false) && outcome.notice) {
         setMessage(outcome.notice);
       }
+      return true;
     } finally {
       pendingRef.current = false;
       if (accountRef.current === requestedAccountId) setPending(false);
@@ -214,6 +215,7 @@ export function useMemberConnections() {
     pending,
     refresh,
     accountId,
+    clearDiscovery: () => setDiscovery(undefined),
     discover: (input: { email?: string; phoneE164?: string }) => runMutation(async () => {
       const client = clientForAccount();
       if (!client) return { ok: false, message: FAILURE_COPY.configuration };
@@ -223,7 +225,11 @@ export function useMemberConnections() {
       setDiscovery(result.data.member);
       return {
         ok: true,
-        notice: result.data.member ? null : 'No member matched that exact email or phone.',
+        notice: result.data.member
+          ? null
+          : input.phoneE164 && !input.email
+            ? 'No member matched that phone number.'
+            : 'No member matched that exact email or phone.',
       };
     }),
     sendRequest: (member: ConnectionMemberIdentity) => runMutation(async () => {

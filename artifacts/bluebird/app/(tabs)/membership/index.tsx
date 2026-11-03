@@ -33,7 +33,7 @@ import {
 } from '@/lib/clerkBluebirdProfile';
 import { getClerkNotificationPreferencesQueryKey } from '@/lib/clerkNotificationPreferences';
 import { getFullAppDemoMemberOverview } from '@/lib/fullAppDemo';
-import { presentMembershipDashboard } from '@/lib/clerkMembershipDesign';
+import { membershipDashboardPhase, presentMembershipDashboard } from '@/lib/clerkMembershipDesign';
 import {
   clearDashboardMembershipCache,
   loadDashboardProductionMembership,
@@ -312,7 +312,11 @@ export default function MembershipScreen() {
   }, [authMode, clerkMembershipAttempt, queryClient, ...membershipRequestDependencies]);
   React.useEffect(() => {
     if (authMode !== 'clerk') return;
-    if (!clerkSession?.isLoaded || clerkSession.isSignedIn !== true || !clerkSession.userId) {
+    if (!clerkSession?.isLoaded) {
+      setClerkMembershipState({ kind: 'loading' });
+      return;
+    }
+    if (clerkSession.isSignedIn !== true || !clerkSession.userId) {
       cachedClerkMembership.current = null;
       clearDashboardMembershipCache();
       setSkipTheLinePasses(null);
@@ -373,6 +377,72 @@ export default function MembershipScreen() {
     });
     logMembershipDashboardPresentation(visibleState.kind, design.tierBadge);
     if (confirmedMembership) logMembershipNormalizedFields(confirmedMembership);
+    const phase = membershipDashboardPhase({
+      sessionLoaded: clerkSession?.isLoaded === true,
+      signedIn: clerkSession?.isSignedIn === true,
+      load: visibleState.kind === 'refreshing'
+        ? 'refreshing'
+        : visibleState.kind === 'loaded' || visibleState.kind === 'stale_error'
+          ? visibleState.kind
+          : visibleState.kind,
+    });
+    if (phase === 'loading') {
+      return (
+        <View
+          accessibilityLabel="Loading membership"
+          style={[styles.root, styles.centered, { backgroundColor: colors.offWhite, paddingTop: topPad }]}
+          testID="clerk-membership-loading"
+        >
+          <View style={[styles.membershipSkeleton, { backgroundColor: colors.muted }]} />
+          <View style={[styles.membershipSkeleton, styles.membershipSkeletonShort, { backgroundColor: colors.muted }]} />
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      );
+    }
+    if (phase === 'signed-out') {
+      return (
+        <View style={[styles.root, styles.centered, { backgroundColor: colors.offWhite, padding: 28 }]} testID="clerk-membership">
+          <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>Membership unavailable</Text>
+          <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
+            We couldn’t confirm your membership details. Please try again.
+          </Text>
+          <TouchableOpacity
+            onPress={() => setClerkMembershipAttempt((attempt) => attempt + 1)}
+            accessibilityRole="button"
+            testID="clerk-membership-retry"
+          >
+            <Text style={[styles.plansLinkText, { color: colors.primary }]}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    if (phase === 'error') {
+      return (
+        <View style={[styles.root, styles.centered, { backgroundColor: colors.offWhite, padding: 28 }]} testID="clerk-membership">
+          <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>Membership unavailable</Text>
+          <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]} testID="clerk-membership-error">
+            {visibleState.kind === 'error' ? visibleState.message : 'Bluebird could not load your membership details.'}
+          </Text>
+          <TouchableOpacity
+            onPress={() => setClerkMembershipAttempt((attempt) => attempt + 1)}
+            accessibilityRole="button"
+            testID="clerk-membership-retry"
+          >
+            <Text style={[styles.plansLinkText, { color: colors.primary }]}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    if (phase === 'empty') {
+      return (
+        <View style={[styles.root, styles.centered, { backgroundColor: colors.offWhite, padding: 28 }]} testID="clerk-membership-empty">
+          <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>No membership details yet</Text>
+          <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
+            Bluebird did not return membership details for this account.
+          </Text>
+        </View>
+      );
+    }
     const clerkRows = [
       { label: 'AI Concierge', onPress: () => router.push('/concierge' as any) },
       { label: 'Referral Program', onPress: () => router.push('/referral' as any) },
@@ -381,6 +451,7 @@ export default function MembershipScreen() {
     return (
       <View style={[styles.root, { backgroundColor: colors.offWhite }]} testID="clerk-membership">
         <ScrollView
+          style={{ backgroundColor: colors.offWhite }}
           contentContainerStyle={[styles.scroll, styles.clerkScroll, { paddingTop: topPad + 8, paddingBottom: botPad + 96 }]}
           showsVerticalScrollIndicator={false}
         >
@@ -572,6 +643,7 @@ export default function MembershipScreen() {
     return (
       <View style={[styles.root, { backgroundColor: colors.offWhite }]}>
         <ScrollView
+          style={{ backgroundColor: colors.offWhite }}
           contentContainerStyle={[styles.scroll, { paddingTop: topPad + 16, paddingBottom: botPad + 80 }]}
           showsVerticalScrollIndicator={false}
         >
@@ -743,6 +815,7 @@ export default function MembershipScreen() {
       style={[styles.root, { backgroundColor: colors.offWhite }]}
     >
       <ScrollView
+        style={{ backgroundColor: colors.offWhite }}
         contentContainerStyle={[styles.scroll, { paddingTop: topPad + 16, paddingBottom: botPad + 80 }]}
         showsVerticalScrollIndicator={false}
       >
@@ -966,7 +1039,9 @@ export default function MembershipScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, paddingHorizontal: 28 },
+  membershipSkeleton: { width: '72%', height: 18, borderRadius: 8 },
+  membershipSkeletonShort: { width: '46%', height: 14 },
   errorState: { paddingHorizontal: 28 },
   errorTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 18, textAlign: 'center' },
   errorBody: { fontFamily: 'Inter_400Regular', fontSize: 14, textAlign: 'center', marginTop: 6 },

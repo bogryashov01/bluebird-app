@@ -61,7 +61,7 @@ export function MyQueuesPanel({
 
   return (
     <ScrollView
-      style={styles.body}
+      style={[styles.body, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
       testID="my-queues"
@@ -71,6 +71,7 @@ export function MyQueuesPanel({
           refreshing={refreshing}
           onRefresh={refresh}
           tintColor={colors.primary}
+          progressBackgroundColor={colors.surface}
         />
       )}
     >

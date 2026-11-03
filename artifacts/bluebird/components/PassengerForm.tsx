@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import {
@@ -34,7 +35,7 @@ export function PassengerForm({
     <View testID="passenger-form" style={styles.form}>
       <Text style={[styles.title, { color: colors.foreground }]}>{title}</Text>
       <Field label="First Name" error={errors.firstName} colors={colors}>
-        <TextInput
+        <ThemedTextInput
           testID="passenger-first-name"
           value={values.firstName}
           onChangeText={(firstName) => update({ firstName })}
@@ -44,7 +45,7 @@ export function PassengerForm({
         />
       </Field>
       <Field label="Middle Name (optional)" error={errors.middleName} colors={colors}>
-        <TextInput
+        <ThemedTextInput
           testID="passenger-middle-name"
           value={values.middleName}
           onChangeText={(middleName) => update({ middleName })}
@@ -54,7 +55,7 @@ export function PassengerForm({
         />
       </Field>
       <Field label="Last Name" error={errors.lastName} colors={colors}>
-        <TextInput
+        <ThemedTextInput
           testID="passenger-last-name"
           value={values.lastName}
           onChangeText={(lastName) => update({ lastName })}
@@ -64,7 +65,7 @@ export function PassengerForm({
         />
       </Field>
       <Field label="Weight (lbs)" error={errors.weightLbs} colors={colors}>
-        <TextInput
+        <ThemedTextInput
           testID="passenger-weight"
           value={values.weightLbs}
           onChangeText={(weightLbs) => update({ weightLbs })}
@@ -74,7 +75,7 @@ export function PassengerForm({
         />
       </Field>
       <Field label="Date of Birth" error={errors.dob} colors={colors}>
-        <TextInput
+        <ThemedTextInput
           testID="passenger-dob"
           value={values.dob}
           onChangeText={(dob) => update({ dob })}
@@ -117,7 +118,7 @@ export function PassengerForm({
         <Text style={[styles.help, { color: colors.mutedForeground }]}>{PASSENGER_GENDER_NOTE}</Text>
       </Field>
       <Field label="Notes (optional)" error={errors.notes} colors={colors}>
-        <TextInput
+        <ThemedTextInput
           testID="passenger-notes"
           value={values.notes}
           onChangeText={(notes) => update({ notes })}

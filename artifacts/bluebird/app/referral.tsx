@@ -121,6 +121,11 @@ export default function ReferralScreen() {
 
   if (state.status !== 'loaded') return null;
   const { snapshot } = state;
+  const rewardOnNavy = colors.scheme === 'light';
+  const rewardText = rewardOnNavy ? colors.textOnBrand : colors.textOnSurface;
+  const rewardMuted = rewardOnNavy ? colors.mutedOnBrand : colors.mutedForegroundLight;
+  const rewardTileBackground = rewardOnNavy ? 'rgba(255,255,255,0.10)' : colors.background;
+  const rewardTileBorder = rewardOnNavy ? 'rgba(255,255,255,0.18)' : colors.border;
   const stats = [
     { label: 'Friends Activated', value: String(snapshot.statistics.friendsActivated) },
     { label: 'Credit Earned', value: formatReferralCredit(snapshot.statistics.creditEarnedCents) },
@@ -137,12 +142,31 @@ export default function ReferralScreen() {
         showsVerticalScrollIndicator={false}
         testID="referral-screen"
       >
-      <View style={[styles.hero, { backgroundColor: colors.backgroundMid }]}>
-        <View style={[styles.heroIcon, { backgroundColor: colors.primary + '24' }]}>
-          <Feather name="gift" size={21} color={colors.primaryForeground} />
+      <View
+        testID="referral-reward-card"
+        style={[
+          styles.hero,
+          {
+            backgroundColor: rewardOnNavy ? colors.backgroundMid : colors.cardHigh,
+            borderColor: colors.paleBlue,
+          },
+        ]}
+      >
+        <View style={[styles.heroIcon, { backgroundColor: rewardOnNavy ? colors.primary + '24' : colors.primary + '22' }]}>
+          <Feather name="gift" size={21} color={rewardOnNavy ? colors.primaryForeground : colors.primary} />
         </View>
-        <Text style={[styles.headline, { color: colors.textOnBrand }]}>Give $500,{'\n'}earn $1,000</Text>
-        <Text style={[styles.subcopy, { color: colors.mutedOnBrand }]}>
+        <Text style={[styles.headline, { color: rewardText }]}>Give $500,{'\n'}earn $1,000</Text>
+        <View style={styles.rewardRow}>
+          <View style={[styles.rewardTile, { backgroundColor: rewardTileBackground, borderColor: rewardTileBorder }]}>
+            <Text style={[styles.rewardAmount, { color: rewardText }]}>$500</Text>
+            <Text style={[styles.rewardCaption, { color: rewardMuted }]}>Friend's membership discount</Text>
+          </View>
+          <View style={[styles.rewardTile, { backgroundColor: rewardTileBackground, borderColor: rewardTileBorder }]}>
+            <Text style={[styles.rewardAmount, { color: colors.paleBlue }]}>$1,000</Text>
+            <Text style={[styles.rewardCaption, { color: rewardMuted }]}>Your referral credit</Text>
+          </View>
+        </View>
+        <Text style={[styles.subcopy, { color: rewardMuted }]}>
           Your friend gets $500 off membership. You earn $1,000 in referral credit after their qualifying membership activation.
         </Text>
       </View>
@@ -266,7 +290,11 @@ const styles = StyleSheet.create({
   stateTitle: { fontFamily: 'Inter_700Bold', fontSize: 21, textAlign: 'center', marginTop: 4 },
   stateBody: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21, textAlign: 'center' },
   content: { paddingTop: 20, paddingHorizontal: 20, gap: 14 },
-  hero: { width: '100%', borderRadius: 22, padding: 22, gap: 12 },
+  hero: { width: '100%', borderWidth: 1, borderRadius: 22, padding: 22, gap: 14 },
+  rewardRow: { flexDirection: 'row', gap: 10 },
+  rewardTile: { flex: 1, borderWidth: 1, borderRadius: 16, padding: 14, gap: 4 },
+  rewardAmount: { fontFamily: 'Inter_700Bold', fontSize: 24, letterSpacing: -0.4 },
+  rewardCaption: { fontFamily: 'Inter_500Medium', fontSize: 12, lineHeight: 16 },
   heroIcon: { alignItems: 'center', justifyContent: 'center', width: 42, height: 42, borderRadius: 14 },
   headline: { fontFamily: 'Inter_700Bold', fontSize: 31, lineHeight: 35, letterSpacing: -0.7 },
   subcopy: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21 },

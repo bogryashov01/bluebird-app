@@ -1,17 +1,18 @@
 import React from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
   ActivityIndicator,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { MemberInitialsAvatar } from '@/components/MemberProfileSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
@@ -67,6 +68,7 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back" testID="member-message-back" onPress={() => router.back()} style={styles.back}>
           <Feather name="chevron-left" size={24} color={colors.primary} />
         </TouchableOpacity>
+        <MemberInitialsAvatar name={title} size={36} />
         <View style={styles.headerCopy}>
           <Text style={[styles.name, { color: colors.textOnSurface }]} numberOfLines={1}>{title}</Text>
         </View>
@@ -85,7 +87,7 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.messages}>
+        <ScrollView style={{ backgroundColor: colors.offWhite }} contentContainerStyle={styles.messages}>
           {thread.hasMore ? (
             <TouchableOpacity accessibilityRole="button" testID="member-message-earlier" onPress={() => { void thread.loadEarlier(); }} style={styles.earlier}>
               <Text style={[styles.earlierLabel, { color: colors.primary }]}>Load earlier messages</Text>
@@ -111,7 +113,7 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
       ) : null}
       {thread.enabled && thread.status !== 'disabled' && thread.status !== 'signed-out' ? (
         <View style={[styles.composer, { paddingBottom: insets.bottom + 8 }]}>
-          <TextInput
+          <ThemedTextInput
             value={draft}
             onChangeText={(value) => setDraft(limitMemberMessageBody(value))}
             editable={!thread.pending}

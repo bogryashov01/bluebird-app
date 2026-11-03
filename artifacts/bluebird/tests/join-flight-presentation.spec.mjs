@@ -10,7 +10,9 @@ import {
   joinFlightPassNote,
   JOIN_FLIGHT_CONFIRM_UNAVAILABLE,
   JOIN_FLIGHT_PASS_NOTE,
+  formatInternationalPassPrice,
   formatQueueClosingTime,
+  readInternationalUnlimited,
   joinFlightDisclosures,
   joinFlightQueueCountLabel,
   joinFlightQueuePositionLabel,
@@ -23,8 +25,13 @@ import {
   presentJoinFlightQueuePanel,
   presentQueueCloseCountdown,
   presentVerifiedQueueJoinSuccess,
+  compareAirportCountries,
+  presentAirportCountryRead,
   productionInternationalJoinStep,
   queueJoinSuccessModel,
+  presentQueueSkipLineOffer,
+  QUEUE_SKIP_NOTE,
+  queueRosterLabel,
   reviewProductionQueueJoin,
   shouldRefreshAfterJoin,
 } from "../scripts/.join-flight-presentation.test.mjs";
@@ -274,6 +281,10 @@ test("the join screens do not call queue, payment, or membership mutations", () 
   assert.match(joinScreen, /setAcknowledged\(true\)/);
   assert.match(joinScreen, /productionInternationalJoinStep/);
   assert.match(joinScreen, /pathname: '\/flight\/queue-status'/);
+  assert.equal(queueRosterLabel('  AB '), 'AB');
+  assert.equal(queueRosterLabel(''), 'Member');
+  assert.equal(queueRosterLabel(null), 'Member');
+  assert.match(queueStatus, /queueRosterLabel\(row\.initials\)/);
   assert.doesNotMatch(acknowledgementScreen, /joinEmptyLegQueue|onJoin|fetch\(|payment|useInternationalPassCredit|internationalPassAuthorized/);
   const international = readFileSync(resolve(projectRoot, "components/ProductionInternationalNotice.tsx"), "utf8");
   const joined = readFileSync(resolve(projectRoot, "components/ProductionQueueJoined.tsx"), "utf8");
@@ -290,6 +301,69 @@ test("the join screens do not call queue, payment, or membership mutations", () 
   assert.match(queueStatus, /join-flight-queue-viewer/);
   assert.match(queueStatus, /queueRosterTierLabel/);
   assert.match(queueStatus, /Leave the Queue/);
+  assert.match(queueStatus, /presentQueueSkipLineOffer/);
+  assert.match(queueStatus, /Use Skip the Line Pass/);
+  assert.match(queueStatus, /testID="queue-status-skip-line"/);
+  assert.doesNotMatch(queueStatus, /skipLine\(|joinEmptyLegQueue|PassCelebration|\/flight\/confirmed|Flight Confirmed|Booking Confirmed/);
+  assert.match(queueStatus, /readCurrentWinnerCelebration/);
+  assert.equal(presentQueueSkipLineOffer({
+    inQueue: true,
+    mutationsEnabled: true,
+    balance: { count: 2 },
+    passAlreadyApplied: false,
+    viewerIsEffectiveWinner: false,
+  }).kind, "ready");
+  assert.equal(presentQueueSkipLineOffer({
+    inQueue: false,
+    mutationsEnabled: true,
+    balance: { count: 2 },
+    passAlreadyApplied: false,
+    viewerIsEffectiveWinner: false,
+  }).kind, "hidden");
+  assert.equal(presentQueueSkipLineOffer({
+    inQueue: true,
+    mutationsEnabled: true,
+    balance: "loading",
+    passAlreadyApplied: false,
+    viewerIsEffectiveWinner: null,
+  }).kind, "loading");
+  assert.equal(presentQueueSkipLineOffer({
+    inQueue: true,
+    mutationsEnabled: true,
+    balance: { count: 0 },
+    passAlreadyApplied: false,
+    viewerIsEffectiveWinner: false,
+  }).kind, "none");
+  assert.equal(presentQueueSkipLineOffer({
+    inQueue: true,
+    mutationsEnabled: true,
+    balance: "unavailable",
+    passAlreadyApplied: false,
+    viewerIsEffectiveWinner: false,
+  }).kind, "unavailable");
+  assert.equal(presentQueueSkipLineOffer({
+    inQueue: true,
+    mutationsEnabled: true,
+    balance: { count: 2 },
+    passAlreadyApplied: true,
+    viewerIsEffectiveWinner: false,
+  }).kind, "already-used");
+  assert.equal(presentQueueSkipLineOffer({
+    inQueue: true,
+    mutationsEnabled: true,
+    balance: { count: 2 },
+    passAlreadyApplied: false,
+    viewerIsEffectiveWinner: true,
+  }).kind, "winner");
+  assert.equal(presentQueueSkipLineOffer({
+    inQueue: true,
+    mutationsEnabled: false,
+    balance: { count: 2 },
+    passAlreadyApplied: false,
+    viewerIsEffectiveWinner: false,
+  }).kind, "closed");
+  assert.match(QUEUE_SKIP_NOTE, /current winner/);
+  assert.match(QUEUE_SKIP_NOTE, /does not award the flight or only change your queue number/);
   assert.doesNotMatch(queueStatus, /position:\s*1|You are #1/);
   assert.match(confirmation, /View My Trips/);
   assert.doesNotMatch(confirmation, /DEMO_PET|simulatedQueue|demo-status-view-trips/);
@@ -316,9 +390,11 @@ test("the join screens do not call queue, payment, or membership mutations", () 
 test("join request bodies, pass consent, conflicts, and account refresh stay behind the closed gate", () => {
   assert.deepEqual(prepareProductionQueueJoinBody("none"), {});
   assert.deepEqual(prepareProductionQueueJoinBody("authorize-pass"), { internationalPassAuthorized: true });
-  assert.deepEqual(prepareProductionQueueJoinBody("use-credit"), { useInternationalPassCredit: true });
+  assert.deepEqual(prepareProductionQueueJoinBody("use-credit"), {
+    internationalPassAuthorized: true,
+    useInternationalPassCredit: true,
+  });
   assert.equal("useInternationalPassCredit" in prepareProductionQueueJoinBody("authorize-pass"), false);
-  assert.equal("internationalPassAuthorized" in prepareProductionQueueJoinBody("use-credit"), false);
   assert.deepEqual(reviewProductionQueueJoin({
     consent: "authorize-pass",
     internationalPassRequired: true,
@@ -357,6 +433,14 @@ test("join request bodies, pass consent, conflicts, and account refresh stay beh
   assert.match(presentJoinFlightFailure({ status: 400 }).body, /did not accept/);
   assert.match(presentJoinFlightFailure({ status: 401 }).body, /Sign in again/);
   assert.match(presentJoinFlightFailure({ status: 402 }).body, /No card was charged/);
+  assert.match(presentJoinFlightFailure({ status: 402 }).body, /choices are still here/);
+  const passRequired = presentJoinFlightFailure({ status: 402, code: "international_pass_required" });
+  assert.equal(passRequired.code, "international_pass_required");
+  assert.match(passRequired.body, /Authorize an International Pass or use an available credit/);
+  const missingCredit = presentJoinFlightFailure({ status: 402, code: "insufficient_credit" });
+  assert.equal(missingCredit.title, "International Pass credit unavailable");
+  assert.match(missingCredit.body, /Authorize an International Pass instead/);
+  assert.match(missingCredit.body, /choices are still here/);
   assert.match(presentJoinFlightFailure({ status: 403 }).body, /does not confirm/);
   assert.match(presentJoinFlightFailure({ status: 404 }).body, /no longer available/);
   assert.match(presentJoinFlightFailure({ status: null }).body, /could not reach Bluebird/);
@@ -431,11 +515,107 @@ test("queue acknowledgements and the international step gate the production join
     bringingPet: true,
     petFeeAcknowledged: true,
   }), true);
-  assert.equal(productionInternationalJoinStep({ international: false, internationalPassRequired: true }), "skip");
-  assert.equal(productionInternationalJoinStep({ international: null, internationalPassRequired: true }), "skip");
-  assert.equal(productionInternationalJoinStep({ international: true, internationalPassRequired: false }), "not-required");
-  assert.equal(productionInternationalJoinStep({ international: true, internationalPassRequired: true }), "required");
-  assert.equal(productionInternationalJoinStep({ international: true, internationalPassRequired: null }), "unknown");
+  const catalog = [{
+    label: "International Empty Legs",
+    values: { base: "Extra Fee", plus: true },
+  }];
+  assert.equal(readInternationalUnlimited(catalog, "plus"), true);
+  assert.equal(readInternationalUnlimited(catalog, "base"), false);
+  assert.equal(readInternationalUnlimited(catalog, null), null);
+  assert.equal(readInternationalUnlimited(catalog, "unknown"), null);
+  assert.equal(productionInternationalJoinStep({
+    isInternational: false,
+    internationalUnlimited: false,
+  }), "skip");
+  assert.equal(productionInternationalJoinStep({
+    isInternational: null,
+    internationalUnlimited: false,
+  }), "skip");
+  assert.equal(productionInternationalJoinStep({
+    isInternational: true,
+    internationalUnlimited: true,
+  }), "not-required");
+  assert.equal(productionInternationalJoinStep({
+    isInternational: true,
+    internationalUnlimited: false,
+  }), "required");
+  assert.equal(productionInternationalJoinStep({
+    isInternational: true,
+    internationalUnlimited: null,
+    entitlementPending: true,
+  }), "pending");
+  assert.equal(productionInternationalJoinStep({
+    isInternational: true,
+    internationalUnlimited: null,
+  }), "unknown");
+  assert.equal(formatInternationalPassPrice(1000), "$1,000");
+  assert.equal(formatInternationalPassPrice(null), null);
+  assert.equal(formatInternationalPassPrice(-1), null);
+  const priced = joinFlightRouteParams(42, { ...flight, internationalPassPriceUsd: 1000 });
+  assert.equal(priced.internationalPassPriceUsd, "1000");
+  assert.equal(parseJoinFlightDisplay(priced).internationalPassPriceUsd, 1000);
+  assert.equal(parseJoinFlightDisplay({ flightId: "42", internationalPassPriceUsd: "fee" }).internationalPassPriceUsd, null);
+  assert.deepEqual(presentAirportCountryRead({
+    originCode: "DAL",
+    destinationCode: "LHR",
+    isPending: true,
+    isError: false,
+    records: undefined,
+  }), { status: "loading", originCountry: null, destinationCountry: null });
+  assert.deepEqual(presentAirportCountryRead({
+    originCode: "DAL",
+    destinationCode: "LHR",
+    isPending: false,
+    isError: true,
+    records: undefined,
+  }), { status: "unavailable", originCountry: null, destinationCountry: null });
+  assert.deepEqual(presentAirportCountryRead({
+    originCode: "DAL",
+    destinationCode: "LHR",
+    isPending: false,
+    isError: false,
+    records: [
+      { code: "DAL", country: "United States" },
+      { code: "LHR", country: "United Kingdom" },
+    ],
+  }), {
+    status: "resolved",
+    originCountry: "United States",
+    destinationCountry: "United Kingdom",
+  });
+  assert.equal(presentAirportCountryRead({
+    originCode: "DAL",
+    destinationCode: "LHR",
+    isPending: false,
+    isError: false,
+    records: [
+      { code: "DAL", country: "United States" },
+      { code: "LHR", country: null },
+    ],
+  }).status, "unavailable");
+  assert.equal(presentAirportCountryRead({
+    originCode: "DAL",
+    destinationCode: "LHR",
+    isPending: true,
+    isError: false,
+    records: [
+      { code: "DAL", country: "USA" },
+      { code: "LHR", country: "United Kingdom" },
+    ],
+  }).status, "resolved");
+  assert.equal(presentAirportCountryRead({
+    originCode: null,
+    destinationCode: "LHR",
+    isPending: true,
+    isError: false,
+    records: undefined,
+  }).status, "unavailable");
+  const joinScreen = readFileSync(resolve(projectRoot, "app/flight/join.tsx"), "utf8");
+  assert.match(joinScreen, /isInternational: flight\?\.international \?\? null/);
+  assert.match(joinScreen, /readInternationalUnlimited/);
+  assert.doesNotMatch(joinScreen, /useJoinAirportCountryRead|compareAirportCountries/);
+  assert.doesNotMatch(joinScreen, /Bluebird is checking whether you are already in this queue/);
+  assert.match(joinScreen, /JoinQueueLoading/);
   const closing = new Date("2099-01-01T00:00:00.000Z").getTime();
   assert.equal(presentQueueCloseCountdown("2099-01-01T01:02:03.000Z", closing), "01:02:03");
   assert.equal(presentQueueCloseCountdown("not-a-time", closing), null);

@@ -208,7 +208,11 @@ export default function ProfileScreen() {
 
   React.useEffect(() => {
     if (authMode !== 'clerk') return;
-    if (!clerkSession?.isLoaded || clerkSession.isSignedIn !== true || !clerkSession.userId) {
+    if (!clerkSession?.isLoaded) {
+      setProfileLoadState({ kind: 'loading' });
+      return;
+    }
+    if (clerkSession.isSignedIn !== true || !clerkSession.userId) {
       setProfileLoadState({ kind: 'not_authenticated' });
       return;
     }
@@ -287,6 +291,7 @@ export default function ProfileScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.offWhite }]} testID="clerk-profile">
         <ScrollView
+          style={{ backgroundColor: colors.offWhite }}
           contentContainerStyle={[
             styles.scroll,
             { paddingTop: topPad + 16, paddingBottom: bottomPad + 100 },
@@ -440,6 +445,7 @@ export default function ProfileScreen() {
       style={[styles.container, { backgroundColor: colors.offWhite }]}
     >
       <ScrollView
+        style={{ backgroundColor: colors.offWhite }}
         contentContainerStyle={[
           styles.scroll,
           { paddingTop: topPad + 16, paddingBottom: bottomPad + 100 },

@@ -10,7 +10,7 @@ import {
   parseMobileMembershipPlans,
   readMobileMembership,
 } from '../scripts/.mobile-membership.test.mjs';
-import { presentClerkMembershipDesign, presentMembershipDashboard } from '../scripts/.clerk-membership-design.test.mjs';
+import { membershipDashboardPhase, presentClerkMembershipDesign, presentMembershipDashboard } from '../scripts/.clerk-membership-design.test.mjs';
 import {
   ProductionAuthHttpError,
   ProductionAuthNetworkError,
@@ -1244,4 +1244,37 @@ test('membership diagnostics record the request outcome without secrets or a cac
   assert.equal(isolated.includes('503'), false);
   assert.equal(logs.join('\n').includes('Authorization'), false);
   assert.equal(logs.join('\n').includes('mock-only-token'), false);
+});
+
+test('membership waits to load, then separates an empty account from an error', () => {
+  assert.equal(membershipDashboardPhase({
+    sessionLoaded: false,
+    signedIn: false,
+    load: 'not_authenticated',
+  }), 'loading');
+  assert.equal(membershipDashboardPhase({
+    sessionLoaded: true,
+    signedIn: true,
+    load: 'loading',
+  }), 'loading');
+  assert.equal(membershipDashboardPhase({
+    sessionLoaded: true,
+    signedIn: true,
+    load: 'unavailable',
+  }), 'empty');
+  assert.equal(membershipDashboardPhase({
+    sessionLoaded: true,
+    signedIn: true,
+    load: 'error',
+  }), 'error');
+  assert.equal(membershipDashboardPhase({
+    sessionLoaded: true,
+    signedIn: false,
+    load: 'not_authenticated',
+  }), 'signed-out');
+  assert.equal(membershipDashboardPhase({
+    sessionLoaded: true,
+    signedIn: true,
+    load: 'loaded',
+  }), 'ready');
 });

@@ -1,10 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { Linking, Text, TouchableOpacity, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import {
-  PUSH_ACCOUNT_PREFERENCES,
-  PUSH_DELIVERY_UNAVAILABLE,
-} from '@/lib/clerkPushNotifications';
+import { PUSH_ACCOUNT_PREFERENCES } from '@/lib/clerkPushNotifications';
 import {
   getClerkPushUiState,
   requestClerkPushPermission,
@@ -35,7 +32,7 @@ export function ClerkPushPermissionStatus() {
         {PUSH_ACCOUNT_PREFERENCES}
       </Text>
       <Text testID="clerk-push-delivery" style={{ color: colors.mutedForegroundLight, fontFamily: 'Inter_400Regular', fontSize: 13 }}>
-        {PUSH_DELIVERY_UNAVAILABLE}
+        {state.deliveryLabel}
       </Text>
       {state.promptAvailable ? (
         <TouchableOpacity

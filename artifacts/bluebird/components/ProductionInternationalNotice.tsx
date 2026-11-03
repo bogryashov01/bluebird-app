@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
@@ -14,11 +14,13 @@ import {
 
 export function ProductionInternationalNotice({
   step,
+  priceLabel = null,
   submitting = false,
   failure = null,
   onJoin,
 }: {
   step: Exclude<ProductionInternationalJoinStep, 'skip'>;
+  priceLabel?: string | null;
   submitting?: boolean;
   failure?: JoinFlightFailure | null;
   onJoin: (consent: QueueJoinConsent, creditConfirmed: boolean) => void;
@@ -29,7 +31,11 @@ export function ProductionInternationalNotice({
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
   const [creditConfirmed, setCreditConfirmed] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const joinLock = useRef(false);
   const canSubmit = canSubmitProductionQueueJoin() && !submitting;
+  useEffect(() => {
+    if (!submitting) joinLock.current = false;
+  }, [submitting]);
   const passValue = step === 'required'
     ? 'Choice required'
     : step === 'not-required'
@@ -37,12 +43,13 @@ export function ProductionInternationalNotice({
       : 'Not confirmed';
 
   const join = (consent: QueueJoinConsent, confirmed: boolean) => {
-    if (!canSubmit) return;
+    if (!canSubmit || joinLock.current) return;
     if (consent === 'use-credit' && !confirmed) {
       setNotice(JOIN_FLIGHT_CREDIT_CONFIRM_REQUIRED);
       return;
     }
     setNotice(null);
+    joinLock.current = true;
     onJoin(consent, confirmed);
   };
 
@@ -59,6 +66,11 @@ export function ProductionInternationalNotice({
         <View style={[styles.feeRow, { backgroundColor: colors.textOnBrand + '0A', borderColor: colors.textOnBrand + '18' }]}>
           <Text style={[styles.feeLabel, { color: colors.mutedOnBrand }]}>International Pass</Text>
           <Text testID="production-international-pass-state" style={[styles.feeValue, { color: colors.textOnBrand }]}>{passValue}</Text>
+          {priceLabel ? (
+            <Text testID="production-international-pass-price" style={[styles.feeValue, { color: colors.textOnBrand }]}>
+              {priceLabel}
+            </Text>
+          ) : null}
         </View>
         <View style={[styles.plusCard, { backgroundColor: colors.primary + '24', borderColor: colors.primary + '66' }]}>
           <View style={[styles.plusIcon, { backgroundColor: colors.primary + '35' }]}>
@@ -77,9 +89,11 @@ export function ProductionInternationalNotice({
           </Text>
         ) : (
           <Text style={[styles.body, { color: colors.mutedOnBrand }]}>
-            {step === 'unknown'
-              ? 'Bluebird has not confirmed a pass requirement. Joining sends no pass flag. The server can still reject the request.'
-              : 'Joining sends no International Pass flag because Bluebird did not require one.'}
+            {step === 'pending'
+              ? 'Checking whether this membership includes international flights.'
+              : step === 'unknown'
+                ? 'Bluebird has not confirmed a pass requirement. Joining sends no pass flag. The server can still reject the request.'
+                : 'Joining sends no International Pass flag because Bluebird did not require one.'}
           </Text>
         )}
         {step === 'required' ? (
@@ -98,7 +112,9 @@ export function ProductionInternationalNotice({
         {failure ? <Text testID="production-international-error" style={[styles.body, { color: colors.textOnBrand }]}>{failure.body}</Text> : null}
       </ScrollView>
       <View style={[styles.footer, { paddingBottom: bottomPad + 12 }]}>
-        {step === 'required' ? (
+        {step === 'pending' ? (
+          <ActivityIndicator testID="production-international-entitlement" color={colors.primary} />
+        ) : step === 'required' ? (
           <>
             <PrimaryButton
               label="Authorize an International Pass"

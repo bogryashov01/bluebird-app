@@ -5,7 +5,11 @@ import {
   getAvailableClerkMemberDestination,
   getClerkAuthRootDestination,
   getClerkMemberDestination,
+  clerkColdStartDestination,
   getClerkPostLoginJourney,
+  isClerkAccountPending,
+  projectClerkResolutionForSession,
+  shouldRetryClerkMemberResolution,
   getClerkPostLoginStatusMessage,
   getClerkResolutionForIdentity,
   isClerkHomeAvailable,
@@ -494,4 +498,50 @@ test("routing booleans are strict even when a caller bypasses the API parser", a
       readiness: { registeredHome: true, linkedMember: true },
     }), "/(clerk-auth)/signed-in");
   }
+});
+
+test("restoring a Clerk session keeps the confirmed member and does not open sign-in", () => {
+  const confirmed = {
+    status: "profile_complete",
+    clerkUserId: "clerk-user-a",
+    currentUser: projection,
+  };
+  assert.deepEqual(
+    projectClerkResolutionForSession(confirmed, { isLoaded: false, isSignedIn: false, userId: null }),
+    confirmed,
+  );
+  assert.equal(isClerkAccountPending({ status: "resolving" }), true);
+  assert.equal(isClerkAccountPending(confirmed), false);
+  assert.equal(clerkColdStartDestination({
+    startup: "loading",
+    signedIn: false,
+    resolution: { status: "resolving" },
+  }), "loading");
+  assert.equal(clerkColdStartDestination({
+    startup: "ready",
+    signedIn: true,
+    resolution: { status: "resolving" },
+  }), "loading");
+  assert.equal(clerkColdStartDestination({
+    startup: "ready",
+    signedIn: true,
+    resolution: confirmed,
+  }), "continue");
+  assert.equal(clerkColdStartDestination({
+    startup: "failed",
+    signedIn: true,
+    resolution: confirmed,
+  }), "sign-in");
+  assert.equal(clerkColdStartDestination({
+    startup: "ready",
+    signedIn: false,
+    resolution: { status: "signed_out" },
+  }), "sign-in");
+  assert.equal(shouldRetryClerkMemberResolution({ status: "error", reason: "network" }, 0), true);
+  assert.equal(shouldRetryClerkMemberResolution({ status: "error", reason: "network" }, 1), false);
+  assert.equal(shouldRetryClerkMemberResolution({ status: "error", reason: "unauthorized" }, 0), false);
+  assert.deepEqual(
+    projectClerkResolutionForSession(confirmed, { isLoaded: true, isSignedIn: false, userId: null }),
+    { status: "signed_out" },
+  );
 });

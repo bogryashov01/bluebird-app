@@ -12,11 +12,12 @@ import {
   createLegacyAuthTokenGetter,
 } from '@/lib/clerkAuthSession';
 import {
-  getClerkResolutionForIdentity,
   isClerkMemberResolutionCurrent,
+  projectClerkResolutionForSession,
   resolveClerkMember,
   resolveProjection,
   shouldAutomaticallyResolveClerkMember,
+  shouldRetryClerkMemberResolution,
   type ClerkMemberResolution,
 } from '@/lib/clerkMemberResolution';
 import {
@@ -27,6 +28,7 @@ import {
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import { clearMemberConnectionsCache } from '@/lib/memberConnections';
 import { clearMemberMessagesCache } from '@/lib/memberMessages';
+import { revokeHeldClerkPushToken } from '@/lib/clerkPushRuntime';
 import { clearDashboardMembershipCache } from '@/lib/membershipDashboardRead';
 import type { ProductionCurrentUser } from '@/lib/productionAuthApi';
 import {
@@ -180,6 +182,12 @@ function ActiveAuthProvider({
   const registerPushToken = useRegisterNetworkingPushToken();
   const previousClerkIdentity = useRef<string | null | undefined>(undefined);
   const startupAttemptStartedRef = useRef<number | null>(null);
+  const clerkLoadedRef = useRef(false);
+  clerkLoadedRef.current = clerkSession?.isLoaded === true;
+  const memberAutoRetryRef = useRef<{ userId: string | null; attempts: number }>({
+    userId: null,
+    attempts: 0,
+  });
   const clerkSessionRef = useRef(clerkSession);
   clerkSessionRef.current = clerkSession;
   const verifiedProfileCompletionRef = useRef<{
@@ -261,6 +269,7 @@ function ActiveAuthProvider({
     if (!production) return;
 
     return startClerkStartupTimeout(() => {
+      if (clerkLoadedRef.current) return;
       const timedOutState = getClerkStartupState({
         authExpected: true,
         configurationValid,
@@ -349,6 +358,9 @@ function ActiveAuthProvider({
     }
 
     const requestedClerkUserId = clerkSession.userId;
+    if (memberAutoRetryRef.current.userId !== requestedClerkUserId) {
+      memberAutoRetryRef.current = { userId: requestedClerkUserId, attempts: 0 };
+    }
     if (!requestedClerkUserId) {
       setClerkMemberResolution({
         status: 'unresolved',
@@ -384,6 +396,10 @@ function ActiveAuthProvider({
           accepted.revision > requestProfileRevision
         ) {
           setClerkMemberResolution(resolveProjection(accepted.currentUser, requestedClerkUserId));
+        } else if (shouldRetryClerkMemberResolution(resolution, memberAutoRetryRef.current.attempts)) {
+          memberAutoRetryRef.current.attempts += 1;
+          setClerkMemberResolution({ status: 'resolving', clerkUserId: requestedClerkUserId });
+          setClerkResolutionRetry((attempt) => attempt + 1);
         } else {
           setClerkMemberResolution(resolution);
         }
@@ -516,6 +532,11 @@ function ActiveAuthProvider({
 
   const signOut = async () => {
     if (clerkMode) {
+      try {
+        await revokeHeldClerkPushToken();
+      } catch {
+        // Push revocation must not block sign-out.
+      }
       clearDashboardMembershipCache();
       clearMemberConnectionsCache();
       clearMemberMessagesCache();
@@ -577,14 +598,13 @@ function ActiveAuthProvider({
     return true;
   }, [clerkMode]);
 
-  const currentClerkUserId = clerkMode &&
-    clerkSession?.isLoaded &&
-    clerkSession.isSignedIn === true
-    ? clerkSession.userId
-    : null;
-  const currentClerkMemberResolution = getClerkResolutionForIdentity(
+  const currentClerkMemberResolution = projectClerkResolutionForSession(
     clerkMemberResolution,
-    currentClerkUserId,
+    clerkMode ? {
+      isLoaded: clerkSession?.isLoaded === true,
+      isSignedIn: clerkSession?.isSignedIn,
+      userId: clerkSession?.userId ?? null,
+    } : null,
   );
 
   return (

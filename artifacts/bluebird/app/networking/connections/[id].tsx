@@ -1,4 +1,5 @@
 import React from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import {
   getListNetworkingConnectionsQueryKey,
@@ -10,7 +11,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
-import { ActivityIndicator, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 export default function NetworkingThreadScreen() {
   const colors = useColors();
   const { user } = useAuth();
@@ -85,7 +86,7 @@ export default function NetworkingThreadScreen() {
         </ScrollView>
       )}
       <View style={[styles.composer, { borderTopColor: colors.separator, backgroundColor: colors.surface }]}>
-        <TextInput value={content} onChangeText={setContent} placeholder="Write a message" placeholderTextColor={colors.mutedForegroundLight} style={[styles.input, { color: colors.textOnSurface, backgroundColor: colors.muted }]} maxLength={1000} multiline />
+        <ThemedTextInput value={content} onChangeText={setContent} placeholder="Write a message" placeholderTextColor={colors.mutedForegroundLight} style={[styles.input, { color: colors.textOnSurface, backgroundColor: colors.muted }]} maxLength={1000} multiline />
         <TouchableOpacity onPress={submit} disabled={!content.trim() || send.isPending} style={[styles.send, { backgroundColor: colors.primary, opacity: !content.trim() || send.isPending ? 0.5 : 1 }]}><Text style={[styles.sendText, { color: colors.primaryForeground }]}>Send</Text></TouchableOpacity>
       </View>
       {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}

@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
   ActivityIndicator,
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -714,7 +714,7 @@ function Field({ label, colors, ...props }: any) {
   return (
     <View style={styles.field}>
       <Text style={[styles.label, { color: colors.mutedForegroundLight }]}>{label}</Text>
-      <TextInput
+      <ThemedTextInput
         {...props}
         placeholderTextColor={colors.mutedForegroundLight}
         style={[styles.input, { backgroundColor: colors.input, color: colors.textOnSurface, borderColor: colors.border }]}

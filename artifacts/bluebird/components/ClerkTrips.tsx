@@ -281,7 +281,7 @@ export function ClerkTrips() {
   } else {
     state = (
       <ScrollView
-        style={styles.body}
+        style={[styles.body, { backgroundColor: colors.background }]}
         contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 100 }]}
         showsVerticalScrollIndicator={false}
         testID={`clerk-trips-list-${activeList}`}

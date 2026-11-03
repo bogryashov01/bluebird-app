@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
   ActivityIndicator,
   Platform,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -295,7 +295,7 @@ function ClerkAuthForm({
               {step === 'phone' ? (
                 <View style={styles.fieldGroup}>
                   <Text style={[styles.label, { color: colors.mutedOnBrand }]}>Phone number</Text>
-                  <TextInput
+                  <ThemedTextInput
                     accessibilityLabel="Phone number"
                     autoComplete="tel"
                     autoCapitalize="none"
@@ -328,7 +328,7 @@ function ClerkAuthForm({
                   <Text style={[styles.helperText, { color: colors.mutedOnBrand }]}>
                     Enter the code Clerk sent to your phone. Your number is not shown here.
                   </Text>
-                  <TextInput
+                  <ThemedTextInput
                     accessibilityLabel="SMS verification code"
                     autoComplete="one-time-code"
                     autoCapitalize="none"

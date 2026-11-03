@@ -1,5 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import {
@@ -78,7 +79,7 @@ export function ClerkStartupStateView({
       <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>
         Sign-in is being prepared securely. Your account remains protected.
       </Text>
-      <TextInput
+      <ThemedTextInput
         accessibilityLabel="Phone number"
         editable={false}
         placeholder="Phone number"

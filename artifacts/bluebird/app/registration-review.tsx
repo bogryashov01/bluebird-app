@@ -328,6 +328,9 @@ export default function RegistrationReviewScreen() {
   const continueAfterConfirmation = () => {
     router.replace({ pathname: '/(auth)/welcome-tour', params: { clerkFlow: '1' } });
   };
+  const returnToLocations = () => {
+    router.dismissTo({ pathname: '/airport-picker', params: { clerkFlow: '1' } });
+  };
   const completionConfirmed = completionCheck?.kind === 'confirmed_complete';
 
   return (
@@ -336,7 +339,7 @@ export default function RegistrationReviewScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back to Locations"
-          onPress={() => router.back()}
+          onPress={returnToLocations}
           style={[styles.backButton, { backgroundColor: colors.muted }]}
           testID="back-to-location-selection"
         >
@@ -493,7 +496,7 @@ export default function RegistrationReviewScreen() {
         <View style={[styles.footer, { borderTopColor: colors.border, paddingBottom: bottomPad + 12 }]}>
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.back()}
+            onPress={returnToLocations}
             style={[styles.backAction, { borderColor: colors.border }]}
             testID="back-from-registration-review"
           >

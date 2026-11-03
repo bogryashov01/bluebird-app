@@ -266,7 +266,9 @@ test('the live auth layout remounts Clerk on Retry and keeps startup on the phon
 
   assert.match(layout, /<DormantClerkProvider[\s\S]*key=\{clerkStartupAttempt\}[\s\S]*attempt=\{clerkStartupAttempt\}/);
   assert.doesNotMatch(layout, /clerkStartupState === 'failed'/);
-  assert.match(index, /if \(authMode === 'clerk'\)[\s\S]*clerkStartupState !== 'ready' \|\| !clerkSignedIn[\s\S]*Redirect href="\/\(clerk-auth\)\/sign-in"/);
+  assert.match(index, /clerkColdStartDestination\(/);
+  assert.match(index, /coldStart === 'loading'[\s\S]*ClerkAccountLoading/);
+  assert.match(index, /coldStart === 'sign-in'[\s\S]*Redirect href="\/\(clerk-auth\)\/sign-in"/);
   assert.match(index, /if \(isLoading\)/);
   assert.match(auth, /useState<ClerkStartupState>\(\(\) =>\s*getClerkStartupState/);
   assert.match(auth, /onRetryClerkStartup\(\)/);

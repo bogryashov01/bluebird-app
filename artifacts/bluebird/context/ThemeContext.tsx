@@ -1,8 +1,11 @@
 import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useState,
 } from 'react';
-import { useColorScheme } from 'react-native';
+import { Appearance, useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SystemUI from 'expo-system-ui';
+import colors from '@/constants/colors';
+import { resolvedColorScheme } from '@/lib/bluebirdThemeSurfaces';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedScheme = 'light' | 'dark';
@@ -36,8 +39,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(STORAGE_KEY, pref).catch(() => {});
   }, []);
 
-  const scheme: ResolvedScheme =
-    preference === 'system' ? (osScheme === 'light' ? 'light' : 'dark') : preference;
+  const scheme: ResolvedScheme = resolvedColorScheme(preference, osScheme);
+
+  useEffect(() => {
+    try {
+      Appearance.setColorScheme(preference === 'system' ? 'unspecified' : preference);
+    } catch {
+      // The native appearance override is unavailable outside iOS and Android.
+    }
+  }, [preference]);
+
+  useEffect(() => {
+    const background = scheme === 'dark' ? colors.dark.background : colors.light.background;
+    SystemUI.setBackgroundColorAsync(background).catch(() => {});
+  }, [scheme]);
 
   const value = useMemo(
     () => ({ preference, scheme, setPreference }),

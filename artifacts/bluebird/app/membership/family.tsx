@@ -1,7 +1,7 @@
 import React from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
-  ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput,
-  TouchableOpacity, View,
+  ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -174,7 +174,7 @@ export default function FamilyMembershipScreen() {
           <>
             <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>Add a member</Text>
             <View style={[styles.card, { backgroundColor: colors.surface }]}>
-              <TextInput
+              <ThemedTextInput
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"

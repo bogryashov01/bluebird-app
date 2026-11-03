@@ -15,20 +15,22 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
-import { Redirect, Stack, usePathname, useSegments } from 'expo-router';
+import { Redirect, Stack, ThemeProvider as NavigationThemeProvider, usePathname, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { setBaseUrl, setRequestGuard } from '@workspace/api-client-react';
 import { AuthProvider, DemoAuthProvider } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { useColors } from '@/hooks/useColors';
+import { bluebirdNavigationTheme, useBluebirdStackScreenOptions } from '@/lib/bluebirdNavigationTheme';
 import { QueueConfirmationWatcher } from '@/lib/queueCelebration';
 import { ClerkPushCoordinator } from '@/components/ClerkPushCoordinator';
+import { MemberMessageRealtime } from '@/components/MemberMessageRealtime';
 import { DormantClerkProvider } from '@/lib/dormantClerkIntegration';
 import { CLERK_AUTH_CONFIGURATION, shouldShowClerkConfigurationError } from '@/lib/clerkAuthConfig';
 import { ClerkAuthConfigurationError } from '@/components/ClerkAuthConfigurationError';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '@/context/AuthContext';
-import { shouldRedirectClerkRoute, clerkLegacyConversationHref, isConnectionsPreviewDevelopmentEnabled } from '@/lib/clerkAuthSession';
+import { shouldApplyClerkRouteRedirect, shouldRedirectClerkRoute, clerkLegacyConversationHref, isConnectionsPreviewDevelopmentEnabled } from '@/lib/clerkAuthSession';
 import { useJoinNavDecision } from '@/lib/joinNavDiagnostics';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
@@ -78,8 +80,16 @@ const queryClient = new QueryClient({
   },
 });
 
+function onboardingAirportPresentation(params: object | undefined): 'card' | 'modal' {
+  if (!params || !('clerkFlow' in params)) return 'modal';
+  const clerkFlow = params.clerkFlow;
+  const value = Array.isArray(clerkFlow) ? clerkFlow[0] : clerkFlow;
+  return value === '1' ? 'card' : 'modal';
+}
+
 function RootLayoutNav() {
   const colors = useColors();
+  const stackScreenOptions = useBluebirdStackScreenOptions();
   const segments = useSegments();
   const pathname = usePathname();
   const {
@@ -115,13 +125,16 @@ function RootLayoutNav() {
   const clerkRouteGuarded =
     authMode === 'clerk' &&
     !incompleteProfileOnboardingRoute &&
-    shouldRedirectClerkRoute(
-      segments,
-      memberAccessResolved,
-      registeredHomeReady,
-      pathname,
-      connectionsPreviewEnabled,
-    );
+    shouldApplyClerkRouteRedirect({
+      sessionLoaded: clerkSession?.isLoaded === true,
+      routeRequiresRedirect: shouldRedirectClerkRoute(
+        segments,
+        memberAccessResolved,
+        registeredHomeReady,
+        pathname,
+        connectionsPreviewEnabled,
+      ),
+    });
   const redirectDestination = profileRouteBlocked
     ? '/(auth)/welcome'
     : legacyConversationHref
@@ -175,11 +188,8 @@ function RootLayoutNav() {
         when the member isn't on the Queue Status screen. */}
     <QueueConfirmationWatcher />
     <ClerkPushCoordinator />
-    <Stack
-      screenOptions={{
-        contentStyle: { backgroundColor: colors.background },
-      }}
-    >
+    <MemberMessageRealtime />
+    <Stack screenOptions={stackScreenOptions}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       {CLERK_AUTH_CONFIGURATION.authExpected && (
@@ -308,7 +318,12 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="airport-picker"
-        options={{ headerShown: false, presentation: 'modal' }}
+        options={({ route }) => ({
+          headerShown: false,
+          // Registration opens this step with clerkFlow=1. A modal stays on
+          // screen after Continue and hides the card Review & Save route.
+          presentation: onboardingAirportPresentation(route.params),
+        })}
       />
       <Stack.Screen
         name="registration-review"
@@ -391,6 +406,21 @@ function RootLayoutNav() {
   );
 }
 
+function ThemedAppShell({ children }: { children: React.ReactNode }) {
+  const colors = useColors();
+  const navigationTheme = React.useMemo(
+    () => bluebirdNavigationTheme(colors.scheme),
+    [colors.scheme],
+  );
+  return (
+    <NavigationThemeProvider value={navigationTheme}>
+      <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
+        {children}
+      </GestureHandlerRootView>
+    </NavigationThemeProvider>
+  );
+}
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
@@ -410,15 +440,15 @@ export default function RootLayout() {
   const app = (
     <SafeAreaProvider>
       <ThemeProvider>
-        <ErrorBoundary>
-          <QueryClientProvider client={queryClient}>
-            <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemedAppShell>
+          <ErrorBoundary>
+            <QueryClientProvider client={queryClient}>
               <KeyboardProvider>
                 <RoutedRoot />
               </KeyboardProvider>
-            </GestureHandlerRootView>
-          </QueryClientProvider>
-        </ErrorBoundary>
+            </QueryClientProvider>
+          </ErrorBoundary>
+        </ThemedAppShell>
       </ThemeProvider>
     </SafeAreaProvider>
   );
@@ -486,6 +516,7 @@ function RoutedRoot() {
 
 function FullAppDemoRoot() {
   const colors = useColors();
+  const stackScreenOptions = useBluebirdStackScreenOptions();
   const insets = useSafeAreaInsets();
   const headerOptions = {
     header: (props: React.ComponentProps<typeof AppHeader>) => <AppHeader {...props} />,
@@ -510,7 +541,7 @@ function FullAppDemoRoot() {
               DEMO MODE
             </Text>
           </View>
-          <Stack screenOptions={{ contentStyle: { backgroundColor: colors.background } }}>
+          <Stack screenOptions={stackScreenOptions}>
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen
@@ -564,11 +595,12 @@ function FullAppDemoUnavailable() {
 
 function MembershipMockPreviewRoot() {
   const colors = useColors();
+  const stackScreenOptions = useBluebirdStackScreenOptions();
   const configuration = getMembershipDataModeConfiguration();
   return (
     <>
       <StatusBar style={colors.scheme === 'dark' ? 'light' : 'dark'} />
-      <Stack screenOptions={{ contentStyle: { backgroundColor: colors.background } }}>
+      <Stack screenOptions={stackScreenOptions}>
         <Stack.Screen
           name="membership/mock-preview"
           options={{ headerShown: configuration.mockPreviewAllowed }}

@@ -6,7 +6,10 @@ import { ProductionQueueJoined } from '@/components/ProductionQueueJoined';
 import { QueueJoinConfirmation } from '@/components/QueueJoinConfirmation';
 import { DemoPolicyScreen } from '@/components/DemoJoinReference';
 import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
-import { canSubmitProductionQueueJoin, parseJoinFlightDisplay, productionInternationalJoinStep } from '@/lib/joinFlightPresentation';
+import { JoinQueueLoading } from '@/components/JoinQueueLoading';
+import { useAuth } from '@/context/AuthContext';
+import { canSubmitProductionQueueJoin, formatInternationalPassPrice, parseJoinFlightDisplay, productionInternationalJoinStep, readInternationalUnlimited } from '@/lib/joinFlightPresentation';
+import { useProductionMembershipPlans } from '@/hooks/useProductionMembershipPlans';
 import { useJoinFlightQueueRead } from '@/lib/useJoinFlightQueueRead';
 import { useProductionQueueMutation } from '@/lib/useProductionQueueMutation';
 import { useDemoJoinFlow } from '@/lib/demoJoinFlowStore';
@@ -17,9 +20,28 @@ export default function JoinFlightScreen() {
   const params = useLocalSearchParams<Record<string, string | string[]>>();
   const flight = parseJoinFlightDisplay(params);
   const queue = useJoinFlightQueueRead(flight?.flightId ?? 0, flight?.flightStatus ?? null);
+  const { clerkMemberResolution } = useAuth();
+  const plansQuery = useProductionMembershipPlans();
+  const memberTier = clerkMemberResolution.status === 'profile_complete'
+    || clerkMemberResolution.status === 'profile_incomplete'
+    ? clerkMemberResolution.currentUser.memberTier
+    : null;
+  const entitlementPending = flight?.international === true && (
+    plansQuery.isPending
+    || clerkMemberResolution.status === 'resolving'
+    || clerkMemberResolution.status === 'not_checked'
+  );
+  const internationalUnlimited = plansQuery.isSuccess
+    ? readInternationalUnlimited(plansQuery.data.features, memberTier)
+    : null;
+  const internationalStep = productionInternationalJoinStep({
+    isInternational: flight?.international ?? null,
+    internationalUnlimited,
+    entitlementPending,
+  });
   const queueMutation = useProductionQueueMutation(
     flight?.flightId ?? 0,
-    flight?.internationalPassRequired ?? null,
+    internationalStep === 'required',
   );
   const demo = useDemoJoinFlow();
   const productionMemberData = isProductionMemberDataSelected();
@@ -65,7 +87,7 @@ export default function JoinFlightScreen() {
     );
   }
   if (queue.kind === 'loading') {
-    return <ProductionReadOnlyNotice flightId={flight.flightId} title="Checking your queue" description="Bluebird is checking whether you are already in this queue." />;
+    return <JoinQueueLoading />;
   }
   if (queueMutation.success) {
     return (
@@ -80,7 +102,7 @@ export default function JoinFlightScreen() {
     );
   }
   if (viewerInQueue) {
-    return <ProductionReadOnlyNotice flightId={flight.flightId} title="Opening queue status" description="Your place in this queue is loaded from Bluebird." />;
+    return <JoinQueueLoading />;
   }
   if (!acknowledged) {
     return (
@@ -91,16 +113,15 @@ export default function JoinFlightScreen() {
     );
   }
 
-  const internationalStep = productionInternationalJoinStep({
-    international: flight.international,
-    internationalPassRequired: flight.internationalPassRequired,
-  });
+  const showPassChoice = internationalStep === 'required'
+    || queueMutation.failure?.code === 'international_pass_required';
   if (internationalStep !== 'skip') {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
         <ProductionInternationalNotice
-          step={internationalStep}
+          step={internationalStep === 'pending' ? 'pending' : showPassChoice ? 'required' : internationalStep}
+          priceLabel={formatInternationalPassPrice(flight.internationalPassPriceUsd)}
           submitting={queueMutation.submitting}
           failure={queueMutation.failure}
           onJoin={(consent, creditConfirmed) => { void queueMutation.join(consent, creditConfirmed); }}

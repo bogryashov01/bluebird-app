@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -462,7 +463,7 @@ function ProfileInput({
 } & Omit<React.ComponentProps<typeof TextInput>, 'value' | 'onChangeText' | 'style'>) {
   const colors = useColors();
   return (
-    <TextInput
+    <ThemedTextInput
       {...props}
       value={value}
       onChangeText={onChangeText}

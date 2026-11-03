@@ -12,6 +12,7 @@ import {
   sanitizeProductionHttpFailure,
   submitProductionQueueJoin,
   submitProductionQueueLeave,
+  submitProductionQueueSkipLine,
 } from "../scripts/.production-queue-mutations.test.mjs";
 
 const projectRoot = resolve(import.meta.dirname, "..");
@@ -74,7 +75,7 @@ test("a successful standard join sends an empty body and uses the confirmed serv
   assert.equal(result.entry.userInQueue, true);
 });
 
-test("International Pass authorization sends only the chosen flag", async () => {
+test("International Pass cash authorization omits the credit flag and credit authorization sends both", async () => {
   assert.deepEqual(assessProductionQueueJoin({
     consent: "none",
     internationalPassRequired: true,
@@ -104,8 +105,10 @@ test("International Pass authorization sends only the chosen flag", async () => 
   });
   const credited = await submitProductionQueueJoin(credit.input);
   assert.equal(credited.status, "joined");
-  assert.deepEqual(credit.calls, [["join", 42, { useInternationalPassCredit: true }]]);
-  assert.equal("internationalPassAuthorized" in credit.calls[0][2], false);
+  assert.deepEqual(credit.calls, [["join", 42, {
+    internationalPassAuthorized: true,
+    useInternationalPassCredit: true,
+  }]]);
   assert.equal("useInternationalPassCredit" in authorize.calls[0][2], false);
 
   const withheld = openJoin({
@@ -342,6 +345,23 @@ test("the production gate stays closed and the app does not call the client", as
   assert.equal(join.status, "disabled");
   assert.equal(leave.status, "disabled");
   assert.deepEqual(calls, []);
+  const skipCalls = [];
+  const closedSkip = await submitProductionQueueSkipLine({
+    gateOpen: false,
+    flightId: 42,
+    explicitConfirm: true,
+    existingCreditCount: 1,
+    signedIn: true,
+    inFlight: { current: false },
+    createClient: () => ({
+      skipLine: async (id, body) => {
+        skipCalls.push([id, body]);
+        return { id: 42, viewerIsEffectiveWinner: true };
+      },
+    }),
+  });
+  assert.equal(closedSkip.status, "disabled");
+  assert.deepEqual(skipCalls, []);
 
   const hook = readFileSync(resolve(projectRoot, "lib/useProductionQueueMutation.ts"), "utf8");
   const confirmation = readFileSync(resolve(projectRoot, "components/QueueJoinConfirmation.tsx"), "utf8");
@@ -351,6 +371,10 @@ test("the production gate stays closed and the app does not call the client", as
   assert.match(hook, /gateOpen: canSubmitProductionQueueJoin\(\)/);
   assert.doesNotMatch(hook, /gateOpen:\s*true/);
   assert.match(hook, /applyQueueMutationRefresh/);
+  assert.match(hook, /submitProductionQueueSkipLine/);
+  assert.match(hook, /Use 1 Skip the Line Pass\?/);
+  assert.match(hook, /status === 'applied'[\s\S]*markCurrentWinnerCelebration\([\s\S]*viewerIsEffectiveWinner: result\.flight\.viewerIsEffectiveWinner === true/);
+  assert.doesNotMatch(hook, /PassCelebration|\/flight\/confirmed|Flight Confirmed|You've Won the Flight/);
   assert.match(confirmation, /joinFlightConfirmNote\(demoEnabled\)/);
   const presentation = readFileSync(resolve(projectRoot, "lib/joinFlightPresentation.ts"), "utf8");
   assert.match(presentation, /Queue joining is not available in this build\. No request is sent\./);
@@ -376,4 +400,46 @@ test("an unconfirmed join response does not invent a position", async () => {
   assert.equal(result.status, "failed");
   assert.match(result.failure.body, /did not confirm a queue position/);
   assert.equal(JSON.stringify(result).includes('"position":1'), false);
+});
+
+test("Skip the Line applies an existing credit after joining and confirms current-winner status", async () => {
+  const calls = [];
+  const input = {
+    gateOpen: true,
+    flightId: 42,
+    explicitConfirm: true,
+    existingCreditCount: 2,
+    signedIn: true,
+    inFlight: { current: false },
+    createClient: () => ({
+      skipLine: async (id, body) => {
+        calls.push([id, body]);
+        return { id: 42, viewerIsEffectiveWinner: true };
+      },
+    }),
+  };
+  const unconfirmed = await submitProductionQueueSkipLine({ ...input, explicitConfirm: false });
+  const noCredit = await submitProductionQueueSkipLine({ ...input, existingCreditCount: 0 });
+  const applied = await submitProductionQueueSkipLine(input);
+  const notWinner = await submitProductionQueueSkipLine({
+    ...input,
+    createClient: () => ({
+      skipLine: async (id, body) => {
+        calls.push([id, body]);
+        return { id: 42, viewerIsEffectiveWinner: false, viewerQueuePosition: 1 };
+      },
+    }),
+  });
+  assert.equal(unconfirmed.status, "needs-confirmation");
+  assert.equal(noCredit.status, "needs-credit");
+  assert.equal(applied.status, "applied");
+  assert.equal(applied.flight.viewerIsEffectiveWinner, true);
+  assert.equal(applied.flight.viewerQueuePosition, undefined);
+  assert.equal(notWinner.status, "failed");
+  assert.match(notWinner.failure.body, /did not confirm Skip the Line/);
+  assert.equal(notWinner.failure.keepsExistingQueue, true);
+  assert.deepEqual(calls, [
+    [42, { useCredit: true }],
+    [42, { useCredit: true }],
+  ]);
 });

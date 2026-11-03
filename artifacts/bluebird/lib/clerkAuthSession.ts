@@ -85,6 +85,18 @@ export function isClerkQueueStatusPath(segments: readonly string[], pathname = '
     segments.length === 2;
 }
 
+/**
+ * A Clerk snapshot that has not loaded yet is still restoring the previous
+ * session. Redirecting during that gap sends a signed-in member to sign-in.
+ */
+export function shouldApplyClerkRouteRedirect(input: {
+  sessionLoaded: boolean;
+  routeRequiresRedirect: boolean;
+}): boolean {
+  if (!input.sessionLoaded) return false;
+  return input.routeRequiresRedirect;
+}
+
 export function shouldRedirectClerkRoute(
   segments: readonly string[],
   memberAccessResolved: boolean,

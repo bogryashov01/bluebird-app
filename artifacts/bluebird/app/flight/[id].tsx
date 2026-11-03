@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Alert, ImageBackground, useWindowDimensions,
-  Modal, Pressable, Linking, TextInput,
-} from 'react-native';
+  Modal, Pressable, Linking, } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -833,7 +833,10 @@ export default function FlightDetailScreen() {
             });
             router.push({
               pathname: '/flight/join',
-              params: joinFlightRouteParams(productionFlightId, f),
+              params: joinFlightRouteParams(productionFlightId, f, {
+                originCountry: originAirportInfo?.country,
+                destinationCountry: destinationAirportInfo?.country,
+              }),
             });
           }}
           style={[
@@ -1084,7 +1087,7 @@ export default function FlightDetailScreen() {
       </TouchableOpacity>
 
       <ScrollView
-        style={{ flex: 1 }}
+        style={{ flex: 1, backgroundColor: colors.offWhite }}
         contentContainerStyle={{
           paddingBottom: botPad + 128,
         }}
@@ -1310,7 +1313,7 @@ export default function FlightDetailScreen() {
             <Text style={[styles.networkCopy, { color: colors.mutedForegroundLight }]}>
               They’re currently first in line for this flight. Send a short introduction without changing your queue position.
             </Text>
-            <TextInput
+            <ThemedTextInput
               value={networkMessage}
               onChangeText={setNetworkMessage}
               placeholder="Hi — I’d enjoy meeting before the flight…"

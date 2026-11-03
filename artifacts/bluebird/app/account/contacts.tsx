@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
   ActionSheetIOS,
+  Appearance,
   ActivityIndicator,
   Platform,
   ScrollView,
   Share,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -208,7 +209,7 @@ function ConnectContactsScreen() {
           </View>
         ) : (
           <>
-            <TextInput
+            <ThemedTextInput
               value={query}
               onChangeText={setQuery}
               placeholder="Search selected contacts"
@@ -433,7 +434,7 @@ function choosePhoneNumber(numbers: readonly ContactPhoneNumber[]): Promise<stri
         title: 'Choose a phone number',
         options: [...options, 'Cancel'],
         cancelButtonIndex: options.length,
-        userInterfaceStyle: 'dark',
+        userInterfaceStyle: Appearance.getColorScheme() === 'light' ? 'light' : 'dark',
       },
       (selectedIndex) => {
         if (selectedIndex == null || selectedIndex < 0 || selectedIndex >= numbers.length) {

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Platform, TextInput,
-} from 'react-native';
+  Platform, } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -391,7 +391,7 @@ export default function JoinQueueAcknowledgeScreen() {
             <View style={styles.petInformation}>
               <Text style={[styles.sectionLabel, { color: colors.textOnSurface }]}>Pet Information</Text>
               <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Pet weight (lbs)</Text>
-              <TextInput
+              <ThemedTextInput
                 value={petWeightLbs}
                 onChangeText={setPetWeightLbs}
                 keyboardType="decimal-pad"

@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from '@/context/AuthContext';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
+import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
+import { confirmClerkPushDestination } from '@/lib/clerkPushDestination';
 import {
   considerPushResponse,
   type PushNavigationDecision,
@@ -13,6 +15,7 @@ import {
 import {
   configureClerkForegroundNotifications,
   requestClerkPushPermission,
+  setClerkPushFocusPath,
   setClerkPushSession,
   syncClerkPushToken,
 } from '@/lib/clerkPushRuntime';
@@ -21,20 +24,20 @@ function notificationPayload(response: Notifications.NotificationResponse): unkn
   return response.notification.request.content.data ?? null;
 }
 
-function remember(decision: PushNavigationDecision, consumedIds: string[], queued: QueuedPushResponse | null) {
-  if (decision.outcome === 'navigated' && decision.href) {
-    router.push(decision.href);
-    Notifications.clearLastNotificationResponse();
-  }
-  return { consumedIds: decision.consumedIds, queued: decision.queued ?? queued };
+function remember(decision: PushNavigationDecision) {
+  return decision.consumedIds;
 }
 
 export function ClerkPushCoordinator() {
   const { authMode, clerkMemberResolution } = useAuth();
   const session = useClerkAuthSnapshot();
+  const pathname = usePathname();
   const consumedIds = useRef<string[]>([]);
   const queued = useRef<QueuedPushResponse | null>(null);
   const previousUserId = useRef<string | null>(null);
+  const navigationGeneration = useRef(0);
+  const readToken = useRef<() => Promise<string | null>>(async () => null);
+  readToken.current = () => session?.getToken() ?? Promise.resolve(null);
   const sessionLoaded = authMode === 'clerk' && session?.isLoaded === true;
   const signedIn = sessionLoaded && session?.isSignedIn === true && !!session.userId;
   const activeUserId = signedIn ? session?.userId ?? null : null;
@@ -48,9 +51,14 @@ export function ClerkPushCoordinator() {
   }, []);
 
   useEffect(() => {
+    setClerkPushFocusPath(pathname);
+  }, [pathname]);
+
+  useEffect(() => {
     const previous = previousUserId.current;
     const accountChanged = previous !== null && previous !== activeUserId;
     if (accountChanged || (previous !== null && !signedIn)) {
+      navigationGeneration.current += 1;
       queued.current = null;
       Notifications.clearLastNotificationResponse();
     }
@@ -59,6 +67,7 @@ export function ClerkPushCoordinator() {
       ready: sessionLoaded,
       signedIn,
       clerkUserId: activeUserId,
+      getAccessToken: () => readToken.current(),
     });
   }, [activeUserId, sessionLoaded, signedIn]);
 
@@ -71,6 +80,30 @@ export function ClerkPushCoordinator() {
   }, [activeUserId, navigationReady]);
 
   useEffect(() => {
+    const openIfAuthorized = (decision: PushNavigationDecision) => {
+      if (decision.outcome !== 'navigated' || !decision.href) return;
+      const href = decision.href;
+      const check = decision.accountCheck;
+      if (!check || check.kind === 'session') {
+        router.push(href);
+        Notifications.clearLastNotificationResponse();
+        return;
+      }
+      const configuration = getMainBluebirdApiConfigurationOrNull();
+      if (!configuration) return;
+      const generation = navigationGeneration.current;
+      void confirmClerkPushDestination({
+        check,
+        environment: configuration.environment,
+        baseUrl: configuration.apiBaseUrl,
+        getAccessToken: () => readToken.current(),
+      }).then((allowed) => {
+        if (!allowed || navigationGeneration.current !== generation) return;
+        router.push(href);
+        Notifications.clearLastNotificationResponse();
+      }).catch(() => undefined);
+    };
+
     const take = (response: Notifications.NotificationResponse | null) => {
       if (!response || response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
       const decision = considerPushResponse({
@@ -81,9 +114,9 @@ export function ClerkPushCoordinator() {
         consumedIds: consumedIds.current,
         queued: queued.current,
       });
-      const next = remember(decision, consumedIds.current, queued.current);
-      consumedIds.current = next.consumedIds;
+      consumedIds.current = remember(decision);
       queued.current = decision.queued;
+      openIfAuthorized(decision);
     };
 
     if (!sessionLoaded) {
@@ -99,14 +132,12 @@ export function ClerkPushCoordinator() {
         activeUserId,
         navigationReady,
         consumedIds: consumedIds.current,
+        boundUserId: queued.current.boundUserId,
         queued: null,
       });
       consumedIds.current = decision.consumedIds;
       queued.current = decision.queued;
-      if (decision.href) {
-        router.push(decision.href);
-        Notifications.clearLastNotificationResponse();
-      }
+      openIfAuthorized(decision);
     }
 
     take(Notifications.getLastNotificationResponse());

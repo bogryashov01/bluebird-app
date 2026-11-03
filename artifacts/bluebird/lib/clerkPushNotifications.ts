@@ -1,18 +1,75 @@
 /**
- * Clerk-scoped push preparation.
+ * Clerk-scoped push routing and registration policy.
  *
- * The production registration endpoint is not confirmed. This module never
- * chooses a URL, never calls fetch, and never writes the Expo token to
- * persistent storage. The token stays in memory for the Clerk user who was
- * signed in when it was retrieved.
- *
- * Before registration is enabled, the production service must delete that
- * user's token on sign-out and when the account on this device changes.
- * This client cannot perform that deletion until the endpoint exists.
+ * This module never calls fetch and never writes the Expo token to persistent
+ * storage. The token stays in memory for the Clerk user who was signed in
+ * when it was retrieved. Network registration lives in clerkPushRegistration
+ * and runs only when EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION is exactly "true".
  */
 
 export const PUSH_DELIVERY_UNAVAILABLE =
   'Push delivery is unavailable until the production registration endpoint is confirmed. This app does not send the device token.';
+
+export const PUSH_REGISTRATION_REGISTERED =
+  'This iPhone is registered for Bluebird notifications.';
+
+export const PUSH_REGISTRATION_FAILED =
+  'Bluebird could not register this iPhone for notifications. Sign-in and messages continue without it.';
+
+/**
+ * Registration stays off unless this is exactly "true".
+ * production-live-internal does not set it. Enabling it selects
+ * POST and DELETE /me/push-tokens and does not turn on a production build by itself.
+ */
+export const CLERK_PUSH_REGISTRATION_FLAG = 'EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION';
+export const CLERK_PUSH_TOKEN_PATH = '/me/push-tokens';
+
+export function isClerkPushRegistrationEnabled(input?: {
+  flag?: string;
+  nativeAuthTest?: boolean;
+}): boolean {
+  const flag = input?.flag ?? process.env[CLERK_PUSH_REGISTRATION_FLAG];
+  return flag === 'true' && input?.nativeAuthTest !== true;
+}
+
+export type ClerkPushRegistrationPlan =
+  | { status: 'disabled' }
+  | { status: 'ready'; method: 'POST' | 'DELETE'; path: typeof CLERK_PUSH_TOKEN_PATH };
+
+/** A disabled flag sends nothing. A ready plan names the verified token route. */
+export function planClerkPushRegistration(input: {
+  enabled: boolean;
+  action?: 'register' | 'revoke';
+}): ClerkPushRegistrationPlan {
+  if (input.enabled !== true) return { status: 'disabled' };
+  return {
+    status: 'ready',
+    method: input.action === 'revoke' ? 'DELETE' : 'POST',
+    path: CLERK_PUSH_TOKEN_PATH,
+  };
+}
+
+export function shouldRegisterPushToken(input: {
+  enabled: boolean;
+  clerkUserId: string | null;
+  token: string | null;
+  registeredUserId: string | null;
+  registeredToken: string | null;
+}): boolean {
+  if (input.enabled !== true || !input.clerkUserId || !input.token) return false;
+  return input.registeredUserId !== input.clerkUserId || input.registeredToken !== input.token;
+}
+
+export function shouldRevokeHeldPushToken(input: {
+  previousUserId: string | null;
+  nextUserId: string | null;
+  nextSignedIn: boolean;
+  heldUserId: string | null;
+}): boolean {
+  if (!input.heldUserId || !input.previousUserId) return false;
+  if (!input.nextSignedIn) return true;
+  return input.previousUserId !== input.nextUserId;
+}
 
 export const PUSH_ACCOUNT_PREFERENCES =
   'Email and SMS preferences belong to the Bluebird account. They do not control iOS notification permission or push delivery.';
@@ -158,6 +215,7 @@ export type ClerkPushScreen =
   | 'flight-policy'
   | 'membership'
   | 'connections'
+  | 'queue-status'
   | 'messages';
 
 export type ClerkPushHref =
@@ -168,11 +226,15 @@ export type ClerkPushHref =
   | { pathname: '/flight/passengers'; params: { legId: string } }
   | { pathname: '/flight/policy-review'; params: { legId: string } }
   | { pathname: '/(tabs)/membership' }
-  | { pathname: '/(tabs)/connections' };
+  | { pathname: '/(tabs)/connections' }
+  | { pathname: '/flight/queue-status'; params: { flightId: string } }
+  | { pathname: '/messages/[conversationId]'; params: { conversationId: string } };
 
 const PUSH_TYPES: Record<string, ClerkPushScreen> = {
   flight_details: 'flight-details',
+  flight_update: 'flight-details',
   my_queues: 'my-queues',
+  queue_status: 'queue-status',
   trips: 'trips',
   winner_checklist: 'winner-checklist',
   passenger_information: 'passenger-information',
@@ -195,18 +257,122 @@ function payloadAccountId(data: Record<string, unknown>): string | null {
   return typeof value === 'string' && value.trim() && !/\s/.test(value) ? value : null;
 }
 
+export type ClerkPushAccountCheck =
+  | { kind: 'session' }
+  | { kind: 'conversation'; conversationId: number }
+  | { kind: 'connection'; connectionId: number }
+  | { kind: 'flight'; flightId: number }
+  | { kind: 'winner'; flightId: number };
+
+export type ClerkPushResolution =
+  | { href: ClerkPushHref; accountCheck: ClerkPushAccountCheck }
+  | { reason: 'unknown-type' | 'missing-identifier' | 'invalid-route' | 'account-mismatch' | 'unsupported-message' };
+
+const VERSIONED_EVENTS = {
+  'message.created': 'messages',
+  'connection.requested': 'connections',
+  'connection.accepted': 'connections',
+  'flight.published': 'flight',
+  'queue.updated': 'flight',
+  'flight.back_on': 'flight',
+  'winner.selected': 'flight',
+  'winner.confirmed': 'flight',
+  'flight.cancelled': 'flight',
+} as const;
+
+type VersionedEvent = keyof typeof VERSIONED_EVENTS;
+
+function versionedRecord(payload: Record<string, unknown>): Record<string, unknown> | 'reject' | null {
+  if (payload.v !== undefined) return payload.v === 1 ? payload : 'reject';
+  const nested = payload.data;
+  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    const inner = nested as Record<string, unknown>;
+    if (inner.v !== undefined) return inner.v === 1 ? inner : 'reject';
+  }
+  if (typeof payload.type === 'string' && payload.type.includes('.')) return 'reject';
+  return null;
+}
+
+function versionedRoute(
+  event: VersionedEvent,
+  navigation: Record<string, unknown>,
+): ClerkPushResolution {
+  const screen = VERSIONED_EVENTS[event];
+  if (navigation.screen !== screen) return { reason: 'invalid-route' };
+  if (screen === 'messages') {
+    const conversationId = recordId(navigation.conversationId);
+    if (!conversationId) return { reason: 'missing-identifier' };
+    return {
+      href: { pathname: '/messages/[conversationId]', params: { conversationId } },
+      accountCheck: { kind: 'conversation', conversationId: Number(conversationId) },
+    };
+  }
+  if (screen === 'connections') {
+    const connectionId = recordId(navigation.connectionId);
+    if (!connectionId) return { reason: 'missing-identifier' };
+    return {
+      href: { pathname: '/(tabs)/connections' },
+      accountCheck: { kind: 'connection', connectionId: Number(connectionId) },
+    };
+  }
+  const flightId = recordId(navigation.flightId);
+  if (!flightId) return { reason: 'missing-identifier' };
+  const numericFlightId = Number(flightId);
+  if (event === 'queue.updated') {
+    return {
+      href: { pathname: '/flight/queue-status', params: { flightId } },
+      accountCheck: { kind: 'flight', flightId: numericFlightId },
+    };
+  }
+  if (event === 'winner.selected' || event === 'winner.confirmed') {
+    return {
+      href: { pathname: '/flight/checklist', params: { legId: flightId } },
+      accountCheck: { kind: 'winner', flightId: numericFlightId },
+    };
+  }
+  return {
+    href: { pathname: '/flight/[id]', params: { id: flightId } },
+    accountCheck: { kind: 'flight', flightId: numericFlightId },
+  };
+}
+
+function resolveVersionedPush(
+  body: Record<string, unknown>,
+  activeUserId: string | null,
+): ClerkPushResolution {
+  const event = body.type;
+  if (typeof event !== 'string' || !Object.prototype.hasOwnProperty.call(VERSIONED_EVENTS, event)) {
+    return { reason: 'unknown-type' };
+  }
+  const navigation = body.navigation;
+  if (!navigation || typeof navigation !== 'object' || Array.isArray(navigation)) {
+    return { reason: 'invalid-route' };
+  }
+  const accountId = payloadAccountId(body) ?? payloadAccountId(navigation as Record<string, unknown>);
+  if (accountId && accountId !== activeUserId) return { reason: 'account-mismatch' };
+  if (!activeUserId) return { reason: 'account-mismatch' };
+  return versionedRoute(event as VersionedEvent, navigation as Record<string, unknown>);
+}
+
+function sessionRoute(href: ClerkPushHref): ClerkPushResolution {
+  return { href, accountCheck: { kind: 'session' } };
+}
+
 export function resolveClerkPushHref(
   payload: unknown,
   activeUserId: string | null,
-): { href: ClerkPushHref } | { reason: 'unknown-type' | 'missing-identifier' | 'invalid-route' | 'account-mismatch' | 'unsupported-message' } {
+): ClerkPushResolution {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return { reason: 'invalid-route' };
   }
   const data = payload as Record<string, unknown>;
+  const versioned = versionedRecord(data);
+  if (versioned === 'reject') return { reason: 'invalid-route' };
+  if (versioned) return resolveVersionedPush(versioned, activeUserId);
   if (typeof data.path === 'string' || typeof data.url === 'string' || typeof data.route === 'string') {
     if (typeof data.type !== 'string' || !PUSH_TYPES[data.type]) return { reason: 'invalid-route' };
   }
-  const screen = typeof data.type === 'string' ? PUSH_TYPES[data.type] : undefined;
+  const screen: ClerkPushScreen | undefined = typeof data.type === 'string' ? PUSH_TYPES[data.type] : undefined;
   if (!screen) return { reason: 'unknown-type' };
   const accountId = payloadAccountId(data);
   if (accountId && accountId !== activeUserId) return { reason: 'account-mismatch' };
@@ -215,64 +381,100 @@ export function resolveClerkPushHref(
   switch (screen) {
     case 'flight-details': {
       const id = recordId(data.flightId ?? data.id);
-      return id ? { href: { pathname: '/flight/[id]', params: { id } } } : { reason: 'missing-identifier' };
+      return id ? sessionRoute({ pathname: '/flight/[id]', params: { id } }) : { reason: 'missing-identifier' };
     }
     case 'my-queues':
-      return { href: { pathname: '/(tabs)/trips', params: { list: 'queues' } } };
+      return sessionRoute({ pathname: '/(tabs)/trips', params: { list: 'queues' } });
     case 'trips':
-      return { href: { pathname: '/(tabs)/trips' } };
+      return sessionRoute({ pathname: '/(tabs)/trips' });
     case 'winner-checklist': {
       const legId = recordId(data.legId);
       return legId
-        ? { href: { pathname: '/flight/checklist', params: { legId } } }
+        ? sessionRoute({ pathname: '/flight/checklist', params: { legId } })
         : { reason: 'missing-identifier' };
     }
     case 'passenger-information': {
       const legId = recordId(data.legId);
       return legId
-        ? { href: { pathname: '/flight/passengers', params: { legId } } }
+        ? sessionRoute({ pathname: '/flight/passengers', params: { legId } })
         : { reason: 'missing-identifier' };
     }
     case 'flight-policy': {
       const legId = recordId(data.legId);
       return legId
-        ? { href: { pathname: '/flight/policy-review', params: { legId } } }
+        ? sessionRoute({ pathname: '/flight/policy-review', params: { legId } })
         : { reason: 'missing-identifier' };
     }
     case 'membership':
-      return { href: { pathname: '/(tabs)/membership' } };
+      return sessionRoute({ pathname: '/(tabs)/membership' });
     case 'connections':
-      return { href: { pathname: '/(tabs)/connections' } };
-    case 'messages':
-      // The production message notification contract is not available.
-      // Demo conversation ids and guessed message ids are not opened.
-      return { reason: 'unsupported-message' };
+      return sessionRoute({ pathname: '/(tabs)/connections' });
+    case 'queue-status': {
+      const flightId = recordId(data.flightId);
+      if (!flightId) return { reason: 'missing-identifier' };
+      if (!accountId) return { reason: 'account-mismatch' };
+      return sessionRoute({ pathname: '/flight/queue-status', params: { flightId } });
+    }
+    case 'messages': {
+      const conversationId = recordId(data.conversationId);
+      if (!conversationId) return { reason: 'missing-identifier' };
+      if (!accountId) return { reason: 'account-mismatch' };
+      return sessionRoute({
+        pathname: '/messages/[conversationId]',
+        params: { conversationId },
+      });
+    }
     default:
       return { reason: 'unknown-type' };
   }
 }
 
+export function pushRepeatsOpenConversation(payload: unknown, pathname: string | null): boolean {
+  if (!pathname || !payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  const versioned = versionedRecord(payload as Record<string, unknown>);
+  if (!versioned || versioned === 'reject' || versioned.type !== 'message.created') return false;
+  const navigation = versioned.navigation;
+  if (!navigation || typeof navigation !== 'object' || Array.isArray(navigation)) return false;
+  const conversationId = recordId((navigation as Record<string, unknown>).conversationId);
+  if (!conversationId) return false;
+  return pathname === `/messages/${conversationId}`;
+}
+
 export function clerkPushReadsCurrentAccount(href: ClerkPushHref): boolean {
   return href.pathname === '/flight/[id]' ||
+    href.pathname === '/flight/queue-status' ||
     href.pathname === '/flight/checklist' ||
     href.pathname === '/flight/passengers' ||
+    href.pathname === '/messages/[conversationId]' ||
     href.pathname === '/(tabs)/trips';
 }
 
 export type QueuedPushResponse = {
   responseId: string;
   payload: unknown;
+  boundUserId: string | null;
 };
 
 export type PushNavigationDecision = {
   consumedIds: string[];
   queued: QueuedPushResponse | null;
   href: ClerkPushHref | null;
+  accountCheck: ClerkPushAccountCheck | null;
   outcome: 'navigated' | 'pending' | 'duplicate' | 'ignored' | 'account-mismatch';
 };
 
 function responseId(value: unknown): string | null {
   return typeof value === 'string' && RESPONSE_ID.test(value) ? value : null;
+}
+
+function navigationDecision(
+  consumed: Set<string>,
+  queued: QueuedPushResponse | null,
+  href: ClerkPushHref | null,
+  accountCheck: ClerkPushAccountCheck | null,
+  outcome: PushNavigationDecision['outcome'],
+): PushNavigationDecision {
+  return { consumedIds: [...consumed], queued, href, accountCheck, outcome };
 }
 
 export function considerPushResponse(input: {
@@ -282,53 +484,49 @@ export function considerPushResponse(input: {
   navigationReady: boolean;
   consumedIds: readonly string[];
   queued: QueuedPushResponse | null;
+  boundUserId?: string | null;
 }): PushNavigationDecision {
   const id = responseId(input.responseId);
   const consumed = new Set(input.consumedIds);
-  if (!id) {
-    return { consumedIds: [...consumed], queued: input.queued, href: null, outcome: 'ignored' };
-  }
+  if (!id) return navigationDecision(consumed, input.queued, null, null, 'ignored');
   if (consumed.has(id) || input.queued?.responseId === id) {
-    return {
-      consumedIds: [...consumed],
-      queued: input.queued,
-      href: null,
-      outcome: 'duplicate',
-    };
+    return navigationDecision(consumed, input.queued, null, null, 'duplicate');
   }
+  const boundUserId = input.boundUserId !== undefined ? input.boundUserId : input.activeUserId;
+  if (boundUserId && input.activeUserId && boundUserId !== input.activeUserId) {
+    consumed.add(id);
+    return navigationDecision(consumed, null, null, null, 'account-mismatch');
+  }
+  const queue = (): QueuedPushResponse => ({
+    responseId: id,
+    payload: input.payload,
+    boundUserId,
+  });
   const resolved = resolveClerkPushHref(input.payload, input.activeUserId);
   if ('reason' in resolved) {
     if (!input.navigationReady && resolved.reason === 'account-mismatch' && !input.activeUserId) {
-      return {
-        consumedIds: [...consumed],
-        queued: { responseId: id, payload: input.payload },
-        href: null,
-        outcome: 'pending',
-      };
+      return navigationDecision(consumed, queue(), null, null, 'pending');
     }
     consumed.add(id);
-    return {
-      consumedIds: [...consumed],
-      queued: input.queued?.responseId === id ? null : input.queued,
-      href: null,
-      outcome: resolved.reason === 'account-mismatch' ? 'account-mismatch' : 'ignored',
-    };
+    return navigationDecision(
+      consumed,
+      input.queued?.responseId === id ? null : input.queued,
+      null,
+      null,
+      resolved.reason === 'account-mismatch' ? 'account-mismatch' : 'ignored',
+    );
   }
   if (!input.navigationReady) {
-    return {
-      consumedIds: [...consumed],
-      queued: { responseId: id, payload: input.payload },
-      href: null,
-      outcome: 'pending',
-    };
+    return navigationDecision(consumed, queue(), null, null, 'pending');
   }
   consumed.add(id);
-  return {
-    consumedIds: [...consumed],
-    queued: input.queued?.responseId === id ? null : input.queued,
-    href: resolved.href,
-    outcome: 'navigated',
-  };
+  return navigationDecision(
+    consumed,
+    input.queued?.responseId === id ? null : input.queued,
+    resolved.href,
+    resolved.accountCheck,
+    'navigated',
+  );
 }
 
 export function flushQueuedPushResponse(input: {
@@ -338,7 +536,7 @@ export function flushQueuedPushResponse(input: {
   consumedIds: readonly string[];
 }): PushNavigationDecision {
   if (!input.queued) {
-    return { consumedIds: [...input.consumedIds], queued: null, href: null, outcome: 'ignored' };
+    return navigationDecision(new Set(input.consumedIds), null, null, null, 'ignored');
   }
   return considerPushResponse({
     responseId: input.queued.responseId,
@@ -346,21 +544,28 @@ export function flushQueuedPushResponse(input: {
     activeUserId: input.activeUserId,
     navigationReady: input.navigationReady,
     consumedIds: input.consumedIds,
+    boundUserId: input.queued.boundUserId,
     queued: null,
   });
 }
 
 export function dropQueuedPushNavigation(consumedIds: readonly string[]): PushNavigationDecision {
-  return { consumedIds: [...consumedIds], queued: null, href: null, outcome: 'ignored' };
+  return navigationDecision(new Set(consumedIds), null, null, null, 'ignored');
 }
 
 export function foregroundPresentation(input: {
   notificationId: string;
   alreadyPresented: readonly string[];
   permission: PushPermissionState;
+  payload?: unknown;
+  pathname?: string | null;
 }): { show: boolean; presentedIds: string[] } {
   const presented = new Set(input.alreadyPresented);
   if (!input.notificationId || presented.has(input.notificationId) || !canRetrievePushToken(input.permission)) {
+    return { show: false, presentedIds: [...presented] };
+  }
+  if (pushRepeatsOpenConversation(input.payload, input.pathname ?? null)) {
+    presented.add(input.notificationId);
     return { show: false, presentedIds: [...presented] };
   }
   presented.add(input.notificationId);

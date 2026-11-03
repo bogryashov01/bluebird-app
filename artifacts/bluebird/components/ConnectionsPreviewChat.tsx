@@ -1,10 +1,10 @@
 import React from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
   Platform,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -102,7 +102,7 @@ export function ConnectionsPreviewChat({ conversationId }: { conversationId: str
         <Text style={[styles.meta, { color: colors.textOnSurface }]} testID="connections-chat-feedback">{preview.actionMessage}</Text>
       ) : null}
       <View style={[styles.composer, { paddingBottom: insets.bottom + 8 }]}>
-        <TextInput
+        <ThemedTextInput
           value={draft}
           onChangeText={(value) => setDraft(value.slice(0, MESSAGE_CHARACTER_LIMIT))}
           editable={!!conversation?.canSend}

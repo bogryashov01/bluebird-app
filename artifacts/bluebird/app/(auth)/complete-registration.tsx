@@ -1,12 +1,13 @@
 import React, { useRef, useState } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
   ActivityIndicator,
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
+  type TextInput,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
@@ -112,7 +113,7 @@ export default function CompleteRegistrationScreen() {
         <View style={styles.nameRow}>
           <View style={styles.nameField}>
             <Text style={[styles.label, { color: colors.mutedOnBrand }]}>First Name</Text>
-            <TextInput
+            <ThemedTextInput
               style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.foreground }]}
               placeholder="Alex"
               placeholderTextColor={colors.mutedForeground}
@@ -129,7 +130,7 @@ export default function CompleteRegistrationScreen() {
           </View>
           <View style={styles.nameField}>
             <Text style={[styles.label, { color: colors.mutedOnBrand }]}>Last Name</Text>
-            <TextInput
+            <ThemedTextInput
               ref={lastNameRef}
               style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.foreground }]}
               placeholder="Morgan"
@@ -148,7 +149,7 @@ export default function CompleteRegistrationScreen() {
 
         <View style={styles.fieldGroup}>
           <Text style={[styles.label, { color: colors.mutedOnBrand }]}>Email</Text>
-          <TextInput
+          <ThemedTextInput
             ref={emailRef}
             style={[
               styles.input,

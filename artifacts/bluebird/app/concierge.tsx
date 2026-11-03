@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
-  View, Text, StyleSheet, FlatList, TextInput, ScrollView,
+  View, Text, StyleSheet, FlatList, ScrollView,
   TouchableOpacity, Platform, ActivityIndicator,
+  type TextInput,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -258,7 +260,7 @@ function ConciergeContent() {
 
       {/* Input bar */}
       <View style={[styles.inputBar, { backgroundColor: colors.headerBackground, borderTopColor: colors.separator, paddingBottom: bottomPad + 8 }]}>
-        <TextInput
+        <ThemedTextInput
           ref={inputRef}
           style={[styles.inputField, { backgroundColor: colors.input, color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
           placeholder="Ask the AI Concierge..."
