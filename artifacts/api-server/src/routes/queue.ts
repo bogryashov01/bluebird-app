@@ -17,6 +17,7 @@ import { flightAcceptsQueueActions } from "../lib/departure";
 import { JoinQueueBody } from "@workspace/api-zod";
 import { exceedsPassengerCapacity, passengerCapacityError } from "../lib/passenger-capacity";
 import { activeFamilyMemberForUser, syncFamilyPlans } from "../lib/family";
+import { presentQueueRoster } from "../lib/queueVisibility";
 
 const router = Router();
 const PET_CLEANING_FEE_USD = 500;
@@ -360,6 +361,7 @@ router.get("/status", authMiddleware, async (req, res) => {
             flightId: queueEntriesTable.flightId,
             position: queueEntriesTable.position,
             name: usersTable.name,
+            memberRef: usersTable.memberRef,
           })
           .from(queueEntriesTable)
           .innerJoin(usersTable, eq(queueEntriesTable.userId, usersTable.id))
@@ -370,24 +372,19 @@ router.get("/status", authMiddleware, async (req, res) => {
             ),
           );
 
-    const initialsForName = (name: string): string => {
-      const parts = name.trim().split(/\s+/).filter(Boolean);
-      if (parts.length === 0) return "M";
-      if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-    };
-
-    const membersByFlight = new Map<string, { initials: string; position: number }[]>();
+    const membersByFlight = new Map<string, ReturnType<typeof presentQueueRoster>>();
+    const rowsByFlight = new Map<string, { name: string; position: number; memberRef: string }[]>();
     for (const member of waitingMembers) {
-      const members = membersByFlight.get(member.flightId) ?? [];
-      members.push({
-        initials: initialsForName(member.name),
+      const rows = rowsByFlight.get(member.flightId) ?? [];
+      rows.push({
+        name: member.name,
         position: member.position,
+        memberRef: member.memberRef,
       });
-      membersByFlight.set(member.flightId, members);
+      rowsByFlight.set(member.flightId, rows);
     }
-    for (const members of membersByFlight.values()) {
-      members.sort((a, b) => a.position - b.position);
+    for (const [flightId, rows] of rowsByFlight) {
+      membersByFlight.set(flightId, presentQueueRoster(rows));
     }
 
     const enriched = await Promise.all(

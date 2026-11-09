@@ -18,6 +18,11 @@ import {
 import { authMiddleware } from "../middlewares/auth";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { scheduleNetworkingPhotoCleanup } from "../lib/networkingPhotoCleanup";
+import {
+  canSendConnectionMessage,
+  evaluateConnectionRequest,
+  reviewConnectionDecision,
+} from "../lib/queueVisibility";
 
 const router = Router();
 router.use(authMiddleware);
@@ -109,9 +114,11 @@ function publicProfile(
       ...(full ? { linkedinUrl: null, facebookUrl: null, instagramUrl: null } : {}),
     };
   }
+  const lastName = profile.lastName.trim();
   return {
     firstName: profile.firstName,
     lastName: full ? profile.lastName : undefined,
+    lastInitial: lastName ? lastName[0].toUpperCase() : "",
     photoUrl: resolvedPhotoUrl(photo),
     photoAssetPath: photo.photoAssetPath,
     industry: profile.industry,
@@ -244,6 +251,12 @@ router.patch("/profile", async (req, res) => {
       }
       updates[key] = value;
     }
+  }
+  if (body.allowIncomingRequests !== undefined) {
+    if (typeof body.allowIncomingRequests !== "boolean") {
+      return res.status(400).json({ error: "allowIncomingRequests must be true or false" });
+    }
+    updates.allowIncomingRequests = body.allowIncomingRequests;
   }
   for (const key of ["linkedinUrl", "facebookUrl", "instagramUrl"] as const) {
     if (body[key] !== undefined) {
@@ -440,7 +453,12 @@ router.get("/flights/:flightId/front-member", async (req, res) => {
     const flightId = String(req.params.flightId);
     const [flight] = await db.select().from(flightsTable).where(eq(flightsTable.id, flightId));
     if (!flight) return res.status(404).json({ error: "Flight not found" });
-    const [entry] = await db.select().from(queueEntriesTable).where(and(
+    const [entry] = await db.select({
+      userId: queueEntriesTable.userId,
+      memberRef: usersTable.memberRef,
+    }).from(queueEntriesTable)
+      .innerJoin(usersTable, eq(queueEntriesTable.userId, usersTable.id))
+      .where(and(
       eq(queueEntriesTable.flightId, flightId),
       eq(queueEntriesTable.status, "waiting"),
       eq(queueEntriesTable.position, 1),
@@ -451,11 +469,17 @@ router.get("/flights/:flightId/front-member", async (req, res) => {
     const [profile] = await db.select().from(networkingProfilesTable)
       .where(eq(networkingProfilesTable.userId, entry.userId));
     const photo = await userPhoto(entry.userId);
-    if (!profile || !profileCompletion(profile, photo).completed) return res.json({ eligible: false, member: null });
+    if (!profile || !profile.allowIncomingRequests || !profileCompletion(profile, photo).completed) {
+      return res.json({ eligible: false, member: null });
+    }
     return res.json({
       eligible: true,
       flightId,
-      member: { userId: entry.userId, ...publicProfile(profile, false, photo) },
+      member: {
+        userId: entry.userId,
+        memberRef: entry.memberRef,
+        ...publicProfile(profile, false, photo),
+      },
     });
   } catch {
     return res.status(500).json({ error: "Failed to find the front member" });
@@ -467,6 +491,7 @@ router.post("/requests", async (req, res) => {
   const user = await currentUser(userId);
   if (!memberRequired(user, res)) return;
   const flightId = typeof req.body?.flightId === "string" ? req.body.flightId : "";
+  const requestedMemberRef = typeof req.body?.memberRef === "string" ? req.body.memberRef.trim() : "";
   const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
   if (!flightId || message.length < 1 || message.length > 240) {
     return res.status(400).json({ error: "Choose a flight and write a message up to 240 characters" });
@@ -481,24 +506,47 @@ router.post("/requests", async (req, res) => {
     if (!requesterProfile || !profileCompletion(requesterProfile, requesterPhoto).completed) {
       return res.status(400).json({ error: "Complete your networking profile before sending a request", code: "NETWORKING_PROFILE_INCOMPLETE" });
     }
-    const [entry] = await db.select().from(queueEntriesTable).where(and(
+    const [entry] = await db.select({
+      userId: queueEntriesTable.userId,
+      memberRef: usersTable.memberRef,
+    }).from(queueEntriesTable)
+      .innerJoin(usersTable, eq(queueEntriesTable.userId, usersTable.id))
+      .where(and(
       eq(queueEntriesTable.flightId, flightId),
       eq(queueEntriesTable.status, "waiting"),
       eq(queueEntriesTable.position, 1),
-      ne(queueEntriesTable.userId, userId),
     )).orderBy(asc(queueEntriesTable.createdAt)).limit(1);
-    if (!entry) return res.status(409).json({ error: "There is no eligible front member for this flight" });
-    if (await hasBlock(userId, entry.userId)) return res.status(403).json({ error: "This member is unavailable for networking" });
+    const [recipientProfile] = entry
+      ? await db.select({ allowIncomingRequests: networkingProfilesTable.allowIncomingRequests })
+        .from(networkingProfilesTable)
+        .where(eq(networkingProfilesTable.userId, entry.userId))
+      : [];
     const [flight] = await db.select({ id: flightsTable.id, status: flightsTable.status })
       .from(flightsTable).where(eq(flightsTable.id, flightId));
-    if (!flight || flight.status !== "available") return res.status(409).json({ error: "This flight is no longer available" });
-    const [existing] = await db.select().from(networkingRequestsTable).where(and(
-      eq(networkingRequestsTable.flightId, flightId),
-      eq(networkingRequestsTable.requesterId, userId),
-      eq(networkingRequestsTable.recipientId, entry.userId),
-    ));
-    if (existing?.status === "pending" || existing?.status === "accepted") {
-      return res.status(409).json({ error: "You already sent a request for this flight", requestId: existing.id });
+    const [existing] = entry
+      ? await db.select().from(networkingRequestsTable).where(and(
+        eq(networkingRequestsTable.flightId, flightId),
+        eq(networkingRequestsTable.requesterId, userId),
+        eq(networkingRequestsTable.recipientId, entry.userId),
+      ))
+      : [];
+    const decision = evaluateConnectionRequest({
+      requesterIsMember: true,
+      requesterId: userId,
+      frontUserId: entry?.userId ?? null,
+      frontMemberRef: entry?.memberRef ?? null,
+      requestedMemberRef: requestedMemberRef || null,
+      incomingAllowed: recipientProfile?.allowIncomingRequests !== false,
+      blocked: entry ? await hasBlock(userId, entry.userId) : false,
+      flightAvailable: !!flight && flight.status === "available",
+      existingStatus: existing?.status ?? null,
+    });
+    if (!decision.ok || !entry) {
+      return res.status(decision.ok ? 409 : decision.status).json({
+        error: decision.ok ? "There is no eligible front member for this flight" : decision.error,
+        code: decision.ok ? "NO_ELIGIBLE_FRONT_MEMBER" : decision.code,
+        ...(existing && !decision.ok && decision.code === "DUPLICATE_REQUEST" ? { requestId: existing.id } : {}),
+      });
     }
     const request = existing
       ? (await db.update(networkingRequestsTable).set({ message, status: "pending", updatedAt: new Date() })
@@ -567,7 +615,14 @@ router.post("/requests/:id/decision", async (req, res) => {
       await db.update(networkingRequestsTable).set({ status: "declined", updatedAt: new Date() }).where(eq(networkingRequestsTable.id, request.id));
       return res.json({ status: action === "block" ? "blocked" : "reported" });
     }
-    if (request.status !== "pending") return res.status(409).json({ error: "This request has already been decided" });
+    if (action === "accept" || action === "decline") {
+      const review = reviewConnectionDecision({
+        isRecipient: true,
+        currentStatus: request.status,
+        action,
+      });
+      if (!review.ok) return res.status(review.status).json({ error: review.error, code: review.code });
+    }
     if (action === "decline") {
       await db.update(networkingRequestsTable).set({ status: "declined", updatedAt: new Date() }).where(eq(networkingRequestsTable.id, request.id));
       await notify(request.requesterId, "Connection request declined", "Your flight connection request was declined.", "networking_declined", { requestId: request.id, flightId: request.flightId });
@@ -629,7 +684,11 @@ router.get("/connections/:id/messages", async (req, res) => {
   if (!memberRequired(user, res)) return;
   try {
     const connection = await connectionFor(userId, String(req.params.id));
-    if (!connection || await hasBlock(userId, await otherMember(connection, userId))) return res.status(403).json({ error: "This conversation is unavailable" });
+    const otherId = connection ? await otherMember(connection, userId) : "";
+    if (!connection || !canSendConnectionMessage({
+      participant: true,
+      blocked: await hasBlock(userId, otherId),
+    })) return res.status(403).json({ error: "This conversation is unavailable" });
     const messages = await db.select().from(networkingMessagesTable)
       .where(eq(networkingMessagesTable.connectionId, connection.id))
       .orderBy(asc(networkingMessagesTable.createdAt));
@@ -648,7 +707,11 @@ router.post("/connections/:id/messages", async (req, res) => {
   if (!content || content.length > 1000) return res.status(400).json({ error: "Message must be between 1 and 1,000 characters" });
   try {
     const connection = await connectionFor(userId, String(req.params.id));
-    if (!connection || await hasBlock(userId, await otherMember(connection, userId))) return res.status(403).json({ error: "This conversation is unavailable" });
+    const otherId = connection ? await otherMember(connection, userId) : "";
+    if (!connection || !canSendConnectionMessage({
+      participant: true,
+      blocked: await hasBlock(userId, otherId),
+    })) return res.status(403).json({ error: "This conversation is unavailable" });
     if (clientMessageId) {
       const [duplicate] = await db.select().from(networkingMessagesTable).where(and(
         eq(networkingMessagesTable.senderId, userId),
@@ -659,7 +722,7 @@ router.post("/connections/:id/messages", async (req, res) => {
     const [message] = await db.insert(networkingMessagesTable).values({
       id: id(), connectionId: connection.id, senderId: userId, content, clientMessageId,
     }).returning();
-    const recipientId = await otherMember(connection, userId);
+    const recipientId = otherId;
     const [profile] = await db.select().from(networkingProfilesTable).where(eq(networkingProfilesTable.userId, userId));
     await notify(recipientId, "New message", `${profile?.firstName ?? "Your connection"} sent you a message.`, "networking_message", { connectionId: connection.id });
     return res.status(201).json(message);

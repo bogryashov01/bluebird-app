@@ -240,17 +240,12 @@ const scopedDomestic = scopedStatus.json?.find?.((entry) => entry.flightId === d
 const scopedOtherFlight = scopedStatus.json?.find?.((entry) => entry.flightId === intlFixtureId);
 const domesticQueueMembers = scopedDomestic?.queueMembers ?? [];
 const otherFlightQueueMembers = scopedOtherFlight?.queueMembers ?? [];
-check("queue members are ordered and expose only initials plus position",
-  JSON.stringify(domesticQueueMembers) === JSON.stringify([
-    { initials: "AL", position: 1 },
-    { initials: "GH", position: 2 },
-    { initials: "AT", position: 3 },
-    { initials: "QT", position: 4 },
-    { initials: "QT", position: 5 },
-  ]) &&
+check("queue members are ordered and expose initials, position, and an opaque member ref",
+  domesticQueueMembers.map((member) => `${member.position}:${member.initials}`).join(",") === "1:AL,2:GH,3:AT,4:QT,5:QT" &&
   domesticQueueMembers.every((member) =>
-    Object.keys(member).sort().join(",") === "initials,position" &&
-    !("name" in member) && !("userId" in member) && !("phone" in member)),
+    Object.keys(member).sort().join(",") === "initials,memberRef,position" &&
+    /^[a-f0-9]{32}$/.test(member.memberRef) &&
+    !("name" in member) && !("userId" in member) && !("phone" in member) && !("email" in member)),
   JSON.stringify(domesticQueueMembers));
 check("queue status does not expose the member user ID",
   !("userId" in (scopedDomestic ?? {})),

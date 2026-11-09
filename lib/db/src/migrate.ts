@@ -29,6 +29,13 @@ export async function ensureSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_asset_path TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_channel TEXT NOT NULL DEFAULT 'app';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS member_ref TEXT;
+    UPDATE users
+      SET member_ref = md5(random()::text || clock_timestamp()::text || id)
+      WHERE member_ref IS NULL OR btrim(member_ref) = '';
+    CREATE UNIQUE INDEX IF NOT EXISTS users_member_ref_unique ON users (member_ref);
+    ALTER TABLE users ALTER COLUMN member_ref SET NOT NULL;
+    ALTER TABLE users ALTER COLUMN member_ref SET DEFAULT md5(random()::text || clock_timestamp()::text);
     UPDATE users SET weight_kg = NULL WHERE weight_kg IS NOT NULL AND weight_kg <= 0;
     DO $$
     BEGIN
@@ -522,6 +529,7 @@ export async function ensureSchema(): Promise<void> {
     );
     ALTER TABLE networking_profiles ADD COLUMN IF NOT EXISTS photo_asset_path TEXT;
     ALTER TABLE networking_profiles ADD COLUMN IF NOT EXISTS facebook_url TEXT;
+    ALTER TABLE networking_profiles ADD COLUMN IF NOT EXISTS allow_incoming_requests BOOLEAN NOT NULL DEFAULT true;
     -- Asset paths are the canonical representation for newly uploaded photos.
     -- Keep older HTTPS photos readable while moving object paths out of the
     -- legacy URL column.

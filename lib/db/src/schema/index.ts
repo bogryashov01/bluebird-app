@@ -27,9 +27,13 @@ export const usersTable = pgTable("users", {
     .$type<NotificationDeliveryChannel>()
     .notNull()
     .default("app"),
+  // Public queue reference. This is not the account id and is safe to show
+  // to other members who are already in the same flight queue.
+  memberRef: text("member_ref").notNull().default(sql`md5(random()::text || clock_timestamp()::text)`),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   uniqueIndex("users_referral_code_unique").on(table.referralCode),
+  uniqueIndex("users_member_ref_unique").on(table.memberRef),
   check("users_weight_positive", sql`${table.weightKg} IS NULL OR ${table.weightKg} > 0`),
 ]);
 
@@ -94,6 +98,7 @@ export const networkingProfilesTable = pgTable("networking_profiles", {
   linkedinUrl: text("linkedin_url"),
   facebookUrl: text("facebook_url"),
   instagramUrl: text("instagram_url"),
+  allowIncomingRequests: boolean("allow_incoming_requests").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
