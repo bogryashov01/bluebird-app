@@ -15,7 +15,14 @@ import {
 } from '@/lib/flightDetailPresentation';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import { fetchProductionFlight, parseProductionFlightId } from '@/lib/productionFlights';
-import { isQueueClosed } from '@/lib/winnerChecklist';
+import { useWinnerActions } from '@/lib/useWinnerActions';
+import {
+  canConfirmProductionWinner,
+  isQueueClosed,
+  reviewWinnerConfirmation,
+  winnerActionBlock,
+  WINNER_CONFIRMED,
+} from '@/lib/winnerChecklist';
 import {
   claimWinnerCelebration,
   presentWinnerOffer,
@@ -32,6 +39,7 @@ export default function WinnerReviewScreen() {
   const sessionRef = useRef(session);
   sessionRef.current = session;
   const configuration = getMainBluebirdApiConfigurationOrNull();
+  const winnerActions = useWinnerActions(flightId ?? 0);
   const signedIn = authMode === 'clerk' &&
     session?.isLoaded === true &&
     session.isSignedIn === true &&
@@ -72,13 +80,20 @@ export default function WinnerReviewScreen() {
     },
   });
   const flight = readProductionFlightDetailCache(flightQuery.data)?.flight;
+  const locallyConfirmed = winnerActions.confirmedMessage !== null;
+  const locallyDeclined = winnerActions.declinedMessage !== null;
   const offer = presentWinnerOffer({
     viewerIsEffectiveWinner: flight?.viewerIsEffectiveWinner ?? null,
-    viewerConfirmationStatus: flight?.viewerConfirmationStatus ?? null,
+    viewerConfirmationStatus: locallyConfirmed
+      ? 'confirmed'
+      : locallyDeclined
+        ? 'declined'
+        : flight?.viewerConfirmationStatus ?? null,
     queueClosed: flight ? isQueueClosed(flight.queueClosesAt, Date.now()) : null,
     awarded: null,
     bookedPassenger: flight?.viewerIsBookedPassenger ?? null,
     flightStatus: flight?.status ?? null,
+    // Expiration requires a verified backend deadline field. Do not invent one.
     deadlineIso: null,
     nowMs: Date.now(),
   });
@@ -99,6 +114,28 @@ export default function WinnerReviewScreen() {
     ]).start();
   }, [clerkUserId, flightId, offer.kind, opacity, scale]);
 
+  const refetchFlight = flightQuery.refetch;
+  useEffect(() => {
+    if (!locallyConfirmed || flightId === null) return;
+    void refetchFlight();
+  }, [flightId, locallyConfirmed, refetchFlight]);
+
+  const onContinueConfirm = () => {
+    if (flightId === null || winnerActions.submitting || !canConfirmProductionWinner()) return;
+    const decision = reviewWinnerConfirmation(flightId);
+    if (decision.status !== 'ready') return;
+    const block = winnerActionBlock({
+      isWinner: flight?.viewerIsEffectiveWinner === true,
+      awarded: flight?.viewerIsBookedPassenger === true,
+      confirmed: flight?.viewerConfirmationStatus === 'confirmed' || locallyConfirmed,
+      confirmedAt: null,
+      declined: flight?.viewerConfirmationStatus === 'declined' || locallyDeclined,
+      queueClosesAt: flight?.queueClosesAt ?? null,
+      nowMs: Date.now(),
+    });
+    void winnerActions.confirm(block);
+  };
+
   return (
     <View style={[styles.screen, { backgroundColor: colors.offWhite, paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -108,28 +145,46 @@ export default function WinnerReviewScreen() {
           {route || 'Flight details unavailable'}
         </Text>
         <Text testID="winner-review-title" style={[styles.title, { color: colors.textOnSurface }]}>
-          {copy?.title ?? 'Winner details are not available'}
+          {locallyConfirmed
+            ? 'This flight is confirmed'
+            : copy?.title ?? 'Winner details are not available'}
         </Text>
         <Text testID="winner-review-status" style={[styles.body, { color: colors.mutedForegroundLight }]}>
-          {copy?.body ?? 'This screen is waiting for the signed-in flight details.'}
+          {locallyConfirmed
+            ? (winnerActions.confirmedMessage ?? WINNER_CONFIRMED)
+            : copy?.body ?? 'This screen is waiting for the signed-in flight details.'}
         </Text>
       </Animated.View>
-      {offer.kind === 'pending' && flightId !== null ? (
+      {offer.kind === 'pending' && flightId !== null && !locallyConfirmed ? (
         <PrimaryButton
           label="Continue"
           testID="winner-review-continue"
-          onPress={() => {
-            void flightQuery.refetch();
-            router.replace({ pathname: '/flight/[id]', params: { id: String(flightId) } });
-          }}
+          disabled={!canConfirmProductionWinner() || winnerActions.submitting}
+          loading={winnerActions.submitting && canConfirmProductionWinner()}
+          onPress={onContinueConfirm}
         />
       ) : null}
-      {offer.kind === 'confirmed' ? (
+      {offer.kind === 'confirmed' || locallyConfirmed ? (
         <SecondaryButton
           label="View checklist"
           testID="winner-review-checklist"
           onPress={() => router.push({ pathname: '/flight/checklist', params: { legId: String(flightId) } })}
         />
+      ) : null}
+      {offer.kind === 'expired' ? (
+        <Text testID="winner-review-expired" style={[styles.body, { color: colors.mutedForegroundLight }]}>
+          This confirmation offer has expired. Continue does not send a request.
+        </Text>
+      ) : null}
+      {winnerActions.failure ? (
+        <Text testID="winner-review-error" style={[styles.body, { color: colors.destructive }]}>
+          {winnerActions.failure.title}. {winnerActions.failure.body}
+        </Text>
+      ) : null}
+      {!canConfirmProductionWinner() && offer.kind === 'pending' && !locallyConfirmed ? (
+        <Text testID="winner-review-unavailable" style={[styles.body, { color: colors.mutedForegroundLight }]}>
+          Confirmation is not available in this build. No request is sent.
+        </Text>
       ) : null}
       <SecondaryButton label="Back" testID="winner-review-back" onPress={() => router.back()} />
     </View>

@@ -7,6 +7,8 @@ import {
   declinedCurrentFlightIds,
   nextWinnerNotice,
   pendingOfferFlightIds,
+  pendingTripFlightIds,
+  pendingWinnerOfferFlightIdsFromTrips,
   productionQueueActionsVisible,
   queueEntryVisible,
   rememberWinnerNotice,
@@ -193,6 +195,20 @@ test("Queue Status celebration suppresses the notice, and polling pauses on that
     signedIn: true,
     pathname: "/(tabs)/connections",
   }), false);
+});
+
+test("queue join Pending trips stay visible and are not winner offers", () => {
+  // Product rule: unawarded current trips after queue join are Pending trips.
+  // They must remain in Trips and must not be reinterpreted as winner offers.
+  assert.deepEqual(pendingTripFlightIds([trip(10, false), trip(11, true), trip(12, false)]), [10, 12]);
+  assert.deepEqual(pendingOfferFlightIds([trip(10, false), trip(12, false)]), [10, 12]);
+  assert.deepEqual(pendingTripFlightIds([trip(11, true)]), []);
+  assert.deepEqual(pendingTripFlightIds(null), []);
+  assert.deepEqual(pendingWinnerOfferFlightIdsFromTrips([trip(10, false), trip(12, false)]), []);
+  const observer = readFileSync(resolve(projectRoot, "components/WinnerOfferObserver.tsx"), "utf8");
+  assert.match(observer, /pendingWinnerOfferFlightIdsFromTrips/);
+  assert.doesNotMatch(observer, /pendingOfferFlightIds\(|pendingTripFlightIds\(/);
+  assert.match(observer, /Pending \(unawarded\) Trips after queue join are product-correct/);
 });
 
 test("a failed trips response does not forget a notice, and an account switch does", () => {

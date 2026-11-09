@@ -70,10 +70,32 @@ test("awaiting confirmation opens the review screen and an awarded trip does not
   assert.match(screen, /return \{ flight, viewerAuthenticated: true \}/);
   assert.match(screen, /deadlineIso: null/);
   assert.match(screen, /winner-review-continue/);
-  assert.match(screen, /pathname: '\/flight\/\[id\]'/);
-  assert.doesNotMatch(screen, /confirmEmptyLegWinner|declineEmptyLegWinner|confirmTripChecklist|deadlineIso: '/);
-  assert.match(queue, /Review & Confirm Flight/);
+  // Continue accepts the winner offer via the existing confirmation client.
+  assert.match(screen, /useWinnerActions/);
+  assert.match(screen, /reviewWinnerConfirmation/);
+  assert.match(screen, /winnerActions\.confirm/);
+  assert.match(screen, /canConfirmProductionWinner/);
+  assert.doesNotMatch(screen, /declineEmptyLegWinner|confirmTripChecklist|deadlineIso: '/);
+  assert.doesNotMatch(screen, /pathname: '\/flight\/\[id\]'/);
+  assert.match(queue, /Review \& Confirm Flight/);
   assert.match(trips, /upcomingFlightDetailsTarget/);
   assert.match(trips, /router\.push\(detailsTarget\)/);
   assert.doesNotMatch(trips, /pathname: '\/flight\/winner'/);
+});
+
+test("expired winner stays non-actionable without a backend deadline field", () => {
+  const screen = readFileSync(resolve(projectRoot, "app/flight/winner.tsx"), "utf8");
+  assert.match(screen, /deadlineIso: null/);
+  assert.match(screen, /Expiration requires a verified backend deadline field/);
+  // With a verified deadline the presentation can expire; UI must not invent one.
+  assert.equal(offer({
+    deadlineIso: "2026-11-03T18:00:00.000Z",
+    viewerConfirmationStatus: "pending",
+  }).kind, "expired");
+  assert.equal(presentWinnerOfferCopy(offer({
+    deadlineIso: "2026-11-03T18:00:00.000Z",
+  }))?.title, "This confirmation offer has expired");
+  assert.match(screen, /offer\.kind === 'expired'/);
+  assert.match(screen, /winner-review-expired/);
+  assert.doesNotMatch(screen, /Date\.now\(\)\s*\+|expiresAt:\s*['"]|deadlineIso:\s*['"]/);
 });

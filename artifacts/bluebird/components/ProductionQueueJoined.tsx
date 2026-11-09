@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import { useColors } from '@/hooks/useColors';
 import {
+  canSubmitProductionQueueJoin,
   formatJoinFlightDate,
   formatJoinFlightTime,
   presentJoinQueueWindow,
@@ -12,7 +13,6 @@ import {
   type JoinFlightDisplay,
   type QueueJoinSuccessModel,
 } from '@/lib/joinFlightPresentation';
-import { isProductionQueueVerified } from '@/lib/productionQueueReadiness';
 
 export function ProductionQueueJoined({
   flight,
@@ -37,7 +37,9 @@ export function ProductionQueueJoined({
   const countdown = presentQueueCloseCountdown(flight.queueClosesAt, nowMs);
   const queueWindow = presentJoinQueueWindow(flight.queueClosesAt, nowMs);
   const statusLabel = queueWindow.state === 'open' ? 'Open' : queueWindow.state === 'closed' ? 'Closed' : 'Unavailable';
-  const skipLineAvailable = isProductionQueueVerified();
+  // Match Queue Status: Skip spends a credit only there, gated by QUEUE_MUTATIONS.
+  // This CTA only navigates; it never posts skip-line itself.
+  const skipLineAvailable = canSubmitProductionQueueJoin();
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.offWhite, paddingTop: topPad, paddingBottom: bottomPad + 16 }]} testID="production-queue-joined">
@@ -75,11 +77,11 @@ export function ProductionQueueJoined({
           label="Use Skip the Line Pass Instead"
           testID="production-queue-skip-line"
           disabled={!skipLineAvailable}
-          onPress={() => undefined}
+          onPress={onViewStatus}
         />
         <Text testID="production-queue-skip-line-note" style={[styles.note, { color: colors.mutedForegroundLight }]}>
           {skipLineAvailable
-            ? 'Skip the Line still needs a separate confirmed credit action. This screen does not use a credit.'
+            ? 'Skip the Line is confirmed on Queue Status. This screen does not use a credit by itself.'
             : 'Skip the Line is unavailable right now.'}
         </Text>
       </View>

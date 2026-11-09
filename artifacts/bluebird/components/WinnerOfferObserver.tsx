@@ -16,7 +16,7 @@ import type { ProductionTrips } from '@/lib/productionAuthApi';
 import {
   clearWinnerNoticesForAccount,
   nextWinnerNotice,
-  pendingOfferFlightIds,
+  pendingWinnerOfferFlightIdsFromTrips,
   rememberWinnerNotice,
   winnerCelebrationVisible,
   winnerOfferPollInterval,
@@ -25,6 +25,10 @@ import {
 /**
  * One trips poll for the signed-in member. Queue Status keeps its own flight
  * refresh, so this interval pauses there. The poll never confirms or declines.
+ *
+ * Pending (unawarded) Trips after queue join are product-correct and are NOT
+ * treated as winner offers here. Winner notices require pendingWinnerOfferFlightIdsFromTrips,
+ * which stays empty until trips expose verified winner-selection fields.
  */
 export function WinnerOfferObserver() {
   const colors = useColors();
@@ -107,7 +111,7 @@ export function WinnerOfferObserver() {
     },
   });
 
-  const pendingIds = query.data ? pendingOfferFlightIds(query.data.current) : [];
+  const pendingIds = query.data ? pendingWinnerOfferFlightIdsFromTrips(query.data.current) : [];
   const pendingKey = pendingIds.join(',');
   const celebrationVisible = winnerCelebrationVisible(pathname);
   const tripsLoaded = query.data !== undefined;

@@ -137,7 +137,13 @@ export function productionQueueActionsVisible(input: {
 
 export const WINNER_OFFER_POLL_MS = 15_000;
 
-export function pendingOfferFlightIds(trips: readonly PlacementTrip[] | null | undefined): number[] {
+/**
+ * Pending current trips: unawarded entries after queue join (and until award).
+ * Product rule: a flight appearing in Trips as Pending immediately after joining
+ * a queue is CORRECT. These IDs must remain visible in Trips and must NOT be
+ * treated as pending winner-selection offers by themselves.
+ */
+export function pendingTripFlightIds(trips: readonly PlacementTrip[] | null | undefined): number[] {
   if (!trips) return [];
   const ids: number[] = [];
   for (const trip of trips) {
@@ -147,6 +153,24 @@ export function pendingOfferFlightIds(trips: readonly PlacementTrip[] | null | u
     ids.push(id);
   }
   return ids;
+}
+
+/** @deprecated Use pendingTripFlightIds. Same Pending-trip set; not winner offers. */
+export function pendingOfferFlightIds(trips: readonly PlacementTrip[] | null | undefined): number[] {
+  return pendingTripFlightIds(trips);
+}
+
+/**
+ * Winner-selection offer IDs derived from the trips list alone.
+ * Trips currently expose only checklist.awarded — not viewerIsEffectiveWinner
+ * or confirmation status — so this returns [] until the Replit trips contract
+ * adds verified winner-offer fields. Queue Status / flight detail still use
+ * empty-leg winner fields for the real offer path.
+ */
+export function pendingWinnerOfferFlightIdsFromTrips(
+  _trips: readonly PlacementTrip[] | null | undefined,
+): number[] {
+  return [];
 }
 
 export function winnerNoticeKey(accountKey: string, flightId: number): string {

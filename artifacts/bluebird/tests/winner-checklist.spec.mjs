@@ -196,6 +196,8 @@ test("trip checklist reads are account scoped and the detail read is not used by
 });
 
 test("current trips keep an unconfirmed effective winner and distinguish award progress", () => {
+  // Product rule: queue join → Trips Pending ("Awaiting confirmation") is CORRECT
+  // while the member awaits the queue outcome. Do not hide unawarded current trips.
   const labels = labelCurrentTrips({
     current: [
       { checklist: { emptyLegId: 7, awarded: false, remainingSteps: ["confirmed"] } },
@@ -209,6 +211,11 @@ test("current trips keep an unconfirmed effective winner and distinguish award p
     { flightId: 8, label: "Checklist in progress" },
     { flightId: 9, label: "Confirmed" },
   ]);
+  assert.equal(presentTripChecklistStatus({
+    list: "current",
+    awarded: false,
+    remainingSteps: [],
+  }), "Awaiting confirmation");
   assert.equal(presentTripChecklistStatus({
     list: "past",
     awarded: false,
@@ -225,7 +232,11 @@ test("current trips keep an unconfirmed effective winner and distinguish award p
   assert.match(trips, /clerk-trip-status/);
   assert.match(trips, /currentTripChecklistTarget/);
   assert.match(checklistLibrary, /pathname: '\/flight\/checklist'/);
-  assert.doesNotMatch(trips, /filter\(.*awarded|getTrip\(|router\.replace|Send Boarding Pass|View Boarding Pass/);
+  // Empty Upcoming may replace into Discover; boarding-pass and trip-detail
+  // reads stay off this list screen.
+  assert.doesNotMatch(trips, /getTrip\(|Send Boarding Pass|View Boarding Pass/);
+  assert.doesNotMatch(trips, /filter\(\s*\(.*awarded/);
+  assert.match(trips, /router\.replace\('\/\(tabs\)\/discover'/);
   assert.match(trips, /checklistFullyComplete\(trip\.checklist\)/);
 });
 

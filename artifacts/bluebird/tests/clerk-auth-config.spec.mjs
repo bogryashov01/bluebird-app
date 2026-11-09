@@ -167,6 +167,31 @@ test("an opted-in development client selects Production Clerk and never falls ba
     configurationError: null,
   });
 
+  // Without PRODUCTION_CLERK_DEBUG, a Dev Client (__DEV__) follows the
+  // development resolver. With ENABLE_CLERK_AUTH=false that disables Clerk and
+  // the app falls through to legacy splash — matching Metro RC DEBUG=false.
+  const withoutDebug = resolveRuntimeClerkAuthConfiguration({
+    ...productionDebug,
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG: "false",
+  }, true);
+  assert.equal(withoutDebug.authExpected, false);
+  assert.equal(withoutDebug.enabled, false);
+  assert.equal(withoutDebug.environment, null);
+
+  // Store/release builds are not development clients, so DEBUG=false still
+  // resolves Production Clerk when the approval pair is present.
+  const storeBuild = resolveRuntimeClerkAuthConfiguration({
+    ...productionDebug,
+    EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG: "false",
+  }, false);
+  assert.deepEqual(storeBuild, {
+    authExpected: true,
+    enabled: true,
+    environment: "production",
+    publishableKey: validProductionKey,
+    configurationError: null,
+  });
+
   for (const invalid of [
     { ...productionDebug, EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH: "false" },
     { ...productionDebug, EXPO_PUBLIC_BLUEBIRD_PRODUCTION_API_BASE_URL: undefined },
