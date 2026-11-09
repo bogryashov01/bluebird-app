@@ -12,6 +12,8 @@ import {
   parseAcceptedConnections,
   parseConnectionDiscovery,
   parseIncomingConnectionRequests,
+  parseQueueConnectionStatus,
+  parseQueueTargetPreview,
   readMemberConnectionsSnapshot,
   rememberMemberConnectionsSnapshot,
   retainMemberConnectionsForAccount,
@@ -75,6 +77,7 @@ test("a disabled client does not read a token or call fetch", async () => {
   assert.equal((await client.listIncoming()).kind, "disabled");
   assert.equal((await client.discover({ email: "member@example.com" })).kind, "disabled");
   assert.equal((await client.createRequest("user_to")).kind, "disabled");
+  assert.equal((await client.createQueueRequest("8f99b61f-5c0b-44e9-93bf-55fbb2a0b925")).kind, "disabled");
   assert.equal((await client.accept(4)).kind, "disabled");
   assert.equal((await client.decline(4)).kind, "disabled");
   assert.equal((await client.remove(4)).kind, "disabled");
@@ -256,7 +259,7 @@ test("the connections screen does not present demo members as real people", () =
   const tab = readFileSync(resolve(projectRoot, "app/(tabs)/connections.tsx"), "utf8");
   const auth = readFileSync(resolve(projectRoot, "context/AuthContext.tsx"), "utf8");
   assert.match(screen, /member-connections-unavailable/);
-  assert.match(screen, /Messages are not available yet/);
+  assert.match(screen, /messagesEnabled \|\| connections\.enabled/);
   assert.match(screen, /member-connections-discover/);
   assert.match(screen, /MemberProfileSheet/);
   assert.match(screen, /Find Member/);
@@ -264,6 +267,7 @@ test("the connections screen does not present demo members as real people", () =
   assert.match(screen, /My Connections/);
   assert.match(screen, /discover\(\{ phoneE164: phone \}\)/);
   assert.match(screen, /connections\.decline\(request\.id\)/);
+  assert.match(screen, /connection-queue-status/);
   assert.match(screen, /member-connections-requests-badge/);
   assert.match(screen, /member-connections-incoming-empty/);
   assert.doesNotMatch(screen, /keyboardType="email-address"|member-connections-email|Exact email address/);
@@ -287,4 +291,189 @@ test("the connections screen does not present demo members as real people", () =
   assert.match(tab, /MemberConnectionsScreen/);
   assert.doesNotMatch(tab, /ConnectionsHome/);
   assert.match(auth, /clearMemberConnectionsCache\(\)/);
+});
+
+test("queue connection requests post only the opaque reference and keep the connection id", async () => {
+  const calls = [];
+  const reference = "8F99B61F-5C0B-44E9-93BF-55FBB2A0B925";
+  const client = createMemberConnectionsClient({
+    enabled: true,
+    nativeAuthTest: false,
+    environment: "production",
+    baseUrl,
+    getAccessToken: async () => "clerk-token",
+    fetcher: async (url, init) => {
+      calls.push({ url: String(url), init });
+      return jsonResponse({
+        connection: {
+          id: 73,
+          status: "pending",
+          createdAt: "2026-02-18T17:42:00.000Z",
+          updatedAt: "2026-02-18T17:42:00.000Z",
+          respondedAt: null,
+          removedAt: null,
+          requester: { userId: "user_secret", firstName: "Ada", lastName: "Member" },
+        },
+      }, 201);
+    },
+  });
+  const invalid = await client.createQueueRequest("user_secret");
+  assert.equal(invalid.kind, "error");
+  assert.equal(invalid.code, "invalid_body");
+  assert.equal(calls.length, 0);
+  const created = await client.createQueueRequest(reference);
+  assert.equal(created.kind, "loaded");
+  assert.equal(created.data.connection.id, 73);
+  assert.equal(created.data.connection.status, "pending");
+  assert.equal(JSON.stringify(created.data).includes("user_secret"), false);
+  assert.equal(JSON.stringify(created.data).includes("Ada"), false);
+  const body = JSON.parse(calls[0].init.body);
+  assert.deepEqual(body, { queueTargetReference: reference.toLowerCase() });
+  assert.equal(Object.prototype.hasOwnProperty.call(body, "targetUserId"), false);
+  assert.equal(calls[0].init.headers.Authorization, "Bearer clerk-token");
+  assert.equal(calls[0].url, `${baseUrl}${MEMBER_CONNECTION_PATHS.requests}`);
+});
+
+test("queue status restores every relationship without member identities", async () => {
+  const calls = [];
+  const client = createMemberConnectionsClient({
+    enabled: true,
+    nativeAuthTest: false,
+    environment: "production",
+    baseUrl,
+    getAccessToken: async () => "clerk-token",
+    fetcher: async (url, init) => {
+      calls.push({ url: String(url), init });
+      return jsonResponse({
+        relationships: [
+          {
+            connectionId: 73,
+            emptyLegId: 456,
+            status: "pending",
+            direction: "outgoing",
+            updatedAt: "2026-11-05T12:00:00.000Z",
+            userId: "user_secret",
+            email: "member@example.test",
+          },
+          {
+            connectionId: 74,
+            emptyLegId: 456,
+            status: "accepted",
+            direction: "incoming",
+            updatedAt: "2026-11-05T12:05:00.000Z",
+          },
+        ],
+      });
+    },
+  });
+  const loaded = await client.listQueueStatus();
+  assert.equal(loaded.kind, "loaded");
+  assert.deepEqual(loaded.data.relationships, [
+    {
+      connectionId: 73,
+      emptyLegId: 456,
+      status: "pending",
+      direction: "outgoing",
+      updatedAt: "2026-11-05T12:00:00.000Z",
+    },
+    {
+      connectionId: 74,
+      emptyLegId: 456,
+      status: "accepted",
+      direction: "incoming",
+      updatedAt: "2026-11-05T12:05:00.000Z",
+    },
+  ]);
+  assert.equal(JSON.stringify(loaded.data).includes("user_secret"), false);
+  assert.equal(JSON.stringify(loaded.data).includes("@"), false);
+  assert.equal(calls[0].url, `${baseUrl}${MEMBER_CONNECTION_PATHS.queueStatus}`);
+  assert.equal(calls[0].init.method, "GET");
+  assert.equal(calls[0].init.body, undefined);
+  assert.throws(() => parseQueueConnectionStatus({
+    relationships: [{
+      connectionId: 73,
+      emptyLegId: 456,
+      status: "declined",
+      direction: "outgoing",
+      updatedAt: "2026-11-05T12:00:00.000Z",
+    }],
+  }));
+});
+
+test("queue target preview loads only first name, last name, and position", async () => {
+  const reference = "8f99b61f-5c0b-44e9-93bf-55fbb2a0b925";
+  const calls = [];
+  const client = createMemberConnectionsClient({
+    enabled: true,
+    nativeAuthTest: false,
+    environment: "production",
+    baseUrl,
+    getAccessToken: async () => "clerk-token",
+    fetcher: async (url, init) => {
+      calls.push({ url: String(url), init });
+      return jsonResponse({
+        firstName: "Ada",
+        lastName: "Lovelace",
+        position: 1,
+        userId: "user_secret",
+        email: "ada@example.test",
+        phoneE164: "+15555550100",
+      });
+    },
+  });
+  const loaded = await client.previewQueueTarget(reference);
+  assert.equal(loaded.kind, "loaded");
+  assert.deepEqual(loaded.data, {
+    firstName: "Ada",
+    lastName: "Lovelace",
+    position: 1,
+  });
+  assert.equal(JSON.stringify(loaded.data).includes("user_secret"), false);
+  assert.equal(JSON.stringify(loaded.data).includes("@"), false);
+  assert.equal(JSON.stringify(loaded.data).includes("+1555"), false);
+  assert.equal(calls[0].url, `${baseUrl}${MEMBER_CONNECTION_PATHS.queueTargetPreview(reference)}`);
+  assert.equal(calls[0].init.method, "GET");
+  assert.equal(calls[0].init.body, undefined);
+  assert.throws(() => parseQueueTargetPreview({
+    firstName: "Ada",
+    lastName: "",
+    position: 1,
+  }));
+  const denied = await createMemberConnectionsClient({
+    enabled: true,
+    nativeAuthTest: false,
+    environment: "production",
+    baseUrl,
+    getAccessToken: async () => "clerk-token",
+    fetcher: async () => jsonResponse({ code: "queue_target_unavailable" }, 404),
+  }).previewQueueTarget(reference);
+  assert.equal(denied.kind, "error");
+  assert.equal(denied.code, "queue_target_unavailable");
+});
+
+test("queue connection request errors use the contract codes", async () => {
+  const cases = [
+    [400, "invalid_body", "invalid_body"],
+    [400, "self_request", "self_request"],
+    [401, "unauthorized", "unauthorized"],
+    [403, "active_membership_required", "active_membership_required"],
+    [403, "first_in_queue_required", "first_in_queue_required"],
+    [404, "queue_target_unavailable", "queue_target_unavailable"],
+    [409, "relationship_exists", "relationship_exists"],
+    [500, "relationship_exists", "unavailable"],
+  ];
+  for (const [status, serverCode, expected] of cases) {
+    const client = createMemberConnectionsClient({
+      enabled: true,
+      nativeAuthTest: false,
+      environment: "production",
+      baseUrl,
+      getAccessToken: async () => "clerk-token",
+      fetcher: async () => jsonResponse({ code: serverCode }, status),
+    });
+    const result = await client.createQueueRequest("8f99b61f-5c0b-44e9-93bf-55fbb2a0b925");
+    assert.equal(result.kind, "error");
+    assert.equal(result.code, expected);
+    assert.equal(JSON.stringify(result).includes("user_"), false);
+  }
 });

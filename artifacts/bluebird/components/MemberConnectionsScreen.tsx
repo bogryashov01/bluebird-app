@@ -16,6 +16,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MemberConversationList } from '@/components/MemberConversationList';
 import { MemberInitialsAvatar, MemberProfileSheet } from '@/components/MemberProfileSheet';
@@ -36,6 +37,12 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
   const insets = useSafeAreaInsets();
   const connections = useMemberConnections();
   const messages = useOpenAcceptedConversation();
+  const queryClient = useQueryClient();
+  const refreshQueueRelationships = () => {
+    void queryClient.invalidateQueries({
+      predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes('connection-queue-status'),
+    });
+  };
   const messagesEnabled = isMemberMessagesIntegrationEnabled();
   const [pane, setPane] = React.useState<'connections' | 'chats'>('connections');
   const [phone, setPhone] = React.useState('');
@@ -60,9 +67,9 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
     setPhoneError(null);
     setFindOpen(false);
     setRequestsOpen(false);
-    setPane('connections');
+    setPane(connections.enabled ? 'connections' : messagesEnabled ? 'chats' : 'connections');
     setSheet(null);
-  }, [connections.accountId, connections.enabled]);
+  }, [connections.accountId, connections.enabled, messagesEnabled]);
 
   const accepted = sheet?.kind === 'accepted'
     ? connections.accepted.find((connection) => connection.id === sheet.id) ?? null
@@ -130,52 +137,45 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
             </TouchableOpacity>
           ) : null}
         </View>
-        <View accessibilityRole="tablist" style={styles.tabs}>
-          {(['chats', 'connections'] as const).map((item) => {
-            const selected = pane === item;
-            const label = item === 'chats' ? 'Chats' : 'Connections';
-            return (
-              <TouchableOpacity
-                key={item}
-                accessibilityRole="tab"
-                accessibilityState={{ selected }}
-                testID={`member-connections-pane-${item}`}
-                onPress={() => setPane(item)}
-                style={styles.tab}
-              >
-                <View style={styles.tabLabelRow}>
-                  <Feather
-                    name={item === 'chats' ? 'message-circle' : 'users'}
-                    size={16}
-                    color={selected ? colors.textOnSurface : colors.mutedForegroundLight}
-                  />
-                  <Text style={[styles.tabLabel, { color: selected ? colors.textOnSurface : colors.mutedForegroundLight }]}>{label}</Text>
-                </View>
-                <View style={[styles.underline, { backgroundColor: selected ? colors.primary : 'transparent' }]} />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>
-          {pane === 'chats' ? 'Your direct messages.' : 'Message members after you connect.'}
-        </Text>
-      </View>
-      {pane === 'chats' ? (
-        messagesEnabled ? (
-          <MemberConversationList names={names} active={pane === 'chats'} bottomInset={bottomInset} />
-        ) : (
-          <View style={styles.state} testID="member-connections-messages-unavailable">
-            <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Messages are not available yet</Text>
-            <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]}>
-              Private messages stay off until that service is ready.
-            </Text>
+        {messagesEnabled || connections.enabled ? (
+          <View accessibilityRole="tablist" style={styles.tabs}>
+            {([
+              ...(messagesEnabled ? (['chats'] as const) : []),
+              ...(connections.enabled ? (['connections'] as const) : []),
+            ] as const).map((item) => {
+              const selected = pane === item;
+              const label = item === 'chats' ? 'Chats' : 'Connections';
+              return (
+                <TouchableOpacity
+                  key={item}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected }}
+                  testID={`member-connections-pane-${item}`}
+                  onPress={() => setPane(item)}
+                  style={styles.tab}
+                >
+                  <View style={styles.tabLabelRow}>
+                    <Feather
+                      name={item === 'chats' ? 'message-circle' : 'users'}
+                      size={16}
+                      color={selected ? colors.textOnSurface : colors.mutedForegroundLight}
+                    />
+                    <Text style={[styles.tabLabel, { color: selected ? colors.textOnSurface : colors.mutedForegroundLight }]}>{label}</Text>
+                  </View>
+                  <View style={[styles.underline, { backgroundColor: selected ? colors.primary : 'transparent' }]} />
+                </TouchableOpacity>
+              );
+            })}
           </View>
-        )
-      ) : connections.status === 'disabled' ? (
+        ) : null}
+      </View>
+      {pane === 'chats' && messagesEnabled ? (
+          <MemberConversationList names={names} active={pane === 'chats'} bottomInset={bottomInset} />
+      ) : connections.status === 'disabled' || !connections.enabled ? (
         <View style={styles.state} testID="member-connections-unavailable">
           <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Connections are not available yet</Text>
           <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]}>
-            Member discovery and connection requests stay off until the service is deployed.
+            Try again later.
           </Text>
         </View>
       ) : connections.status === 'signed-out' ? (
@@ -244,7 +244,10 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
           </View>
           <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>My Connections</Text>
           {connections.accepted.length === 0 ? (
-            <Text style={[styles.meta, styles.inset, { color: colors.mutedForegroundLight }]} testID="member-connections-empty">No accepted connections.</Text>
+            <View style={styles.emptyCopy} testID="member-connections-empty">
+              <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>No Connections Yet</Text>
+              <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]}>People you connect with will appear here.</Text>
+            </View>
           ) : connections.accepted.map((connection) => (
             <AcceptedRow
               key={connection.id}
@@ -274,7 +277,16 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
           messagesEnabled: messages.enabled,
           pending: connections.pending || messages.opening,
           onMessage: () => { if (accepted) openConversation(accepted.member.userId); },
-          onAccept: () => { if (incoming) { setSheet(null); void connections.accept(incoming.id); } },
+          onAccept: () => {
+            if (!incoming) return;
+            const requesterId = incoming.requester.userId;
+            setSheet(null);
+            void connections.accept(incoming.id).then((accepted) => {
+              if (!accepted) return;
+              refreshQueueRelationships();
+              openConversation(requesterId);
+            });
+          },
           onConnect: () => {
             if (!discovery || discoveredState !== 'available') return;
             void connections.sendRequest(discovery).then((sent) => {
@@ -289,7 +301,12 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
           label: 'Decline',
           testID: `member-connections-sheet-decline-${incoming.id}`,
           disabled: connections.pending,
-          onPress: () => { setSheet(null); void connections.decline(incoming.id); },
+          onPress: () => {
+            setSheet(null);
+            void connections.decline(incoming.id).then((declined) => {
+              if (declined) refreshQueueRelationships();
+            });
+          },
         } : null}
         footnote={accepted ? {
           label: 'Remove',
@@ -299,11 +316,10 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
         } : null}
         onClose={() => setSheet(null)}
       />
-      <Modal visible={findOpen} animationType="slide" transparent onRequestClose={() => setFindOpen(false)}>
+      <Modal visible={findOpen} animationType="fade" transparent onRequestClose={() => setFindOpen(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modal}>
           <Pressable accessibilityLabel="Close find member" style={styles.backdrop} onPress={() => setFindOpen(false)} />
-          <View testID="member-connections-find-sheet" style={[styles.sheet, { backgroundColor: colors.offWhite, paddingBottom: Math.max(insets.bottom, 16) }]}>
-            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+          <View testID="member-connections-find-sheet" style={[styles.dialog, { backgroundColor: colors.offWhite, borderColor: colors.border }]}>
             <Text style={[styles.sheetTitle, { color: colors.textOnSurface }]}>Find Member</Text>
             <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>Search by phone number.</Text>
             <ThemedTextInput
@@ -381,16 +397,15 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
           </View>
         </KeyboardAvoidingView>
       </Modal>
-      <Modal visible={requestsOpen} animationType="slide" transparent onRequestClose={() => setRequestsOpen(false)}>
+      <Modal visible={requestsOpen} animationType="fade" transparent onRequestClose={() => setRequestsOpen(false)}>
         <View style={styles.modal}>
           <Pressable accessibilityLabel="Close incoming requests" style={styles.backdrop} onPress={() => setRequestsOpen(false)} />
-          <View testID="member-connections-requests-sheet" style={[styles.sheet, { backgroundColor: colors.offWhite, paddingBottom: Math.max(insets.bottom, 16), maxHeight: '80%' }]}>
-            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+          <View testID="member-connections-requests-sheet" style={[styles.dialog, { backgroundColor: colors.offWhite, borderColor: colors.border }]}>
             <Text style={[styles.sheetTitle, { color: colors.textOnSurface }]}>Incoming Requests</Text>
-            <ScrollView keyboardShouldPersistTaps="handled">
+            <ScrollView keyboardShouldPersistTaps="handled" style={styles.dialogScroll}>
               {connections.incoming.length === 0 ? (
                 <Text style={[styles.meta, { color: colors.mutedForegroundLight }]} testID="member-connections-incoming-empty">
-                  No incoming requests right now.
+                  No incoming requests.
                 </Text>
               ) : connections.incoming.map((request) => (
                 <IncomingRequest
@@ -399,8 +414,16 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
                   colors={colors}
                   pending={connections.pending}
                   onOpen={() => setSheet({ kind: 'incoming', id: request.id })}
-                  onAccept={() => { void connections.accept(request.id); }}
-                  onDecline={() => { void connections.decline(request.id); }}
+                  onAccept={() => {
+                    void connections.accept(request.id).then((accepted) => {
+                      if (accepted) refreshQueueRelationships();
+                    });
+                  }}
+                  onDecline={() => {
+                    void connections.decline(request.id).then((declined) => {
+                      if (declined) refreshQueueRelationships();
+                    });
+                  }}
                 />
               ))}
             </ScrollView>
@@ -554,7 +577,7 @@ const styles = StyleSheet.create({
   tabLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   tabLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
   underline: { height: 2, alignSelf: 'stretch', borderRadius: 2 },
-  hint: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20, marginTop: 10, marginBottom: 6 },
+  emptyCopy: { alignItems: 'center', paddingHorizontal: 28, paddingTop: 28, gap: 6 },
   list: { paddingTop: 8, gap: 8 },
   actionRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 16 },
   actionCard: { position: 'relative', flex: 1, minHeight: 74, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, justifyContent: 'center', gap: 8 },
@@ -562,10 +585,21 @@ const styles = StyleSheet.create({
   actionLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
   badge: { position: 'absolute', top: 10, right: 10, minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   badgeLabel: { fontFamily: 'Inter_700Bold', fontSize: 12 },
-  modal: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 10, gap: 12 },
-  handle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center' },
+  modal: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.45)' },
+  dialog: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '78%',
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 20,
+    gap: 12,
+    overflow: 'hidden',
+  },
+  dialogScroll: { maxHeight: 320 },
   sheetTitle: { fontFamily: 'Inter_700Bold', fontSize: 22 },
   requestRow: { paddingVertical: 12, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth },
   requestIdentity: { flexDirection: 'row', alignItems: 'center', gap: 12 },

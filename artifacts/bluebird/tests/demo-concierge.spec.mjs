@@ -87,8 +87,11 @@ test("concierge navigation stays local and does not add a production request", (
   const policy = readFileSync(resolve(projectRoot, "lib/nativeAuthTestPolicy.ts"), "utf8");
   const readiness = readFileSync(resolve(projectRoot, "lib/productionQueueReadiness.ts"), "utf8");
   assert.match(layout, /name="concierge"/);
-  assert.match(concierge, /if \(authMode === 'clerk'\) \{\s*return <DemoConciergeChat \/>;/);
+  assert.match(concierge, /if \(demoMode\) \{\s*return <DemoConciergeChat \/>;/);
+  assert.match(concierge, /AI Concierge unavailable/);
+  assert.match(concierge, /clerk-concierge-unavailable/);
   assert.match(flight, /pathname: '\/concierge'/);
+  assert.match(flight, /authMode !== 'clerk'/);
   assert.match(flight, /joinFlightRouteParams\(productionFlightId, f\)/);
   assert.match(status, /pathname: '\/concierge'/);
   assert.match(status, /joinFlightRouteParams\(entry\.flightId/);

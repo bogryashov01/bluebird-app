@@ -11,7 +11,10 @@ import {
   memberMessageAuthFrame,
   memberMessagePollIntervalMs,
   parseMemberMessageRealtimeFrame,
+  connectionRefreshIntervalMs,
+  realtimeHintRequestsConnections,
   realtimeHintRequestsHistory,
+  realtimeHintRequestsInbox,
   realtimeReconnectDelayMs,
   resolveMessagingGatewayOrigin,
   startMemberMessageRealtime,
@@ -352,6 +355,56 @@ test("a configured origin is sent and an invalid origin does not connect", () =>
   });
   assert.equal(opened.length, 0);
   stopMemberMessageRealtime();
+});
+
+test("connection hints refresh REST lists and ignore duplicates, bodies, and unauthenticated frames", async () => {
+  assert.equal(connectionRefreshIntervalMs({ realtimeEnabled: false, socketLive: false }), null);
+  assert.equal(connectionRefreshIntervalMs({ realtimeEnabled: true, socketLive: false }), 15000);
+  assert.equal(connectionRefreshIntervalMs({ realtimeEnabled: true, socketLive: true }), null);
+  const requested = parseMemberMessageRealtimeFrame(JSON.stringify({
+    type: "connection.requested",
+    data: { connectionId: 15, message: "private introduction", requester: { email: "member@example.test" } },
+  }));
+  const accepted = parseMemberMessageRealtimeFrame(JSON.stringify({
+    type: "connection.accepted",
+    data: { connectionId: 16 },
+  }));
+  assert.deepEqual(requested, { type: "connection.requested", connectionId: 15 });
+  assert.deepEqual(accepted, { type: "connection.accepted", connectionId: 16 });
+  assert.equal(parseMemberMessageRealtimeFrame(JSON.stringify({ type: "connection.requested", connectionId: 15 })), null);
+  assert.equal(realtimeHintRequestsConnections({ kind: "connection-request", clerkUserId: "user_a", connectionId: 15 }), true);
+  assert.equal(realtimeHintRequestsConnections({ kind: "connection-accepted", clerkUserId: "user_a", connectionId: 16 }), true);
+  assert.equal(realtimeHintRequestsHistory({ kind: "connection-accepted", clerkUserId: "user_a", connectionId: 16 }, 16), false);
+  assert.equal(realtimeHintRequestsInbox({ kind: "connection-request", clerkUserId: "user_a", connectionId: 15 }), false);
+  assert.equal(realtimeHintRequestsInbox({ kind: "connection-accepted", clerkUserId: "user_a", connectionId: 16 }), true);
+
+  const early = session();
+  early.sockets[0].onmessage({
+    data: JSON.stringify({ type: "connection.requested", data: { connectionId: 15 } }),
+  });
+  assert.deepEqual(early.hints, []);
+
+  const { sockets, hints } = session();
+  await authenticate(sockets[0]);
+  const frame = JSON.stringify({ type: "connection.requested", data: { connectionId: 15 } });
+  sockets[0].onmessage({ data: frame });
+  sockets[0].onmessage({ data: frame });
+  sockets[0].onmessage({
+    data: JSON.stringify({ type: "connection.accepted", data: { connectionId: 15 } }),
+  });
+  assert.deepEqual(hints.map((hint) => hint.kind), ["auth", "connection-request", "connection-accepted"]);
+  assert.equal(hints[1].connectionId, 15);
+  assert.equal(Object.hasOwn(hints[1], "message"), false);
+  assert.deepEqual(sockets[0].sent.map((item) => JSON.parse(item).type), ["authenticate"]);
+
+  const hook = readFileSync(resolve(projectRoot, "lib/useMemberConnections.ts"), "utf8");
+  const coordinator = readFileSync(resolve(projectRoot, "components/MemberMessageRealtime.tsx"), "utf8");
+  assert.match(hook, /realtimeHintRequestsConnections/);
+  assert.match(hook, /connectionRefreshIntervalMs/);
+  assert.doesNotMatch(hook, /expo-notifications|Notifications\.|WebSocket/);
+  assert.match(coordinator, /AppState/);
+  assert.match(coordinator, /!foreground/);
+  assert.doesNotMatch(coordinator, /expo-notifications|scheduleNotificationAsync/);
 });
 
 test("the production profile does not enable the gateway and HTTP sending stays in place", () => {

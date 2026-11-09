@@ -71,6 +71,24 @@ assert.deepEqual(requests.map(({ url, init }) => ({
   },
 ]);
 
+const withReference = await fetchFullAppDemoQueue(detail, {
+  fetcher: async () => new Response(JSON.stringify([{
+    position: 1,
+    initials: "AB",
+    tier: "base",
+    hasLineSkip: false,
+    isViewer: true,
+    connectionTargetReference: "8f99b61f-5c0b-44e9-93bf-55fbb2a0b925",
+  }])),
+});
+assert.deepEqual(withReference, [{
+  position: 1,
+  initials: "AB",
+  tier: "base",
+  hasLineSkip: false,
+}]);
+assert.equal(JSON.stringify(withReference).includes("8f99"), false);
+
 for (const status of [401, 403]) {
   await assert.rejects(
     fetchFullAppDemoQueue(detail, {

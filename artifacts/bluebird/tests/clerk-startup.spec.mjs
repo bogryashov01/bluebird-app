@@ -276,6 +276,13 @@ test('the live auth layout remounts Clerk on Retry and keeps startup on the phon
   assert.match(provider, /value=\{false\}/);
   assert.match(provider, /event: 'provider_mount'/);
   assert.match(provider, /errorCategory: sanitizeClerkStartupError\(error\)/);
+  const bridge = provider.slice(
+    provider.indexOf("function ClerkAuthSnapshotBridge"),
+    provider.indexOf("export function DormantClerkProvider"),
+  );
+  assert.match(bridge, /<ErrorBoundary>\s*\{children\}\s*<\/ErrorBoundary>/);
+  assert.doesNotMatch(bridge, /initialization_error/);
+  assert.match(provider, /event: 'initialization_error'[\s\S]*<ClerkProvider publishableKey=/);
   assert.match(provider, /<ClerkStartupStateView\s+state="failed"[\s\S]*?onRetry=/);
   assert.match(panel, /event: flowMode === 'sign-in' \? 'sign_in_completed' : 'sign_up_completed'/);
   assert.match(panel, /event: 'signed_in_route_requested'/);

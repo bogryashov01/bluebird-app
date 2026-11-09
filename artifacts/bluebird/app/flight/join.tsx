@@ -19,7 +19,7 @@ import { logJoinNav, useJoinNavMount } from '@/lib/joinNavDiagnostics';
 export default function JoinFlightScreen() {
   const params = useLocalSearchParams<Record<string, string | string[]>>();
   const flight = parseJoinFlightDisplay(params);
-  const queue = useJoinFlightQueueRead(flight?.flightId ?? 0, flight?.flightStatus ?? null);
+  const { panel: queue } = useJoinFlightQueueRead(flight?.flightId ?? 0, flight?.flightStatus ?? null);
   const { clerkMemberResolution } = useAuth();
   const plansQuery = useProductionMembershipPlans();
   const memberTier = clerkMemberResolution.status === 'profile_complete'

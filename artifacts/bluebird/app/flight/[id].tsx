@@ -1,5 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ThemedTextInput } from '@/components/ThemedTextInput';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Alert, ImageBackground, useWindowDimensions,
@@ -7,16 +6,39 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, usePathname, router } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, usePathname, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useGetFlight, useGetFlightMyStatus, useCancelQueueEntry, useCancelTrip, useListAirports,
-  useGetNetworkingFrontMember, useCreateNetworkingRequest,
+  useGetNetworkingFrontMember, useCreateNetworkingRequest, useGetQueueStatus, useListNetworkingConnections,
+  type CreateNetworkingRequest,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
+import {
+  FRONT_QUEUE_AMBIGUOUS,
+  FRONT_QUEUE_DECLINED,
+  FRONT_QUEUE_MEMBER_UNAVAILABLE,
+  FRONT_QUEUE_PENDING,
+  FRONT_QUEUE_REQUEST_UNAVAILABLE,
+  FRONT_QUEUE_STATUS_UNAVAILABLE,
+  acceptedConnectionMemberUserId,
+  canOpenLeaderQueuePreview,
+  leaderQueueViewerIsBelowFirst,
+  mergeLeaderQueueRelationships,
+  presentFrontQueueConnection,
+  presentLeaderPreviewTitle,
+  presentLeaderQueueConnection,
+  presentProductionQueueRoster,
+  queueConnectionRequestFailureCopy,
+  queueRequestFailureCopy,
+  readFlightQueue,
+  type FrontQueueConnectionKind,
+  type LeaderQueueConnection,
+  type LeaderQueueRelationship,
+} from '@/lib/flightQueuePresentation';
 import { fetchFullAppDemoFlight } from '@/lib/fullAppDemoLiveReads';
 import { useFullAppDemoQueueOptional } from '@/lib/fullAppDemoQueue';
 import { shouldUseLocalFlightReadMode } from '@/lib/clerkAuthSession';
@@ -31,17 +53,27 @@ import {
   prepareFlightDetailRequest,
   presentSeatsAvailable,
   productionFlightDetailQueryKey,
+  readProductionFlightDetailCache,
   selectDisplayedFlight,
   type FlightDetailPhase,
 } from '@/lib/flightDetailPresentation';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
+import { mainBluebirdAuthenticatedQueryKey } from '@/lib/mainBluebirdApi';
+import {
+  createMemberConnectionsClient,
+  isMemberConnectionsIntegrationEnabled,
+} from '@/lib/memberConnections';
+import { useMemberConnections } from '@/lib/useMemberConnections';
+import { useOpenAcceptedConversation } from '@/lib/useMemberMessages';
 import { isProductionQueueVerified } from '@/lib/productionQueueReadiness';
-import { joinFlightRouteParams } from '@/lib/joinFlightPresentation';
+import { joinFlightQueueCountLabel, joinFlightRouteParams } from '@/lib/joinFlightPresentation';
+import { useJoinFlightQueueRead } from '@/lib/useJoinFlightQueueRead';
 import { useDemoJoinFlow } from '@/lib/demoJoinFlowStore';
 import { logJoinNav } from '@/lib/joinNavDiagnostics';
 import { ClerkQueuePanel } from '@/components/ClerkQueuePanel';
 import { ProductionQueueLeaveControl } from '@/components/ProductionQueueLeaveControl';
 import { WinnerFlightNotice } from '@/components/WinnerFlightNotice';
+import { productionQueueActionsVisible, queueClosedAt } from '@/lib/memberFlightPlacement';
 import {
   fetchProductionAirports,
   fetchProductionFlight,
@@ -79,13 +111,19 @@ function formatTime12(t: string | null): string | null {
   const hr = h % 12 === 0 ? 12 : h % 12;
   return `${hr}:${String(m).padStart(2, '0')} ${ampm}`;
 }
-function flightStatusText(status: string | null): string | null {
-  const value = status?.trim();
-  if (!value) return null;
-  if (value === 'available') return 'Available';
-  if (value === 'published') return 'Available';
-  return value.charAt(0).toUpperCase() + value.slice(1);
+function requestErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null;
+  const data = (error as { data?: { code?: unknown } }).data;
+  return typeof data?.code === 'string' ? data.code : null;
 }
+
+function queueHttpStatus(error: unknown): number | null {
+  if (!error || typeof error !== 'object') return null;
+  const record = error as { status?: unknown; response?: { status?: unknown } };
+  const status = typeof record.status === 'number' ? record.status : record.response?.status;
+  return typeof status === 'number' ? status : null;
+}
+
 interface FlightInfoItem {
   label: string;
   value: string;
@@ -103,6 +141,66 @@ interface DirectionsTarget {
   label: string;
   destination: string;
   location?: string;
+}
+
+function QueueMemberRow({
+  initials,
+  position,
+  first,
+  viewer,
+  selectable,
+  onPress,
+}: {
+  initials: string;
+  position: number;
+  first: boolean;
+  viewer: boolean;
+  selectable: boolean;
+  onPress: () => void;
+}) {
+  const colors = useColors();
+  const highlighted = first || viewer;
+  const copy = (
+    <>
+      <View style={[styles.queueInitials, { backgroundColor: highlighted ? colors.primary : colors.muted }]}>
+        <Text style={[styles.queueInitialsText, { color: highlighted ? colors.primaryForeground : colors.textOnSurface }]}>
+          {initials}
+        </Text>
+      </View>
+      <View style={styles.queueCopy}>
+        <Text style={[styles.queuePosition, { color: colors.textOnSurface }]}>#{position}</Text>
+        {first ? <Text style={[styles.queueFirst, { color: colors.primary }]}>First in line</Text> : null}
+        {viewer ? (
+          <Text style={[styles.queueFirst, { color: colors.primary }]} testID="flight-queue-you">You</Text>
+        ) : null}
+      </View>
+    </>
+  );
+  const rowStyle = [
+    styles.queueRow,
+    {
+      backgroundColor: highlighted ? colors.primary + '12' : colors.surface,
+      borderColor: highlighted ? colors.primary : colors.border,
+    },
+  ];
+  if (!selectable) {
+    return (
+      <View testID={first ? 'flight-queue-first' : `flight-queue-member-${position}`} style={rowStyle}>
+        {copy}
+      </View>
+    );
+  }
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`First in line, ${initials}`}
+      testID="flight-queue-first"
+      onPress={onPress}
+      style={rowStyle}
+    >
+      {copy}
+    </Pressable>
+  );
 }
 
 function FlightInfoCard({
@@ -171,8 +269,38 @@ export default function FlightDetailScreen() {
   const demoEntry = demoQueue?.entries.find((entry) => entry.flightId === String(numericFlightId));
   const [directionsTarget, setDirectionsTarget] = useState<DirectionsTarget | null>(null);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
-  const [networkMessage, setNetworkMessage] = useState('');
+  const [networkRequestStatus, setNetworkRequestStatus] = useState<'pending' | 'declined' | null>(null);
   const [networkError, setNetworkError] = useState('');
+  const [frontPreview, setFrontPreview] = useState<'production' | 'local' | null>(null);
+  const [previewDismissable, setPreviewDismissable] = useState(false);
+  const [leaderPreviewName, setLeaderPreviewName] = useState<{ firstName: string; lastName: string } | null>(null);
+  const [leaderRequestPending, setLeaderRequestPending] = useState(false);
+  const [leaderRequestNotice, setLeaderRequestNotice] = useState<string | null>(null);
+  const [leaderSendBlocked, setLeaderSendBlocked] = useState(false);
+  const [confirmedLeaderRelationship, setConfirmedLeaderRelationship] = useState<LeaderQueueRelationship | null>(null);
+  const memberConnections = useMemberConnections();
+  const messages = useOpenAcceptedConversation();
+  useEffect(() => {
+    setFrontPreview(null);
+    setPreviewDismissable(false);
+    setLeaderPreviewName(null);
+    setLeaderRequestNotice(null);
+    setLeaderSendBlocked(false);
+    setConfirmedLeaderRelationship(null);
+  }, [id]);
+  useEffect(() => {
+    if (frontPreview == null) {
+      setPreviewDismissable(false);
+      return;
+    }
+    // The same finger-up that opens the preview can land on a backdrop Pressable
+    // and close it immediately. Wait one frame cycle before allowing dismiss.
+    const timer = setTimeout(() => setPreviewDismissable(true), 350);
+    return () => clearTimeout(timer);
+  }, [frontPreview]);
+  useEffect(() => {
+    if (frontPreview !== 'production') setLeaderPreviewName(null);
+  }, [frontPreview]);
   const joinNavAt = useRef(0);
   const flightBackAt = useRef(0);
 
@@ -286,21 +414,67 @@ export default function FlightDetailScreen() {
       : productionFlightQuery.fetchStatus === 'fetching' || !identityReady
         ? 'pending'
         : 'idle';
-  const detailFlight = productionFlightQuery.data?.flight.id === String(numericFlightId)
-    ? productionFlightQuery.data.flight
+  const detailCache = readProductionFlightDetailCache(productionFlightQuery.data);
+  const detailFlight = detailCache?.flight.id === String(numericFlightId)
+    ? detailCache.flight
     : undefined;
   const displayedProduction = selectDisplayedFlight({
     cached: cachedProductionFlight,
     detail: detailFlight,
     phase: detailPhase,
     httpStatus: flightDetailHttpStatus(productionFlightQuery.error),
-    viewerAuthenticated: productionFlightQuery.data?.viewerAuthenticated === true &&
+    viewerAuthenticated: detailCache?.viewerAuthenticated === true &&
       viewerScope !== 'anonymous' &&
       viewerScope !== 'demo',
   });
   const flight: FlightView | undefined = localReadMode
     ? (localFlightQuery.data ? mapLocalFlight(localFlightQuery.data) : undefined)
     : displayedProduction.flight;
+  const { panel: productionQueue, refetch: refetchProductionQueue } = useJoinFlightQueueRead(
+    numericFlightId ?? 0,
+    !localReadMode && flight?.status === 'published' ? 'published' : null,
+  );
+  const apiConfiguration = getMainBluebirdApiConfigurationOrNull();
+  const queueConnectionsEnabled = !localReadMode &&
+    signedInClerk &&
+    numericFlightId !== null &&
+    apiConfiguration !== null &&
+    isMemberConnectionsIntegrationEnabled();
+  const queueConnectionStatus = useQuery({
+    queryKey: queueConnectionsEnabled && clerkUserId && apiConfiguration
+      ? mainBluebirdAuthenticatedQueryKey(
+        apiConfiguration.environment,
+        clerkUserId,
+        'connection-queue-status',
+      )
+      : ['connection-queue-status', 'disabled'],
+    enabled: queueConnectionsEnabled,
+    retry: false,
+    queryFn: async () => {
+      const configuration = getMainBluebirdApiConfigurationOrNull();
+      const accountId = clerkSessionRef.current?.isSignedIn === true ? clerkSessionRef.current.userId : null;
+      if (!configuration || !accountId) throw new Error('unauthorized');
+      const client = createMemberConnectionsClient({
+        enabled: true,
+        environment: configuration.environment,
+        baseUrl: configuration.apiBaseUrl,
+        getAccessToken: () => clerkSessionRef.current?.getToken() ?? Promise.resolve(null),
+      });
+      const result = await client.listQueueStatus();
+      if (clerkSessionRef.current?.userId !== accountId) throw new Error('cancelled');
+      if (result.kind !== 'loaded') throw new Error(result.kind === 'error' ? result.code : 'disabled');
+      return result.data.relationships;
+    },
+  });
+  useFocusEffect(useCallback(() => {
+    if (!queueConnectionsEnabled) return;
+    void queueConnectionStatus.refetch();
+    void memberConnections.refresh();
+  }, [memberConnections.refresh, queueConnectionStatus.refetch, queueConnectionsEnabled]));
+  useEffect(() => {
+    if (!queueConnectionStatus.isSuccess) return;
+    setConfirmedLeaderRelationship(null);
+  }, [queueConnectionStatus.dataUpdatedAt, queueConnectionStatus.isSuccess]);
   React.useEffect(() => {
     if (!demoMode || !demoQueue || !demoEntry || !flight?.status) return;
     if (demoEntry.status !== 'waiting' && demoEntry.status !== 'changed-position') return;
@@ -358,6 +532,19 @@ export default function FlightDetailScreen() {
     query: {
       enabled: localReadMode && !!user && String(user.membershipTier) !== 'none' && !!id,
       refetchInterval: 15000,
+      refetchOnMount: 'always',
+    },
+  });
+  const queueRoster = useGetQueueStatus({
+    query: {
+      enabled: localReadMode && !!user && !!id,
+      refetchInterval: user ? 10_000 : false,
+      refetchOnMount: 'always',
+    },
+  });
+  const acceptedConnections = useListNetworkingConnections({
+    query: {
+      enabled: localReadMode && !!user && !!id,
       refetchOnMount: 'always',
     },
   });
@@ -422,17 +609,34 @@ export default function FlightDetailScreen() {
   };
 
   const sendNetworkingRequest = () => {
-    const message = networkMessage.trim();
-    if (!message || networkingRequest.isPending) return;
+    if (!id || networkingRequest.isPending || networkRequestStatus === 'pending') return;
     setNetworkError('');
-    networkingRequest.mutate({ data: { flightId: id!, message } }, {
-      onSuccess: () => setNetworkMessage(''),
-      onError: (err: any) => {
-        if (err?.data?.code === 'MEMBERSHIP_REQUIRED') {
-          router.push('/membership/plans' as any);
+    const memberRef = frontMember?.member && 'memberRef' in frontMember.member
+      ? frontMember.member.memberRef
+      : undefined;
+    networkingRequest.mutate({
+      data: {
+        flightId: id,
+        message: 'I would like to connect.',
+        ...(typeof memberRef === 'string' && memberRef.trim() !== '' ? { memberRef } : {}),
+      } as CreateNetworkingRequest,
+    }, {
+      onSuccess: (result) => {
+        setNetworkRequestStatus(result.status === 'declined' ? 'declined' : 'pending');
+        void acceptedConnections.refetch();
+      },
+      onError: (error: unknown) => {
+        const code = requestErrorCode(error);
+        if (code === 'DUPLICATE_REQUEST') {
+          setNetworkRequestStatus('pending');
+          setNetworkError('');
           return;
         }
-        setNetworkError(err?.data?.error ?? err?.message ?? 'Could not send your introduction.');
+        if (code === 'MEMBERSHIP_REQUIRED') {
+          router.push('/membership/plans' as never);
+          return;
+        }
+        setNetworkError(queueRequestFailureCopy(code));
       },
     });
   };
@@ -520,7 +724,7 @@ export default function FlightDetailScreen() {
   const arrivalTime = formatTime12(
     f.source === 'production' ? presentCachedDepartureClock(f.arrivalTime) : f.arrivalTime,
   );
-  const viewerFieldsAuthenticated = productionFlightQuery.data?.viewerAuthenticated === true &&
+  const viewerFieldsAuthenticated = detailCache?.viewerAuthenticated === true &&
     !displayedProduction.showingCachedDiscover &&
     viewerScope !== 'anonymous' &&
     viewerScope !== 'demo';
@@ -589,28 +793,12 @@ export default function FlightDetailScreen() {
         valueTestID: 'flight-info-aircraft-type',
       }]
       : []),
-    ...(f.duration?.trim()
-      ? [{
-        label: 'Duration',
-        value: f.duration.trim(),
-        testID: 'flight-info-duration-card',
-        valueTestID: 'flight-info-duration',
-      }]
-      : []),
     ...(f.international !== null
       ? [{
         label: 'Route type',
         value: f.international ? 'International' : 'Domestic',
         testID: 'flight-info-international-card',
         valueTestID: 'flight-info-international',
-      }]
-      : []),
-    ...(flightStatusText(f.status)
-      ? [{
-        label: 'Status',
-        value: flightStatusText(f.status)!,
-        testID: 'flight-info-status-card',
-        valueTestID: 'flight-info-status',
       }]
       : []),
     ...(seatsAvailableLabel
@@ -622,6 +810,187 @@ export default function FlightDetailScreen() {
       }]
       : []),
   ];
+  const rosterEntry = queueRoster.data?.find((entry) => entry.flightId === f.id && entry.status === 'waiting');
+  const rosterMembers = rosterEntry ? readFlightQueue(rosterEntry.queueMembers) : null;
+  const queueMembers = localReadMode ? rosterMembers : null;
+  const productionRoster = !localReadMode && productionQueue.kind === 'participants'
+    ? presentProductionQueueRoster(productionQueue.rows)
+    : null;
+  const queueRosterStatus = queueHttpStatus(queueRoster.error);
+  const frontUserId = frontMember?.member?.userId ?? null;
+  const acceptedConnection = acceptedConnections.data?.find((connection) =>
+    connection.memberAId === frontUserId || connection.memberBId === frontUserId,
+  ) ?? null;
+  const productionCount = productionQueue.kind === 'participants'
+    ? joinFlightQueueCountLabel(productionQueue.participantCount)
+    : null;
+  const localCount = queueMembers && queueMembers.length > 0
+    ? joinFlightQueueCountLabel(queueMembers.length)
+    : null;
+  const leaderReference = productionRoster?.find((member) => member.position === 1)?.connectionTargetReference ?? null;
+  const rosterViewerPosition = productionRoster?.find((member) => member.isViewer)?.position ?? null;
+  const queueViewerPosition = productionQueue.kind === 'participants' ? productionQueue.viewerPosition : null;
+  const flightViewerPosition = typeof f.viewerQueuePosition === 'number' &&
+    Number.isSafeInteger(f.viewerQueuePosition) &&
+    f.viewerQueuePosition > 0
+    ? f.viewerQueuePosition
+    : null;
+  const viewerPosition = rosterViewerPosition ?? queueViewerPosition ?? flightViewerPosition;
+  const viewerIsLeader = rosterViewerPosition != null
+    ? rosterViewerPosition === 1
+    : queueViewerPosition === 1 || flightViewerPosition === 1;
+  const queueRelationshipStatus = !queueConnectionsEnabled
+    ? 'ready'
+    : queueConnectionStatus.isSuccess
+      ? 'ready'
+      : queueConnectionStatus.isError
+        ? 'error'
+        : 'loading';
+  const leaderConnection = presentLeaderQueueConnection({
+    viewerBelowFirst: leaderQueueViewerIsBelowFirst(viewerPosition),
+    reference: leaderReference,
+    requestsEnabled: isMemberConnectionsIntegrationEnabled(),
+    status: queueRelationshipStatus,
+    relationships: mergeLeaderQueueRelationships(
+      queueConnectionStatus.data ?? [],
+      confirmedLeaderRelationship ? [confirmedLeaderRelationship] : [],
+    ),
+    flightId: numericFlightId ?? 0,
+    sendBlocked: leaderSendBlocked,
+  });
+  const localViewerInQueue = myStatus?.status === 'waiting' &&
+    typeof myStatus.queuePosition === 'number' &&
+    myStatus.queuePosition >= 1;
+  const localFrontConnection = presentFrontQueueConnection({
+    viewerInQueue: localViewerInQueue,
+    viewerIsFirst: myStatus?.queuePosition === 1,
+    channel: 'local',
+    localEligible: frontMember ? frontMember.eligible === true : undefined,
+    localStatus: acceptedConnection ? 'accepted' : networkRequestStatus,
+  });
+  const openAcceptedConversation = () => {
+    if (!acceptedConnection || localFrontConnection !== 'accepted') return;
+    setFrontPreview(null);
+    router.push(`/networking/connections/${acceptedConnection.id}` as never);
+  };
+  const openProductionConversation = () => {
+    if (leaderConnection.kind !== 'accepted') return;
+    const participantUserId = acceptedConnectionMemberUserId(
+      leaderConnection.connectionId,
+      memberConnections.accepted,
+    );
+    if (!participantUserId) return;
+    void messages.open(participantUserId).then((result) => {
+      if (result?.kind !== 'loaded') return;
+      setFrontPreview(null);
+      router.push({
+        pathname: '/messages/[conversationId]',
+        params: { conversationId: String(result.data.conversation.id) },
+      });
+    });
+  };
+  const sendLeaderRequest = async () => {
+    if (leaderConnection.kind !== 'request' || leaderRequestPending || numericFlightId == null) return;
+    const configuration = getMainBluebirdApiConfigurationOrNull();
+    const accountId = clerkSessionRef.current?.isSignedIn === true ? clerkSessionRef.current.userId : null;
+    if (!configuration || !accountId) return;
+    const reference = leaderConnection.reference;
+    setLeaderRequestPending(true);
+    setLeaderRequestNotice(null);
+    try {
+      const client = createMemberConnectionsClient({
+        enabled: isMemberConnectionsIntegrationEnabled(),
+        environment: configuration.environment,
+        baseUrl: configuration.apiBaseUrl,
+        getAccessToken: () => clerkSessionRef.current?.getToken() ?? Promise.resolve(null),
+      });
+      const result = await client.createQueueRequest(reference);
+      if (clerkSessionRef.current?.userId !== accountId) return;
+      if (result.kind === 'loaded') {
+        setConfirmedLeaderRelationship({
+          connectionId: result.data.connection.id,
+          emptyLegId: numericFlightId,
+          status: 'pending',
+          direction: 'outgoing',
+        });
+        await queueConnectionStatus.refetch();
+        setLeaderSendBlocked(false);
+        setLeaderRequestNotice(null);
+        return;
+      }
+      const code = result.kind === 'error' ? result.code : 'unavailable';
+      if (code === 'relationship_exists') {
+        const refreshed = await queueConnectionStatus.refetch();
+        const restored = (refreshed.data ?? []).some((row) =>
+          row.emptyLegId === numericFlightId &&
+          (row.direction === 'outgoing' || row.status === 'accepted'),
+        );
+        if (restored) {
+          setLeaderSendBlocked(false);
+          setLeaderRequestNotice(null);
+          return;
+        }
+        setLeaderSendBlocked(true);
+      }
+      if (code === 'queue_target_unavailable' || code === 'self_request' || code === 'first_in_queue_required') {
+        await queryClient.invalidateQueries({
+          queryKey: mainBluebirdAuthenticatedQueryKey(
+            configuration.environment,
+            accountId,
+            'empty-leg-queue',
+            numericFlightId,
+          ),
+        });
+      }
+      if (code === 'self_request' || code === 'queue_target_unavailable' || code === 'first_in_queue_required') {
+        setLeaderSendBlocked(true);
+      }
+      setLeaderRequestNotice(result.kind === 'disabled'
+        ? 'Connection requests are not available yet.'
+        : queueConnectionRequestFailureCopy(code));
+    } finally {
+      setLeaderRequestPending(false);
+    }
+  };
+  const previewConnection: FrontQueueConnectionKind | LeaderQueueConnection['kind'] = frontPreview === 'production'
+    ? leaderConnection.kind
+    : frontPreview === 'local'
+      ? localFrontConnection
+      : 'hidden';
+  const productionChatUserId = leaderConnection.kind === 'accepted'
+    ? acceptedConnectionMemberUserId(leaderConnection.connectionId, memberConnections.accepted)
+    : null;
+  const sendDisabled = frontPreview === 'production'
+    ? previewConnection !== 'request' || leaderRequestPending
+    : previewConnection !== 'request' && previewConnection !== 'declined' || networkingRequest.isPending;
+  const previewInitials = frontPreview === 'production'
+    ? productionRoster?.find((member) => member.position === 1)?.initials ?? ''
+    : queueMembers?.find((member) => member.position === 1)?.initials ?? '';
+  const previewTitle = presentLeaderPreviewTitle({
+    firstName: frontPreview === 'production' ? leaderPreviewName?.firstName ?? null : null,
+    lastName: frontPreview === 'production' ? leaderPreviewName?.lastName ?? null : null,
+    initials: previewInitials,
+  });
+  const loadLeaderPreviewName = (reference: string | null) => {
+    setLeaderPreviewName(null);
+    const configuration = getMainBluebirdApiConfigurationOrNull();
+    if (!reference || !configuration || !isMemberConnectionsIntegrationEnabled()) return;
+    const accountId = clerkSessionRef.current?.isSignedIn === true ? clerkSessionRef.current.userId : null;
+    if (!accountId) return;
+    void createMemberConnectionsClient({
+      enabled: true,
+      environment: configuration.environment,
+      baseUrl: configuration.apiBaseUrl,
+      getAccessToken: () => clerkSessionRef.current?.getToken() ?? Promise.resolve(null),
+    }).previewQueueTarget(reference).then((result) => {
+      if (clerkSessionRef.current?.userId !== accountId) return;
+      if (result.kind !== 'loaded') return;
+      setLeaderPreviewName({
+        firstName: result.data.firstName,
+        lastName: result.data.lastName,
+      });
+    }).catch(() => {});
+  };
 
   const showMapError = (target: string) => {
     const message = `We couldn't open maps. Search for this location instead:\n\n${target}`;
@@ -785,7 +1154,14 @@ export default function FlightDetailScreen() {
         );
       }
       const memberInQueue = f.userInQueue === true && productionFlightId !== null;
-      if (memberInQueue) {
+      const queueActionsOpen = memberInQueue && productionQueueActionsVisible({
+        userInQueue: f.userInQueue,
+        viewerIsEffectiveWinner: f.viewerIsEffectiveWinner,
+        viewerConfirmationStatus: f.viewerConfirmationStatus,
+        viewerIsBookedPassenger: f.viewerIsBookedPassenger,
+        queueClosed: queueClosedAt(f.queueClosesAt, Date.now()),
+      });
+      if (queueActionsOpen && productionFlightId !== null) {
         return (
           <>
           <TouchableOpacity
@@ -811,6 +1187,15 @@ export default function FlightDetailScreen() {
         </>
         );
       }
+      if (memberInQueue && !queueActionsOpen) return null;
+      const selectedWinner = !productionQueueActionsVisible({
+        userInQueue: true,
+        viewerIsEffectiveWinner: f.viewerIsEffectiveWinner,
+        viewerConfirmationStatus: f.viewerConfirmationStatus,
+        viewerIsBookedPassenger: f.viewerIsBookedPassenger,
+        queueClosed: queueClosedAt(f.queueClosesAt, Date.now()),
+      });
+      if (selectedWinner) return null;
       return (
         <TouchableOpacity
           testID="production-queue-read-only-cta"
@@ -1091,6 +1476,7 @@ export default function FlightDetailScreen() {
         contentContainerStyle={{
           paddingBottom: botPad + 128,
         }}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* ── Hero image with gradient ── */}
@@ -1165,7 +1551,7 @@ export default function FlightDetailScreen() {
           )}
           {displayedProduction.refreshFailed && (
             <Text testID="flight-detail-refresh-error" style={[styles.dateText, { color: colors.mutedForegroundLight }]}>
-              Latest details could not be refreshed. Showing the flight already loaded on this device.
+              Flight details could not be refreshed.
             </Text>
           )}
           {productionFlightQuery.isFetching && displayedProduction.showingCachedDiscover && (
@@ -1256,6 +1642,127 @@ export default function FlightDetailScreen() {
           </View>
         </View>
 
+        <View style={styles.flightInfoSection} testID="flight-queue-section">
+          <Text style={[styles.flightInfoTitle, { color: colors.textOnSurface }]}>Flight Queue</Text>
+          {localReadMode && !user ? (
+            <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]} testID="flight-queue-signed-out">
+              Sign in to see the flight queue.
+            </Text>
+          ) : localReadMode && queueRoster.isLoading ? (
+            <ActivityIndicator color={colors.primary} style={styles.queueState} testID="flight-queue-loading" />
+          ) : localReadMode && queueRoster.isError ? (
+            <View testID={queueRosterStatus === 401 || queueRosterStatus === 403 ? 'flight-queue-denied' : 'flight-queue-error'}>
+              <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]}>
+                {queueRosterStatus === 401 || queueRosterStatus === 403
+                  ? 'Queue details are not available for this account.'
+                  : 'The queue could not be loaded.'}
+              </Text>
+              <TouchableOpacity onPress={() => { void queueRoster.refetch(); }} accessibilityRole="button">
+                <Text style={[styles.queueRetry, { color: colors.primary }]}>Try again</Text>
+              </TouchableOpacity>
+            </View>
+          ) : !localReadMode && productionQueue.kind === 'loading' ? (
+            <ActivityIndicator color={colors.primary} style={styles.queueState} testID="flight-queue-loading" />
+          ) : !localReadMode && productionQueue.kind === 'signed-out' ? (
+            <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]} testID="flight-queue-signed-out">
+              Sign in to see the flight queue.
+            </Text>
+          ) : !localReadMode && productionQueue.kind === 'unauthorized' ? (
+            <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]} testID="flight-queue-denied">
+              Queue details are not available for this account.
+            </Text>
+          ) : !localReadMode && productionQueue.kind === 'empty' ? (
+            <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]} testID="flight-queue-empty">
+              No one is waiting in this queue.
+            </Text>
+          ) : !localReadMode && productionQueue.kind === 'unavailable' ? (
+            <View testID="flight-queue-error">
+              <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]}>
+                The queue could not be loaded.
+              </Text>
+              <TouchableOpacity
+                onPress={() => { void refetchProductionQueue(); }}
+                accessibilityRole="button"
+                testID="flight-queue-retry"
+              >
+                <Text style={[styles.queueRetry, { color: colors.primary }]}>Try again</Text>
+              </TouchableOpacity>
+            </View>
+          ) : !localReadMode && productionRoster ? (
+            <>
+              {productionCount ? (
+                <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]} testID="flight-queue-count">
+                  {productionCount}
+                </Text>
+              ) : null}
+              <View testID="flight-queue-list">
+                {productionRoster.map((member) => {
+                  const first = member.position === 1;
+                  return (
+                    <QueueMemberRow
+                      key={`${member.position}-${member.initials}`}
+                      initials={member.initials}
+                      position={member.position}
+                      first={first}
+                      viewer={member.isViewer}
+                      selectable={first && canOpenLeaderQueuePreview({
+                        viewerIsLeader,
+                        connection: leaderConnection.kind,
+                      })}
+                      onPress={() => {
+                        setFrontPreview('production');
+                        loadLeaderPreviewName(leaderReference);
+                      }}
+                    />
+                  );
+                })}
+              </View>
+            </>
+          ) : localReadMode && (queueMembers == null || myStatus?.status !== 'waiting') ? (
+            <Text
+              style={[styles.queueState, { color: colors.mutedForegroundLight }]}
+              testID={myStatus?.status !== 'waiting' ? 'flight-queue-empty' : 'flight-queue-unavailable'}
+            >
+              {myStatus?.status !== 'waiting'
+                ? 'Join this flight to see who is waiting.'
+                : 'The full queue is not available for this flight.'}
+            </Text>
+          ) : localReadMode && queueMembers && queueMembers.length === 0 ? (
+            <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]} testID="flight-queue-empty">
+              No one is waiting in this queue.
+            </Text>
+          ) : localReadMode && queueMembers ? (
+            <>
+              {localCount ? (
+                <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]} testID="flight-queue-count">
+                  {localCount}
+                </Text>
+              ) : null}
+              <View testID="flight-queue-list">
+                {queueMembers.map((member) => {
+                  const first = member.position === 1;
+                  const viewer = localViewerInQueue && member.position === myStatus?.queuePosition;
+                  return (
+                    <QueueMemberRow
+                      key={`${member.position}-${member.initials}`}
+                      initials={member.initials}
+                      position={member.position}
+                      first={first}
+                      viewer={viewer}
+                      selectable={first && localFrontConnection !== 'hidden'}
+                      onPress={() => setFrontPreview('local')}
+                    />
+                  );
+                })}
+              </View>
+            </>
+          ) : (
+            <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]} testID="flight-queue-unavailable">
+              The full queue is not available for this flight.
+            </Text>
+          )}
+        </View>
+
         {/* ── Four supported flight facts ── */}
         {flightInformation.length > 0 && (
           <View style={styles.flightInfoSection}>
@@ -1295,44 +1802,6 @@ export default function FlightDetailScreen() {
               arrivalAirportLocation,
               arrivalAirportTarget,
             )}
-          </View>
-        )}
-
-        {!!frontMember?.eligible && frontMember.member && (
-          <View style={[styles.networkCard, { backgroundColor: colors.surface, borderColor: colors.primary + '35' }]}>
-            <View style={styles.networkHeading}>
-              <View style={[styles.networkAvatar, { backgroundColor: colors.primary + '18' }]}>
-                <Text style={[styles.networkAvatarText, { color: colors.primary }]}>{frontMember.member.firstName?.[0] ?? '?'}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.networkEyebrow, { color: colors.primary }]}>MEET YOUR FELLOW MEMBER</Text>
-                <Text style={[styles.networkName, { color: colors.textOnSurface }]}>{frontMember.member.firstName}</Text>
-                <Text style={[styles.networkIndustry, { color: colors.mutedForegroundLight }]}>{frontMember.member.industry}</Text>
-              </View>
-            </View>
-            <Text style={[styles.networkCopy, { color: colors.mutedForegroundLight }]}>
-              They’re currently first in line for this flight. Send a short introduction without changing your queue position.
-            </Text>
-            <ThemedTextInput
-              value={networkMessage}
-              onChangeText={setNetworkMessage}
-              placeholder="Hi — I’d enjoy meeting before the flight…"
-              placeholderTextColor={colors.mutedForegroundLight}
-              maxLength={240}
-              multiline
-              style={[styles.networkInput, { color: colors.textOnSurface, backgroundColor: colors.muted, borderColor: colors.border }]}
-            />
-            {networkError ? <Text style={[styles.networkError, { color: colors.destructive }]}>{networkError}</Text> : null}
-            <TouchableOpacity
-              style={[styles.networkButton, { backgroundColor: colors.primary, opacity: networkMessage.trim() && !networkingRequest.isPending ? 1 : 0.55 }]}
-              disabled={!networkMessage.trim() || networkingRequest.isPending}
-              onPress={sendNetworkingRequest}
-              activeOpacity={0.8}
-            >
-              {networkingRequest.isPending
-                ? <ActivityIndicator color={colors.primaryForeground} size="small" />
-                : <Text style={[styles.networkButtonText, { color: colors.primaryForeground }]}>Send introduction</Text>}
-            </TouchableOpacity>
           </View>
         )}
 
@@ -1382,6 +1851,130 @@ export default function FlightDetailScreen() {
           <Text style={[styles.policyChevron, { color: colors.mutedForegroundLight }]}>›</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal
+        visible={frontPreview != null}
+        transparent
+        animationType="fade"
+        presentationStyle="overFullScreen"
+        onRequestClose={() => setFrontPreview(null)}
+      >
+        <View
+          style={[styles.queuePreviewBackdrop, { backgroundColor: colors.backgroundMid + 'B8' }]}
+          testID="flight-queue-front-preview-backdrop"
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss member preview"
+            style={StyleSheet.absoluteFill}
+            disabled={!previewDismissable}
+            onPress={() => {
+              if (!previewDismissable) return;
+              setFrontPreview(null);
+            }}
+          />
+          <View
+            testID="flight-queue-front-preview"
+            style={[styles.queuePreviewCard, { backgroundColor: colors.surface }]}
+          >
+            <View style={styles.mapSheetHeader}>
+              <View style={styles.mapSheetTitleGroup}>
+                <Text
+                  testID="flight-queue-front-preview-name"
+                  style={[styles.mapSheetTitle, { color: colors.textOnSurface }]}
+                >
+                  {previewTitle}
+                </Text>
+                <Text style={[styles.mapSheetAddress, { color: colors.mutedForegroundLight }]}>Queue position #1 · First in line</Text>
+              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                onPress={() => setFrontPreview(null)}
+                style={styles.mapSheetClose}
+              >
+                <Feather name="x" size={20} color={colors.mutedForegroundLight} />
+              </TouchableOpacity>
+            </View>
+            {previewConnection === 'pending' ? (
+              <Text testID="flight-queue-connection-pending" style={[styles.queueState, { color: colors.mutedForegroundLight }]}>
+                {FRONT_QUEUE_PENDING}
+              </Text>
+            ) : null}
+            {previewConnection === 'declined' ? (
+              <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]}>{FRONT_QUEUE_DECLINED}</Text>
+            ) : null}
+            {previewConnection === 'loading' ? (
+              <Text testID="flight-queue-connection-loading" style={[styles.queueState, { color: colors.mutedForegroundLight }]}>
+                Checking this connection.
+              </Text>
+            ) : null}
+            {previewConnection === 'ambiguous' ? (
+              <Text testID="flight-queue-connection-ambiguous" style={[styles.queueState, { color: colors.mutedForegroundLight }]}>
+                {FRONT_QUEUE_AMBIGUOUS}
+              </Text>
+            ) : null}
+            {previewConnection === 'unavailable' || previewConnection === 'hidden' ? (
+              <Text testID="flight-queue-connection-unavailable" style={[styles.queueState, { color: colors.mutedForegroundLight }]}>
+                {frontPreview === 'production'
+                  ? leaderRequestNotice
+                    ?? (leaderConnection.kind === 'unavailable' && leaderConnection.reason === 'status'
+                      ? FRONT_QUEUE_STATUS_UNAVAILABLE
+                      : FRONT_QUEUE_REQUEST_UNAVAILABLE)
+                  : FRONT_QUEUE_MEMBER_UNAVAILABLE}
+              </Text>
+            ) : null}
+            {leaderRequestNotice && frontPreview === 'production' && previewConnection !== 'unavailable' && previewConnection !== 'hidden' ? (
+              <Text testID="flight-queue-connection-notice" style={[styles.networkError, { color: colors.destructive }]}>
+                {leaderRequestNotice}
+              </Text>
+            ) : null}
+            {networkError && frontPreview === 'local' ? (
+              <Text style={[styles.networkError, { color: colors.destructive }]}>{networkError}</Text>
+            ) : null}
+            {messages.message && frontPreview === 'production' && previewConnection === 'accepted' ? (
+              <Text style={[styles.networkError, { color: colors.destructive }]}>{messages.message}</Text>
+            ) : null}
+            {previewConnection === 'accepted' ? (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityState={{ disabled: frontPreview === 'production' && !productionChatUserId }}
+                testID="flight-queue-open-conversation"
+                disabled={frontPreview === 'production' ? !productionChatUserId || messages.opening : false}
+                style={[styles.networkButton, {
+                  backgroundColor: colors.primary,
+                  opacity: frontPreview === 'production' && !productionChatUserId ? 0.45 : 1,
+                }]}
+                onPress={frontPreview === 'production' ? openProductionConversation : openAcceptedConversation}
+              >
+                <Text style={[styles.networkButtonText, { color: colors.primaryForeground }]}>Open Chat</Text>
+              </TouchableOpacity>
+            ) : previewConnection === 'pending' || previewConnection === 'ambiguous' ? null : (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityState={{ disabled: sendDisabled }}
+                testID="flight-queue-send-request"
+                disabled={sendDisabled}
+                onPress={
+                  frontPreview === 'production' && previewConnection === 'request'
+                    ? () => { void sendLeaderRequest(); }
+                    : frontPreview === 'local' && (previewConnection === 'request' || previewConnection === 'declined')
+                      ? sendNetworkingRequest
+                      : undefined
+                }
+                style={[styles.networkButton, {
+                  backgroundColor: colors.primary,
+                  opacity: sendDisabled ? 0.45 : 1,
+                }]}
+              >
+                {(leaderRequestPending && frontPreview === 'production') || (networkingRequest.isPending && frontPreview === 'local')
+                  ? <ActivityIndicator color={colors.primaryForeground} size="small" />
+                  : <Text style={[styles.networkButtonText, { color: colors.primaryForeground }]}>Send Connection Request</Text>}
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={!!directionsTarget}
@@ -1440,7 +2033,7 @@ export default function FlightDetailScreen() {
       {!directionsTarget && (
         <View style={[styles.ctaBar, { backgroundColor: colors.offWhite, borderTopColor: colors.separator, paddingBottom: botPad + 12 }]}>
           {renderCTA()}
-          {!demoMode && (
+          {!demoMode && authMode !== 'clerk' && (
             <TouchableOpacity
               style={styles.conciergeLink}
               onPress={() => router.push({
@@ -1539,6 +2132,19 @@ const styles = StyleSheet.create({
   flightInfoLabel: { fontFamily: 'Inter_500Medium', fontSize: 10, letterSpacing: 0.3 },
   flightInfoValue: { fontFamily: 'Inter_600SemiBold', fontSize: 14, lineHeight: 18, marginTop: 3 },
   flightInfoDetail: { fontFamily: 'Inter_400Regular', fontSize: 10, marginTop: 1 },
+  queueState: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20, marginTop: 4 },
+  queueRetry: { fontFamily: 'Inter_600SemiBold', fontSize: 14, marginTop: 8 },
+  queuePreviewBackdrop: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+  queuePreviewCard: { borderRadius: 20, padding: 18, zIndex: 1 },
+  queueRow: {
+    minHeight: 58, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8,
+  },
+  queueInitials: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  queueInitialsText: { fontFamily: 'Inter_700Bold', fontSize: 14 },
+  queueCopy: { flex: 1, gap: 2 },
+  queuePosition: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
+  queueFirst: { fontFamily: 'Inter_600SemiBold', fontSize: 12, letterSpacing: 0.2 },
 
   // Compact airport rows
   airportSection: { marginHorizontal: 16, marginBottom: 12 },

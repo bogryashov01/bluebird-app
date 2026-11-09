@@ -287,6 +287,22 @@ export default function FlightChecklistScreen() {
           remainingSteps: trip.checklist.remainingSteps,
         })}
       </Text>
+      <View testID="checklist-progress" style={styles.progressBlock}>
+        <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+          {`${steps.filter((step) => step.complete).length} of ${steps.length} complete`}
+        </Text>
+        <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+          <View
+            style={[
+              styles.progressFill,
+              {
+                backgroundColor: colors.primary,
+                width: `${Math.round((steps.filter((step) => step.complete).length / Math.max(steps.length, 1)) * 100)}%`,
+              },
+            ]}
+          />
+        </View>
+      </View>
       {steps.map((step) => (
         <View key={step.id} testID={`checklist-step-${step.id}`} style={[styles.card, { backgroundColor: colors.card }]}>
           <Text style={[styles.stepTitle, { color: colors.foreground }]}>
@@ -493,11 +509,11 @@ export default function FlightChecklistScreen() {
         />
         <Text style={[styles.meta, { color: colors.mutedForeground }]}>
           {hasServerTime(trip.checklist.policyAckAt)
-            ? 'Policy acknowledged on the server.'
+            ? 'Policy acknowledged.'
             : authTest
               ? POLICY_DOCUMENT_UNAVAILABLE_NOTE
               : canAcknowledgeProductionPolicy()
-                ? 'Read the policy, scroll to the end, and agree on the policy screen.'
+                ? 'Read the policy and agree.'
                 : POLICY_UNAVAILABLE_NOTE}
         </Text>
         {!hasServerTime(trip.checklist.policyAckAt) && (
@@ -668,6 +684,9 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 12 },
   route: { fontFamily: 'Inter_700Bold', fontSize: 22, letterSpacing: -0.3 },
   status: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
+  progressBlock: { gap: 8 },
+  progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: 6, borderRadius: 3 },
   card: { borderRadius: 18, padding: 16, gap: 8 },
   stepTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
   meta: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },

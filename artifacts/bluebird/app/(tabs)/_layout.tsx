@@ -14,8 +14,26 @@ import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotifications';
 import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
 import { useJoinNavDecision } from '@/lib/joinNavDiagnostics';
+import { isMemberConnectionsIntegrationEnabled } from '@/lib/memberConnections';
+import { isMemberMessagesIntegrationEnabled } from '@/lib/memberMessages';
 
-function NativeTabLayout({ unreadCount }: { unreadCount: number }) {
+/** Connections tab stays mounted for deep links; hide it when both live integrations are off. */
+export function isMemberConnectionsTabVisible(input?: {
+  connectionsEnabled?: boolean;
+  messagesEnabled?: boolean;
+}): boolean {
+  const connectionsEnabled = input?.connectionsEnabled ?? isMemberConnectionsIntegrationEnabled();
+  const messagesEnabled = input?.messagesEnabled ?? isMemberMessagesIntegrationEnabled();
+  return connectionsEnabled === true || messagesEnabled === true;
+}
+
+function NativeTabLayout({
+  unreadCount,
+  connectionsVisible,
+}: {
+  unreadCount: number;
+  connectionsVisible: boolean;
+}) {
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index" hidden />
@@ -27,7 +45,7 @@ function NativeTabLayout({ unreadCount }: { unreadCount: number }) {
         <NativeTabs.Trigger.Icon sf={{ default: 'briefcase', selected: 'briefcase.fill' }} />
         <NativeTabs.Trigger.Label>Trips</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="connections">
+      <NativeTabs.Trigger name="connections" hidden={!connectionsVisible}>
         <NativeTabs.Trigger.Icon sf={{ default: 'bubble.left.and.bubble.right', selected: 'bubble.left.and.bubble.right.fill' }} />
         <NativeTabs.Trigger.Label>Connections</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
@@ -44,7 +62,13 @@ function NativeTabLayout({ unreadCount }: { unreadCount: number }) {
   );
 }
 
-function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
+function ClassicTabLayout({
+  unreadCount,
+  connectionsVisible,
+}: {
+  unreadCount: number;
+  connectionsVisible: boolean;
+}) {
   const colors = useColors();
   const isIOS = Platform.OS === 'ios';
   const isWeb = Platform.OS === 'web';
@@ -109,15 +133,19 @@ function ClassicTabLayout({ unreadCount }: { unreadCount: number }) {
       />
       <Tabs.Screen
         name="connections"
-        options={{
-          title: 'Connections',
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="bubble.left.and.bubble.right" tintColor={color} size={22} />
-            ) : (
-              <Feather name="message-circle" size={20} color={color} />
-            ),
-        }}
+        options={
+          connectionsVisible
+            ? {
+                title: 'Connections',
+                tabBarIcon: ({ color }) =>
+                  isIOS ? (
+                    <SymbolView name="bubble.left.and.bubble.right" tintColor={color} size={22} />
+                  ) : (
+                    <Feather name="message-circle" size={20} color={color} />
+                  ),
+              }
+            : { href: null }
+        }
       />
       <Tabs.Screen
         name="membership/index"
@@ -159,6 +187,7 @@ export default function TabLayout() {
   const unreadCount = useUnreadNotificationsCount();
   const { token, isLoading, authMode, clerkSignedIn, clerkMemberResolution, demoMode } = useAuth();
   const colors = useColors();
+  const connectionsVisible = isMemberConnectionsTabVisible();
   const registeredHomeReady = isClerkHomeAvailable(
     clerkMemberResolution,
     CLERK_MEMBER_NAVIGATION_READINESS,
@@ -184,9 +213,9 @@ export default function TabLayout() {
   });
   if (demoMode) {
     if (isLiquidGlassAvailable() && preference === 'system') {
-      return <NativeTabLayout unreadCount={0} />;
+      return <NativeTabLayout unreadCount={0} connectionsVisible={connectionsVisible} />;
     }
-    return <ClassicTabLayout unreadCount={0} />;
+    return <ClassicTabLayout unreadCount={0} connectionsVisible={connectionsVisible} />;
   }
   // Do not mount tab screens while the stored demo session is being checked.
   // A direct /discover route otherwise renders Flights briefly before the
@@ -205,9 +234,9 @@ export default function TabLayout() {
         : <Redirect href="/(clerk-auth)/sign-in" />;
     }
     if (isLiquidGlassAvailable() && preference === 'system') {
-      return <NativeTabLayout unreadCount={0} />;
+      return <NativeTabLayout unreadCount={0} connectionsVisible={connectionsVisible} />;
     }
-    return <ClassicTabLayout unreadCount={0} />;
+    return <ClassicTabLayout unreadCount={0} connectionsVisible={connectionsVisible} />;
   }
   // Centralized guard: no session → auth flow. Prevents deep links from
   // bypassing sign-in.
@@ -215,7 +244,7 @@ export default function TabLayout() {
   // Native tabs follow the OS appearance only — use them just when the user's
   // theme preference is "System"; a forced Light/Dark needs the themed classic tabs.
   if (isLiquidGlassAvailable() && preference === 'system') {
-    return <NativeTabLayout unreadCount={unreadCount} />;
+    return <NativeTabLayout unreadCount={unreadCount} connectionsVisible={connectionsVisible} />;
   }
-  return <ClassicTabLayout unreadCount={unreadCount} />;
+  return <ClassicTabLayout unreadCount={unreadCount} connectionsVisible={connectionsVisible} />;
 }

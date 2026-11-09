@@ -53,6 +53,7 @@ export interface QueueRosterRow {
   tier: 'free' | 'base' | 'plus';
   hasLineSkip: boolean;
   isViewer: boolean;
+  connectionTargetReference?: string;
 }
 
 export type JoinFlightQueuePanel =
@@ -192,6 +193,7 @@ export function presentJoinFlightQueuePanel(input: {
         tier: entry.tier,
         hasLineSkip: entry.hasLineSkip,
         isViewer: entry.isViewer,
+        ...(entry.connectionTargetReference ? { connectionTargetReference: entry.connectionTargetReference } : {}),
       })),
   };
 }
@@ -607,11 +609,11 @@ export function presentQueueLeaveFailure(input: {
 }
 
 export const QUEUE_JOIN_DUPLICATE = 'A queue request is already in progress. No second request was sent.';
-export const QUEUE_LEAVE_UNAVAILABLE = 'Leaving the queue is not available in this build. No request is sent.';
+export const QUEUE_LEAVE_UNAVAILABLE = 'Leaving the queue is unavailable right now.';
 export const QUEUE_JOIN_UNCONFIRMED = 'Bluebird did not confirm a queue position. No position was saved on this device.';
 export const QUEUE_LEAVE_UNCONFIRMED = 'Bluebird did not confirm that you left the queue. Your place was not changed on this device.';
 export const QUEUE_LEFT_CONFIRMED = 'Bluebird confirmed that you left this queue.';
-export const QUEUE_SKIP_UNAVAILABLE = 'Skip the Line is not available in this build. No pass is used.';
+export const QUEUE_SKIP_UNAVAILABLE = 'Skip the Line is unavailable right now.';
 export const QUEUE_SKIP_NONE = 'No Skip the Line passes are available.';
 export const QUEUE_SKIP_ALREADY_USED = 'A Skip the Line pass is already applied to this flight.';
 export const QUEUE_SKIP_WINNER = 'You are the current winner for this flight. Skip the Line is not offered again.';
@@ -760,7 +762,7 @@ export const JOIN_FLIGHT_MEMBERSHIP_NOTE = 'Bluebird requires an active Base or 
 export const JOIN_FLIGHT_CREDIT_CONFIRM_REQUIRED = 'Confirm the International Pass credit before joining. No request was sent.';
 export const JOIN_FLIGHT_PASS_NOTE = 'Choosing an option stays on this screen. Joining is not enabled, so nothing is sent and no card is charged. International Pass payment is handled separately.';
 export const JOIN_FLIGHT_PASS_READY = 'Choose one option. The join request includes that choice and does not charge a card.';
-export const JOIN_FLIGHT_CONFIRM_UNAVAILABLE = 'Queue joining is not available in this build. No request is sent.';
+export const JOIN_FLIGHT_CONFIRM_UNAVAILABLE = 'Joining is unavailable right now.';
 export const JOIN_FLIGHT_CONFIRM_DEMO = 'DEMO — No real queue entry will be created.';
 export const JOIN_FLIGHT_CONFIRM_READY = 'Joining places you in this queue. It does not confirm a seat.';
 export const JOIN_FLIGHT_CONSENT_REQUIRED = 'Choose an International Pass option before joining. No request was sent.';

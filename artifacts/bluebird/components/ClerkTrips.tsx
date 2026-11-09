@@ -24,9 +24,10 @@ import type { ProductionTrip, ProductionTrips } from '@/lib/productionAuthApi';
 import { useDemoJoinFlow } from '@/lib/demoJoinFlowStore';
 import { separateDemoTrip } from '@/lib/demoJoinFlow';
 import { MyQueuesPanel } from '@/components/MyQueuesPanel';
-import { awardedCurrentFlightIds } from '@/lib/myQueuesPresentation';
-import { currentTripChecklistTarget, presentTripChecklistStatus, resolveCurrentTripChecklistNavigation } from '@/lib/winnerChecklist';
-import { queueRosterQueryPrefix, queueViewerListQueryKey } from '@/lib/useMyQueues';
+import { awardedCurrentFlightIds, memberQueueFlightId } from '@/lib/myQueuesPresentation';
+import { checklistFullyComplete, currentTripChecklistTarget, presentTripChecklistStatus, resolveCurrentTripChecklistNavigation } from '@/lib/winnerChecklist';
+import { canonicalTripFlightId, declinedCurrentFlightIds, upcomingFlightDetailsTarget, upcomingOwnedFlightIds } from '@/lib/memberFlightPlacement';
+import { queueRosterQueryPrefix, queueViewerListQueryKey, useMyQueues } from '@/lib/useMyQueues';
 
 type TripList = 'current' | 'queues' | 'past';
 
@@ -61,11 +62,14 @@ function ClerkTripCard({
     awarded: trip.checklist.awarded,
     remainingSteps: trip.checklist.remainingSteps,
   });
+  const flightId = canonicalTripFlightId(trip);
+  const detailsTarget = flightId === null ? null : upcomingFlightDetailsTarget({ list, legId: flightId });
   const checklistTarget = currentTripChecklistTarget({
     list,
     awarded: trip.checklist.awarded,
-    legId: leg.id,
+    legId: flightId ?? leg.id,
   });
+  const checklistComplete = list === 'current' && checklistFullyComplete(trip.checklist);
   const body = (
     <>
       <View style={[styles.badge, { backgroundColor: colors.primary }]}>
@@ -76,14 +80,29 @@ function ClerkTripCard({
       <Text style={[styles.meta, { color: colors.mutedForeground }]} numberOfLines={2}>
         {[leg.aircraftType, formatDeparture(leg.departureTime)].filter(Boolean).join(' · ')}
       </Text>
-      {checklistTarget ? (
-        <Text testID="clerk-trip-checklist-label" style={[styles.meta, { color: colors.primary }]}>
-          Winner checklist
+      {checklistTarget && flightId !== null && !checklistComplete ? (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Flight checklist"
+          testID="clerk-trip-checklist-link"
+          onPress={() => onOpenChecklist(flightId)}
+        >
+          <Text testID="clerk-trip-checklist-label" style={[styles.meta, { color: colors.primary }]}>
+            Flight checklist
+          </Text>
+        </TouchableOpacity>
+      ) : detailsTarget && !checklistTarget ? (
+        <Text testID="clerk-trip-confirm-label" style={[styles.meta, { color: colors.primary }]}>
+          Review flight
+        </Text>
+      ) : !detailsTarget && !checklistTarget ? (
+        <Text testID="clerk-trip-unavailable" style={[styles.meta, { color: colors.mutedForeground }]}>
+          Flight details are not available yet.
         </Text>
       ) : null}
     </>
   );
-  if (!checklistTarget) {
+  if (!detailsTarget && !checklistTarget) {
     return (
       <View style={[styles.tripCard, { backgroundColor: colors.card }]} testID="clerk-trip-card">
         {body}
@@ -93,12 +112,20 @@ function ClerkTripCard({
   return (
     <TouchableOpacity
       accessibilityRole="button"
-      accessibilityLabel={`${origin} to ${destination}. Winner checklist`}
-      accessibilityHint="Opens the winner checklist"
-      testID="clerk-trip-open-checklist"
+      accessibilityLabel={checklistTarget
+        ? `${origin} to ${destination}. Confirmed flight`
+        : `${origin} to ${destination}. Awaiting confirmation`}
+      accessibilityHint="Opens flight details"
+      testID={checklistTarget ? 'clerk-trip-open-checklist' : 'clerk-trip-review-winner'}
       style={[styles.tripCard, { backgroundColor: colors.card }]}
       activeOpacity={0.85}
-      onPress={() => { onOpenChecklist(leg.id); }}
+      onPress={() => {
+        if (detailsTarget) {
+          router.push(detailsTarget);
+          return;
+        }
+        if (checklistTarget && flightId !== null) onOpenChecklist(flightId);
+      }}
     >
       {body}
     </TouchableOpacity>
@@ -176,6 +203,15 @@ export function ClerkTrips() {
       return api.authenticated.listTrips({ signal });
     },
   });
+  const queues = useMyQueues();
+  const confirmationByFlightId = React.useMemo(() => {
+    const confirmation = new Map<number, string | null>();
+    for (const flight of queues.rows) {
+      const id = memberQueueFlightId(flight.id);
+      if (id !== null) confirmation.set(id, flight.viewerConfirmationStatus);
+    }
+    return confirmation;
+  }, [queues.rows]);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -240,7 +276,19 @@ export function ClerkTrips() {
   const items = activeList === 'current' || activeList === 'past'
     ? query.data?.[activeList]
     : undefined;
+  const declinedIds = new Set(declinedCurrentFlightIds(
+    activeList === 'current' && query.data ? query.data.current : [],
+    confirmationByFlightId,
+  ));
+  const visibleItems = items?.filter((trip) => {
+    const id = canonicalTripFlightId(trip);
+    return id === null || !declinedIds.has(id);
+  });
   const awardedFlightIds = awardedCurrentFlightIds(query.isSuccess ? query.data.current : []);
+  const upcomingFlightIds = upcomingOwnedFlightIds(
+    query.isSuccess ? query.data.current : [],
+    confirmationByFlightId,
+  );
   const demoTrip = query.data ? separateDemoTrip(query.data, demo.entry).demo : demo.demoTrip;
   let state: React.ReactNode;
   if (query.isPending) {
@@ -267,15 +315,20 @@ export function ClerkTrips() {
         onAction={() => { void query.refetch(); }}
       />
     );
-  } else if (items?.length === 0) {
+  } else if (visibleItems?.length === 0) {
     state = (
       <StateMessage
-        title={activeList === 'current' ? 'No upcoming trips' : 'No past trips'}
+        title={activeList === 'current' ? 'No Upcoming Flights' : 'No Past Flights'}
         description={activeList === 'current'
-          ? 'Upcoming trips will appear here when available.'
-          : 'Past trips will appear here when available.'}
+          ? 'Browse empty legs and join a queue to book your first flight.'
+          : 'Completed flights will appear here.'}
         colors={colors}
         testID={`clerk-trips-empty-${activeList}`}
+        actionLabel={activeList === 'current' ? 'Discover Flights' : undefined}
+        actionTestID={activeList === 'current' ? 'clerk-trips-discover' : undefined}
+        onAction={activeList === 'current'
+          ? () => router.replace('/(tabs)/discover' as never)
+          : undefined}
       />
     );
   } else {
@@ -286,7 +339,7 @@ export function ClerkTrips() {
         showsVerticalScrollIndicator={false}
         testID={`clerk-trips-list-${activeList}`}
       >
-        {(items ?? []).map((trip) => (
+        {(visibleItems ?? []).map((trip) => (
           <ClerkTripCard
             key={trip.leg.id}
             trip={trip}
@@ -353,7 +406,7 @@ export function ClerkTrips() {
           accessibilityElementsHidden={activeList !== 'queues'}
           importantForAccessibility={activeList === 'queues' ? 'auto' : 'no-hide-descendants'}
         >
-          <MyQueuesPanel awardedFlightIds={awardedFlightIds} active={activeList === 'queues'} />
+          <MyQueuesPanel awardedFlightIds={awardedFlightIds} upcomingFlightIds={upcomingFlightIds} active={activeList === 'queues'} />
         </View>
       ) : null}
       {activeList === 'queues' ? null : state}
@@ -367,6 +420,7 @@ function StateMessage({
   colors,
   testID = 'clerk-trips-state',
   actionLabel,
+  actionTestID = 'clerk-trips-retry',
   onAction,
 }: {
   title: string;
@@ -374,6 +428,7 @@ function StateMessage({
   colors: ReturnType<typeof useColors>;
   testID?: string;
   actionLabel?: string;
+  actionTestID?: string;
   onAction?: () => void;
 }) {
   return (
@@ -383,7 +438,8 @@ function StateMessage({
       {actionLabel && onAction && (
         <TouchableOpacity
           accessibilityRole="button"
-          testID="clerk-trips-retry"
+          accessibilityLabel={actionLabel}
+          testID={actionTestID}
           style={[styles.retryButton, { backgroundColor: colors.primary }]}
           onPress={onAction}
         >

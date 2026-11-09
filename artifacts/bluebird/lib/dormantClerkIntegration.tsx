@@ -83,7 +83,11 @@ function ClerkAuthSnapshotBridge({ children }: { children: React.ReactNode }) {
 
   return (
     <ClerkAuthSnapshotContext.Provider value={snapshot}>
-      {children}
+      {/* Screen render errors stay on the generic fallback. The provider
+          boundary outside this bridge is only for Clerk startup failures. */}
+      <ErrorBoundary>
+        {children}
+      </ErrorBoundary>
     </ClerkAuthSnapshotContext.Provider>
   );
 }

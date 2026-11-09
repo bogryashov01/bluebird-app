@@ -4,10 +4,9 @@ import { router, useFocusEffect } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { useMyQueues } from '@/lib/useMyQueues';
 import {
-  MY_QUEUES_COVERAGE_NOTE,
   MY_QUEUES_DETAILS_UNAVAILABLE,
-  MY_QUEUES_SERVER_EMPTY,
-  MY_QUEUES_LISTED_ON_CURRENT,
+  MY_QUEUES_EMPTY_BODY,
+  MY_QUEUES_EMPTY_TITLE,
   MY_QUEUES_LOAD_ERROR,
   MY_QUEUES_NOT_BOOKING,
   MY_QUEUES_POSITION_UNAVAILABLE,
@@ -23,12 +22,15 @@ import {
   queueFlightDetailsTarget,
   queueFlightReference,
 } from '@/lib/myQueuesPresentation';
+import { queueClosedAt, queueEntryVisible } from '@/lib/memberFlightPlacement';
 
 export function MyQueuesPanel({
   awardedFlightIds = [],
+  upcomingFlightIds = [],
   active = false,
 }: {
   awardedFlightIds?: readonly number[];
+  upcomingFlightIds?: readonly number[];
   active?: boolean;
 }) {
   const colors = useColors();
@@ -52,13 +54,20 @@ export function MyQueuesPanel({
     refreshRef.current();
   }, [active]);
   const awarded = new Set(awardedFlightIds);
+  const upcoming = new Set(upcomingFlightIds.length > 0 ? upcomingFlightIds : awardedFlightIds);
   const joinedRows = rows.filter((flight) => flight.userInQueue === true);
   const visibleRows = joinedRows.filter((flight) => {
     const flightId = memberQueueFlightId(flight.id);
-    return flightId !== null && !awarded.has(flightId);
+    if (flightId === null) return false;
+    return queueEntryVisible({
+      userInQueue: flight.userInQueue,
+      viewerIsEffectiveWinner: flight.viewerIsEffectiveWinner,
+      viewerConfirmationStatus: flight.viewerConfirmationStatus,
+      viewerIsBookedPassenger: flight.viewerIsBookedPassenger,
+      queueClosed: queueClosedAt(flight.queueClosesAt, nowMs),
+      ownedByUpcoming: upcoming.has(flightId),
+    });
   });
-  const listedOnCurrent = listState === 'ready' && joinedRows.length > 0 && visibleRows.length === 0;
-
   return (
     <ScrollView
       style={[styles.body, { backgroundColor: colors.background }]}
@@ -75,9 +84,6 @@ export function MyQueuesPanel({
         />
       )}
     >
-      <Text style={[styles.note, { color: colors.mutedForeground }]} testID="my-queues-coverage-note">
-        {MY_QUEUES_COVERAGE_NOTE}
-      </Text>
       {listState === 'loading' ? (
         <View style={styles.centered} testID="my-queues-loading" accessibilityLabel="Checking queues">
           <ActivityIndicator color={colors.primary} />
@@ -109,8 +115,9 @@ export function MyQueuesPanel({
       ) : null}
       {listState === 'ready' && visibleRows.length === 0 ? (
         <View style={styles.state} testID="my-queues-empty">
-          <Text style={[styles.stateTitle, { color: colors.foreground }]}>
-            {listedOnCurrent ? MY_QUEUES_LISTED_ON_CURRENT : MY_QUEUES_SERVER_EMPTY}
+          <Text style={[styles.stateTitle, { color: colors.foreground }]}>{MY_QUEUES_EMPTY_TITLE}</Text>
+          <Text testID="my-queues-empty-body" style={[styles.stateBody, { color: colors.mutedForeground }]}>
+            {MY_QUEUES_EMPTY_BODY}
           </Text>
         </View>
       ) : null}

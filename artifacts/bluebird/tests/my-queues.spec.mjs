@@ -12,7 +12,6 @@ import {
   saveQueueCandidate,
 } from "../scripts/.queue-candidates.test.mjs";
 import {
-  MY_QUEUES_COVERAGE_NOTE,
   MY_QUEUES_EMPTY,
   MY_QUEUES_NONE_SAVED,
   MY_QUEUES_DETAILS_UNAVAILABLE,
@@ -190,20 +189,23 @@ test("My Queues is a third Trips tab and does not mutate production or mix in de
   assert.match(trips, /clerk-trips-tab-\$\{tab\.id\}/);
   assert.match(trips, /id: 'queues'/);
   assert.match(trips, /keepQueues/);
-  assert.match(trips, /<MyQueuesPanel awardedFlightIds=\{awardedFlightIds\} active=\{activeList === 'queues'\} \/>/);
+  assert.match(trips, /<MyQueuesPanel awardedFlightIds=\{awardedFlightIds\} upcomingFlightIds=\{upcomingFlightIds\} active=\{activeList === 'queues'\} \/>/);
   assert.match(trips, /queueViewerListQueryKey/);
   assert.match(trips, /awardedCurrentFlightIds\(query\.isSuccess \? query\.data\.current : \[\]\)/);
   assert.match(trips, /currentTripChecklistTarget/);
-  assert.doesNotMatch(trips, /fetchProductionFlight|router\.replace|getTrip\(/);
+  assert.match(trips, /clerk-trips-discover/);
+  assert.match(trips, /router\.replace\('\/\(tabs\)\/discover'/);
+  assert.doesNotMatch(trips, /fetchProductionFlight|getTrip\(/);
   assert.match(trips, /queuesHidden/);
   assert.match(trips, /return api\.authenticated\.listTrips\(\{ signal \}\)/);
   assert.match(trips, /removeQueries/);
   assert.doesNotMatch(store, /removeItem/);
   assert.match(panel, /presentServerMemberQueues|memberQueueFlightId/);
-  assert.match(panel, /MY_QUEUES_SERVER_EMPTY/);
+  assert.match(panel, /MY_QUEUES_EMPTY_TITLE/);
+  assert.match(panel, /MY_QUEUES_EMPTY_BODY/);
   assert.match(panel, /People in queue/);
   assert.match(panel, /accessibilityLabel="Try again for upcoming queues"/);
-  assert.match(panel, /\{MY_QUEUES_COVERAGE_NOTE\}/);
+  assert.doesNotMatch(panel, /MY_QUEUES_COVERAGE_NOTE|upcoming flights Bluebird reports|already listed under Upcoming/);
   assert.match(panel, /\{MY_QUEUES_NOT_BOOKING\}/);
   assert.match(panel, /presentQueueLifecycle/);
   assert.match(panel, /presentQueueCountdown/);
@@ -215,9 +217,8 @@ test("My Queues is a third Trips tab and does not mutate production or mix in de
   assert.match(panel, /router\.push\(detailsTarget\)/);
   assert.match(panel, /accessibilityHint="Opens flight details"/);
   assert.doesNotMatch(panel, /fetchProductionFlight\(|empty-legs\/|You won|Queue is open|Queue closed|\/demo\/flight|\/queue\/status/);
-  assert.match(MY_QUEUES_EMPTY, /No verified queues found among flights saved on this device/);
-  assert.match(MY_QUEUES_COVERAGE_NOTE, /upcoming flights Bluebird reports/);
-  assert.match(MY_QUEUES_NOT_BOOKING, /not a confirmed booking/);
+  assert.equal(MY_QUEUES_EMPTY, "No Active Queues");
+  assert.match(MY_QUEUES_NOT_BOOKING, /Not a confirmed seat/);
   assert.match(panel, /RefreshControl/);
   assert.match(panel, /testID="my-queues-pull-refresh"/);
   assert.match(panel, /useFocusEffect/);
@@ -242,8 +243,8 @@ test("My Queues is a third Trips tab and does not mutate production or mix in de
   assert.doesNotMatch(policy, /past=false/);
   const readiness = readFileSync(resolve(projectRoot, "lib/productionQueueReadiness.ts"), "utf8");
   assert.match(readiness, /deployedMainService: false/);
-  assert.match(MY_QUEUES_NONE_SAVED, /No flights saved on this device yet/);
-  assert.equal(MY_QUEUES_STATUS, "Queue participation verified");
+  assert.equal(MY_QUEUES_NONE_SAVED, "No Active Queues");
+  assert.equal(MY_QUEUES_STATUS, "In queue");
 });
 
 test("verified queue cards open Flight Details, which keeps cached Discover data and then reads the detail endpoint", () => {
@@ -274,7 +275,7 @@ test("verified queue cards open Flight Details, which keeps cached Discover data
   assert.doesNotMatch(reader, /fetchProductionFlight\(|router\.push\(|\/flight\/\[id\]|\/api\/membership/);
   assert.match(reader, /fetchUpcomingMemberFlights\(/);
   assert.doesNotMatch(reader, /loadQueueCandidates/);
-  assert.match(MY_QUEUES_DETAILS_UNAVAILABLE, /not available for this flight/);
+  assert.equal(MY_QUEUES_DETAILS_UNAVAILABLE, "Flight details are not available yet.");
   const roster = presentRosterEntries([row(1, "AA", true)]);
   assert.equal(roster.kind, "confirmed");
   assert.equal(Object.hasOwn(roster, "winner"), false);
@@ -305,7 +306,8 @@ test("verified queue cards open Flight Details, which keeps cached Discover data
   });
   assert.deepEqual(moved.verified, []);
   assert.equal(moved.emptyTitle, MY_QUEUES_LISTED_ON_CURRENT);
-  assert.match(MY_QUEUES_LISTED_ON_CURRENT, /Upcoming/);
+  assert.equal(MY_QUEUES_LISTED_ON_CURRENT, "No Active Queues");
+  assert.doesNotMatch(MY_QUEUES_LISTED_ON_CURRENT, /Upcoming|API|account/);
   assert.doesNotMatch(MY_QUEUES_STATUS, /winner|open|closed/i);
 });
 

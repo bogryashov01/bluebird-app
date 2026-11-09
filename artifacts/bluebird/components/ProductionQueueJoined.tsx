@@ -80,7 +80,7 @@ export function ProductionQueueJoined({
         <Text testID="production-queue-skip-line-note" style={[styles.note, { color: colors.mutedForegroundLight }]}>
           {skipLineAvailable
             ? 'Skip the Line still needs a separate confirmed credit action. This screen does not use a credit.'
-            : 'Skip the Line is not available in this build. No credit is used.'}
+            : 'Skip the Line is unavailable right now.'}
         </Text>
       </View>
     </View>

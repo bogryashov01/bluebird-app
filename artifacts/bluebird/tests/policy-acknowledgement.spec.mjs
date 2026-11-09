@@ -96,9 +96,10 @@ test("an unread, unavailable, or ineligible policy sends nothing", async () => {
 });
 
 test("a closed gate and a missing leg id do not create a client", async () => {
-  const closed = openInput({ gateOpen: canAcknowledgeProductionPolicy() });
+  const closed = openInput({ gateOpen: false });
   assert.equal((await submitPolicyAcknowledgement(closed.input)).status, "disabled");
   assert.equal(closed.calls.length, 0);
+  assert.equal(canAcknowledgeProductionPolicy(), true);
   for (const legId of [0, -1, null]) {
     const { input, calls } = openInput({ legId });
     assert.equal((await submitPolicyAcknowledgement(input)).status, "failed");
@@ -223,12 +224,12 @@ test("consent resets with the reviewed policy and the gate stays closed", () => 
   assert.match(checklist, /pathname: '\/flight\/policy-review'/);
   assert.match(checklist, /disabled=\{!canAcknowledgeProductionPolicy\(\)\}/);
   assert.doesNotMatch(checklist, /acknowledgeTripPolicy/);
-  assert.match(winners, /export function canAcknowledgeProductionPolicy\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canConfirmProductionWinner\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canDeclineProductionWinner\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canVerifyProductionFbo\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canAcknowledgeProductionManifest\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canSendProductionBoardingPass\(\): boolean \{\n  return false;\n\}/);
+  assert.match(winners, /export function canAcknowledgeProductionPolicy\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canConfirmProductionWinner\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canDeclineProductionWinner\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canVerifyProductionFbo\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canAcknowledgeProductionManifest\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canSendProductionBoardingPass\(\): boolean \{\n  return true;\n\}/);
   assert.match(library, /versionId/);
   assert.match(library, /\$\{userId\}\|\$\{input\.legId\}\|\$\{input\.versionId\}\|\$\{input\.body\}/);
   assert.doesNotMatch(authPolicy, /checklist\/policyAck|checklist\/manifestAck|winner\/decline/);

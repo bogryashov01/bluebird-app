@@ -40,7 +40,7 @@ export function MemberConversationList({
       <View style={styles.state} testID="member-connections-messages-unavailable">
         <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Messages are not available yet</Text>
         <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]}>
-          Private messages stay off until that service is ready.
+          Try again later.
         </Text>
       </View>
     );
@@ -84,16 +84,16 @@ export function MemberConversationList({
           <Text style={[styles.retryLabel, { color: colors.primary }]}>Try again</Text>
         </TouchableOpacity>
       ) : null}
-      <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>Messages</Text>
       {inbox.unreadCount > 0 ? (
         <Text style={[styles.unreadTotal, { color: colors.mutedForegroundLight }]} testID="member-messages-unread-total">
           {inbox.unreadCount === 1 ? '1 unread message' : `${inbox.unreadCount} unread messages`}
         </Text>
       ) : null}
       {inbox.conversations.length === 0 && inbox.status === 'ready' ? (
-        <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]} testID="member-messages-empty">
-          No conversations yet. Message an accepted connection to start one.
-        </Text>
+        <View testID="member-messages-empty" style={styles.empty}>
+          <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>No Messages Yet</Text>
+          <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]}>Your conversations will appear here.</Text>
+        </View>
       ) : null}
       {inbox.conversations.map((conversation) => {
         const title = conversationTitle(conversation.participantUserId, names);
@@ -149,6 +149,7 @@ const styles = StyleSheet.create({
   badgeLabel: { fontFamily: 'Inter_700Bold', fontSize: 12 },
   retry: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: 20 },
   retryLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
+  empty: { alignItems: 'center', paddingHorizontal: 28, paddingTop: 36, gap: 6 },
   state: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 8 },
   stateTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, textAlign: 'center' },
   stateBody: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20, textAlign: 'center', paddingHorizontal: 28, paddingTop: 20 },

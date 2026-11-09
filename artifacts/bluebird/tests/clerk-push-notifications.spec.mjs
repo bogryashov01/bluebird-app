@@ -332,9 +332,29 @@ test("Clerk push registration does not call the legacy JWT endpoint or persist t
   assert.equal(runtime.match(/addNotificationResponseReceivedListener/g), null);
   const coordinatorListeners = coordinator.match(/addNotificationResponseReceivedListener/g);
   assert.equal(coordinatorListeners?.length, 1);
+  assert.match(coordinator, /AppState.addEventListener/);
+  assert.match(coordinator, /revokeAccessToken/);
+  assert.doesNotMatch(coordinator, /confirmEmptyLegWinner|declineEmptyLegWinner/);
   const eas = readFileSync(resolve(projectRoot, "eas.json"), "utf8");
-  assert.equal(eas.includes("EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION"), false);
   const builds = JSON.parse(eas).build;
+  const live = builds["production-live-internal"].env;
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION, "true");
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT, "production");
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST, "false");
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_QUEUE_MUTATIONS, "true");
+  assert.equal(live.EXPO_PUBLIC_ENABLE_CLERK_AUTH, "false");
+  assert.equal(live.EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH, "true");
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_FULL_APP_DEMO, "false");
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG, "false");
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE, "production");
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE, "production");
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS, "false");
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES, "false");
+  assert.equal(Object.hasOwn(live, "EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION"), false);
+  for (const [name, profile] of Object.entries(builds)) {
+    if (name === "production-live-internal") continue;
+    assert.equal(profile.env?.EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION, undefined);
+  }
   const app = JSON.parse(readFileSync(resolve(projectRoot, "app.json"), "utf8")).expo;
   assert.equal(app.ios.bundleIdentifier, "com.bluebirdjets.app");
   assert.deepEqual(
@@ -585,13 +605,29 @@ test("versioned message, connection, flight, and queue taps resolve to existing 
     params: { flightId: "9" },
   });
   assert.deepEqual(resolveClerkPushHref(versioned("winner.selected", "flight", { flightId: 9 }), "user_a").href, {
-    pathname: "/flight/checklist",
-    params: { legId: "9" },
+    pathname: "/flight/winner",
+    params: { flightId: "9" },
   });
-  assert.deepEqual(resolveClerkPushHref(versioned("winner.confirmed", "flight", { flightId: 9 }), "user_a").accountCheck, {
-    kind: "winner",
+  assert.deepEqual(resolveClerkPushHref(versioned("winner.selected", "flight", { flightId: 9 }), "user_a").accountCheck, {
+    kind: "flight",
     flightId: 9,
   });
+  assert.deepEqual(resolveClerkPushHref(versioned("winner.confirmed", "flight", { flightId: 9 }), "user_a").href, {
+    pathname: "/flight/[id]",
+    params: { id: "9" },
+  });
+  assert.deepEqual(resolveClerkPushHref(versioned("winner.confirmed", "flight", { flightId: 9 }), "user_a").accountCheck, {
+    kind: "flight",
+    flightId: 9,
+  });
+  const selected = versioned("winner.selected", "flight", { flightId: 9 });
+  assert.equal(foregroundPresentation({
+    notificationId: "winner-foreground",
+    alreadyPresented: [],
+    permission: "granted",
+    payload: selected,
+    pathname: "/(tabs)/discover",
+  }).show, false);
 });
 
 test("cold-start versioned navigation waits for auth and a different account cannot reuse it", () => {

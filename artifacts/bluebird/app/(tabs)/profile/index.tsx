@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   ActivityIndicator, View, Text, Image, StyleSheet, ScrollView, TouchableOpacity,
-  Platform, Modal, Pressable,
+  Platform, Modal, Pressable, Switch,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +26,11 @@ import type { ProductionUserProfile } from '@/lib/productionAuthApi';
 import { getFullAppDemoProfile } from '@/lib/fullAppDemo';
 import { presentClerkMembershipDesign } from '@/lib/clerkMembershipDesign';
 import { isMemberConnectionsIntegrationEnabled } from '@/lib/memberConnections';
+import { isAccountDeletionMutationEnabled } from '@/lib/accountDeletion';
+import {
+  IncomingConnectionPreferenceError,
+  saveIncomingConnectionRequestsPreference,
+} from '@/lib/clerkConnectionPrivacy';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; hint: string }[] = [
   { value: 'light',  label: 'Light',  hint: 'Always use the light theme' },
@@ -123,6 +128,9 @@ export default function ProfileScreen() {
   const [appearanceOpen, setAppearanceOpen] = React.useState(false);
   const [profileLoadState, setProfileLoadState] = React.useState<ClerkProfileLoadState>({ kind: 'loading' });
   const [profileLoadAttempt, setProfileLoadAttempt] = React.useState(0);
+  const [incomingPreference, setIncomingPreference] = React.useState<boolean | null>(null);
+  const [incomingPreferenceSaving, setIncomingPreferenceSaving] = React.useState(false);
+  const [incomingPreferenceError, setIncomingPreferenceError] = React.useState<string | null>(null);
   const cachedClerkProfile = React.useRef<{ clerkUserId: string; profile: ProductionUserProfile } | null>(null);
   const currentClerkIdentity = React.useRef<string | null>(clerkSession?.userId ?? null);
   currentClerkIdentity.current = clerkSession?.userId ?? null;
@@ -276,6 +284,47 @@ export default function ProfileScreen() {
       clerkMemberResolution.clerkUserId === clerkSession?.userId
         ? clerkMemberResolution.currentUser
         : null;
+    const connectionsEnabled = isMemberConnectionsIntegrationEnabled();
+    const accountDeletionEnabled = isAccountDeletionMutationEnabled();
+    const incomingSupported = connectionsEnabled && profile?.allowIncomingConnectionRequestsSupported === true;
+    const incomingValue = incomingPreference ?? profile?.allowIncomingConnectionRequests !== false;
+    const saveIncomingPreference = async (next: boolean) => {
+      if (!profile || !clerkSession.userId || incomingPreferenceSaving || !incomingSupported) return;
+      const requestedClerkUserId = clerkSession.userId;
+      setIncomingPreference(next);
+      setIncomingPreferenceSaving(true);
+      setIncomingPreferenceError(null);
+      try {
+        const api = createClerkApi().authenticated;
+        const saved = await saveIncomingConnectionRequestsPreference({
+          getCurrentSession: () => {
+            const session = currentClerkSession.current;
+            if (!session) return null;
+            return {
+              isLoaded: session.isLoaded === true,
+              isSignedIn: session.isSignedIn,
+              userId: session.userId,
+            };
+          },
+          requestedClerkUserId,
+          readProfile: (options) => api.getProfile(options),
+          updateProfile: (data, options) => api.updateProfile(data, options),
+          allowIncomingConnectionRequests: next,
+        });
+        if (currentClerkIdentity.current !== requestedClerkUserId) return;
+        cachedClerkProfile.current = { clerkUserId: requestedClerkUserId, profile: saved };
+        setProfileLoadState({ kind: 'loaded', clerkUserId: requestedClerkUserId, profile: saved });
+        setIncomingPreference(null);
+      } catch (error) {
+        if (currentClerkIdentity.current !== requestedClerkUserId) return;
+        setIncomingPreference(null);
+        setIncomingPreferenceError(error instanceof IncomingConnectionPreferenceError
+          ? error.message
+          : 'The preference could not be saved.');
+      } finally {
+        setIncomingPreferenceSaving(false);
+      }
+    };
     const membershipStatus = presentClerkMembershipDesign({
       verifiedFirstName: firstName,
       verifiedLastName: lastName,
@@ -342,6 +391,12 @@ export default function ProfileScreen() {
                 label: 'Payment Methods',
                 onPress: () => router.push('/account/payment-methods' as any),
               },
+              ...(accountDeletionEnabled ? [{
+                label: 'Delete Account',
+                hint: 'Permanent',
+                testID: 'clerk-delete-account',
+                onPress: () => router.push('/account/delete-account' as any),
+              }] : []),
             ]}
           />
           {visibleProfileState.kind === 'error' && (
@@ -365,6 +420,21 @@ export default function ProfileScreen() {
                 label: 'Notification Settings',
                 onPress: () => router.push('/notifications'),
               },
+              ...(incomingSupported ? [{
+                label: 'Connection requests',
+                hint: 'Allow members to request a connection',
+                testID: 'clerk-incoming-connection-requests',
+                right: (
+                  <Switch
+                    testID="clerk-incoming-connection-requests-switch"
+                    value={incomingValue}
+                    disabled={incomingPreferenceSaving || !profile}
+                    onValueChange={(value) => { void saveIncomingPreference(value); }}
+                    accessibilityLabel="Allow incoming connection requests"
+                    accessibilityState={{ disabled: incomingPreferenceSaving || !profile }}
+                  />
+                ),
+              }] : []),
               {
                 label: 'Appearance',
                 hint: THEME_OPTIONS.find((option) => option.value === preference)?.label,
@@ -372,28 +442,29 @@ export default function ProfileScreen() {
               },
             ]}
           />
-          <SettingsGroup
-            title="Connections"
-            rows={[
-              {
-                label: 'Connections',
-                hint: isMemberConnectionsIntegrationEnabled() ? undefined : 'Not available yet',
-                testID: 'clerk-connections-preview',
-                onPress: () => router.navigate('/(tabs)/connections' as never),
-              },
-            ]}
-          />
+          {incomingPreferenceError ? (
+            <Text style={[styles.profileErrorText, { color: colors.destructive }]} testID="clerk-incoming-connection-requests-error">
+              {incomingPreferenceError}
+            </Text>
+          ) : null}
+          {connectionsEnabled ? (
+            <SettingsGroup
+              title="Connections"
+              rows={[
+                {
+                  label: 'Connections',
+                  testID: 'clerk-connections-preview',
+                  onPress: () => router.navigate('/(tabs)/connections' as never),
+                },
+              ]}
+            />
+          ) : null}
           <SettingsGroup
             title="Support"
             rows={[
               {
-                label: 'Community',
-                hint: 'Not available yet',
-                onPress: () => router.push('/community'),
-              },
-              {
                 label: 'AI Concierge',
-                hint: 'On this device',
+                hint: 'Not available yet',
                 onPress: () => router.push('/concierge'),
               },
               { label: 'Help Center', onPress: () => router.push('/support/help-center' as any) },

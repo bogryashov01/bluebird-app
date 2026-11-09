@@ -136,10 +136,11 @@ test("required passenger fields, pounds, dates, and gender are validated without
   const fromRecord = passengerFormFromRecord(person({ gender: null, weight: null }));
   assert.equal(fromRecord.gender, null);
   assert.equal(fromRecord.weightLbs, "");
-  assert.match(PASSENGER_GENDER_NOTE, /product confirmation/);
+  assert.match(PASSENGER_GENDER_NOTE, /Gender is required/);
+  assert.doesNotMatch(PASSENGER_GENDER_NOTE, /API|product confirmation/);
 });
 
-test("a locked or unknown manifest disables edits, and passenger writes stay disabled", () => {
+test("a locked or unknown manifest disables edits, and a valid passenger review uses the existing request", () => {
   assert.equal(manifestEditsLocked(true), true);
   assert.equal(manifestEditsLocked(undefined), true);
   assert.equal(manifestEditsLocked(null), true);
@@ -150,20 +151,20 @@ test("a locked or unknown manifest disables edits, and passenger writes stay dis
     passengerCap: 8,
     manifestLocked: null,
   }).allowed, false);
-  assert.equal(canCreateProductionPassenger(), false);
-  assert.equal(canUpdateProductionPassenger(), false);
-  assert.equal(canDeleteProductionPassenger(), false);
+  assert.equal(canCreateProductionPassenger(), true);
+  assert.equal(canUpdateProductionPassenger(), true);
+  assert.equal(canDeleteProductionPassenger(), true);
   const created = reviewCreateProductionPassenger(42, validForm(), today);
   const updated = reviewUpdateProductionPassenger(42, 7, validForm(), today);
   const removed = reviewDeleteProductionPassenger(42, 7, false, true);
-  assert.equal(created.status, "disabled");
+  assert.equal(created.status, "ready");
   assert.equal(created.method, "POST");
   assert.equal(created.path, "/empty-legs/42/passengers");
   assert.equal(created.body.firstName, "Alex");
-  assert.equal(updated.status, "disabled");
+  assert.equal(updated.status, "ready");
   assert.equal(updated.method, "PATCH");
   assert.equal(updated.path, "/empty-legs/42/passengers/7");
-  assert.equal(removed.status, "disabled");
+  assert.equal(removed.status, "ready");
   assert.equal(removed.method, "DELETE");
   assert.equal(removed.body, null);
   assert.equal(reviewDeleteProductionPassenger(42, 7, false, false).status, "needs-confirmation");
@@ -201,7 +202,7 @@ test("manifest reads stay on the explicit passenger screen and acknowledgement s
   assert.match(checklist, /disabled=\{!canAcknowledgeProductionManifest\(\)\}/);
   const winner = readFileSync(resolve(projectRoot, "lib/winnerChecklist.ts"), "utf8");
   assert.match(winner, /complete: hasTimestamp\(checklist\.manifestAckAt\)/);
-  assert.match(winner, /export function canAcknowledgeProductionManifest\(\): boolean \{\n  return false;\n\}/);
+  assert.match(winner, /export function canAcknowledgeProductionManifest\(\): boolean \{\n  return true;\n\}/);
   assert.match(winner, /reviewPost\(legId, `\/trips\/\$\{legId\}\/checklist\/manifestAck`, canAcknowledgeProductionManifest\(\)\)/);
 });
 

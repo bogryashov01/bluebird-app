@@ -31,6 +31,9 @@ const PUBLIC_QUEUE_CONTRACT_KEYS = [
   'isViewer',
 ] as const satisfies readonly (keyof ProductionPublicQueueEntry)[];
 
+const OPTIONAL_PUBLIC_QUEUE_KEYS = ['connectionTargetReference'] as const;
+const CONNECTION_TARGET_REFERENCE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function parsePublicQueue(value: unknown): FullAppDemoPublicQueueEntry[] {
   if (!Array.isArray(value)) {
     throw new Error('Queue response must be a public queue array.');
@@ -41,10 +44,16 @@ function parsePublicQueue(value: unknown): FullAppDemoPublicQueueEntry[] {
     }
     const raw = item as Record<string, unknown>;
     const keys = Object.keys(raw);
+    const allowed = new Set<string>([...PUBLIC_QUEUE_CONTRACT_KEYS, ...OPTIONAL_PUBLIC_QUEUE_KEYS]);
     if (
-      keys.length !== PUBLIC_QUEUE_CONTRACT_KEYS.length ||
       PUBLIC_QUEUE_CONTRACT_KEYS.some((key) => !Object.prototype.hasOwnProperty.call(raw, key)) ||
-      keys.some((key) => !(PUBLIC_QUEUE_CONTRACT_KEYS as readonly string[]).includes(key))
+      keys.some((key) => !allowed.has(key))
+    ) {
+      throw new Error(`Queue entry ${index + 1} does not match the established public queue contract.`);
+    }
+    if (
+      raw.connectionTargetReference !== undefined &&
+      (typeof raw.connectionTargetReference !== 'string' || !CONNECTION_TARGET_REFERENCE.test(raw.connectionTargetReference))
     ) {
       throw new Error(`Queue entry ${index + 1} does not match the established public queue contract.`);
     }

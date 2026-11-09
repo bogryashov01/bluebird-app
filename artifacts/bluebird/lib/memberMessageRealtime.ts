@@ -2,8 +2,12 @@
  * Hint socket for member messages.
  *
  * The Member Messaging Gateway authenticates the first text frame and then
- * sends JSON events. Message bodies stay on the authenticated HTTP client.
+ * sends JSON hints. Message bodies stay on the authenticated HTTP client.
+ * Connection hints carry only a connection id and refresh the REST lists.
+ * These hints are not operating-system push notifications.
  * The Clerk JWT is sent only in that first frame and is never written to a log.
+ * The client does not send a conversation subscription. The gateway decides
+ * which account-owned events to deliver after authentication.
  *
  * Heartbeat: React Native 0.86.3 connects through SocketRocket 0.7.1.
  * A control-frame ping is answered with a control-frame pong inside
@@ -74,6 +78,18 @@ export function memberMessagePollIntervalMs(input: {
   return MEMBER_MESSAGE_POLL_MS;
 }
 
+/**
+ * Connections keep their existing mount refresh when the gateway is off.
+ * While the gateway is enabled and the socket is down, the REST lists poll.
+ */
+export function connectionRefreshIntervalMs(input: {
+  realtimeEnabled: boolean;
+  socketLive: boolean;
+}): number | null {
+  if (input.realtimeEnabled === true && input.socketLive !== true) return MEMBER_MESSAGE_POLL_MS;
+  return null;
+}
+
 export function realtimeReconnectDelayMs(attempt: number, random: number): number {
   const step = Number.isSafeInteger(attempt) && attempt > 0 ? attempt : 1;
   const exponential = Math.min(30_000, 1_000 * 2 ** (step - 1));
@@ -135,7 +151,9 @@ export type MemberMessageRealtimeFrame =
   | { type: 'authenticated' }
   | { type: 'message.created'; conversationId: number; messageId: number }
   | { type: 'conversation.updated'; conversationId: number }
-  | { type: 'unread.changed'; conversationId: number };
+  | { type: 'unread.changed'; conversationId: number }
+  | { type: 'connection.requested'; connectionId: number }
+  | { type: 'connection.accepted'; connectionId: number };
 
 function recordId(value: unknown): number | null {
   if (typeof value !== 'number' && typeof value !== 'string') return null;
@@ -174,6 +192,11 @@ export function parseMemberMessageRealtimeFrame(raw: unknown): MemberMessageReal
   if (root.type === 'authenticated') return { type: 'authenticated' };
   const fields = eventData(root);
   if (!fields) return null;
+  if (root.type === 'connection.requested' || root.type === 'connection.accepted') {
+    const connectionId = recordId(fields.connectionId);
+    if (!connectionId) return null;
+    return { type: root.type, connectionId };
+  }
   const conversationId = recordId(fields.conversationId);
   if (!conversationId) return null;
   if (root.type === 'conversation.updated') {
@@ -196,14 +219,16 @@ export type MemberMessageRealtimeHint =
   | { kind: 'auth'; clerkUserId: string }
   | { kind: 'message'; clerkUserId: string; conversationId: number; messageId: number }
   | { kind: 'conversation'; clerkUserId: string; conversationId: number }
-  | { kind: 'unread'; clerkUserId: string; conversationId: number };
+  | { kind: 'unread'; clerkUserId: string; conversationId: number }
+  | { kind: 'connection-request'; clerkUserId: string; connectionId: number }
+  | { kind: 'connection-accepted'; clerkUserId: string; connectionId: number };
 
 export function realtimeHintRequestsHistory(
   hint: MemberMessageRealtimeHint,
   conversationId: number,
 ): boolean {
   if (hint.kind === 'auth') return true;
-  if (hint.kind === 'unread') return false;
+  if (hint.kind === 'unread' || hint.kind === 'connection-request' || hint.kind === 'connection-accepted') return false;
   return hint.conversationId === conversationId;
 }
 
@@ -211,7 +236,13 @@ export function realtimeHintRequestsInbox(hint: MemberMessageRealtimeHint): bool
   return hint.kind === 'auth' ||
     hint.kind === 'message' ||
     hint.kind === 'conversation' ||
-    hint.kind === 'unread';
+    hint.kind === 'unread' ||
+    hint.kind === 'connection-accepted';
+}
+
+/** Connection hints reload the REST connection lists. They do not open a message. */
+export function realtimeHintRequestsConnections(hint: MemberMessageRealtimeHint): boolean {
+  return hint.kind === 'auth' || hint.kind === 'connection-request' || hint.kind === 'connection-accepted';
 }
 
 export interface MemberMessageRealtimeClose {
@@ -457,6 +488,18 @@ export function createMemberMessageRealtimeSession(input: {
           kind: 'conversation',
           clerkUserId: input.clerkUserId,
           conversationId: frame.conversationId,
+        });
+        return;
+      }
+      if (frame.type === 'connection.requested' || frame.type === 'connection.accepted') {
+        const key = `${frame.type}:${frame.connectionId}`;
+        if (seenMessageIds.has(key)) return;
+        if (seenMessageIds.size >= SEEN_MESSAGE_LIMIT) seenMessageIds.clear();
+        seenMessageIds.add(key);
+        deliver({
+          kind: frame.type === 'connection.requested' ? 'connection-request' : 'connection-accepted',
+          clerkUserId: input.clerkUserId,
+          connectionId: frame.connectionId,
         });
         return;
       }

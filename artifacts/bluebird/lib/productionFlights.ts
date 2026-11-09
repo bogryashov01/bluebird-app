@@ -1,4 +1,5 @@
 import type { Flight } from '@workspace/api-client-react';
+import { readFlightQueue, type FlightQueueMemberView } from './flightQueuePresentation';
 import { requestProductionJson } from './productionRequestTransport';
 import {
   getMainBluebirdApiConfiguration,
@@ -99,6 +100,7 @@ export interface FlightView {
   status: string | null;
   queueClosesAt: string | null;
   queueCount: number | null;
+  queueMembers: FlightQueueMemberView[] | null;
   memberQueueCount: number | null;
   userInQueue: boolean | null;
   viewerQueuePosition: number | null;
@@ -576,6 +578,7 @@ export function mapProductionFlight(value: unknown): FlightView {
     status: getString(raw.status, 'status'),
     queueClosesAt: getString(raw.queueClosesAt, 'queueClosesAt'),
     queueCount: getNumber(raw.queueCount, 'queueCount'),
+    queueMembers: readFlightQueue(raw.queueMembers),
     memberQueueCount: getNumber(raw.memberQueueCount, 'memberQueueCount'),
     userInQueue: getBoolean(raw.userInQueue, 'userInQueue'),
     viewerQueuePosition: getNumber(raw.viewerQueuePosition, 'viewerQueuePosition'),
@@ -748,6 +751,7 @@ export function mapLocalFlight(flight: Flight): FlightView {
     status: flight.status,
     queueClosesAt: null,
     queueCount: null,
+    queueMembers: null,
     memberQueueCount: null,
     userInQueue: null,
     viewerQueuePosition: null,

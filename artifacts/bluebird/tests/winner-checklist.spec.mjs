@@ -13,6 +13,7 @@ import {
   canSendProductionBoardingPass,
   canVerifyProductionFbo,
   currentTripChecklistTarget,
+  checklistFullyComplete,
   isQueueClosed,
   labelCurrentTrips,
   listedTripForChecklist,
@@ -83,14 +84,14 @@ test("a declined effective winner has no confirm or rejoin action", () => {
   assert.doesNotMatch(source, /rejoin|Join Flight|joinEmptyLegQueue/i);
 });
 
-test("confirmation, decline, and checklist mutation gates stay disabled and do not prepare a request body", () => {
-  assert.equal(canConfirmProductionWinner(), false);
-  assert.equal(canDeclineProductionWinner(), false);
-  assert.equal(canVerifyProductionFbo(), false);
-  assert.equal(canAcknowledgeProductionManifest(), false);
-  assert.equal(canAcknowledgeProductionPolicy(), false);
-  assert.equal(canSendProductionBoardingPass(), false);
-  const reviews = [
+test("winner confirmation and decline use the existing winner endpoints and send no body", () => {
+  assert.equal(canConfirmProductionWinner(), true);
+  assert.equal(canDeclineProductionWinner(), true);
+  assert.equal(canVerifyProductionFbo(), true);
+  assert.equal(canAcknowledgeProductionManifest(), true);
+  assert.equal(canAcknowledgeProductionPolicy(), true);
+  assert.equal(canSendProductionBoardingPass(), true);
+  const opened = [
     reviewWinnerConfirmation(42),
     reviewWinnerDecline(42, true),
     reviewFboVerification(42),
@@ -98,12 +99,13 @@ test("confirmation, decline, and checklist mutation gates stay disabled and do n
     reviewPolicyAcknowledgement(42),
     reviewBoardingPassSend(42),
   ];
-  for (const review of reviews) {
-    assert.equal(review.status, "disabled");
+  for (const review of opened) {
+    assert.equal(review.status, "ready");
     assert.equal(review.method, "POST");
     assert.equal(review.body, null);
   }
-  assert.equal(reviewWinnerConfirmation(42).path, "/trips/42/checklist/confirmed");
+  assert.equal(reviewPolicyAcknowledgement(42).path, "/trips/42/checklist/policyAck");
+  assert.equal(reviewWinnerConfirmation(42).path, "/empty-legs/42/winner/confirm");
   assert.equal(reviewWinnerDecline(42, true).path, "/empty-legs/42/winner/decline");
   assert.equal(reviewWinnerDecline(42, false).status, "needs-confirmation");
   assert.equal(reviewFboVerification(42).path, "/trips/42/checklist/fboVerified");
@@ -111,6 +113,30 @@ test("confirmation, decline, and checklist mutation gates stay disabled and do n
   assert.equal(reviewPolicyAcknowledgement(42).path, "/trips/42/checklist/policyAck");
   assert.equal(reviewBoardingPassSend(42).path, "/trips/42/boarding-pass/send");
   assert.equal(reviewWinnerConfirmation(0).status, "invalid");
+});
+
+test("boarding pass actions replace the checklist only after every server step is complete", () => {
+  const complete = {
+    awarded: true,
+    remainingSteps: [],
+    confirmedAt: "2026-11-03T12:00:00.000Z",
+    fboVerifiedAt: "2026-11-03T12:01:00.000Z",
+    manifestAckAt: "2026-11-03T12:02:00.000Z",
+    policyAckAt: "2026-11-03T12:03:00.000Z",
+  };
+  assert.equal(checklistFullyComplete(complete), true);
+  assert.equal(checklistFullyComplete({ ...complete, policyAckAt: null }), false);
+  assert.equal(checklistFullyComplete({ ...complete, remainingSteps: ["policyAck"] }), false);
+  assert.equal(checklistFullyComplete({ ...complete, awarded: false }), false);
+  const trips = readFileSync(resolve(projectRoot, "components/ClerkTrips.tsx"), "utf8");
+  const notice = readFileSync(resolve(projectRoot, "components/WinnerFlightNotice.tsx"), "utf8");
+  assert.doesNotMatch(trips, /Send Boarding Pass|View Boarding Pass|flight-send-boarding-pass/);
+  assert.match(notice, /checklistFullyComplete\(listedTrip\.checklist\)/);
+  assert.match(notice, /Send Boarding Pass/);
+  assert.match(notice, /View Boarding Pass/);
+  assert.match(notice, /winner-view-checklist/);
+  assert.match(notice, /winner-checklist-link/);
+  assert.doesNotMatch(notice, /sendTripBoardingPass\(/);
 });
 
 test("checklist screens return before a disabled mutation and do not post", () => {
@@ -199,7 +225,8 @@ test("current trips keep an unconfirmed effective winner and distinguish award p
   assert.match(trips, /clerk-trip-status/);
   assert.match(trips, /currentTripChecklistTarget/);
   assert.match(checklistLibrary, /pathname: '\/flight\/checklist'/);
-  assert.doesNotMatch(trips, /boardingPass|filter\(.*awarded|getTrip\(|router\.replace/);
+  assert.doesNotMatch(trips, /filter\(.*awarded|getTrip\(|router\.replace|Send Boarding Pass|View Boarding Pass/);
+  assert.match(trips, /checklistFullyComplete\(trip\.checklist\)/);
 });
 
 test("an awarded current trip opens the existing checklist, and other trips do not", () => {
@@ -269,10 +296,11 @@ test("a boarding pass is shown only for an awarded trip with an authorized https
 });
 
 test("passenger and policy steps state the unresolved contract and do not invent content", () => {
-  assert.match(PASSENGER_PLACEHOLDER_NOTE, /Gender/);
-  assert.match(PASSENGER_PLACEHOLDER_NOTE, /seat capacity/);
-  assert.match(PASSENGER_PLACEHOLDER_NOTE, /Saving passenger changes is not available/);
-  assert.match(POLICY_UNAVAILABLE_NOTE, /Acknowledgement is not available/);
+  assert.match(PASSENGER_PLACEHOLDER_NOTE, /gender/i);
+  assert.match(PASSENGER_PLACEHOLDER_NOTE, /[Ss]eat capacity/);
+  assert.doesNotMatch(PASSENGER_PLACEHOLDER_NOTE, /backend|manifest request/);
+  assert.match(POLICY_UNAVAILABLE_NOTE, /agree/);
+  assert.doesNotMatch(POLICY_UNAVAILABLE_NOTE, /existing policy request|server confirms/);
   const steps = presentChecklistSteps({
     confirmedAt: null,
     fboVerifiedAt: null,
@@ -354,16 +382,16 @@ test("an auth-test awarded trip uses the trip list and does not call blocked che
   assert.match(passengers, /enabled: ready && !authTest/);
   assert.match(passengers, /passengers-back-to-trips/);
   assert.doesNotMatch(policy, /\/api\/trips\/\$\{|'\/api\/trips\/'|empty-legs\/\$\{[^}]*\}\/passengers|\/passengers'/);
-  assert.equal(canConfirmProductionWinner(), false);
-  assert.equal(canDeclineProductionWinner(), false);
-  assert.equal(canVerifyProductionFbo(), false);
-  assert.equal(canAcknowledgeProductionManifest(), false);
-  assert.equal(canAcknowledgeProductionPolicy(), false);
-  assert.equal(canSendProductionBoardingPass(), false);
+  assert.equal(canConfirmProductionWinner(), true);
+  assert.equal(canDeclineProductionWinner(), true);
+  assert.equal(canVerifyProductionFbo(), true);
+  assert.equal(canAcknowledgeProductionManifest(), true);
+  assert.equal(canAcknowledgeProductionPolicy(), true);
+  assert.equal(canSendProductionBoardingPass(), true);
   const manifest = readFileSync(resolve(projectRoot, "lib/passengerManifest.ts"), "utf8");
-  assert.match(manifest, /export function canCreateProductionPassenger\(\): boolean \{\n  return false;\n\}/);
-  assert.match(manifest, /export function canUpdateProductionPassenger\(\): boolean \{\n  return false;\n\}/);
-  assert.match(manifest, /export function canDeleteProductionPassenger\(\): boolean \{\n  return false;\n\}/);
+  assert.match(manifest, /export function canCreateProductionPassenger\(\): boolean \{\n  return true;\n\}/);
+  assert.match(manifest, /export function canUpdateProductionPassenger\(\): boolean \{\n  return true;\n\}/);
+  assert.match(manifest, /export function canDeleteProductionPassenger\(\): boolean \{\n  return true;\n\}/);
 });
 
 test("trip action failures use local copy and production gates stay closed", () => {

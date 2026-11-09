@@ -32,6 +32,9 @@ export const MEMBER_CONNECTION_PATHS = {
   accept: (connectionId: number) => `/me/connections/requests/${connectionId}/accept`,
   decline: (connectionId: number) => `/me/connections/requests/${connectionId}/decline`,
   list: '/me/connections',
+  queueStatus: '/me/connections/queue-status',
+  queueTargetPreview: (queueTargetReference: string) =>
+    `/me/connections/queue-targets/${encodeURIComponent(queueTargetReference)}/preview`,
   remove: (connectionId: number) => `/me/connections/${connectionId}`,
 } as const;
 
@@ -80,6 +83,42 @@ export type MemberConnectionsFailure =
   | 'not_found'
   | 'conflict'
   | 'unavailable';
+
+export type QueueConnectionRequestFailure =
+  | 'configuration'
+  | 'token'
+  | 'network'
+  | 'timeout'
+  | 'cancelled'
+  | 'schema'
+  | 'invalid_body'
+  | 'self_request'
+  | 'unauthorized'
+  | 'active_membership_required'
+  | 'first_in_queue_required'
+  | 'queue_target_unavailable'
+  | 'relationship_exists'
+  | 'unavailable';
+
+export type QueueTargetPreviewFailure =
+  | 'configuration'
+  | 'token'
+  | 'network'
+  | 'timeout'
+  | 'cancelled'
+  | 'schema'
+  | 'invalid_body'
+  | 'unauthorized'
+  | 'active_membership_required'
+  | 'queue_target_unavailable'
+  | 'unavailable';
+
+/** Names for the position-1 preview. The queue list never includes these. */
+export interface QueueTargetPreview {
+  firstName: string;
+  lastName: string;
+  position: number;
+}
 
 export type MemberConnectionsResult<T> =
   | { kind: 'disabled' }
@@ -196,6 +235,88 @@ export function parseConnectionRequestResponse(value: unknown): { connection: Co
   return { connection: parseConnectionRelationship(raw.connection, 'connectionRequest.connection') };
 }
 
+export interface QueueConnectionAcknowledgement {
+  id: number;
+  status: 'pending';
+  createdAt: string;
+  updatedAt: string;
+  respondedAt: string | null;
+  removedAt: string | null;
+}
+
+const QUEUE_TARGET_REFERENCE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function normalizeQueueTargetReference(value: string): string | null {
+  const reference = value.trim().toLowerCase();
+  return QUEUE_TARGET_REFERENCE.test(reference) ? reference : null;
+}
+
+const PREVIEW_NAME = /^[\p{L}][\p{L}\p{M}'’.\- ]{0,79}$/u;
+
+/**
+ * GET queue-target preview. Only first name, last name, and position are kept.
+ * Extra identity fields from the server are dropped.
+ */
+export function parseQueueTargetPreview(value: unknown): QueueTargetPreview {
+  const raw = objectValue(value, 'queueTargetPreview');
+  const firstName = previewName(raw.firstName, 'queueTargetPreview.firstName');
+  const lastName = previewName(raw.lastName, 'queueTargetPreview.lastName');
+  const position = positiveId(raw.position, 'queueTargetPreview.position');
+  return { firstName, lastName, position };
+}
+
+/** Queue requests return an id and status. They do not include member identities. */
+export function parseQueueConnectionAcknowledgement(value: unknown): { connection: QueueConnectionAcknowledgement } {
+  const raw = objectValue(value, 'queueConnectionRequest');
+  const connection = objectValue(raw.connection, 'queueConnectionRequest.connection');
+  const status = stringValue(connection.status, 'queueConnectionRequest.connection.status');
+  if (status !== 'pending') schemaFailure('queueConnectionRequest.connection.status');
+  return {
+    connection: {
+      id: positiveId(connection.id, 'queueConnectionRequest.connection.id'),
+      status: 'pending',
+      createdAt: dateTime(connection.createdAt, 'queueConnectionRequest.connection.createdAt'),
+      updatedAt: dateTime(connection.updatedAt, 'queueConnectionRequest.connection.updatedAt'),
+      respondedAt: nullableDateTime(connection.respondedAt, 'queueConnectionRequest.connection.respondedAt'),
+      removedAt: nullableDateTime(connection.removedAt, 'queueConnectionRequest.connection.removedAt'),
+    },
+  };
+}
+
+export interface QueueConnectionRelationship {
+  connectionId: number;
+  emptyLegId: number;
+  status: 'pending' | 'accepted';
+  direction: 'outgoing' | 'incoming';
+  updatedAt: string;
+}
+
+/**
+ * Restores queue connection state after restart. Rows keep their own ids and
+ * directions. Member identities are not part of this response.
+ */
+export function parseQueueConnectionStatus(value: unknown): { relationships: QueueConnectionRelationship[] } {
+  const raw = objectValue(value, 'queueConnectionStatus');
+  if (!Array.isArray(raw.relationships)) schemaFailure('queueConnectionStatus.relationships');
+  return {
+    relationships: raw.relationships.map((item, index) => {
+      const field = `queueConnectionStatus.relationships.${index}`;
+      const row = objectValue(item, field);
+      const status = stringValue(row.status, `${field}.status`);
+      const direction = stringValue(row.direction, `${field}.direction`);
+      if (status !== 'pending' && status !== 'accepted') schemaFailure(`${field}.status`);
+      if (direction !== 'outgoing' && direction !== 'incoming') schemaFailure(`${field}.direction`);
+      return {
+        connectionId: positiveId(row.connectionId, `${field}.connectionId`),
+        emptyLegId: positiveId(row.emptyLegId, `${field}.emptyLegId`),
+        status,
+        direction,
+        updatedAt: dateTime(row.updatedAt, `${field}.updatedAt`),
+      };
+    }),
+  };
+}
+
 export function parseIncomingConnectionRequests(value: unknown): { requests: ConnectionRelationship[] } {
   const raw = objectValue(value, 'incomingRequests');
   if (!Array.isArray(raw.requests)) schemaFailure('incomingRequests.requests');
@@ -240,18 +361,19 @@ export function discoverConnectionQuery(input: {
 export function createMemberConnectionsClient(options: MemberConnectionsClientOptions) {
   const live = options.enabled === true && options.nativeAuthTest !== true;
 
-  async function request<T>(
+  async function request<T, Code extends string = MemberConnectionsFailure>(
     path: string,
     method: 'GET' | 'POST' | 'DELETE',
     parse: (value: unknown) => T,
     body?: Record<string, string>,
-  ): Promise<MemberConnectionsResult<T>> {
+    mapFailure: (error: unknown) => Code = failureCode as (error: unknown) => Code,
+  ): Promise<{ kind: 'disabled' } | { kind: 'loaded'; data: T } | { kind: 'error'; code: Code }> {
     if (!live) return { kind: 'disabled' };
     let baseUrl: string;
     try {
       baseUrl = validateMainBluebirdApiBaseUrl(options.baseUrl, options.environment);
     } catch {
-      return { kind: 'error', code: 'configuration' };
+      return { kind: 'error', code: 'configuration' as Code };
     }
     try {
       const data = await requestProductionJson({
@@ -289,7 +411,7 @@ export function createMemberConnectionsClient(options: MemberConnectionsClientOp
       });
       return { kind: 'loaded', data };
     } catch (error) {
-      return { kind: 'error', code: failureCode(error) };
+      return { kind: 'error', code: mapFailure(error) };
     }
   }
 
@@ -306,7 +428,32 @@ export function createMemberConnectionsClient(options: MemberConnectionsClientOp
       if (!USER_ID.test(id)) return Promise.resolve({ kind: 'error', code: 'invalid_body' } as const);
       return request(MEMBER_CONNECTION_PATHS.requests, 'POST', parseConnectionRequestResponse, { targetUserId: id });
     },
+    createQueueRequest: (queueTargetReference: string) => {
+      if (!live) return Promise.resolve({ kind: 'disabled' } as const);
+      const reference = normalizeQueueTargetReference(queueTargetReference);
+      if (!reference) return Promise.resolve({ kind: 'error', code: 'invalid_body' } as const);
+      return request(
+        MEMBER_CONNECTION_PATHS.requests,
+        'POST',
+        parseQueueConnectionAcknowledgement,
+        { queueTargetReference: reference },
+        queueConnectionFailureCode,
+      );
+    },
+    previewQueueTarget: (queueTargetReference: string) => {
+      if (!live) return Promise.resolve({ kind: 'disabled' } as const);
+      const reference = normalizeQueueTargetReference(queueTargetReference);
+      if (!reference) return Promise.resolve({ kind: 'error', code: 'invalid_body' } as const);
+      return request(
+        MEMBER_CONNECTION_PATHS.queueTargetPreview(reference),
+        'GET',
+        parseQueueTargetPreview,
+        undefined,
+        queueTargetPreviewFailureCode,
+      );
+    },
     listIncoming: () => request(MEMBER_CONNECTION_PATHS.incoming, 'GET', parseIncomingConnectionRequests),
+    listQueueStatus: () => request(MEMBER_CONNECTION_PATHS.queueStatus, 'GET', parseQueueConnectionStatus),
     accept: (connectionId: number) => decision(connectionId, 'accept'),
     decline: (connectionId: number) => decision(connectionId, 'decline'),
     listAccepted: () => request(MEMBER_CONNECTION_PATHS.list, 'GET', parseAcceptedConnections),
@@ -329,6 +476,49 @@ export function createMemberConnectionsClient(options: MemberConnectionsClientOp
       : MEMBER_CONNECTION_PATHS.decline(connectionId);
     return request(path, 'POST', parseConnectionRequestResponse);
   }
+}
+
+function queueConnectionFailureCode(error: unknown): QueueConnectionRequestFailure {
+  if (error instanceof ProductionAuthHttpError) {
+    const code = error.serverCode;
+    if (error.status === 400 && code === 'self_request') return 'self_request';
+    if (error.status === 400) return 'invalid_body';
+    if (error.status === 401) return 'unauthorized';
+    if (error.status === 403 && code === 'active_membership_required') return 'active_membership_required';
+    if (error.status === 403 && code === 'first_in_queue_required') return 'first_in_queue_required';
+    if (error.status === 404 && code === 'queue_target_unavailable') return 'queue_target_unavailable';
+    if (error.status === 409 && code === 'relationship_exists') return 'relationship_exists';
+    return 'unavailable';
+  }
+  if (error instanceof ProductionAuthCancelledError) return 'cancelled';
+  if (error instanceof ProductionAuthTimeoutError) return 'timeout';
+  if (error instanceof ProductionAuthNetworkError) return 'network';
+  if (error instanceof ProductionAuthSchemaError || error instanceof ProductionAuthInvalidJsonError) return 'schema';
+  if (error instanceof ProductionAuthRequestError && error.code === 'token') return 'token';
+  return 'unavailable';
+}
+
+function queueTargetPreviewFailureCode(error: unknown): QueueTargetPreviewFailure {
+  if (error instanceof ProductionAuthHttpError) {
+    const code = error.serverCode;
+    if (error.status === 400) return 'invalid_body';
+    if (error.status === 401) return 'unauthorized';
+    if (error.status === 403 && code === 'active_membership_required') return 'active_membership_required';
+    if (error.status === 404) return 'queue_target_unavailable';
+    return 'unavailable';
+  }
+  if (error instanceof ProductionAuthCancelledError) return 'cancelled';
+  if (error instanceof ProductionAuthTimeoutError) return 'timeout';
+  if (error instanceof ProductionAuthNetworkError) return 'network';
+  if (error instanceof ProductionAuthSchemaError || error instanceof ProductionAuthInvalidJsonError) return 'schema';
+  if (error instanceof ProductionAuthRequestError && error.code === 'token') return 'token';
+  return 'unavailable';
+}
+
+function previewName(value: unknown, field: string): string {
+  const text = stringValue(value, field).trim().replace(/\s+/g, ' ');
+  if (!PREVIEW_NAME.test(text)) schemaFailure(field);
+  return text;
 }
 
 function failureCode(error: unknown): MemberConnectionsFailure {

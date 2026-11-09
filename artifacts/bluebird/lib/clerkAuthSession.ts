@@ -85,6 +85,15 @@ export function isClerkQueueStatusPath(segments: readonly string[], pathname = '
     segments.length === 2;
 }
 
+/** The winner celebration opens refreshed flight details. Opening it does not confirm or decline. */
+export function isClerkWinnerPath(segments: readonly string[], pathname = ''): boolean {
+  const path = pathname.split(/[?#]/, 1)[0].replace(/\/+$/, '');
+  if (path === '/flight/winner') return true;
+  return segments[0] === 'flight' &&
+    segments[1] === 'winner' &&
+    segments.length === 2;
+}
+
 /**
  * A Clerk snapshot that has not loaded yet is still restoring the previous
  * session. Redirecting during that gap sends a signed-in member to sign-in.
@@ -103,6 +112,7 @@ export function shouldRedirectClerkRoute(
   registeredHomeReady = false,
   pathname = '',
   connectionsPreviewEnabled = false,
+  developmentDiagnosticsEnabled = false,
 ): boolean {
   if (memberAccessResolved) return false;
   const group = segments[0];
@@ -149,6 +159,9 @@ export function shouldRedirectClerkRoute(
   if (registeredHomeReady && isClerkQueueStatusPath(segments, pathname)) {
     return false;
   }
+  if (registeredHomeReady && isClerkWinnerPath(segments, pathname)) {
+    return false;
+  }
   // The join review and development-only demo screens do not submit a
   // production request. Match both the route name and the pathname so an
   // unmatched segment cannot send this flow back to the start screen.
@@ -169,6 +182,13 @@ export function shouldRedirectClerkRoute(
     registeredHomeReady &&
     isConnectionsPreviewPath(segments) &&
     !pathnameHasLegacyConversationTarget(pathname)
+  ) return false;
+  // Development builds can open a manual read-only Connections diagnostic.
+  // Release builds keep the route behind the normal redirect.
+  if (
+    developmentDiagnosticsEnabled &&
+    registeredHomeReady &&
+    isConnectionDiagnosticsPath(segments, pathname)
   ) return false;
   // Member message threads use the messages client. Opening this route does
   // not enable the feature or send a message. A demo or non-numeric id is not
@@ -192,6 +212,14 @@ const MEMBER_MESSAGE_ID = /^(?:\[conversationId\]|[1-9]\d*)$/;
 const SAFE_MEMBER_MESSAGE_PATH = /^\/messages\/([1-9]\d*)$/;
 
 export const CLERK_CONNECTIONS_TAB = '/(tabs)/connections' as const;
+
+export function isConnectionDiagnosticsPath(segments: readonly string[], pathname = ''): boolean {
+  const path = locationPath(pathname);
+  if (path === '/dev/connection-diagnostics') return true;
+  return segments[0] === 'dev' &&
+    segments[1] === 'connection-diagnostics' &&
+    segments.length === 2;
+}
 
 /** Development builds may open the device-local preview. Release builds cannot. */
 export function isConnectionsPreviewDevelopmentEnabled(

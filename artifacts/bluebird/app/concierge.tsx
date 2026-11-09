@@ -11,6 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
 import { DemoConciergeChat } from '@/components/DemoConciergeChat';
+import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
 import { useConciergeChat, useGetConciergeHistory, useRequestConciergeCallback } from '@workspace/api-client-react';
 import * as Haptics from 'expo-haptics';
 
@@ -286,9 +287,20 @@ function ConciergeContent() {
 }
 
 export default function ConciergeScreen() {
-  const { authMode } = useAuth();
-  if (authMode === 'clerk') {
+  const { authMode, demoMode } = useAuth();
+  // Preserve scripted demo chat for the full-app demo only. Production Clerk
+  // must not present those replies as a live AI Concierge service.
+  if (demoMode) {
     return <DemoConciergeChat />;
+  }
+  if (authMode === 'clerk') {
+    return (
+      <ProductionAuthenticatedUnavailableNotice
+        title="AI Concierge unavailable"
+        description="AI Concierge is not connected to your signed-in Bluebird account yet. No demo replies are shown."
+        testID="clerk-concierge-unavailable"
+      />
+    );
   }
   return <ConciergeContent />;
 }

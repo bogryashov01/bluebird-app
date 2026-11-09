@@ -886,22 +886,23 @@ test('the Clerk membership screen keeps the original layout without prototype da
   assert.equal(clerkSource.includes('logMembershipDashboardPresentation'), true);
   assert.equal(clerkSource.includes('logMembershipNormalizedFields'), true);
   assert.equal(clerkSource.includes('design.metrics'), true);
-  assert.equal(clerkSource.includes('design.upgrade'), true);
-  assert.equal(clerkSource.includes('membership-upgrade-soon'), true);
+  assert.equal(clerkSource.includes('design.upgrade'), false);
+  assert.equal(clerkSource.includes('membership-upgrade-soon'), false);
+  assert.equal(clerkSource.includes('clerk-membership-upgrade'), false);
   assert.equal(clerkSource.includes('design.statusLine'), false);
   assert.equal(clerkSource.includes('design.paymentLine'), false);
   assert.equal(clerkSource.includes('design.periodLine'), false);
-  assert.equal(clerkSource.includes('accessibilityState={{ disabled: true }}'), true);
+  assert.equal(clerkSource.includes('accessibilityState={{ disabled: true }}'), false);
   assert.equal(clerkSource.includes("color: '#0A1128'"), false);
   assert.equal(source.includes("upgradeBtnText, { color: colors.textOnSurface }"), true);
   assert.equal(clerkSource.includes('getReferrals'), false);
   assert.equal(clerkSource.includes('listTrips'), false);
   for (const label of [
     'AI Concierge',
+    'Not available yet',
     'Referral Program',
     'Payment Methods',
     'design.metrics',
-    'design.upgrade',
     'design.statusNote',
     'membership-settings',
     'memberTier: completedAccount.memberTier',
@@ -947,12 +948,14 @@ test('the Clerk membership screen keeps the original layout without prototype da
     'Personal Information',
     'Connect Contacts',
     'Payment Methods',
+    'Delete Account',
     'Notification Settings',
     'Appearance',
     'Help Center',
     'Legal',
     'Sign Out',
     "router.push('/account/contacts'",
+    "router.push('/account/delete-account'",
     "router.push('/concierge'",
     "router.push('/support/help-center'",
     "router.push('/support/legal'",

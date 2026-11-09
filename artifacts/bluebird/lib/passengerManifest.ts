@@ -1,18 +1,18 @@
 import type { ProductionPassenger, ProductionPassengerInput, UserGender } from './productionAuthApi';
 
-/** Creating a passenger stays off until explicitly authorized. */
+/** Creating a passenger uses the existing passenger manifest contract. */
 export function canCreateProductionPassenger(): boolean {
-  return false;
+  return true;
 }
 
-/** Updating a passenger stays off until explicitly authorized. */
+/** Updating a passenger uses the existing passenger manifest contract. */
 export function canUpdateProductionPassenger(): boolean {
-  return false;
+  return true;
 }
 
-/** Deleting a passenger stays off until explicitly authorized. */
+/** Deleting a passenger uses the existing passenger manifest contract. */
 export function canDeleteProductionPassenger(): boolean {
-  return false;
+  return true;
 }
 
 export const MAX_PARTY_SIZE = 6;
@@ -22,7 +22,8 @@ export const MAX_ADDITIONAL_PASSENGERS = 5;
  * Gender is required by the current passenger API. Paul still needs to confirm
  * that male and female are the product values. The app does not invent one.
  */
-export const PASSENGER_GENDER_NOTE = 'Gender is required by the current passenger API and still needs product confirmation. Choose Male or Female only when the traveler’s gender is known.';
+export const PASSENGER_GENDER_NOTE =
+  'Gender is required. Choose Male or Female.';
 
 export const PASSENGER_SAVE_UNAVAILABLE = 'Saving passenger changes is unavailable in this build. No request is sent.';
 
@@ -60,10 +61,9 @@ export function emptyPassengerForm(): PassengerFormValues {
   };
 }
 
-export function passengerFormFromRecord(passenger: Pick<
-  ProductionPassenger,
-  'firstName' | 'middleName' | 'lastName' | 'weight' | 'dob' | 'gender' | 'notes'
->): PassengerFormValues {
+export function passengerFormFromRecord(
+  passenger: Pick<ProductionPassenger, 'firstName' | 'middleName' | 'lastName' | 'weight' | 'dob' | 'gender' | 'notes'>,
+): PassengerFormValues {
   return {
     firstName: passenger.firstName,
     middleName: passenger.middleName?.trim() ?? '',
@@ -134,9 +134,7 @@ export interface PassengerRoster<T> {
   guests: T[];
 }
 
-export function presentPassengerRoster<T extends { isAccountHolder: boolean }>(
-  passengers: readonly T[],
-): PassengerRoster<T> {
+export function presentPassengerRoster<T extends { isAccountHolder: boolean }>(passengers: readonly T[]): PassengerRoster<T> {
   let accountHolder: T | null = null;
   const protectedPassengers: T[] = [];
   const guests: T[] = [];
@@ -179,8 +177,9 @@ export function additionalPassengerOffer(input: {
   }
   return {
     allowed: true,
-    reason: totalLimit < MAX_PARTY_SIZE
-      ? `This aircraft allows ${totalLimit} passengers total, including you.`
+    reason:
+      totalLimit < MAX_PARTY_SIZE ?
+        `This aircraft allows ${totalLimit} passengers total, including you.`
       : 'You can add up to five additional passengers.',
   };
 }
@@ -290,19 +289,12 @@ export function presentPassengerFailure(status: number | null): { title: string;
   return { title: 'Connection problem', body: 'Passenger information could not be loaded. Nothing was changed.' };
 }
 
-export function shouldApplyPassengerManifest(input: {
-  requestedUserId: string;
-  activeUserId: string | null;
-  signedIn: boolean;
-}): boolean {
+export function shouldApplyPassengerManifest(input: { requestedUserId: string; activeUserId: string | null; signedIn: boolean }): boolean {
   const requested = input.requestedUserId.trim();
   return input.signedIn === true && requested.length > 0 && input.activeUserId === requested;
 }
 
-export function manifestMatchesFlight(
-  records: readonly { emptyLegId: number }[],
-  flightId: number,
-): boolean {
+export function manifestMatchesFlight(records: readonly { emptyLegId: number }[], flightId: number): boolean {
   return records.every((record) => record.emptyLegId === flightId);
 }
 
@@ -343,8 +335,7 @@ export function createdPassengerConfirmed(
 ): boolean {
   const accepted = acceptedPassengerList(flightId, list);
   if (!accepted) return false;
-  return list.passengers.some((passenger) =>
-    passenger.emptyLegId === flightId && passengerMatchesInput(passenger, body));
+  return list.passengers.some((passenger) => passenger.emptyLegId === flightId && passengerMatchesInput(passenger, body));
 }
 
 export function updatedPassengerConfirmed(
@@ -372,8 +363,8 @@ export function deletedPassengerConfirmed(
 
 export function presentPetSummary(petCount: number): string | null {
   if (!Number.isSafeInteger(petCount) || petCount < 1) return null;
-  return petCount === 1
-    ? 'This flight includes 1 pet record. Pet changes are not available here.'
+  return petCount === 1 ?
+      'This flight includes 1 pet record. Pet changes are not available here.'
     : `This flight includes ${petCount} pet records. Pet changes are not available here.`;
 }
 

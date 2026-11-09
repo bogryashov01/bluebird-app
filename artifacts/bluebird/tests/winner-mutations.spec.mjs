@@ -28,11 +28,8 @@ const now = Date.parse("2026-10-29T12:00:00.000Z");
 const closedAt = "2026-10-29T10:00:00.000Z";
 const futureClose = "2026-10-29T13:00:00.000Z";
 
-function confirmedTrip(confirmedAt = "2026-10-29T12:05:00.000Z", id = 42) {
-  return {
-    leg: { id },
-    checklist: { emptyLegId: id, confirmedAt, awarded: false },
-  };
+function confirmedFlight(status = "confirmed", id = 42) {
+  return { id, viewerConfirmationStatus: status, viewerIsEffectiveWinner: true, awardedAt: "2026-10-29T12:05:00.000Z" };
 }
 
 function declinedFlight(status = "declined", id = 42) {
@@ -50,9 +47,9 @@ function openInput(overrides = {}) {
     explicitConfirm: true,
     inFlight: { current: false },
     createClient: () => ({
-      confirmTripChecklist: async (id) => {
+      confirmEmptyLegWinner: async (id) => {
         calls.push(["confirm", id]);
-        return confirmedTrip();
+        return confirmedFlight();
       },
       declineEmptyLegWinner: async (id) => {
         calls.push(["decline", id]);
@@ -64,20 +61,20 @@ function openInput(overrides = {}) {
   return { input, calls };
 }
 
-test("an eligible winner confirmation posts the checklist path and requires a confirmation time", async () => {
+test("an eligible winner confirmation posts the winner path and requires a confirmed flight", async () => {
   const { input, calls } = openInput();
   const result = await submitWinnerConfirmation(input);
   assert.equal(result.status, "confirmed");
-  assert.equal(result.trip.checklist.confirmedAt, "2026-10-29T12:05:00.000Z");
+  assert.equal(result.flight.viewerConfirmationStatus, "confirmed");
   assert.deepEqual(calls, [["confirm", 42]]);
 });
 
-test("confirmation does not succeed from a matching trip that is still unconfirmed", async () => {
+test("confirmation does not succeed from a matching flight that is still unconfirmed", async () => {
   const { input, calls } = openInput({
     createClient: () => ({
-      confirmTripChecklist: async (id) => {
+      confirmEmptyLegWinner: async (id) => {
         calls.push(["confirm", id]);
-        return confirmedTrip(null);
+        return { id: 42, viewerConfirmationStatus: "pending" };
       },
       declineEmptyLegWinner: async () => { throw new Error("decline"); },
     }),
@@ -91,7 +88,7 @@ test("confirmation does not succeed from a matching trip that is still unconfirm
 test("a confirmation for a different leg is unconfirmed", async () => {
   const { input } = openInput({
     createClient: () => ({
-      confirmTripChecklist: async () => confirmedTrip("2026-10-29T12:05:00.000Z", 99),
+      confirmEmptyLegWinner: async () => confirmedFlight("confirmed", 99),
       declineEmptyLegWinner: async () => declinedFlight(),
     }),
   });
@@ -161,7 +158,7 @@ test("decline requires an explicit confirmation and a declined server status", a
 
   const pending = openInput({
     createClient: () => ({
-      confirmTripChecklist: async () => confirmedTrip(),
+      confirmEmptyLegWinner: async () => confirmedFlight(),
       declineEmptyLegWinner: async () => declinedFlight("pending"),
     }),
   });
@@ -186,7 +183,7 @@ test("missing flight and leg ids fail before a client is created", async () => {
 test("an expired or rejected winner response does not show success", async () => {
   const { input } = openInput({
     createClient: () => ({
-      confirmTripChecklist: async () => {
+      confirmEmptyLegWinner: async () => {
         throw new ProductionAuthHttpError(409, { code: "queue_closed", body: { code: "queue_closed" } });
       },
       declineEmptyLegWinner: async () => {
@@ -205,7 +202,7 @@ test("an expired or rejected winner response does not show success", async () =>
 test("network, schema, and unauthorized failures stay local", async () => {
   const network = openInput({
     createClient: () => ({
-      confirmTripChecklist: async () => { throw new ProductionAuthNetworkError(); },
+      confirmEmptyLegWinner: async () => { throw new ProductionAuthNetworkError(); },
       declineEmptyLegWinner: async () => { throw new ProductionAuthNetworkError(); },
     }),
   });
@@ -214,7 +211,7 @@ test("network, schema, and unauthorized failures stay local", async () => {
 
   const schema = openInput({
     createClient: () => ({
-      confirmTripChecklist: async () => { throw new ProductionAuthSchemaError("trip.checklist.confirmedAt"); },
+      confirmEmptyLegWinner: async () => { throw new ProductionAuthSchemaError("trip.checklist.confirmedAt"); },
       declineEmptyLegWinner: async () => { throw new ProductionAuthInvalidJsonError(); },
     }),
   });
@@ -223,7 +220,7 @@ test("network, schema, and unauthorized failures stay local", async () => {
 
   const unauthorized = openInput({
     createClient: () => ({
-      confirmTripChecklist: async () => { throw new ProductionAuthHttpError(401, null); },
+      confirmEmptyLegWinner: async () => { throw new ProductionAuthHttpError(401, null); },
       declineEmptyLegWinner: async () => { throw new ProductionAuthRequestError("Main API access token is unavailable.", "token"); },
     }),
   });
@@ -244,10 +241,10 @@ test("a second tap does not send a second request", async () => {
     explicitConfirm: true,
     inFlight: { current: false },
     createClient: () => ({
-      confirmTripChecklist: async (id) => {
+      confirmEmptyLegWinner: async (id) => {
         calls.push(id);
         await gate;
-        return confirmedTrip();
+        return confirmedFlight();
       },
       declineEmptyLegWinner: async (id) => {
         calls.push(id);
@@ -329,13 +326,15 @@ test("sign-out and an account switch do not refresh or send", async () => {
   }), false);
 });
 
-test("the production winner gates stay closed and the screens do not bypass them", async () => {
-  const closedConfirm = openInput({ gateOpen: canConfirmProductionWinner() });
-  const closedDecline = openInput({ gateOpen: canDeclineProductionWinner() });
+test("a closed winner gate sends nothing and the screens do not call the client directly", async () => {
+  const closedConfirm = openInput({ gateOpen: false });
+  const closedDecline = openInput({ gateOpen: false });
   assert.equal((await submitWinnerConfirmation(closedConfirm.input)).status, "disabled");
   assert.equal((await submitWinnerDecline(closedDecline.input)).status, "disabled");
   assert.equal(closedConfirm.calls.length, 0);
   assert.equal(closedDecline.calls.length, 0);
+  assert.equal(canConfirmProductionWinner(), true);
+  assert.equal(canDeclineProductionWinner(), true);
 
   const hook = readFileSync(resolve(projectRoot, "lib/useWinnerActions.ts"), "utf8");
   const checklist = readFileSync(resolve(projectRoot, "app/flight/checklist.tsx"), "utf8");
@@ -352,7 +351,7 @@ test("the production winner gates stay closed and the screens do not bypass them
   assert.match(checklist, /WINNER_DECLINE_DIALOG/);
   assert.match(notice, /WINNER_DECLINE_DIALOG/);
   assert.match(notice, /winner-view-checklist/);
-  assert.doesNotMatch(`${checklist}\n${notice}`, /confirmTripChecklist|declineEmptyLegWinner|confirmEmptyLegWinner/);
+  assert.doesNotMatch(`${checklist}\n${notice}`, /confirmEmptyLegWinner|declineEmptyLegWinner|confirmEmptyLegWinner/);
   assert.match(join, /export function canSubmitProductionQueueJoin\(\): boolean \{\n  return isProductionQueueMutationsEnabled\(\);\n\}/);
   assert.match(readiness, /deployedMainService: false/);
   assert.doesNotMatch(policy, /checklist\/confirmed|winner\/decline/);
@@ -433,8 +432,16 @@ test("the authenticated client posts the winner paths with a bearer token and no
         authorization: init.headers?.Authorization ?? init.headers?.authorization,
         credentials: init.credentials,
       });
-      if (String(url).endsWith("/trips/42/checklist/confirmed")) {
-        return { ok: true, status: 200, json: async () => trip };
+      if (String(url).endsWith("/empty-legs/42/winner/confirm") || String(url).endsWith("/empty-legs/43/winner/confirm")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ...emptyLeg,
+            id: String(url).endsWith("/empty-legs/43/winner/confirm") ? 42 : 42,
+            viewerConfirmationStatus: String(url).endsWith("/empty-legs/43/winner/confirm") ? "pending" : "confirmed",
+          }),
+        };
       }
       if (String(url).endsWith("/empty-legs/42/winner/decline")) {
         return { ok: true, status: 200, json: async () => emptyLeg };
@@ -454,7 +461,7 @@ test("the authenticated client posts the winner paths with a bearer token and no
   });
   assert.equal(declined.status, "declined");
   assert.deepEqual(requests.map((request) => request.url.replace("https://bluebirdjets.com/api", "")), [
-    "/trips/42/checklist/confirmed",
+    "/empty-legs/42/winner/confirm",
     "/empty-legs/42/winner/decline",
   ]);
   for (const request of requests) {
@@ -471,5 +478,5 @@ test("the authenticated client posts the winner paths with a bearer token and no
   });
   assert.equal(unconfirmed.status, "failed");
   assert.match(unconfirmed.failure.body, /did not confirm/);
-  assert.equal(requests.at(-1).url.endsWith("/trips/43/checklist/confirmed"), true);
+  assert.equal(requests.at(-1).url.endsWith("/empty-legs/43/winner/confirm"), true);
 });

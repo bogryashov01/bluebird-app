@@ -20,7 +20,10 @@ import { parseProductionFlightId } from '@/lib/productionFlights';
 export function useJoinFlightQueueRead(
   flightId: number,
   flightStatus: 'published' | null,
-): JoinFlightQueuePanel {
+): {
+  panel: JoinFlightQueuePanel;
+  refetch: () => Promise<unknown>;
+} {
   const { authMode, clerkUserId } = useAuth();
   const session = useClerkAuthSnapshot();
   const sessionRef = React.useRef(session);
@@ -76,13 +79,16 @@ export function useJoinFlightQueueRead(
     },
   });
 
-  return presentJoinFlightQueuePanel({
-    flightStatus,
-    sessionReady: published ? sessionReady : true,
-    signedIn,
-    loading: ready && (query.isLoading || query.isFetching),
-    failed: query.isError,
-    unauthorized: query.error instanceof ProductionAuthHttpError && query.error.status === 401,
-    read: query.data ?? null,
-  });
+  return {
+    panel: presentJoinFlightQueuePanel({
+      flightStatus,
+      sessionReady: published ? sessionReady : true,
+      signedIn,
+      loading: ready && query.isLoading,
+      failed: query.isError,
+      unauthorized: query.error instanceof ProductionAuthHttpError && query.error.status === 401,
+      read: query.data ?? null,
+    }),
+    refetch: query.refetch,
+  };
 }

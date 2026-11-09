@@ -61,7 +61,7 @@ export function ProductionInternationalNotice({
         </View>
         <Text style={[styles.title, { color: colors.textOnBrand }]}>International Flight Notice</Text>
         <Text style={[styles.body, { color: colors.mutedOnBrand }]}>
-          This flight is international. Bluebird decides whether this account must authorize an International Pass or use an existing credit. This screen does not charge a card and does not upgrade membership.
+          This flight is international. An International Pass may be required before you join. This does not charge a card.
         </Text>
         <View style={[styles.feeRow, { backgroundColor: colors.textOnBrand + '0A', borderColor: colors.textOnBrand + '18' }]}>
           <Text style={[styles.feeLabel, { color: colors.mutedOnBrand }]}>International Pass</Text>
@@ -79,8 +79,8 @@ export function ProductionInternationalNotice({
           <Text style={[styles.plusTitle, { color: colors.textOnBrand }]}>Plus membership</Text>
           <Text style={[styles.body, { color: colors.mutedOnBrand }]}>
             {step === 'not-required'
-              ? 'Bluebird did not require an International Pass for this account. No waiver is applied by this screen.'
-              : 'Upgrade to Plus is not available in this join flow. No upgrade is started.'}
+              ? 'An International Pass is not required for this flight.'
+              : 'Plus upgrades are not offered from this screen.'}
           </Text>
         </View>
         {step === 'required' ? (
@@ -90,10 +90,10 @@ export function ProductionInternationalNotice({
         ) : (
           <Text style={[styles.body, { color: colors.mutedOnBrand }]}>
             {step === 'pending'
-              ? 'Checking whether this membership includes international flights.'
+              ? 'Checking international access.'
               : step === 'unknown'
-                ? 'Bluebird has not confirmed a pass requirement. Joining sends no pass flag. The server can still reject the request.'
-                : 'Joining sends no International Pass flag because Bluebird did not require one.'}
+                ? 'Bluebird has not confirmed whether an International Pass is required.'
+                : 'An International Pass is not required for this flight.'}
           </Text>
         )}
         {step === 'required' ? (
@@ -104,7 +104,7 @@ export function ProductionInternationalNotice({
             onPress={() => setCreditConfirmed((value) => !value)}
           >
             <Text style={[styles.credit, { color: colors.textOnBrand }]}>
-              {creditConfirmed ? '✓ ' : '○ '}I confirm this join uses an International Pass credit. No payment is started.
+              {creditConfirmed ? '✓ ' : '○ '}Use an International Pass credit. No payment is started.
             </Text>
           </TouchableOpacity>
         ) : null}
@@ -141,11 +141,11 @@ export function ProductionInternationalNotice({
             onPress={() => join('none', false)}
           />
         )}
-        <Text style={[styles.hint, { color: colors.mutedOnBrand }]}>
-          {canSubmitProductionQueueJoin()
-            ? 'A queue request is sent only when you press a join action.'
-            : 'Queue joining is not available in this build. No request is sent.'}
-        </Text>
+        {!canSubmitProductionQueueJoin() ? (
+          <Text style={[styles.hint, { color: colors.mutedOnBrand }]}>
+            Joining is unavailable right now.
+          </Text>
+        ) : null}
       </View>
     </View>
   );

@@ -551,14 +551,19 @@ function PassengerFacts({
   passenger: ProductionPassenger;
   colors: ReturnType<typeof useColors>;
 }) {
-  const weight = passenger.weight === null ? 'Weight unavailable' : `${passenger.weight} lbs`;
-  const gender = passenger.gender === 'male' ? 'Male' : passenger.gender === 'female' ? 'Female' : 'Gender unavailable';
   return (
     <View style={styles.facts}>
       <Text style={[styles.name, { color: colors.foreground }]}>{displayPassengerName(passenger) || 'Name unavailable'}</Text>
-      <Text style={[styles.meta, { color: colors.mutedForeground }]}>{passenger.dob}</Text>
-      <Text style={[styles.meta, { color: colors.mutedForeground }]}>{weight}</Text>
-      <Text style={[styles.meta, { color: colors.mutedForeground }]}>{gender}</Text>
+      {[
+        ['Date of birth', passenger.dob],
+        ['Weight', passenger.weight === null ? 'Unavailable' : `${passenger.weight} lbs`],
+        ['Gender', passenger.gender === 'male' ? 'Male' : passenger.gender === 'female' ? 'Female' : 'Unavailable'],
+      ].map(([label, value]) => (
+        <View key={label} style={styles.factRow}>
+          <Text style={[styles.factLabel, { color: colors.mutedForeground }]}>{label}</Text>
+          <Text style={[styles.meta, { color: colors.foreground }]}>{value}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -600,7 +605,9 @@ const styles = StyleSheet.create({
   name: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
   meta: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },
   note: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18 },
-  facts: { gap: 2 },
+  facts: { gap: 8 },
+  factRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  factLabel: { fontFamily: 'Inter_500Medium', fontSize: 13 },
   stack: { gap: 12 },
   row: { flexDirection: 'row', gap: 10 },
   rowButton: { flex: 1 },

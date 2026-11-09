@@ -95,9 +95,10 @@ test("an ineligible send and a missing confirmation do not create a client", asy
   const unconfirmed = openInput({ explicitConfirm: false });
   assert.equal((await submitBoardingPassSend(unconfirmed.input)).status, "needs-confirmation");
   assert.equal(unconfirmed.calls.length, 0);
-  const closed = openInput({ gateOpen: canSendProductionBoardingPass() });
+  const closed = openInput({ gateOpen: false });
   assert.equal((await submitBoardingPassSend(closed.input)).status, "disabled");
   assert.equal(closed.calls.length, 0);
+  assert.equal(canSendProductionBoardingPass(), true);
   for (const legId of [0, -1, null]) {
     const { input, calls } = openInput({ legId });
     assert.equal((await submitBoardingPassSend(input)).status, "failed");
@@ -193,11 +194,12 @@ test("an account switch or sign-out does not refresh another member", () => {
   assert.equal(seen.length, 0);
 });
 
-test("the boarding pass gate stays closed and the checklist does not send from this build", () => {
+test("the boarding pass send uses the existing endpoint and the trips card does not send by itself", () => {
   const hook = readFileSync(resolve(projectRoot, "lib/useWinnerActions.ts"), "utf8");
   const checklist = readFileSync(resolve(projectRoot, "app/flight/checklist.tsx"), "utf8");
   const winners = readFileSync(resolve(projectRoot, "lib/winnerChecklist.ts"), "utf8");
   const trips = readFileSync(resolve(projectRoot, "components/ClerkTrips.tsx"), "utf8");
+  const notice = readFileSync(resolve(projectRoot, "components/WinnerFlightNotice.tsx"), "utf8");
   const authPolicy = readFileSync(resolve(projectRoot, "lib/nativeAuthTestPolicy.ts"), "utf8");
   assert.match(hook, /gateOpen: canSendProductionBoardingPass\(\)/);
   assert.match(hook, /explicitConfirm: true/);
@@ -210,13 +212,19 @@ test("the boarding pass gate stays closed and the checklist does not send from t
   assert.match(checklist, /Linking\.openURL\(boardingPassUrl\)/);
   assert.match(checklist, /checklist-boarding-pass-missing/);
   assert.doesNotMatch(checklist, /reviewBoardingPassSend|boarding-pass\/send|sendTripBoardingPass/);
-  assert.doesNotMatch(trips, /boardingPass/);
-  assert.match(winners, /export function canSendProductionBoardingPass\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canConfirmProductionWinner\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canDeclineProductionWinner\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canVerifyProductionFbo\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canAcknowledgeProductionManifest\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canAcknowledgeProductionPolicy\(\): boolean \{\n  return false;\n\}/);
+  assert.doesNotMatch(trips, /Send Boarding Pass|View Boarding Pass|sendTripBoardingPass\(/);
+  assert.match(notice, /checklistFullyComplete/);
+  assert.match(notice, /flight-send-boarding-pass/);
+  assert.match(notice, /flight-view-boarding-pass/);
+  assert.match(notice, /Alert\.alert/);
+  assert.match(notice, /router\.push\(detailsTarget\)|pathname: '\/flight\/checklist'/);
+  assert.doesNotMatch(notice, /sendTripBoardingPass\(/);
+  assert.match(winners, /export function canSendProductionBoardingPass\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canConfirmProductionWinner\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canDeclineProductionWinner\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canVerifyProductionFbo\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canAcknowledgeProductionManifest\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canAcknowledgeProductionPolicy\(\): boolean \{\n  return true;\n\}/);
   assert.doesNotMatch(authPolicy, /boarding-pass\/send|checklist\/policyAck|winner\/decline/);
 });
 

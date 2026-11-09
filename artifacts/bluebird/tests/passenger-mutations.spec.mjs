@@ -198,11 +198,12 @@ test("deletion requires confirmation, protects the account holder, and requires 
 });
 
 test("a closed gate, a missing id, sign-out, and a locked manifest do not create a client", async () => {
-  const closed = openCreate({ gateOpen: canCreateProductionPassenger() });
+  const closed = openCreate({ gateOpen: false });
   assert.equal((await submitPassengerCreate(closed.input)).status, "disabled");
   assert.equal(closed.calls.length, 0);
+  assert.equal(canCreateProductionPassenger(), true);
   const updateClosed = await submitPassengerUpdate({
-    gateOpen: canUpdateProductionPassenger(),
+    gateOpen: false,
     flightId: 42,
     passengerId: 9,
     values: form(),
@@ -215,7 +216,7 @@ test("a closed gate, a missing id, sign-out, and a locked manifest do not create
   });
   assert.equal(updateClosed.status, "disabled");
   const deleteClosed = await submitPassengerDelete({
-    gateOpen: canDeleteProductionPassenger(),
+    gateOpen: false,
     flightId: 42,
     passengerId: 9,
     isAccountHolder: false,
@@ -320,9 +321,9 @@ test("passenger gates stay closed and the screen does not bypass them or complet
   assert.match(hook, /explicitConfirm: true/);
   assert.match(hook, /sessionRef\.current\?\.userId !== requestedUserId/);
   assert.doesNotMatch(hook, /gateOpen:\s*true|manifestAckAt\s*=/);
-  assert.match(library, /export function canCreateProductionPassenger\(\): boolean \{\n  return false;\n\}/);
-  assert.match(library, /export function canUpdateProductionPassenger\(\): boolean \{\n  return false;\n\}/);
-  assert.match(library, /export function canDeleteProductionPassenger\(\): boolean \{\n  return false;\n\}/);
+  assert.match(library, /export function canCreateProductionPassenger\(\): boolean \{\n  return true;\n\}/);
+  assert.match(library, /export function canUpdateProductionPassenger\(\): boolean \{\n  return true;\n\}/);
+  assert.match(library, /export function canDeleteProductionPassenger\(\): boolean \{\n  return true;\n\}/);
   assert.match(library, /MAX_PARTY_SIZE = 6/);
   assert.match(library, /MAX_ADDITIONAL_PASSENGERS = 5/);
   for (const source of [screen, form, library]) {

@@ -336,12 +336,12 @@ function ClerkHomeAirportEditor({ clerkUserId }: { clerkUserId: string }) {
         ) : null}
         {!configuration ? (
           <Text style={[styles.emptyText, { color: colors.destructive }]} testID="clerk-home-airport-config-error">
-            Home Airport is unavailable because the Main Bluebird API is not configured.
+            Home Airport is unavailable right now.
           </Text>
         ) : null}
         {profile && !safeProfile ? (
           <Text style={[styles.emptyText, { color: colors.mutedForeground }]} testID="clerk-home-airport-read-only">
-            Read-only: required profile details are incomplete or the current settings cannot be safely preserved in a full-profile update. No change was sent.
+            Complete your profile before changing your home airport.
           </Text>
         ) : null}
         {profile ? (
@@ -423,7 +423,7 @@ function ClerkHomeAirportEditor({ clerkUserId }: { clerkUserId: string }) {
         </Pressable>
         {!accountWritesEnabled ? (
           <Text testID="clerk-home-airport-account-save-unavailable" style={[styles.error, { color: colors.mutedForeground, textAlign: 'center', marginTop: 8 }]}>
-            Home airport changes are not saved to the account in this build. No request is sent.
+            Home airport changes cannot be saved right now.
           </Text>
         ) : null}
       </View>
@@ -691,7 +691,7 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
             ) : null}
             {airportSearchState.kind === 'configuration-unavailable' ? (
               <Text style={[styles.emptyText, { color: colors.destructive }]} testID="registration-airport-configuration-error">
-                Airport search is unavailable because the Main Bluebird API is not configured.
+                Airport search is unavailable right now.
               </Text>
             ) : null}
             {airportSearchState.kind === 'unsupported-empty-query' ? (
@@ -737,7 +737,7 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
               />
             ) : null}
             {!configuration ? (
-              <Text style={[styles.emptyText, { color: colors.destructive }]}>The Main Bluebird API is not configured, so cities aren’t available.</Text>
+              <Text style={[styles.emptyText, { color: colors.destructive }]}>Cities are unavailable right now.</Text>
             ) : null}
             {!citiesQuery.isLoading && !citiesQuery.isError && cities.length === 0 && configuration ? (
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No cities matched “{citySearch.trim()}”.</Text>

@@ -36,7 +36,6 @@ import { productionFlightDetailQueryKey } from './flightDetailPresentation';
 import { mainBluebirdAuthenticatedQueryKey } from './mainBluebirdApi';
 import type { MainBluebirdApiEnvironment } from './mainBluebirdApiConfig';
 import {
-  confirmedTripForLeg,
   declinedFlightForId,
   FBO_DUPLICATE,
   FBO_UNCONFIRMED,
@@ -67,7 +66,7 @@ import {
 } from './winnerChecklist';
 
 export interface WinnerMutationClient {
-  confirmTripChecklist: (legId: number) => Promise<ProductionTrip>;
+  confirmEmptyLegWinner: (emptyLegId: number) => Promise<ProductionEmptyLeg>;
   declineEmptyLegWinner: (emptyLegId: number) => Promise<ProductionEmptyLeg>;
   verifyTripFbo: (legId: number) => Promise<ProductionTrip>;
   acknowledgeTripManifest: (legId: number) => Promise<ProductionTrip>;
@@ -77,7 +76,7 @@ export interface WinnerMutationClient {
 
 type WinnerSubmission =
   | { status: 'disabled' | 'needs-confirmation' }
-  | { status: 'confirmed'; trip: ProductionTrip }
+  | { status: 'confirmed'; flight: ProductionEmptyLeg }
   | { status: 'verified'; trip: ProductionTrip }
   | { status: 'acknowledged'; trip: ProductionTrip }
   | { status: 'policy-acknowledged'; trip: ProductionTrip }
@@ -99,10 +98,7 @@ function fboUnconfirmedFailure(): TripActionFailure {
 }
 
 function presentFboError(error: unknown): TripActionFailure {
-  if (
-    error instanceof ProductionAuthSchemaError ||
-    (error instanceof ProductionAuthRequestError && error.code === 'invalid_json')
-  ) {
+  if (error instanceof ProductionAuthSchemaError || (error instanceof ProductionAuthRequestError && error.code === 'invalid_json')) {
     return fboUnconfirmedFailure();
   }
   return presentWinnerError(error);
@@ -113,20 +109,14 @@ function unconfirmedFailure(): TripActionFailure {
 }
 
 function presentWinnerError(error: unknown): TripActionFailure {
-  if (
-    error instanceof ProductionAuthSchemaError ||
-    (error instanceof ProductionAuthRequestError && error.code === 'invalid_json')
-  ) {
+  if (error instanceof ProductionAuthSchemaError || (error instanceof ProductionAuthRequestError && error.code === 'invalid_json')) {
     return unconfirmedFailure();
   }
   if (error instanceof ProductionAuthHttpError) return presentTripActionFailure(error.status);
   if (error instanceof ProductionAuthNetworkError || error instanceof ProductionAuthTimeoutError) {
     return presentTripActionFailure(null);
   }
-  if (
-    error instanceof ProductionAuthRequestError &&
-    (error.code === 'token' || error.code === 'session_expired')
-  ) {
+  if (error instanceof ProductionAuthRequestError && (error.code === 'token' || error.code === 'session_expired')) {
     return presentTripActionFailure(401);
   }
   return presentTripActionFailure(null);
@@ -137,9 +127,23 @@ function blocked(block: WinnerActionBlock | null): WinnerSubmission | null {
   return { status: 'failed', failure: presentWinnerBlock(block) };
 }
 
+/** The winner endpoint awards the flight only when this response matches the requested flight and records confirmation. */
+export function confirmedFlightForId(
+  flightId: number,
+  flight: { id: number; viewerConfirmationStatus?: string | null; awardedAt?: string | null },
+): boolean {
+  if (!Number.isSafeInteger(flightId) || flightId < 1 || flight.id !== flightId) return false;
+  if (flight.viewerConfirmationStatus === 'confirmed') return true;
+  return typeof flight.awardedAt === 'string' &&
+    flight.awardedAt.trim().length > 0 &&
+    Number.isFinite(Date.parse(flight.awardedAt));
+}
+
 /**
- * POST /api/trips/:legId/checklist/confirmed. A closed gate returns before the
- * client is created. Success requires the trip parser and a confirmation time.
+ * POST /api/empty-legs/:id/winner/confirm with no body. This is the winner
+ * offer, distinct from the checklist presentation. A closed gate returns
+ * before the client is created. Success requires the empty-leg parser and a
+ * confirmed or awarded response for the same flight.
  */
 export async function submitWinnerConfirmation(input: {
   gateOpen: boolean;
@@ -158,9 +162,9 @@ export async function submitWinnerConfirmation(input: {
   if (input.inFlight.current) return { status: 'duplicate', failure: duplicateFailure() };
   input.inFlight.current = true;
   try {
-    const trip = confirmedTripForLeg(legId, await input.createClient().confirmTripChecklist(legId));
-    if (!trip) return { status: 'failed', failure: unconfirmedFailure() };
-    return { status: 'confirmed', trip };
+    const flight = await input.createClient().confirmEmptyLegWinner(legId);
+    if (!confirmedFlightForId(legId, flight)) return { status: 'failed', failure: unconfirmedFailure() };
+    return { status: 'confirmed', flight };
   } catch (error) {
     return { status: 'failed', failure: presentWinnerError(error) };
   } finally {
@@ -242,10 +246,7 @@ function manifestUnconfirmedFailure(): TripActionFailure {
 }
 
 function presentManifestError(error: unknown): TripActionFailure {
-  if (
-    error instanceof ProductionAuthSchemaError ||
-    (error instanceof ProductionAuthRequestError && error.code === 'invalid_json')
-  ) {
+  if (error instanceof ProductionAuthSchemaError || (error instanceof ProductionAuthRequestError && error.code === 'invalid_json')) {
     return manifestUnconfirmedFailure();
   }
   return presentWinnerError(error);
@@ -293,10 +294,7 @@ function policyUnconfirmedFailure(): TripActionFailure {
 }
 
 function presentPolicyError(error: unknown): TripActionFailure {
-  if (
-    error instanceof ProductionAuthSchemaError ||
-    (error instanceof ProductionAuthRequestError && error.code === 'invalid_json')
-  ) {
+  if (error instanceof ProductionAuthSchemaError || (error instanceof ProductionAuthRequestError && error.code === 'invalid_json')) {
     return policyUnconfirmedFailure();
   }
   return presentWinnerError(error);
@@ -344,10 +342,7 @@ function boardingPassUnconfirmedFailure(): TripActionFailure {
 }
 
 function presentBoardingPassError(error: unknown): TripActionFailure {
-  if (
-    error instanceof ProductionAuthSchemaError ||
-    (error instanceof ProductionAuthRequestError && error.code === 'invalid_json')
-  ) {
+  if (error instanceof ProductionAuthSchemaError || (error instanceof ProductionAuthRequestError && error.code === 'invalid_json')) {
     return boardingPassUnconfirmedFailure();
   }
   return presentWinnerError(error);
@@ -386,11 +381,7 @@ export async function submitBoardingPassSend(input: {
   }
 }
 
-export function winnerMutationRefreshKeys(input: {
-  environment: MainBluebirdApiEnvironment;
-  clerkUserId: string;
-  legId: number;
-}) {
+export function winnerMutationRefreshKeys(input: { environment: MainBluebirdApiEnvironment; clerkUserId: string; legId: number }) {
   const legId = parseProductionFlightId(input.legId);
   if (legId === null) return null;
   return {
@@ -418,13 +409,7 @@ export function applyWinnerMutationRefresh(input: {
     clerkUserId: requested,
     legId: input.legId,
   });
-  if (
-    !keys ||
-    input.gateOpen !== true ||
-    input.signedIn !== true ||
-    requested.length === 0 ||
-    input.activeUserId !== requested
-  ) {
+  if (!keys || input.gateOpen !== true || input.signedIn !== true || requested.length === 0 || input.activeUserId !== requested) {
     return false;
   }
   input.invalidate(keys.trip);

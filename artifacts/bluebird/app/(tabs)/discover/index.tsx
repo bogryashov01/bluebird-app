@@ -43,8 +43,6 @@ import {
   type FlightView,
 } from '@/lib/productionFlights';
 import { fetchFullAppDemoFlights } from '@/lib/fullAppDemoLiveReads';
-import { ProductionReadHttpError } from '@/lib/productionFlights';
-
 const AIRCRAFT_IMAGES: { match: RegExp; source: any }[] = [
   { match: /gulfstream|g280|challenger|falcon/i, source: require('@/assets/images/aircraft-heavy.jpg') },
   { match: /king air|pilatus|pc-12|turboprop/i, source: require('@/assets/images/aircraft-turboprop.jpg') },
@@ -90,7 +88,7 @@ function featuredPrice(flight: FlightView): string | null {
   if (flight.totalPrice !== null && Number.isFinite(flight.totalPrice) && flight.totalPrice >= 0) {
     return `${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(flight.totalPrice)} total`;
   }
-  if (flight.pricePerHour !== null && Number.isFinite(flight.pricePerHour) && flight.pricePerHour >= 0) {
+  if (flight.pricePerHour !== null && Number.isFinite(flight.pricePerHour) && flight.pricePerHour > 0) {
     return `${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(flight.pricePerHour)}/hr`;
   }
   return null;
@@ -182,12 +180,11 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
           <BluebirdLogo variant="symbol" size="small" style={styles.logoImg} />
         </View>
         <TouchableOpacity
-          style={[styles.conciergeBtn, { backgroundColor: colors.card }, demoMode && { opacity: 0.45 }]}
+          style={[styles.conciergeBtn, { backgroundColor: colors.card }]}
           onPress={() => router.push('/concierge')}
-          disabled={demoMode}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          accessibilityLabel={demoMode ? 'AI Concierge unavailable in demo' : 'AI Concierge'}
-          accessibilityState={{ disabled: demoMode }}
+          accessibilityLabel="AI Concierge"
+          accessibilityHint="Opens AI Concierge. Availability depends on your account."
         >
           <Feather name="message-circle" size={18} color={colors.foreground} />
         </TouchableOpacity>
@@ -597,9 +594,7 @@ export default function DiscoverScreen() {
         <View style={styles.centered}>
           <Feather name="wifi-off" size={32} color={colors.mutedForeground} />
           <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            {demoMode && productionFlightsQuery.error instanceof ProductionReadHttpError
-              ? `Could not load live flights (HTTP ${productionFlightsQuery.error.status}).`
-              : 'Could not load flights'}
+            Could not load flights. Check your connection and try again.
           </Text>
           <TouchableOpacity
             testID={demoMode ? 'discover-flight-retry' : undefined}

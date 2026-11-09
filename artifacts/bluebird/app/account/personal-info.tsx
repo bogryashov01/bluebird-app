@@ -1,7 +1,7 @@
 import React from 'react';
 import { ThemedTextInput } from '@/components/ThemedTextInput';
 import {
-  ActivityIndicator, Alert, Image, Linking, Platform, StyleSheet, Text, TouchableOpacity, View,
+  ActivityIndicator, Alert, Image, Linking, Platform, StyleSheet, Switch, Text, TouchableOpacity, View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -594,6 +594,11 @@ function resolveAccountPhotoUrl(path: string | null | undefined): string | null 
   return path ? toPhotoUrl(path) : null;
 }
 
+function readAllowIncomingRequests(profile: object): boolean {
+  const value = 'allowIncomingRequests' in profile ? profile.allowIncomingRequests : undefined;
+  return value !== false;
+}
+
 export default function PersonalInfoScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
@@ -649,6 +654,7 @@ export default function PersonalInfoScreen() {
   const [linkedinUrl, setLinkedinUrl] = React.useState('');
   const [facebookUrl, setFacebookUrl] = React.useState('');
   const [instagramUrl, setInstagramUrl] = React.useState('');
+  const [allowIncomingRequests, setAllowIncomingRequests] = React.useState(true);
   const [isUploadingPhoto, setIsUploadingPhoto] = React.useState(false);
   const [networkingErrorMessage, setNetworkingErrorMessage] = React.useState('');
   const [networkingSaved, setNetworkingSaved] = React.useState(false);
@@ -666,6 +672,7 @@ export default function PersonalInfoScreen() {
     setLinkedinUrl(networkingData.linkedinUrl ?? '');
     setFacebookUrl(networkingData.facebookUrl ?? '');
     setInstagramUrl(networkingData.instagramUrl ?? '');
+    setAllowIncomingRequests(readAllowIncomingRequests(networkingData));
   }, [networkingData]);
 
   const accountPhotoReady = !!(
@@ -831,7 +838,8 @@ export default function PersonalInfoScreen() {
         linkedinUrl: linkedinUrl.trim() || null,
         facebookUrl: facebookUrl.trim() || null,
         instagramUrl: instagramUrl.trim() || null,
-      },
+        allowIncomingRequests,
+      } as Parameters<typeof networkingSave.mutate>[0]['data'],
     }, {
       onSuccess: () => {
         setNetworkingSaved(true);
@@ -1049,6 +1057,21 @@ export default function PersonalInfoScreen() {
               {networkingField('LinkedIn URL (optional)', linkedinUrl, setLinkedinUrl, 'https://www.linkedin.com/in/you', false, true)}
               {networkingField('Facebook URL (optional)', facebookUrl, setFacebookUrl, 'https://www.facebook.com/you', false, true)}
               {networkingField('Instagram URL (optional)', instagramUrl, setInstagramUrl, 'https://www.instagram.com/you', false, true)}
+              <View style={styles.incomingRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.fieldLabel, { color: colors.mutedForegroundLight }]}>Incoming requests</Text>
+                  <Text style={[styles.helperText, { color: colors.mutedForegroundLight }]}>
+                    Allow members to send you a connection request.
+                  </Text>
+                </View>
+                <Switch
+                  accessibilityLabel="Allow incoming connection requests"
+                  testID="networking-allow-incoming-requests"
+                  value={allowIncomingRequests}
+                  onValueChange={setAllowIncomingRequests}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                />
+              </View>
               <View style={[styles.status, { backgroundColor: networkingCompleted ? colors.success + '16' : colors.primary + '12' }]}>
                 <Text style={[styles.statusText, { color: networkingCompleted ? colors.success : colors.primary }]}>
                   {networkingCompleted
@@ -1125,6 +1148,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontFamily: 'Inter_600SemiBold', fontSize: 13,
   },
+  incomingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 },
   choiceRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   choice: {
     minHeight: 44,

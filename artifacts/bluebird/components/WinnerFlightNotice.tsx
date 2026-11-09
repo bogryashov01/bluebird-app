@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
@@ -12,11 +12,17 @@ import {
   mainBluebirdAuthenticatedQueryKey,
 } from '@/lib/mainBluebirdApi';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
-import type { ProductionTrips } from '@/lib/productionAuthApi';
+import type { ProductionTrip, ProductionTrips } from '@/lib/productionAuthApi';
 import {
+  BOARDING_PASS_SEND_DIALOG,
+  BOARDING_PASS_SENT,
   awardStateForFlight,
+  boardingPassActionBlock,
   canConfirmProductionWinner,
   canDeclineProductionWinner,
+  checklistFullyComplete,
+  listedTripForChecklist,
+  presentBoardingPass,
   presentWinnerState,
   reviewWinnerConfirmation,
   reviewWinnerDecline,
@@ -24,6 +30,86 @@ import {
   winnerActionBlock,
 } from '@/lib/winnerChecklist';
 import { useWinnerActions } from '@/lib/useWinnerActions';
+
+function CompletedChecklistActions({
+  trip,
+  actions,
+  onOpenChecklist,
+}: {
+  trip: ProductionTrip;
+  actions: ReturnType<typeof useWinnerActions>;
+  onOpenChecklist: () => void;
+}) {
+  const colors = useColors();
+  const boardingPassUrl = presentBoardingPass({
+    awarded: trip.checklist.awarded,
+    boardingPassUrl: trip.checklist.boardingPassUrl,
+  });
+  const sendBlock = boardingPassActionBlock({
+    checklistAvailable: true,
+    awarded: trip.checklist.awarded,
+    boardingPassUrl: trip.checklist.boardingPassUrl,
+    passLinkSentAt: trip.checklist.passLinkSentAt,
+  });
+  const send = () => {
+    if (sendBlock) return;
+    Alert.alert('Send boarding pass?', BOARDING_PASS_SEND_DIALOG, [
+      { text: 'Not now', style: 'cancel' },
+      { text: 'Send', onPress: () => { void actions.sendBoardingPass(null); } },
+    ]);
+  };
+  return (
+    <View style={styles.passSection}>
+      <View style={styles.passRow}>
+        <SecondaryButton
+          label="Send Boarding Pass"
+          testID="flight-send-boarding-pass"
+          style={styles.passButton}
+          loading={actions.boardingPassSubmitting}
+          disabled={sendBlock !== null}
+          onPress={send}
+        />
+        <PrimaryButton
+          label="View Boarding Pass"
+          testID="flight-view-boarding-pass"
+          style={styles.passButton}
+          disabled={!boardingPassUrl}
+          onPress={() => {
+            if (boardingPassUrl) void Linking.openURL(boardingPassUrl);
+          }}
+        />
+      </View>
+      {!boardingPassUrl ? (
+        <Text testID="flight-boarding-pass-missing" style={[styles.note, { color: colors.mutedForegroundLight }]}>
+          A boarding pass link is not available for this flight.
+        </Text>
+      ) : null}
+      {sendBlock === 'already-sent' ? (
+        <Text testID="flight-boarding-pass-sent" style={[styles.note, { color: colors.textOnSurface }]}>
+          {BOARDING_PASS_SENT}
+        </Text>
+      ) : null}
+      {actions.boardingPassFailure ? (
+        <Text testID="flight-boarding-pass-error" style={[styles.note, { color: colors.destructive }]}>
+          {actions.boardingPassFailure.title}. {actions.boardingPassFailure.body}
+        </Text>
+      ) : null}
+      {actions.boardingPassMessage && sendBlock !== 'already-sent' ? (
+        <Text testID="flight-boarding-pass-sent" style={[styles.note, { color: colors.textOnSurface }]}>
+          {actions.boardingPassMessage}
+        </Text>
+      ) : null}
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Flight checklist"
+        testID="winner-checklist-link"
+        onPress={onOpenChecklist}
+      >
+        <Text style={[styles.checklistLink, { color: colors.primary }]}>Flight checklist</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 export function WinnerFlightNotice({
   flightId,
@@ -92,6 +178,8 @@ export function WinnerFlightNotice({
   });
 
   const awarded = tripsQuery.isSuccess ? awardStateForFlight(tripsQuery.data, flightId) : null;
+  const listedTrip = tripsQuery.isSuccess ? listedTripForChecklist(tripsQuery.data, flightId) : null;
+  const checklistComplete = listedTrip !== null && checklistFullyComplete(listedTrip.checklist);
   const presentation = presentWinnerState({
     viewerAuthenticated: ready,
     viewerIsEffectiveWinner,
@@ -186,6 +274,11 @@ export function WinnerFlightNotice({
       {presentation.kind === 'selected' && presentation.actions && !locallyDeclined && !locallyConfirmed && (
         <View style={styles.actions}>
           <PrimaryButton
+            label="Review & Confirm Flight"
+            testID="winner-review"
+            onPress={() => router.push({ pathname: '/flight/winner', params: { flightId: String(flightId) } })}
+          />
+          <PrimaryButton
             label="Confirm Flight"
             testID="winner-confirm"
             disabled={!canConfirmProductionWinner()}
@@ -217,7 +310,15 @@ export function WinnerFlightNotice({
         </View>
       )}
       {presentation.kind !== 'declined' && !locallyDeclined && (
-        <SecondaryButton label="View checklist" testID="winner-view-checklist" onPress={openChecklist} />
+        checklistComplete && listedTrip ? (
+          <CompletedChecklistActions
+            trip={listedTrip}
+            actions={winnerActions}
+            onOpenChecklist={openChecklist}
+          />
+        ) : (
+          <SecondaryButton label="View checklist" testID="winner-view-checklist" onPress={openChecklist} />
+        )
       )}
     </View>
   );
@@ -238,5 +339,9 @@ const styles = StyleSheet.create({
   route: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   meta: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },
   actions: { gap: 10, marginTop: 4 },
+  passSection: { gap: 8 },
+  passRow: { flexDirection: 'row', alignItems: 'stretch', gap: 8 },
+  passButton: { flex: 1, minHeight: 44, paddingHorizontal: 8 },
+  checklistLink: { fontFamily: 'Inter_600SemiBold', fontSize: 14, textAlign: 'center' },
   note: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18 },
 });

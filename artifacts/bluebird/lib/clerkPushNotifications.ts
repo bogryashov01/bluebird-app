@@ -18,8 +18,8 @@ export const PUSH_REGISTRATION_FAILED =
 
 /**
  * Registration stays off unless this is exactly "true".
- * production-live-internal does not set it. Enabling it selects
- * POST and DELETE /me/push-tokens and does not turn on a production build by itself.
+ * production-live-internal sets it. That selects POST and DELETE
+ * /me/push-tokens and does not enable backend push delivery.
  */
 export const CLERK_PUSH_REGISTRATION_FLAG = 'EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION';
 export const CLERK_PUSH_TOKEN_PATH = '/me/push-tokens';
@@ -228,6 +228,7 @@ export type ClerkPushHref =
   | { pathname: '/(tabs)/membership' }
   | { pathname: '/(tabs)/connections' }
   | { pathname: '/flight/queue-status'; params: { flightId: string } }
+  | { pathname: '/flight/winner'; params: { flightId: string } }
   | { pathname: '/messages/[conversationId]'; params: { conversationId: string } };
 
 const PUSH_TYPES: Record<string, ClerkPushScreen> = {
@@ -324,10 +325,16 @@ function versionedRoute(
       accountCheck: { kind: 'flight', flightId: numericFlightId },
     };
   }
-  if (event === 'winner.selected' || event === 'winner.confirmed') {
+  if (event === 'winner.selected') {
     return {
-      href: { pathname: '/flight/checklist', params: { legId: flightId } },
-      accountCheck: { kind: 'winner', flightId: numericFlightId },
+      href: { pathname: '/flight/winner', params: { flightId } },
+      accountCheck: { kind: 'flight', flightId: numericFlightId },
+    };
+  }
+  if (event === 'winner.confirmed') {
+    return {
+      href: { pathname: '/flight/[id]', params: { id: flightId } },
+      accountCheck: { kind: 'flight', flightId: numericFlightId },
     };
   }
   return {
@@ -429,6 +436,12 @@ export function resolveClerkPushHref(
   }
 }
 
+export function pushUsesExistingWinnerNotice(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  const versioned = versionedRecord(payload as Record<string, unknown>);
+  return !!versioned && versioned !== 'reject' && versioned.type === 'winner.selected';
+}
+
 export function pushRepeatsOpenConversation(payload: unknown, pathname: string | null): boolean {
   if (!pathname || !payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
   const versioned = versionedRecord(payload as Record<string, unknown>);
@@ -443,6 +456,7 @@ export function pushRepeatsOpenConversation(payload: unknown, pathname: string |
 export function clerkPushReadsCurrentAccount(href: ClerkPushHref): boolean {
   return href.pathname === '/flight/[id]' ||
     href.pathname === '/flight/queue-status' ||
+    href.pathname === '/flight/winner' ||
     href.pathname === '/flight/checklist' ||
     href.pathname === '/flight/passengers' ||
     href.pathname === '/messages/[conversationId]' ||
@@ -564,7 +578,10 @@ export function foregroundPresentation(input: {
   if (!input.notificationId || presented.has(input.notificationId) || !canRetrievePushToken(input.permission)) {
     return { show: false, presentedIds: [...presented] };
   }
-  if (pushRepeatsOpenConversation(input.payload, input.pathname ?? null)) {
+  if (
+    pushRepeatsOpenConversation(input.payload, input.pathname ?? null) ||
+    pushUsesExistingWinnerNotice(input.payload)
+  ) {
     presented.add(input.notificationId);
     return { show: false, presentedIds: [...presented] };
   }

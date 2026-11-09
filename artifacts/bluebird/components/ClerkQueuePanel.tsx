@@ -29,26 +29,26 @@ export interface ClerkQueuePanelProps {
 
 function availabilityMessage(availability: ClerkQueueAvailability): string | null {
   if (availability === 'configuration-required') {
-    return 'The matching Main API and Clerk environment is not configured.';
+    return 'Queue details are unavailable right now.';
   }
   if (availability === 'authentication-required') {
-    return 'Sign in with Clerk to load this flight’s queue.';
+    return 'Sign in to view this queue.';
   }
   if (availability === 'verification-required') return getProductionQueueReadOnlyMessage();
-  if (availability === 'invalid-flight-id') return 'This flight does not have a valid Main API ID.';
+  if (availability === 'invalid-flight-id') return 'This flight cannot be queued.';
   return null;
 }
 
 function errorMessage(error: unknown): string {
   if (error && typeof error === 'object' && 'status' in error && typeof error.status === 'number') {
     const status = (error as ProductionAuthRequestError & { status: number }).status;
-    if (status === 401) return 'The Main API rejected the Clerk session (HTTP 401). Sign in again before retrying.';
-    if (status === 403) return 'The Main API denied this queue action (HTTP 403).';
-    if (status === 404) return 'This queue endpoint is unavailable on the selected Main API (HTTP 404).';
-    if (status === 409) return 'The queue changed before this action completed (HTTP 409). Refresh the queue and try again.';
-    return `The Main API queue request failed (HTTP ${status}).`;
+    if (status === 401) return 'Sign in again to continue.';
+    if (status === 403) return 'This queue action is not available.';
+    if (status === 404) return 'This queue is unavailable.';
+    if (status === 409) return 'This queue changed. Refresh and try again.';
+    return 'The queue could not be updated.';
   }
-  return error instanceof Error ? error.message : 'The Main API queue request failed.';
+  return 'The queue could not be updated.';
 }
 
 export function ClerkQueuePanel({
@@ -123,11 +123,11 @@ export function ClerkQueuePanel({
 
       {skip.isSuccess ? (
         <Text style={[styles.body, { color: colors.success }]}>
-          Skip the Line was confirmed by the Main API.
+          Skip the Line is confirmed.
         </Text>
       ) : leave.isSuccess ? (
         <Text style={[styles.body, { color: colors.success }]}>
-          The Main API confirmed that you left this queue.
+          You left this queue.
         </Text>
       ) : unavailable ? (
         <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>{unavailable}</Text>
@@ -175,7 +175,7 @@ export function ClerkQueuePanel({
           )}
           {skip.isSuccess && (
             <Text style={[styles.body, { color: colors.success }]}>
-              Skip the Line was confirmed by the Main API.
+              Skip the Line is confirmed.
             </Text>
           )}
         </View>
@@ -195,13 +195,13 @@ export function ClerkQueuePanel({
           ) : eligibility.isError ? (
             <View style={styles.content}>
               <Text style={[styles.body, { color: colors.coral }]}>
-                We could not verify your membership and profile. No join request was sent.
+                We could not verify your membership. Try again.
               </Text>
               <SecondaryButton label="Try Again" onPress={() => void eligibility.refetch()} testID="clerk-queue-eligibility-retry" />
             </View>
           ) : !flightPublished ? (
             <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>
-              This flight is not published for queue requests.
+              This flight is not open for a queue.
             </Text>
           ) : !eligibility.data?.profileComplete ? (
             <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>

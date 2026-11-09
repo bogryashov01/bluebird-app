@@ -293,9 +293,10 @@ export function setClerkPushFocusPath(pathname: string | null): void {
   focusPath = pathname;
 }
 
-export async function revokeHeldClerkPushToken(): Promise<void> {
+export async function revokeHeldClerkPushToken(
+  reader: () => Promise<string | null> = accessTokenReader,
+): Promise<void> {
   const current = held;
-  const reader = accessTokenReader;
   held = null;
   registeredToken = null;
   deliveryStatus = 'disabled';
@@ -321,6 +322,7 @@ export function setClerkPushSession(input: {
   signedIn: boolean;
   clerkUserId: string | null;
   getAccessToken?: () => Promise<string | null>;
+  revokeAccessToken?: () => Promise<string | null>;
 }): void {
   const previousUserId = session.clerkUserId;
   const accountChanged = previousUserId !== input.clerkUserId;
@@ -330,7 +332,7 @@ export function setClerkPushSession(input: {
     nextSignedIn: input.signedIn,
     heldUserId: held?.clerkUserId ?? null,
   })) {
-    void revokeHeldClerkPushToken();
+    void revokeHeldClerkPushToken(input.revokeAccessToken ?? accessTokenReader);
   }
   if (input.getAccessToken) accessTokenReader = input.getAccessToken;
   session = {

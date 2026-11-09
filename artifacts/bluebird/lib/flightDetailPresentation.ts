@@ -66,6 +66,39 @@ export function productionFlightDetailQueryKey(
   return ['production-empty-leg', flightId, viewerScope];
 }
 
+export type ProductionFlightDetailCache = {
+  flight: FlightView;
+  viewerAuthenticated: boolean;
+};
+
+function isCachedFlightView(value: unknown): value is FlightView {
+  if (!value || typeof value !== 'object') return false;
+  const flight = value as { id?: unknown; source?: unknown };
+  return typeof flight.id === 'string' &&
+    (flight.source === 'production' || flight.source === 'local');
+}
+
+/**
+ * Flight Details stores `{ flight, viewerAuthenticated }` in the shared detail
+ * key. Queue Status used to store the flight object itself in that same key.
+ * Reading either shape keeps a retained Flight Details screen from crashing
+ * while Queue Status updates the cache.
+ */
+export function readProductionFlightDetailCache(data: unknown): ProductionFlightDetailCache | null {
+  if (!data || typeof data !== 'object') return null;
+  const record = data as { flight?: unknown; viewerAuthenticated?: unknown };
+  if (isCachedFlightView(record.flight)) {
+    return {
+      flight: record.flight,
+      viewerAuthenticated: record.viewerAuthenticated === true,
+    };
+  }
+  if (isCachedFlightView(data)) {
+    return { flight: data, viewerAuthenticated: false };
+  }
+  return null;
+}
+
 export function isDiscoverFlightListKey(key: readonly unknown[]): boolean {
   return (key.length === PRODUCTION_FLIGHTS_QUERY_KEY.length &&
       key[0] === PRODUCTION_FLIGHTS_QUERY_KEY[0]) ||

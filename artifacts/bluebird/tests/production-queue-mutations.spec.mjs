@@ -377,7 +377,7 @@ test("the production gate stays closed and the app does not call the client", as
   assert.doesNotMatch(hook, /PassCelebration|\/flight\/confirmed|Flight Confirmed|You've Won the Flight/);
   assert.match(confirmation, /joinFlightConfirmNote\(demoEnabled\)/);
   const presentation = readFileSync(resolve(projectRoot, "lib/joinFlightPresentation.ts"), "utf8");
-  assert.match(presentation, /Queue joining is not available in this build\. No request is sent\./);
+  assert.match(presentation, /Joining is unavailable right now\./);
   assert.match(presentation, /if \(canSubmitProductionQueueJoin\(\)\) return JOIN_FLIGHT_CONFIRM_READY/);
   assert.match(confirmation, /if \(decision\.status === 'ready'\)/);
   assert.doesNotMatch(joinScreen, /saveQueueCandidate/);

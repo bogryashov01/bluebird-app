@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from '@/context/AuthContext';
@@ -14,6 +15,7 @@ import {
 } from '@/lib/clerkPushNotifications';
 import {
   configureClerkForegroundNotifications,
+  refreshClerkPushPermission,
   requestClerkPushPermission,
   setClerkPushFocusPath,
   setClerkPushSession,
@@ -37,7 +39,8 @@ export function ClerkPushCoordinator() {
   const previousUserId = useRef<string | null>(null);
   const navigationGeneration = useRef(0);
   const readToken = useRef<() => Promise<string | null>>(async () => null);
-  readToken.current = () => session?.getToken() ?? Promise.resolve(null);
+  const previousTokenReader = useRef<() => Promise<string | null>>(async () => null);
+  const sessionGetToken = session?.getToken;
   const sessionLoaded = authMode === 'clerk' && session?.isLoaded === true;
   const signedIn = sessionLoaded && session?.isSignedIn === true && !!session.userId;
   const activeUserId = signedIn ? session?.userId ?? null : null;
@@ -63,13 +66,18 @@ export function ClerkPushCoordinator() {
       Notifications.clearLastNotificationResponse();
     }
     previousUserId.current = activeUserId;
+    const revokeAccessToken = previousTokenReader.current;
+    const currentTokenReader = () => sessionGetToken?.() ?? Promise.resolve(null);
+    previousTokenReader.current = currentTokenReader;
+    readToken.current = currentTokenReader;
     setClerkPushSession({
       ready: sessionLoaded,
       signedIn,
       clerkUserId: activeUserId,
-      getAccessToken: () => readToken.current(),
+      getAccessToken: currentTokenReader,
+      revokeAccessToken,
     });
-  }, [activeUserId, sessionLoaded, signedIn]);
+  }, [activeUserId, sessionGetToken, sessionLoaded, signedIn]);
 
   useEffect(() => {
     if (!navigationReady) return;
@@ -77,6 +85,11 @@ export function ClerkPushCoordinator() {
       await requestClerkPushPermission();
       await syncClerkPushToken();
     })();
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      void refreshClerkPushPermission().then(() => syncClerkPushToken());
+    });
+    return () => subscription.remove();
   }, [activeUserId, navigationReady]);
 
   useEffect(() => {

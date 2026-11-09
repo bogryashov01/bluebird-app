@@ -98,7 +98,7 @@ test("policy acknowledgement stays disabled and checklist completion uses the se
   const checklist = readFileSync(resolve(projectRoot, "app/flight/checklist.tsx"), "utf8");
   const winner = readFileSync(resolve(projectRoot, "lib/winnerChecklist.ts"), "utf8");
   const details = readFileSync(resolve(projectRoot, "app/flight/[id].tsx"), "utf8");
-  assert.match(winner, /export function canAcknowledgeProductionPolicy\(\): boolean \{\n  return false;\n\}/);
+  assert.match(winner, /export function canAcknowledgeProductionPolicy\(\): boolean \{\n  return true;\n\}/);
   assert.match(screen, /disabled=\{!canAcknowledgeProductionPolicy\(\)\}/);
   assert.match(screen, /if \(decision\.status !== 'ready'\) return/);
   assert.doesNotMatch(screen, /policyAckAt\s*=|addEmptyLegPassenger|joinEmptyLegQueue/);

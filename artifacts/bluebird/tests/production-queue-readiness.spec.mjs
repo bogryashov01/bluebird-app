@@ -192,7 +192,8 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   await expect(page.getByTestId("flight-detail-gallery")).toHaveCount(0);
   await expect(page.getByTestId("flight-skip-line-pass-card")).toHaveCount(0);
   await expect(page.getByTestId("flight-info-queue-count")).toHaveCount(0);
-  await expect(page.getByTestId("flight-info-status")).toHaveText("Available");
+  await expect(page.getByTestId("flight-info-status")).toHaveCount(0);
+  await expect(page.getByTestId("flight-queue-signed-out")).toBeVisible();
   expect(new URL(page.url()).pathname).toMatch(new RegExp(`/flight/${flightId}$`));
   await page.goBack();
   await expect(page.locator(`[data-testid="production-flight-card-${flightId}"]`)).toBeVisible();
@@ -214,7 +215,7 @@ test("production flight ID reaches a read-only queue notice with no queue API ca
   await expect(page.getByText("A place in the queue does not guarantee a seat. After the queue closes, a winner must confirm before the flight is awarded.")).toBeVisible();
   await expect(page.getByText("An active membership and a complete profile are required. This screen does not check either one.")).toBeVisible();
   await expect(page.getByTestId("join-flight-confirm")).toBeDisabled();
-  await expect(page.getByTestId("join-flight-confirm-note")).toHaveText("Queue joining is not available in this build. No request is sent.");
+  await expect(page.getByTestId("join-flight-confirm-note")).toHaveText("Joining is unavailable right now.");
   await expect(page.getByTestId("queue-join-success")).toHaveCount(0);
   await expect(page.getByTestId("production-read-only-notice")).toHaveCount(0);
   await expect(page.getByText("$2,000", { exact: true })).toHaveCount(0);

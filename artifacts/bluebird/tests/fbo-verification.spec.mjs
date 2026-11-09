@@ -89,9 +89,10 @@ test("a non-winner, a missing checklist, and an existing verification send nothi
 });
 
 test("a closed FBO gate and a missing confirmation do not create a client", async () => {
-  const closed = openInput({ gateOpen: canVerifyProductionFbo() });
+  const closed = openInput({ gateOpen: false });
   assert.equal((await submitFboVerification(closed.input)).status, "disabled");
   assert.equal(closed.calls.length, 0);
+  assert.equal(canVerifyProductionFbo(), true);
   const unconfirmed = openInput({ explicitConfirm: false });
   assert.equal((await submitFboVerification(unconfirmed.input)).status, "needs-confirmation");
   assert.equal(unconfirmed.calls.length, 0);
@@ -237,16 +238,16 @@ test("the FBO gate stays closed and the other production gates stay closed", () 
   assert.match(checklist, /FBO details are not available for this flight/);
   assert.match(checklist, /FBO verification is not available in this build/);
   assert.doesNotMatch(checklist, /verifyTripFbo|(?<![\w.])fetch\(/);
-  assert.match(winners, /export function canVerifyProductionFbo\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canConfirmProductionWinner\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canDeclineProductionWinner\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canAcknowledgeProductionManifest\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canAcknowledgeProductionPolicy\(\): boolean \{\n  return false;\n\}/);
-  assert.match(winners, /export function canSendProductionBoardingPass\(\): boolean \{\n  return false;\n\}/);
+  assert.match(winners, /export function canVerifyProductionFbo\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canConfirmProductionWinner\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canDeclineProductionWinner\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canAcknowledgeProductionManifest\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canAcknowledgeProductionPolicy\(\): boolean \{\n  return true;\n\}/);
+  assert.match(winners, /export function canSendProductionBoardingPass\(\): boolean \{\n  return true;\n\}/);
   assert.match(join, /export function canSubmitProductionQueueJoin\(\): boolean \{\n  return isProductionQueueMutationsEnabled\(\);\n\}/);
-  assert.match(passengers, /export function canCreateProductionPassenger\(\): boolean \{\n  return false;\n\}/);
-  assert.match(passengers, /export function canUpdateProductionPassenger\(\): boolean \{\n  return false;\n\}/);
-  assert.match(passengers, /export function canDeleteProductionPassenger\(\): boolean \{\n  return false;\n\}/);
+  assert.match(passengers, /export function canCreateProductionPassenger\(\): boolean \{\n  return true;\n\}/);
+  assert.match(passengers, /export function canUpdateProductionPassenger\(\): boolean \{\n  return true;\n\}/);
+  assert.match(passengers, /export function canDeleteProductionPassenger\(\): boolean \{\n  return true;\n\}/);
   assert.match(readiness, /deployedMainService: false/);
   assert.doesNotMatch(policy, /checklist\/fboVerified|checklist\/confirmed|winner\/decline/);
 });

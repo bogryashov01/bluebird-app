@@ -3,6 +3,13 @@ import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { isClerkBluebirdProfileResultCurrent } from '@/lib/clerkBluebirdProfile';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import {
+  connectionRefreshIntervalMs,
+  isMemberMessageRealtimeEnabled,
+  realtimeHintRequestsConnections,
+  subscribeMemberMessageHints,
+  subscribeMemberMessageSocketLive,
+} from '@/lib/memberMessageRealtime';
+import {
   clearMemberConnectionsCache,
   connectionMemberLabel,
   createMemberConnectionsClient,
@@ -54,6 +61,7 @@ export function useMemberConnections() {
   const [discovery, setDiscovery] = React.useState<ConnectionMemberIdentity | null | undefined>(undefined);
   const [refreshing, setRefreshing] = React.useState(false);
   const [pending, setPending] = React.useState(false);
+  const [socketLive, setSocketLive] = React.useState(false);
   const pendingRef = React.useRef(false);
 
   if (accountRef.current !== accountId) {
@@ -154,7 +162,29 @@ export function useMemberConnections() {
     const requestedGeneration = generationRef.current;
     const controller = new AbortController();
     void load(requestedAccountId, requestedGeneration, controller.signal);
-    return () => controller.abort();
+    const pollMs = connectionRefreshIntervalMs({
+      realtimeEnabled: isMemberMessageRealtimeEnabled(),
+      socketLive,
+    });
+    const timer = pollMs === null
+      ? null
+      : setInterval(() => {
+        void load(requestedAccountId, requestedGeneration, new AbortController().signal);
+      }, pollMs);
+    return () => {
+      controller.abort();
+      if (timer) clearInterval(timer);
+    };
+  }, [accountId, enabled, load, socketLive]);
+
+  React.useEffect(() => subscribeMemberMessageSocketLive(setSocketLive), []);
+
+  React.useEffect(() => {
+    if (!enabled || !accountId) return;
+    return subscribeMemberMessageHints((hint) => {
+      if (hint.clerkUserId !== accountId || !realtimeHintRequestsConnections(hint)) return;
+      void load(accountId, generationRef.current, new AbortController().signal);
+    });
   }, [accountId, enabled, load]);
 
   const refresh = React.useCallback(async () => {

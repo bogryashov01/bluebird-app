@@ -438,13 +438,17 @@ export default function MembershipScreen() {
         <View style={[styles.root, styles.centered, { backgroundColor: colors.offWhite, padding: 28 }]} testID="clerk-membership-empty">
           <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>No membership details yet</Text>
           <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
-            Bluebird did not return membership details for this account.
+            Membership details are unavailable right now.
           </Text>
         </View>
       );
     }
     const clerkRows = [
-      { label: 'AI Concierge', onPress: () => router.push('/concierge' as any) },
+      {
+        label: 'AI Concierge',
+        hint: 'Not available yet',
+        onPress: () => router.push('/concierge' as any),
+      },
       { label: 'Referral Program', onPress: () => router.push('/referral' as any) },
       { label: 'Payment Methods', onPress: () => router.push('/account/payment-methods' as any) },
     ];
@@ -542,30 +546,6 @@ export default function MembershipScreen() {
             ))}
           </View>
 
-          {design.upgrade ? (
-            <View testID="clerk-membership-upgrade" accessibilityLabel="Base to Plus upgrade">
-              <LinearGradient
-                colors={['#0A1128', '#1259F2']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.dashboardUpgrade}
-              >
-                <Text style={styles.upgradeEyebrow}>{design.upgrade.eyebrow}</Text>
-                <Text style={styles.dashboardUpgradeTitle}>{design.upgrade.title}</Text>
-                <Text style={styles.upgradeBody}>{design.upgrade.description}</Text>
-                <View
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: true }}
-                  accessibilityLabel="Upgrade available soon. Membership upgrades are not available in the app."
-                  testID="membership-upgrade-soon"
-                  style={[styles.upgradeBtn, { backgroundColor: colors.surface, opacity: 0.92 }]}
-                >
-                  <Text style={[styles.upgradeBtnText, { color: colors.textOnSurface }]}>{design.upgrade.buttonLabel}</Text>
-                </View>
-              </LinearGradient>
-            </View>
-          ) : null}
-
           <View style={[styles.linkCard, styles.clerkLinkCard, { backgroundColor: colors.surface }]}>
             {clerkRows.map((row, i) => (
               <TouchableOpacity
@@ -575,7 +555,12 @@ export default function MembershipScreen() {
                 onPress={row.onPress}
                 style={[styles.linkRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.separator }]}
               >
-                <Text style={[styles.linkLabel, { color: colors.textOnSurface }]}>{row.label}</Text>
+                <View style={styles.linkCopy}>
+                  <Text style={[styles.linkLabel, { color: colors.textOnSurface }]}>{row.label}</Text>
+                  {'hint' in row && row.hint ? (
+                    <Text style={[styles.linkHint, { color: colors.mutedForegroundLight }]}>{row.hint}</Text>
+                  ) : null}
+                </View>
                 <Text style={[styles.linkChevron, { color: colors.mutedForegroundLight }]}>›</Text>
               </TouchableOpacity>
             ))}
@@ -1168,6 +1153,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 16,
   },
-  linkLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 16, flex: 1, marginRight: 12 },
+  linkCopy: { flex: 1, marginRight: 12, gap: 2 },
+  linkLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
+  linkHint: { fontFamily: 'Inter_400Regular', fontSize: 13 },
   linkChevron: { fontSize: 22, fontFamily: 'Inter_400Regular', lineHeight: 22 },
 });

@@ -469,6 +469,8 @@ test("documented member methods use the production paths, verbs, and bodies", as
   assert.equal((await client.getMe()).isAuthenticated, true);
   const loadedProfile = await client.getProfile();
   assert.equal(loadedProfile.weightLbs, 170);
+  assert.equal(loadedProfile.allowIncomingConnectionRequests, true);
+  assert.equal(loadedProfile.allowIncomingConnectionRequestsSupported, false);
   assert.deepEqual(loadedProfile.notificationPrefs, notificationPrefs);
   assert.deepEqual(
     await client.updateProfile({ ...profileUpdate, localOnlyField: "must not escape" }),
@@ -1035,6 +1037,62 @@ test("side-effecting GETs are never invoked during setup or used as probes", asy
     "GET /empty-legs/81001/passengers",
     "GET /me/phone-verification/status",
   ]);
+});
+
+test("queue references and connection preference survive only when the server returns them", async () => {
+  const reference = "8f99b61f-5c0b-44e9-93bf-55fbb2a0b925";
+  const requests = [];
+  const client = makeClient(async (url, init) => {
+    requests.push({ path: contractPath(url), method: init.method, body: init.body });
+    if (init.method === "GET" && contractPath(url) === "/me/profile") {
+      return jsonResponse({ ...profile, allowIncomingConnectionRequests: false });
+    }
+    if (init.method === "PUT" && contractPath(url) === "/me/profile") return jsonResponse(currentUser);
+    if (contractPath(url) === "/empty-legs/81001/queue") {
+      return jsonResponse([
+        { position: 1, initials: "AM", tier: "plus", hasLineSkip: false, isViewer: true, email: "first@example.test" },
+        {
+          position: 2,
+          initials: "BM",
+          tier: "base",
+          hasLineSkip: false,
+          isViewer: false,
+          connectionTargetReference: reference.toUpperCase(),
+          userId: "user_secret",
+        },
+        {
+          position: 3,
+          initials: "CM",
+          tier: "free",
+          hasLineSkip: false,
+          isViewer: false,
+          connectionTargetReference: "member-name",
+        },
+      ]);
+    }
+    throw new Error(`Unexpected ${init.method} ${url}`);
+  });
+  const loaded = await client.getProfile();
+  assert.equal(loaded.allowIncomingConnectionRequests, false);
+  assert.equal(loaded.allowIncomingConnectionRequestsSupported, true);
+  assert.equal(loaded.phoneE164, profile.phoneE164);
+  assert.equal(loaded.weightLbs, profile.weightLbs);
+  const queue = await client.getEmptyLegQueue(81001);
+  assert.deepEqual(queue, [
+    { position: 1, initials: "AM", tier: "plus", hasLineSkip: false, isViewer: true },
+    { position: 2, initials: "BM", tier: "base", hasLineSkip: false, isViewer: false, connectionTargetReference: reference },
+    { position: 3, initials: "CM", tier: "free", hasLineSkip: false, isViewer: false },
+  ]);
+  assert.equal(JSON.stringify(queue).includes("user_secret"), false);
+  assert.equal(JSON.stringify(queue).includes("first@"), false);
+  await client.updateProfile({ ...profileUpdate, allowIncomingConnectionRequests: false, homeAirportLabel: "Naples" });
+  const written = JSON.parse(requests[2].body);
+  assert.equal(written.allowIncomingConnectionRequests, false);
+  assert.equal(written.phoneE164, profileUpdate.phoneE164);
+  assert.equal(written.phoneCountry, profileUpdate.phoneCountry);
+  assert.equal(written.weightLbs, profileUpdate.weightLbs);
+  assert.equal(Object.prototype.hasOwnProperty.call(written, "homeAirportLabel"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(written, "emailLocked"), false);
 });
 
 test("token values are not exposed in errors, logs, or authenticated query keys", async () => {

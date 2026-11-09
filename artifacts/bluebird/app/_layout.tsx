@@ -23,6 +23,7 @@ import { ThemeProvider } from '@/context/ThemeContext';
 import { useColors } from '@/hooks/useColors';
 import { bluebirdNavigationTheme, useBluebirdStackScreenOptions } from '@/lib/bluebirdNavigationTheme';
 import { QueueConfirmationWatcher } from '@/lib/queueCelebration';
+import { WinnerOfferObserver } from '@/components/WinnerOfferObserver';
 import { ClerkPushCoordinator } from '@/components/ClerkPushCoordinator';
 import { MemberMessageRealtime } from '@/components/MemberMessageRealtime';
 import { DormantClerkProvider } from '@/lib/dormantClerkIntegration';
@@ -133,6 +134,7 @@ function RootLayoutNav() {
         registeredHomeReady,
         pathname,
         connectionsPreviewEnabled,
+        typeof __DEV__ !== 'undefined' && __DEV__ === true,
       ),
     });
   const redirectDestination = profileRouteBlocked
@@ -187,6 +189,7 @@ function RootLayoutNav() {
     {/* App-wide waiting→confirmed watcher: celebrates a confirmed seat even
         when the member isn't on the Queue Status screen. */}
     <QueueConfirmationWatcher />
+    <WinnerOfferObserver />
     <ClerkPushCoordinator />
     <MemberMessageRealtime />
     <Stack screenOptions={stackScreenOptions}>
@@ -216,6 +219,10 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="flight/queue-status"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="flight/winner"
         options={{ headerShown: false }}
       />
       <Stack.Screen
@@ -307,6 +314,7 @@ function RootLayoutNav() {
         }}
       />
       <Stack.Screen name="connections-preview" options={{ headerShown: false }} />
+      <Stack.Screen name="dev/connection-diagnostics" options={{ headerShown: false }} />
       <Stack.Screen name="messages/[conversationId]" options={{ headerShown: false }} />
       <Stack.Screen
         name="referral"
@@ -379,6 +387,10 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="account/payment-methods"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="account/delete-account"
         options={{ headerShown: false }}
       />
       <Stack.Screen

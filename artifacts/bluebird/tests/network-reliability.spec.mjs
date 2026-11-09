@@ -422,8 +422,9 @@ test("Discover cards load their selected detail and preserve search when returni
   await expect(page.getByText(/Sunday, November 1 · Departs 4:00 AM/)).toBeVisible();
   await expect(page.getByTestId("flight-info-aircraft-type")).toHaveText("Citation Latitude");
   await expect(page.getByTestId("flight-info-aircraft-code")).toHaveText("LATITUDE");
-  await expect(page.getByTestId("flight-info-duration")).toHaveText("3h");
-  await expect(page.getByTestId("flight-info-status")).toHaveText("Available");
+  await expect(page.getByTestId("flight-info-duration")).toHaveCount(0);
+  await expect(page.getByTestId("flight-info-status")).toHaveCount(0);
+  await expect(page.getByTestId("flight-queue-section")).toBeVisible();
   await expect(page.getByTestId("flight-info-international")).toHaveText("Domestic");
   await expect(page.getByTestId("flight-detail-route-duration")).toHaveText("3h");
   await expect(page.getByTestId("flight-info-queue-count")).toHaveCount(0);

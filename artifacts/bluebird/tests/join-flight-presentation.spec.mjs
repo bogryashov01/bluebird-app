@@ -226,6 +226,32 @@ test("queue read display uses participant count and viewer position without seat
   assert.deepEqual(watching.rows.map((row) => row.position), [1, 2]);
   assert.equal(watching.rows[0].hasLineSkip, true);
   assert.equal(watching.rows.some((row) => row.isViewer), false);
+  assert.equal(watching.rows[0].connectionTargetReference, undefined);
+  const referenced = presentJoinFlightQueuePanel({
+    flightStatus: "published",
+    sessionReady: true,
+    signedIn: true,
+    loading: false,
+    failed: false,
+    read: {
+      entries: [
+        { position: 1, initials: "AM", tier: "plus", hasLineSkip: false, isViewer: true },
+        {
+          position: 2,
+          initials: "BM",
+          tier: "base",
+          hasLineSkip: false,
+          isViewer: false,
+          connectionTargetReference: "8f99b61f-5c0b-44e9-93bf-55fbb2a0b925",
+        },
+      ],
+      viewer: { status: "in-queue", position: 1 },
+    },
+  });
+  assert.equal(referenced.kind, "participants");
+  assert.equal(referenced.rows[0].connectionTargetReference, undefined);
+  assert.equal(referenced.rows[1].connectionTargetReference, "8f99b61f-5c0b-44e9-93bf-55fbb2a0b925");
+  assert.equal(JSON.stringify(referenced).includes("user_"), false);
   assert.equal(JSON.stringify(watching).includes("seat"), false);
 });
 
@@ -284,22 +310,23 @@ test("the join screens do not call queue, payment, or membership mutations", () 
   assert.equal(queueRosterLabel('  AB '), 'AB');
   assert.equal(queueRosterLabel(''), 'Member');
   assert.equal(queueRosterLabel(null), 'Member');
-  assert.match(queueStatus, /queueRosterLabel\(row\.initials\)/);
+  assert.doesNotMatch(queueStatus, /queueRosterLabel|MemberInitialsAvatar|MemberProfileSheet/);
   assert.doesNotMatch(acknowledgementScreen, /joinEmptyLegQueue|onJoin|fetch\(|payment|useInternationalPassCredit|internationalPassAuthorized/);
   const international = readFileSync(resolve(projectRoot, "components/ProductionInternationalNotice.tsx"), "utf8");
   const joined = readFileSync(resolve(projectRoot, "components/ProductionQueueJoined.tsx"), "utf8");
   assert.match(international, /International Flight Notice/);
   assert.match(international, /Authorize an International Pass/);
   assert.match(international, /Use an International Pass credit/);
-  assert.match(international, /does not upgrade membership/);
-  assert.match(international, /Upgrade to Plus is not available/);
+  assert.match(international, /Plus upgrades are not offered from this screen\./);
+  assert.match(international, /Neither choice charges a card from this app\./);
   assert.doesNotMatch(international, /\$1,000|fetch\(|skipLine/);
   assert.match(joined, /You're in the queue/);
   assert.match(joined, /View Queue Status/);
   assert.match(joined, /disabled=\{!skipLineAvailable\}/);
   assert.doesNotMatch(joined, /skipLine\(|fetch\(/);
-  assert.match(queueStatus, /join-flight-queue-viewer/);
-  assert.match(queueStatus, /queueRosterTierLabel/);
+  assert.match(queueStatus, /YOUR POSITION/);
+  assert.match(queueStatus, /presentQueuePositionRing/);
+  assert.doesNotMatch(queueStatus, /join-flight-queue-viewer|queueRosterTierLabel/);
   assert.match(queueStatus, /Leave the Queue/);
   assert.match(queueStatus, /presentQueueSkipLineOffer/);
   assert.match(queueStatus, /Use Skip the Line Pass/);

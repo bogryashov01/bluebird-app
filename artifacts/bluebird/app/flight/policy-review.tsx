@@ -217,7 +217,7 @@ export default function FlightPolicyReviewScreen() {
         <Text testID="flight-policy-acknowledged" style={[styles.note, { color: colors.foreground }]}>
           {winnerActions.policyMessage && policyResultVisible
             ? winnerActions.policyMessage
-            : 'Policy acknowledged on the server.'}
+            : 'Policy acknowledged.'}
         </Text>
       )}
       {(acknowledgedOnServer || (policyResultVisible && winnerActions.policyMessage)) && (

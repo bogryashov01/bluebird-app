@@ -1,37 +1,34 @@
 import type { ProductionTrip, ProductionTripChecklist, ProductionTrips } from './productionAuthApi';
 
-/** Winner confirmation awards the flight. It stays off until explicitly authorized. */
+/** Winner confirmation awards the flight through the existing winner endpoint. */
 export function canConfirmProductionWinner(): boolean {
-  return false;
+  return true;
 }
 
-/** Decline recalculates the next winner. It stays off until explicitly authorized. */
+/** Decline uses the existing winner endpoint and may advance the next member. */
 export function canDeclineProductionWinner(): boolean {
-  return false;
+  return true;
 }
 
 export function canVerifyProductionFbo(): boolean {
-  return false;
+  return true;
 }
 
 export function canAcknowledgeProductionManifest(): boolean {
-  return false;
+  return true;
 }
 
 export function canAcknowledgeProductionPolicy(): boolean {
-  return false;
+  return true;
 }
 
-/** Sending a boarding pass can deliver a real message. It stays off. */
+/** Sending a boarding pass uses the existing trip endpoint. Delivery is recorded only by passLinkSentAt. */
 export function canSendProductionBoardingPass(): boolean {
-  return false;
+  return true;
 }
 
 export type WinnerPresentation =
-  | { kind: 'hidden' }
-  | { kind: 'selected'; confirmationLabel: string; actions: boolean }
-  | { kind: 'awarded' }
-  | { kind: 'declined' };
+  { kind: 'hidden' } | { kind: 'selected'; confirmationLabel: string; actions: boolean } | { kind: 'awarded' } | { kind: 'declined' };
 
 export function isQueueClosed(queueClosesAt: string | null, nowMs: number): boolean {
   if (!queueClosesAt || !Number.isFinite(nowMs)) return false;
@@ -72,10 +69,7 @@ export function presentWinnerState(input: {
   };
 }
 
-export function awardStateForFlight(
-  trips: ProductionTrips | undefined,
-  flightId: number,
-): boolean | null {
+export function awardStateForFlight(trips: ProductionTrips | undefined, flightId: number): boolean | null {
   if (!trips || !Number.isSafeInteger(flightId) || flightId < 1) return null;
   const match = [...trips.current, ...trips.past].find((trip) => tripMatchesFlight(trip, flightId));
   if (!match) return false;
@@ -140,10 +134,18 @@ export function resolveCurrentTripChecklistNavigation(input: {
   });
 }
 
-export function presentBoardingPass(input: {
-  awarded: boolean;
-  boardingPassUrl: string | null;
-}): string | null {
+export function checklistFullyComplete(checklist: Pick<
+  ProductionTripChecklist,
+  'awarded' | 'remainingSteps' | 'confirmedAt' | 'fboVerifiedAt' | 'manifestAckAt' | 'policyAckAt'
+>): boolean {
+  if (checklist.awarded !== true || checklist.remainingSteps.length > 0) return false;
+  return hasTimestamp(checklist.confirmedAt) &&
+    hasTimestamp(checklist.fboVerifiedAt) &&
+    hasTimestamp(checklist.manifestAckAt) &&
+    hasTimestamp(checklist.policyAckAt);
+}
+
+export function presentBoardingPass(input: { awarded: boolean; boardingPassUrl: string | null }): string | null {
   if (input.awarded !== true) return null;
   const url = input.boardingPassUrl?.trim() ?? '';
   if (!url.startsWith('https://') || /\s/.test(url)) return null;
@@ -158,10 +160,7 @@ export interface ChecklistStepView {
 }
 
 export function presentChecklistSteps(
-  checklist: Pick<
-    ProductionTripChecklist,
-    'confirmedAt' | 'fboVerifiedAt' | 'manifestAckAt' | 'policyAckAt'
-  >,
+  checklist: Pick<ProductionTripChecklist, 'confirmedAt' | 'fboVerifiedAt' | 'manifestAckAt' | 'policyAckAt'>,
   options?: {
     passengerDetailsAvailable?: boolean;
     policyDocumentAvailable?: boolean;
@@ -172,58 +171,57 @@ export function presentChecklistSteps(
       id: 'confirmed',
       title: 'Confirm Flight',
       complete: hasTimestamp(checklist.confirmedAt),
-      detail: hasTimestamp(checklist.confirmedAt)
-        ? 'Confirmed on the server.'
-        : canConfirmProductionWinner()
-          ? 'Confirmation can be sent for this flight.'
-          : 'Confirmation is not available in this build.',
+      detail:
+        hasTimestamp(checklist.confirmedAt) ? 'Confirmed.'
+        : canConfirmProductionWinner() ? 'Confirm this flight.'
+        : 'Confirmation is not available in this build.',
     },
     {
       id: 'fboVerified',
       title: 'Verify FBO',
       complete: hasTimestamp(checklist.fboVerifiedAt),
-      detail: hasTimestamp(checklist.fboVerifiedAt)
-        ? 'FBO verified on the server.'
-        : canVerifyProductionFbo()
-          ? 'FBO verification can be sent for this flight.'
-          : 'FBO verification is not available in this build.',
+      detail:
+        hasTimestamp(checklist.fboVerifiedAt) ? 'FBO verified.'
+        : canVerifyProductionFbo() ? 'Verify the departure FBO.'
+        : 'FBO verification is not available in this build.',
     },
     {
       id: 'manifestAck',
       title: 'Passenger Information',
       complete: hasTimestamp(checklist.manifestAckAt),
-      detail: hasTimestamp(checklist.manifestAckAt)
-        ? 'Passenger information acknowledged on the server.'
-        : canAcknowledgeProductionManifest()
-          ? 'Review the passenger list, then acknowledge it. Saving a passenger does not acknowledge the list.'
-          : options?.passengerDetailsAvailable === false
-            ? 'Passenger details are not available in this build. No passenger request is sent.'
-            : 'Review passenger details on the passenger screen. Saving changes is not available in this build.',
+      detail:
+        hasTimestamp(checklist.manifestAckAt) ? 'Passenger information acknowledged.'
+        : options?.passengerDetailsAvailable === false ? 'Passenger details are not available in this build. No passenger request is sent.'
+        : canAcknowledgeProductionManifest() ?
+          'Review the passenger list, then acknowledge it. Saving a passenger does not complete this step.'
+        : 'Review passenger details on the passenger screen. Saving changes is not available in this build.',
     },
     {
       id: 'policyAck',
       title: 'Flight Policy',
       complete: hasTimestamp(checklist.policyAckAt),
-      detail: hasTimestamp(checklist.policyAckAt)
-        ? 'Policy acknowledged on the server.'
-        : canAcknowledgeProductionPolicy()
-          ? 'Read the flight policy, scroll to the end, and agree before acknowledging it.'
-          : options?.policyDocumentAvailable === false
-            ? 'The flight policy cannot be loaded in this build. Acknowledgement is not available. No request is sent.'
-            : 'Read the active flight policy. Acknowledgement is not available in this build.',
+      detail:
+        hasTimestamp(checklist.policyAckAt) ? 'Policy acknowledged.'
+        : options?.policyDocumentAvailable === false ?
+          'The flight policy cannot be loaded in this build. Acknowledgement is not available. No request is sent.'
+        : canAcknowledgeProductionPolicy() ? 'Read the flight policy and agree.'
+        : 'Read the active flight policy. Acknowledgement is not available in this build.',
     },
   ];
 }
 
-export const PASSENGER_PLACEHOLDER_NOTE = 'The account holder can travel with up to five additional people. First name, last name, weight in pounds, and date of birth are required. Gender is required by the current backend and still needs product confirmation. Aircraft seat capacity can be lower than six. Saving passenger changes is not available in this build.';
+export const PASSENGER_PLACEHOLDER_NOTE =
+  'You can add up to five passengers. First name, last name, weight in pounds, date of birth, and gender are required. Seat capacity may be lower.';
 
 export const PASSENGER_DETAILS_UNAVAILABLE_NOTE = 'Passenger details are not available in this build. No passenger request is sent.';
 
-export const POLICY_DOCUMENT_UNAVAILABLE_NOTE = 'The flight policy cannot be loaded in this build. Acknowledgement is not available. No request is sent.';
+export const POLICY_DOCUMENT_UNAVAILABLE_NOTE =
+  'The flight policy cannot be loaded in this build. Acknowledgement is not available. No request is sent.';
 
 export const CHECKLIST_LIST_UNAVAILABLE_TITLE = 'Checklist unavailable';
 
-export const CHECKLIST_LIST_UNAVAILABLE_BODY = 'This build cannot load a separate trip checklist. Return to Trips to use the trip list already on this device. No additional request is sent.';
+export const CHECKLIST_LIST_UNAVAILABLE_BODY =
+  'This build cannot load a separate trip checklist. Return to Trips to use the trip list already on this device. No additional request is sent.';
 
 export const CHECKLIST_BACK_TO_TRIPS_LABEL = 'Back to Trips';
 
@@ -231,23 +229,19 @@ export const CHECKLIST_BACK_TO_TRIPS_LABEL = 'Back to Trips';
  * The trip list from GET /api/trips already carries the checklist fields.
  * Auth-test builds use that copy and do not call GET /api/trips/:id.
  */
-export function listedTripForChecklist(
-  trips: ProductionTrips | null | undefined,
-  legId: number,
-): ProductionTrip | null {
+export function listedTripForChecklist(trips: ProductionTrips | null | undefined, legId: number): ProductionTrip | null {
   if (!trips || !Number.isSafeInteger(legId) || legId < 1) return null;
-  return trips.current.find((trip) =>
-    trip.checklist.awarded === true && tripMatchesFlight(trip, legId),
-  ) ?? null;
+  return trips.current.find((trip) => trip.checklist.awarded === true && tripMatchesFlight(trip, legId)) ?? null;
 }
 
 /**
  * The website asks the member to read the active flight policy, scroll to the
- * end, and agree. Acknowledgement stays disabled until that write is authorized.
+ * end, and agree. Acknowledgement uses the existing policy request.
  * The join-flow Flight Policy screen is a separate local document and is not
  * this contract.
  */
-export const POLICY_UNAVAILABLE_NOTE = 'Read the active flight policy on the policy screen. Acknowledgement is not available in this build. Acceptance is not recorded on this device or on the server.';
+export const POLICY_UNAVAILABLE_NOTE =
+  'Read the flight policy and agree. Acceptance is recorded when Bluebird confirms it.';
 
 export type ChecklistMutationReview =
   | { status: 'invalid' }
@@ -255,11 +249,7 @@ export type ChecklistMutationReview =
   | { status: 'disabled'; method: 'POST'; path: string; body: null }
   | { status: 'ready'; method: 'POST'; path: string; body: null };
 
-export type WinnerActionBlock =
-  | 'not-winner'
-  | 'already-confirmed'
-  | 'already-declined'
-  | 'not-open';
+export type WinnerActionBlock = 'not-winner' | 'already-confirmed' | 'already-declined' | 'not-open';
 
 /** A known future queue close means the selection is not open. A missing close time stays for the server to decide. */
 export function winnerSelectionNotOpen(queueClosesAt: string | null, nowMs: number): boolean {
@@ -316,7 +306,7 @@ export function presentWinnerBlock(block: WinnerActionBlock): TripActionFailure 
 }
 
 export function reviewWinnerConfirmation(legId: number): ChecklistMutationReview {
-  return reviewPost(legId, `/trips/${legId}/checklist/confirmed`, canConfirmProductionWinner());
+  return reviewPost(legId, `/empty-legs/${legId}/winner/confirm`, canConfirmProductionWinner());
 }
 
 export function reviewWinnerDecline(legId: number, explicitConfirm: boolean): ChecklistMutationReview {
@@ -350,11 +340,7 @@ export function sentBoardingPassTripForLeg(legId: number, trip: ProductionTrip):
   return trip;
 }
 
-export type BoardingPassActionBlock =
-  | 'checklist-unavailable'
-  | 'not-awarded'
-  | 'pass-unavailable'
-  | 'already-sent';
+export type BoardingPassActionBlock = 'checklist-unavailable' | 'not-awarded' | 'pass-unavailable' | 'already-sent';
 
 export function boardingPassActionBlock(input: {
   checklistAvailable: boolean;
@@ -371,7 +357,8 @@ export function boardingPassActionBlock(input: {
   return null;
 }
 
-export const BOARDING_PASS_SEND_DIALOG = 'This asks Bluebird to send the boarding pass link for this flight. It does not confirm that the message arrives.';
+export const BOARDING_PASS_SEND_DIALOG =
+  'This asks Bluebird to send the boarding pass link for this flight. It does not confirm that the message arrives.';
 export const BOARDING_PASS_SENT = 'Bluebird recorded that the boarding pass link was sent. Delivery is not confirmed on this device.';
 export const BOARDING_PASS_UNCONFIRMED = 'Bluebird did not confirm that the boarding pass link was sent. Nothing was saved on this device.';
 export const BOARDING_PASS_DUPLICATE = 'A boarding pass request is already in progress. No second request was sent.';
@@ -442,11 +429,7 @@ export class TripChecklistMismatchError extends Error {
   }
 }
 
-export function shouldApplyTripChecklist(input: {
-  requestedUserId: string;
-  activeUserId: string | null;
-  signedIn: boolean;
-}): boolean {
+export function shouldApplyTripChecklist(input: { requestedUserId: string; activeUserId: string | null; signedIn: boolean }): boolean {
   const requested = input.requestedUserId.trim();
   return input.signedIn === true && requested.length > 0 && input.activeUserId === requested;
 }
@@ -484,11 +467,7 @@ export function acknowledgedManifestTripForLeg(legId: number, trip: ProductionTr
 }
 
 export type ManifestActionBlock =
-  | 'not-winner'
-  | 'already-acknowledged'
-  | 'checklist-unavailable'
-  | 'manifest-unavailable'
-  | 'manifest-locked';
+  'not-winner' | 'already-acknowledged' | 'checklist-unavailable' | 'manifest-unavailable' | 'manifest-locked';
 
 export function manifestActionBlock(input: {
   isWinner: boolean;
@@ -542,12 +521,7 @@ export function presentManifestBlock(block: ManifestActionBlock): TripActionFail
 }
 
 export type PolicyActionBlock =
-  | 'not-winner'
-  | 'already-acknowledged'
-  | 'checklist-unavailable'
-  | 'policy-unavailable'
-  | 'scroll-incomplete'
-  | 'consent-required';
+  'not-winner' | 'already-acknowledged' | 'checklist-unavailable' | 'policy-unavailable' | 'scroll-incomplete' | 'consent-required';
 
 export function policyActionBlock(input: {
   isWinner: boolean;
@@ -651,8 +625,7 @@ export function declinedFlightForId(
     winnerConfirmationStatus?: string | null;
   },
 ): boolean {
-  const declined = flight.viewerConfirmationStatus === 'declined' ||
-    flight.winnerConfirmationStatus === 'declined';
+  const declined = flight.viewerConfirmationStatus === 'declined' || flight.winnerConfirmationStatus === 'declined';
   return Number.isSafeInteger(flightId) && flightId >= 1 && flight.id === flightId && declined;
 }
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { router } from 'expo-router';
 import {
   getListNetworkingConnectionsQueryKey,
   useListIncomingNetworkingRequests,
@@ -8,6 +9,23 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
+
+function requesterReview(requester: object | null | undefined): {
+  firstName?: string;
+  lastInitial?: string;
+  industry?: string;
+  bio?: string;
+} {
+  if (!requester) return {};
+  const record = requester as Record<string, unknown>;
+  const text = (value: unknown) => typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
+  return {
+    firstName: text(record.firstName),
+    lastInitial: text(record.lastInitial),
+    industry: text(record.industry),
+    bio: text(record.bio),
+  };
+}
 
 export default function NetworkingRequestsScreen() {
   const colors = useColors();
@@ -19,9 +37,12 @@ export default function NetworkingRequestsScreen() {
 
   const act = (id: string, action: 'accept' | 'decline' | 'ignore' | 'block' | 'report') => {
     decision.mutate({ id, data: { action } }, {
-      onSuccess: () => {
+      onSuccess: (result) => {
         queryClient.invalidateQueries({ queryKey: ['/api/networking/requests/incoming'] });
         queryClient.invalidateQueries({ queryKey: getListNetworkingConnectionsQueryKey() });
+        if (action === 'accept' && result.connection?.id) {
+          router.push(`/networking/connections/${result.connection.id}` as never);
+        }
       },
     });
   };
@@ -35,7 +56,8 @@ export default function NetworkingRequestsScreen() {
       ListEmptyComponent={<View style={styles.center}><Text style={[styles.title, { color: colors.textOnSurface }]}>No new requests</Text><Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Introductions from other members will appear here.</Text></View>}
       renderItem={({ item }) => {
         const requester = item.requester;
-        const name = requester?.firstName ?? 'A member';
+        const review = requesterReview(requester);
+        const name = [review.firstName, review.lastInitial].filter((part) => !!part?.trim()).join(' ') || 'A member';
         return (
           <View
             testID={`request-${item.id}`}
@@ -44,7 +66,8 @@ export default function NetworkingRequestsScreen() {
             <View style={[styles.avatar, { backgroundColor: colors.primary + '18' }]}><Text style={[styles.avatarText, { color: colors.primary }]}>{requester?.firstName?.[0] ?? '?'}</Text></View>
             <View style={styles.content}>
               <Text style={[styles.name, { color: colors.textOnSurface }]}>{name}</Text>
-              <Text style={[styles.industry, { color: colors.mutedForegroundLight }]}>{requester?.industry ?? 'Bluebird member'}</Text>
+              <Text style={[styles.industry, { color: colors.mutedForegroundLight }]}>{review.industry ?? 'Bluebird member'}</Text>
+              {review.bio ? <Text style={[styles.message, { color: colors.textOnSurface }]}>{review.bio}</Text> : null}
               <Text style={[styles.message, { color: colors.textOnSurface }]}>{item.message}</Text>
               {item.flight ? <Text style={[styles.flight, { color: colors.mutedForegroundLight }]}>{item.flight.fromCity} → {item.flight.toCity} · {item.flight.departureDate}</Text> : null}
               <View style={styles.actions}>

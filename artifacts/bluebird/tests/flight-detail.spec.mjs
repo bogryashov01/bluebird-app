@@ -13,6 +13,7 @@ import {
   presentFlightDetailQueue,
   presentSeatsAvailable,
   productionFlightDetailQueryKey,
+  readProductionFlightDetailCache,
   selectDisplayedFlight,
 } from "../scripts/.flight-detail-presentation.test.mjs";
 import {
@@ -288,7 +289,26 @@ await assert.rejects(
   (error) => error instanceof ProductionReadHttpError && error.status === 404,
 );
 
+const signedInDetail = readProductionFlightDetailCache({
+  flight: sampleFlight({ id: "42" }),
+  viewerAuthenticated: true,
+});
+assert.equal(signedInDetail.flight.id, "42");
+assert.equal(signedInDetail.viewerAuthenticated, true);
+assert.equal(
+  readProductionFlightDetailCache(sampleFlight({ id: "42" })).flight.id,
+  "42",
+);
+assert.equal(readProductionFlightDetailCache({ viewerAuthenticated: true }), null);
+assert.equal(readProductionFlightDetailCache({ flight: undefined }), null);
+assert.equal(readProductionFlightDetailCache(undefined), null);
+assert.equal(readProductionFlightDetailCache({ flight: undefined })?.flight.id, undefined);
+assert.equal(readProductionFlightDetailCache(sampleFlight())?.flight.id, "42");
+
 const details = readFileSync(resolve(projectRoot, "app/flight/[id].tsx"), "utf8");
+const queueStatus = readFileSync(resolve(projectRoot, "app/flight/queue-status.tsx"), "utf8");
+const joinScreen = readFileSync(resolve(projectRoot, "app/flight/join.tsx"), "utf8");
+const myQueues = readFileSync(resolve(projectRoot, "lib/myQueuesPresentation.ts"), "utf8");
 const readiness = readFileSync(resolve(projectRoot, "lib/productionQueueReadiness.ts"), "utf8");
 const join = readFileSync(resolve(projectRoot, "lib/joinFlightPresentation.ts"), "utf8");
 assert.match(details, /fetchProductionFlight\(flightId, \{/);
@@ -296,6 +316,13 @@ assert.match(details, /accessToken: request\.accessToken/);
 assert.match(details, /createClerkProductionTokenProvider/);
 assert.match(details, /\.\.\.FLIGHT_DETAIL_QUERY_BEHAVIOR/);
 assert.match(details, /selectDisplayedFlight/);
+assert.match(details, /readProductionFlightDetailCache\(productionFlightQuery\.data\)/);
+assert.doesNotMatch(details, /productionFlightQuery\.data\?\.flight\.id/);
+assert.match(queueStatus, /return \{ flight, viewerAuthenticated: true \}/);
+assert.match(queueStatus, /readProductionFlightDetailCache\(flightQuery\.data\)/);
+assert.doesNotMatch(queueStatus, /return fetchProductionFlight\(/);
+assert.match(joinScreen, /pathname: '\/flight\/queue-status', params: \{ flightId: String\(flight\.flightId\) \}/);
+assert.match(myQueues, /pathname: '\/flight\/\[id\]', params: \{ id: String\(flightId\) \}/);
 assert.match(details, /PRODUCTION_FLIGHTS_QUERY_KEY/);
 assert.match(details, /flight-detail-unavailable/);
 assert.match(details, /flight-detail-refresh-error/);

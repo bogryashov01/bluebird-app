@@ -142,6 +142,9 @@ export interface ProductionUserProfile {
   upgradeCreditBalances: ProductionUpgradeCreditBalances;
   weightLbs: Nullable<number>;
   updatedAt?: Nullable<string>;
+  /** True when GET omitted the field. The toggle stays hidden until the server returns it. */
+  allowIncomingConnectionRequests: boolean;
+  allowIncomingConnectionRequestsSupported: boolean;
 }
 
 export type ProductionProfileDiagnosticPresence = 'present' | 'absent' | 'unknown';
@@ -184,6 +187,7 @@ export interface UpdateProductionUserProfileRequest {
   smsConsent?: boolean;
   email?: string;
   weightLbs?: Nullable<number>;
+  allowIncomingConnectionRequests?: boolean;
 }
 
 export interface ProductionBillingAddress {
@@ -318,6 +322,8 @@ export interface ProductionPublicQueueEntry {
   tier: 'free' | 'base' | 'plus';
   hasLineSkip: boolean;
   isViewer: boolean;
+  /** Present only for eligible recipients seen by the active first-ranked member. */
+  connectionTargetReference?: string;
 }
 
 export interface JoinProductionQueueRequest {
@@ -808,6 +814,7 @@ function parseProfileShape(value: unknown, field: string, verifiedPhoneProjectio
       if (weight < 1 || weight > 1500) return schemaFailure(path);
       return weight;
     }),
+    ...readAllowIncomingConnectionRequests(raw, field),
   } as ProductionUserProfile;
   if (verifiedPhoneProjection) {
     profile.updatedAt = nullable(raw.updatedAt, `${field}.updatedAt`, stringValue);
@@ -951,6 +958,9 @@ function validateProfileUpdate(data: UpdateProductionUserProfileRequest): void {
   if (data.weightLbs !== undefined && data.weightLbs !== null &&
       (!Number.isSafeInteger(data.weightLbs) || data.weightLbs < 1 || data.weightLbs > 1500)) {
     schemaFailure('updateProfile.weightLbs');
+  }
+  if (data.allowIncomingConnectionRequests !== undefined && typeof data.allowIncomingConnectionRequests !== 'boolean') {
+    schemaFailure('updateProfile.allowIncomingConnectionRequests');
   }
 }
 
@@ -1132,14 +1142,36 @@ function parseQueueStatus(value: unknown): ProductionQueueStatus {
   };
 }
 
+const CONNECTION_TARGET_REFERENCE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function readConnectionTargetReference(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !CONNECTION_TARGET_REFERENCE.test(value)) return undefined;
+  return value.toLowerCase();
+}
+
+function readAllowIncomingConnectionRequests(
+  raw: Record<string, unknown>,
+  field: string,
+): Pick<ProductionUserProfile, 'allowIncomingConnectionRequests' | 'allowIncomingConnectionRequestsSupported'> {
+  if (!Object.prototype.hasOwnProperty.call(raw, 'allowIncomingConnectionRequests') || raw.allowIncomingConnectionRequests == null) {
+    return { allowIncomingConnectionRequests: true, allowIncomingConnectionRequestsSupported: false };
+  }
+  return {
+    allowIncomingConnectionRequests: booleanValue(raw.allowIncomingConnectionRequests, `${field}.allowIncomingConnectionRequests`),
+    allowIncomingConnectionRequestsSupported: true,
+  };
+}
+
 function parsePublicQueueEntry(value: unknown, field: string): ProductionPublicQueueEntry {
   const raw = objectValue(value, field);
+  const connectionTargetReference = readConnectionTargetReference(raw.connectionTargetReference);
   return {
     position: integerValue(raw.position, `${field}.position`),
     initials: stringValue(raw.initials, `${field}.initials`),
     tier: enumValue(raw.tier, ['free', 'base', 'plus'] as const, `${field}.tier`),
     hasLineSkip: booleanValue(raw.hasLineSkip, `${field}.hasLineSkip`),
     isViewer: booleanValue(raw.isViewer, `${field}.isViewer`),
+    ...(connectionTargetReference ? { connectionTargetReference } : {}),
   };
 }
 
@@ -1529,6 +1561,7 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
         projectRequestBody(data, [
           'firstName', 'lastName', 'dob', 'gender', 'homeAirportCode', 'favoriteCityKeys',
           'phoneE164', 'phoneCountry', 'notificationPrefs', 'smsConsent', 'email', 'weightLbs',
+          'allowIncomingConnectionRequests',
         ]),
       );
     },

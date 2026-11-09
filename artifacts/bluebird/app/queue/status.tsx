@@ -12,6 +12,7 @@ import { useColors } from '@/hooks/useColors';
 import { FloatingBackButton } from '@/components/FloatingBackButton';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import { confirmDialog } from '@/lib/confirmDialog';
+import { readFlightQueue } from '@/lib/flightQueuePresentation';
 import { useGetQueueStatus, useCancelQueueEntry, useGetMembership } from '@workspace/api-client-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -169,7 +170,7 @@ function movementRows(entry: QueueEntry): { text: string; time: string }[] {
 
 function QueueMembersCard({ entry }: { entry: QueueEntry }) {
   const colors = useColors();
-  const members = [...(entry.queueMembers ?? [])].sort((a, b) => a.position - b.position);
+  const members = readFlightQueue(entry.queueMembers) ?? [];
 
   return (
     <View style={[flat.card, { backgroundColor: colors.surface }]}>
@@ -179,31 +180,36 @@ function QueueMembersCard({ entry }: { entry: QueueEntry }) {
           {members.length} {members.length === 1 ? 'member' : 'members'}
         </Text>
       </View>
-      <View style={flat.memberBadgeRow}>
-        {members.map((member, index) => {
-          const isCurrentMember = member.position === entry.position;
-          return (
-            <View
-              key={`${member.position}-${member.initials}-${index}`}
-              style={[
-                flat.memberBadge,
-                {
-                  backgroundColor: isCurrentMember ? colors.primary : colors.primary + '14',
-                  borderColor: isCurrentMember ? colors.primary : colors.primary + '38',
-                },
-              ]}
-              accessibilityLabel={`${isCurrentMember ? 'Your' : 'Queue member'} position ${member.position}`}
-            >
-              <Text style={[flat.memberInitials, { color: isCurrentMember ? colors.primaryForeground : colors.primary }]}>
-                {member.initials}
-              </Text>
-              <Text style={[flat.memberPosition, { color: isCurrentMember ? colors.primaryForeground : colors.mutedForegroundLight }]}>
-                #{member.position}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
+      {members.length === 0 ? (
+        <Text style={[flat.membersCount, { color: colors.mutedForegroundLight }]}>No one is waiting.</Text>
+      ) : (
+        <ScrollView style={flat.memberList} nestedScrollEnabled showsVerticalScrollIndicator>
+          {members.map((member) => {
+            const first = member.position === members[0]?.position;
+            const isCurrentMember = member.position === entry.position;
+            return (
+              <View
+                key={`${member.position}-${member.initials}-${member.memberRef ?? ''}`}
+                style={[
+                  flat.memberRow,
+                  {
+                    backgroundColor: first ? colors.primary + '12' : colors.surface,
+                    borderColor: first ? colors.primary : colors.border,
+                  },
+                ]}
+                accessibilityLabel={`${first ? 'First in line' : 'Queue member'} ${member.initials}, position ${member.position}`}
+              >
+                <Text style={[flat.memberInitials, { color: first || isCurrentMember ? colors.primary : colors.textOnSurface }]}>
+                  {member.initials}
+                </Text>
+                <Text style={[flat.memberPosition, { color: colors.mutedForegroundLight }]}>
+                  #{member.position}{first ? ' · First in line' : ''}{isCurrentMember ? ' · You' : ''}
+                </Text>
+              </View>
+            );
+          })}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -835,6 +841,11 @@ const flat = StyleSheet.create({
   cardTitle: { fontFamily: 'Inter_700Bold', fontSize: 13 },
   membersHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   membersCount: { fontFamily: 'Inter_400Regular', fontSize: 12 },
+  memberList: { maxHeight: 280, marginTop: 10 },
+  memberRow: {
+    minHeight: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8,
+  },
   memberBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   memberBadge: {
     minWidth: 54,

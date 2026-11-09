@@ -1,22 +1,22 @@
 import React from 'react';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { MemberInitialsAvatar, MemberProfileSheet } from '@/components/MemberProfileSheet';
-import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { ActivityIndicator, AppState, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle } from 'react-native-svg';
 import { CurrentWinnerCelebration } from '@/components/CurrentWinnerCelebration';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { createClerkProductionTokenProvider, type ClerkSessionSnapshot } from '@/lib/clerkProductionTokenProvider';
-import { productionFlightDetailQueryKey } from '@/lib/flightDetailPresentation';
 import {
-  formatJoinFlightDate,
-  formatJoinFlightTime,
-  joinFlightQueueCountLabel,
-  joinFlightQueuePositionLabel,
-  presentJoinQueueWindow,
+  FLIGHT_DETAIL_QUERY_BEHAVIOR,
+  productionFlightDetailQueryKey,
+  readProductionFlightDetailCache,
+} from '@/lib/flightDetailPresentation';
+import {
   QUEUE_LEAVE_UNAVAILABLE,
   QUEUE_LEFT_CONFIRMED,
   QUEUE_SKIP_ALREADY_USED,
@@ -26,8 +26,6 @@ import {
   QUEUE_SKIP_UNAVAILABLE,
   QUEUE_SKIP_WINNER,
   presentQueueSkipLineOffer,
-  queueRosterLabel,
-  queueRosterTierLabel,
   canSubmitProductionQueueJoin,
 } from '@/lib/joinFlightPresentation';
 import { mainBluebirdAuthenticatedQueryKey } from '@/lib/mainBluebirdApi';
@@ -39,11 +37,70 @@ import {
 } from '@/lib/membershipDashboardRead';
 import { fetchProductionFlight, parseProductionFlightId } from '@/lib/productionFlights';
 import {
+  presentProductionQueueFlightStatus,
+  presentQueueDecision,
+  presentQueuePositionRing,
+  resolveProductionQueuePosition,
+} from '@/lib/productionQueueStatusPresentation';
+import { QUEUE_ACKNOWLEDGEMENT_ITEMS } from '@/lib/queueAcknowledgements';
+import {
+  presentWinnerOffer,
+  presentWinnerOfferCopy,
+} from '@/lib/winnerOfferPresentation';
+import {
   dismissCurrentWinnerCelebration,
   readCurrentWinnerCelebration,
 } from '@/lib/currentWinnerCelebration';
 import { useJoinFlightQueueRead } from '@/lib/useJoinFlightQueueRead';
 import { useProductionQueueMutation } from '@/lib/useProductionQueueMutation';
+
+const RING_CIRCUMFERENCE = 251;
+const OPERATIONAL_NOTICE = QUEUE_ACKNOWLEDGEMENT_ITEMS[0].label;
+
+function QueuePositionRing({
+  positionText,
+  totalText,
+  fraction,
+}: {
+  positionText: string;
+  totalText: string | null;
+  fraction: number | null;
+}) {
+  const colors = useColors();
+  const dashoffset = fraction === null ? RING_CIRCUMFERENCE : RING_CIRCUMFERENCE * (1 - fraction);
+  return (
+    <View style={styles.ringWrap} testID="queue-status-ring">
+      <Svg width={168} height={168} viewBox="0 0 90 90">
+        <Circle cx="45" cy="45" r="40" fill="none" stroke={colors.border} strokeWidth="7" />
+        {fraction !== null ? (
+          <Circle
+            cx="45"
+            cy="45"
+            r="40"
+            fill="none"
+            stroke={colors.primary}
+            strokeWidth="7"
+            strokeLinecap="round"
+            strokeDasharray={RING_CIRCUMFERENCE}
+            strokeDashoffset={dashoffset}
+            transform="rotate(-90, 45, 45)"
+          />
+        ) : null}
+      </Svg>
+      <View style={styles.ringLabel}>
+        <Text testID="queue-status-position" style={[styles.ringValue, { color: colors.textOnSurface }]}>
+          {positionText}
+          {totalText ? (
+            <Text testID="queue-status-total" style={[styles.ringTotal, { color: colors.mutedForegroundLight }]}>
+              {` / ${totalText}`}
+            </Text>
+          ) : null}
+        </Text>
+        <Text style={[styles.ringCaption, { color: colors.mutedForegroundLight }]}>YOUR POSITION</Text>
+      </View>
+    </View>
+  );
+}
 
 export default function ProductionQueueStatusScreen() {
   const colors = useColors();
@@ -68,6 +125,7 @@ export default function ProductionQueueStatusScreen() {
       : ['production-empty-leg', flightId ?? 'invalid', 'signed-out'],
     enabled: signedIn && !!configuration && flightId !== null,
     retry: false,
+    ...FLIGHT_DETAIL_QUERY_BEHAVIOR,
     queryFn: async ({ signal }) => {
       if (!configuration || flightId === null || !clerkUserId) {
         throw new Error('A signed-in account is required.');
@@ -91,37 +149,57 @@ export default function ProductionQueueStatusScreen() {
       if (sessionRef.current?.userId !== requestedUserId) {
         throw Object.assign(new Error('The signed-in account changed.'), { code: 'cancelled' });
       }
-      return fetchProductionFlight(flightId, { signal, accessToken: token });
+      const flight = await fetchProductionFlight(flightId, { signal, accessToken: token });
+      return { flight, viewerAuthenticated: true };
     },
   });
-  const flightStatus = flightQuery.data?.status === 'published' ? 'published' : null;
-  const queue = useJoinFlightQueueRead(flightId ?? 0, flightStatus);
-  const mutation = useProductionQueueMutation(flightId ?? 0, flightQuery.data?.internationalPassRequired ?? null);
-  const route = flightQuery.data
-    ? [flightQuery.data.fromAirport, flightQuery.data.toAirport].filter(Boolean).join(' → ')
+  const flight = readProductionFlightDetailCache(flightQuery.data)?.flight;
+  const flightStatus = flight?.status === 'published' ? 'published' : null;
+  const { panel: queue } = useJoinFlightQueueRead(flightId ?? 0, flightStatus);
+  const mutation = useProductionQueueMutation(flightId ?? 0, flight?.internationalPassRequired ?? null);
+  const route = flight
+    ? [flight.fromAirport, flight.toAirport].filter(Boolean).join(' → ')
     : '';
-  const when = flightQuery.data
-    ? [formatJoinFlightDate(flightQuery.data.departureDate), formatJoinFlightTime(flightQuery.data.departureTime)].filter(Boolean).join(' · ')
-    : '';
-  const viewerPosition = queue.kind === 'participants' ? queue.viewerPosition : null;
-  const memberInQueue = flightQuery.data?.userInQueue === true || viewerPosition !== null;
-  const positionLabel = viewerPosition !== null
-    ? joinFlightQueuePositionLabel(viewerPosition)
-    : flightQuery.data?.userInQueue === true &&
-      typeof flightQuery.data.viewerQueuePosition === 'number' &&
-      Number.isSafeInteger(flightQuery.data.viewerQueuePosition) &&
-      flightQuery.data.viewerQueuePosition >= 1
-      ? joinFlightQueuePositionLabel(flightQuery.data.viewerQueuePosition)
-      : null;
-  const countLabel = queue.kind === 'participants' ? joinFlightQueueCountLabel(queue.participantCount) : null;
-  const [selectedRow, setSelectedRow] = React.useState<number | null>(null);
-  const rosterRow = queue.kind === 'participants' && selectedRow !== null
-    ? queue.rows.find((row) => row.position === selectedRow) ?? null
-    : null;
-  const windowLabel = presentJoinQueueWindow(flightQuery.data?.queueClosesAt ?? null, Date.now()).label;
+  const rosterPosition = queue.kind === 'participants' ? queue.viewerPosition : null;
+  const rosterCount = queue.kind === 'participants' ? queue.participantCount : null;
+  const reading = resolveProductionQueuePosition({
+    rosterPosition,
+    rosterCount,
+    flightPosition: flight?.viewerQueuePosition ?? null,
+    flightCount: flight?.queueCount ?? null,
+  });
+  const ring = presentQueuePositionRing(reading.position, reading.total);
+  const memberInQueue = flight?.userInQueue === true || reading.position !== null;
   const viewerRosterRow = queue.kind === 'participants'
     ? queue.rows.find((row) => row.isViewer) ?? null
     : null;
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
+  const closesAt = typeof flight?.queueClosesAt === 'string' ? flight.queueClosesAt : null;
+  React.useEffect(() => {
+    if (!closesAt) return undefined;
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [closesAt]);
+  const decision = presentQueueDecision(closesAt, nowMs);
+  const offer = presentWinnerOffer({
+    viewerIsEffectiveWinner: flight?.viewerIsEffectiveWinner ?? null,
+    viewerConfirmationStatus: flight?.viewerConfirmationStatus ?? null,
+    queueClosed: decision.kind === 'closed' ? true : decision.kind === 'countdown' ? false : null,
+    awarded: null,
+    bookedPassenger: flight?.viewerIsBookedPassenger ?? null,
+    flightStatus: flight?.status ?? null,
+    deadlineIso: null,
+    nowMs,
+  });
+  const offerCopy = presentWinnerOfferCopy(offer);
+  const flightState = presentProductionQueueFlightStatus({
+    status: flight?.status ?? null,
+    queueClosesAt: closesAt,
+    nowMs,
+    viewerIsBookedPassenger: flight?.viewerIsBookedPassenger ?? null,
+    viewerConfirmationStatus: flight?.viewerConfirmationStatus ?? null,
+    viewerIsEffectiveWinner: flight?.viewerIsEffectiveWinner ?? null,
+  });
   const [passBalance, setPassBalance] = React.useState<'loading' | 'unavailable' | { count: number }>('loading');
   const [passAttempt, setPassAttempt] = React.useState(0);
   const passEnvironment = configuration?.environment ?? null;
@@ -184,99 +262,151 @@ export default function ProductionQueueStatusScreen() {
     inQueue: memberInQueue,
     mutationsEnabled: canSubmitProductionQueueJoin(),
     balance: passBalance,
-    passAlreadyApplied: flightQuery.data?.viewerHasLineSkip === true || viewerRosterRow?.hasLineSkip === true,
-    viewerIsEffectiveWinner: flightQuery.data?.viewerIsEffectiveWinner ?? null,
+    passAlreadyApplied: flight?.viewerHasLineSkip === true || viewerRosterRow?.hasLineSkip === true,
+    viewerIsEffectiveWinner: flight?.viewerIsEffectiveWinner ?? null,
   });
   const refetchFlight = flightQuery.refetch;
-  useFocusEffect(React.useCallback(() => {
-    if (!signedIn || flightId === null || !configuration || !clerkUserId) return undefined;
+  const closedRefresh = React.useRef(false);
+  React.useEffect(() => {
+    if (decision.kind !== 'closed' || closedRefresh.current || flightId === null) return;
+    closedRefresh.current = true;
     void refetchFlight();
-    void queryClient.invalidateQueries({
-      queryKey: mainBluebirdAuthenticatedQueryKey(configuration.environment, clerkUserId, 'empty-leg-queue', flightId),
+    if (configuration && clerkUserId) {
+      void queryClient.invalidateQueries({
+        queryKey: mainBluebirdAuthenticatedQueryKey(configuration.environment, clerkUserId, 'trips'),
+      });
+    }
+  }, [clerkUserId, configuration, decision.kind, flightId, queryClient, refetchFlight]);
+  const winnerUnresolved = decision.kind === 'closed' && offer.kind === 'unavailable';
+  React.useEffect(() => {
+    if (!winnerUnresolved || flightId === null) return undefined;
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      if (attempts > 6) {
+        clearInterval(timer);
+        return;
+      }
+      void refetchFlight();
+    }, 20000);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refetchFlight();
     });
-    return undefined;
-  }, [clerkUserId, configuration, flightId, queryClient, refetchFlight, signedIn]));
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [flightId, refetchFlight, winnerUnresolved]);
+  const celebratedFlight = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    celebratedFlight.current = null;
+  }, [clerkUserId]);
+  React.useEffect(() => {
+    if (offer.kind !== 'pending' || !clerkUserId || flightId === null) return;
+    const celebrationKey = `${clerkUserId}:${flightId}`;
+    if (celebratedFlight.current === celebrationKey) return;
+    celebratedFlight.current = celebrationKey;
+    router.push({ pathname: '/flight/winner', params: { flightId: String(flightId) } });
+  }, [clerkUserId, flightId, offer.kind]);
+  const cardShadow = colors.scheme === 'light'
+    ? { shadowColor: '#0A1128', shadowOffset: { width: 0, height: 8 }, shadowRadius: 18, shadowOpacity: 0.06, elevation: 2 }
+    : null;
+  const statusColor = flightState?.tone === 'open' || flightState?.tone === 'awarded'
+    ? colors.success
+    : flightState?.tone === 'cancelled'
+      ? colors.destructive
+      : flightState?.tone === 'pending'
+        ? colors.primary
+        : colors.mutedForegroundLight;
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.offWhite }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: bottomPad + 120 }]}>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} testID="queue-status-back">
-          <Text style={[styles.back, { color: colors.primary }]}>Back</Text>
-        </TouchableOpacity>
-        <Text style={[styles.kicker, { color: colors.primary }]}>QUEUE STATUS</Text>
-        {flightId === null ? (
-          <Text style={[styles.title, { color: colors.textOnSurface }]}>Flight unavailable</Text>
-        ) : flightQuery.isPending ? (
-          <ActivityIndicator color={colors.primary} />
-        ) : flightQuery.isError ? (
-          <View testID="queue-status-error">
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 8, paddingBottom: bottomPad + 168 }]}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            onPress={() => router.back()}
+            testID="queue-status-back"
+            style={styles.backButton}
+          >
+            <Feather name="chevron-left" size={26} color={colors.textOnSurface} />
+          </TouchableOpacity>
+          <Text testID="queue-status-route" style={[styles.route, { color: colors.textOnSurface }]}>
+            {flightId === null ? 'Flight unavailable' : route || (flightQuery.isPending ? 'Queue status' : 'Flight details unavailable')}
+          </Text>
+          <View style={styles.backButton} />
+        </View>
+        {flightId !== null && flightQuery.isPending ? (
+          <ActivityIndicator color={colors.primary} style={styles.loading} />
+        ) : null}
+        {flightId !== null && flightQuery.isError ? (
+          <View testID="queue-status-error" style={styles.errorBlock}>
             <Text style={[styles.body, { color: colors.textOnSurface }]}>Queue status could not be loaded.</Text>
             <TouchableOpacity accessibilityRole="button" onPress={() => { void flightQuery.refetch(); }}>
-              <Text style={[styles.back, { color: colors.primary }]}>Try again</Text>
+              <Text style={[styles.retry, { color: colors.primary }]}>Try again</Text>
             </TouchableOpacity>
           </View>
-        ) : (
-          <>
-            <Text testID="queue-status-route" style={[styles.title, { color: colors.textOnSurface }]}>{route || 'Flight details unavailable'}</Text>
-            {!!when && <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>{when}</Text>}
-            {!!flightQuery.data?.aircraftTypeName && (
-              <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>{flightQuery.data.aircraftTypeName}</Text>
-            )}
-            <Text testID="queue-status-window" style={[styles.body, { color: colors.textOnSurface }]}>{windowLabel}</Text>
-            <Text testID="queue-status-position" style={[styles.position, { color: colors.textOnSurface }]}>
-              {positionLabel ?? (memberInQueue ? 'Your position is not available for this flight.' : 'You are not in this queue.')}
-            </Text>
-            {!!countLabel && (
-              <Text testID="join-flight-queue-count" style={[styles.body, { color: colors.textOnSurface }]}>{countLabel}</Text>
-            )}
-            <View testID="join-flight-queue" style={[styles.card, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.cardTitle, { color: colors.textOnSurface }]}>
-                {queue.kind === 'participants' ? `In this queue (${queue.participantCount})` : 'In this queue'}
-              </Text>
-              {queue.kind === 'loading' ? <ActivityIndicator color={colors.primary} /> : null}
-              {queue.kind === 'participants' ? queue.rows.map((row, index) => {
-                const label = queueRosterLabel(row.initials);
-                return (
-                  <TouchableOpacity
-                    key={`${row.position}-${index}`}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open queue profile for ${label}`}
-                    testID={row.isViewer ? 'join-flight-queue-viewer' : `join-flight-queue-row-${row.position}`}
-                    onPress={() => setSelectedRow(row.position)}
-                    style={[styles.row, index > 0 ? { borderTopColor: colors.separator, borderTopWidth: StyleSheet.hairlineWidth } : null]}
-                  >
-                    <MemberInitialsAvatar name={label} />
-                    <View style={styles.rowCopy}>
-                      <Text style={[styles.rowName, { color: colors.textOnSurface }]} numberOfLines={1}>{label}</Text>
-                      <Text style={[styles.rowTier, { color: colors.mutedForegroundLight }]} numberOfLines={1}>
-                        {queueRosterTierLabel(row.tier)} · #{row.position}
-                      </Text>
-                    </View>
-                    {row.isViewer ? <Text style={[styles.you, { color: colors.primary }]}>You</Text> : null}
-                  </TouchableOpacity>
-                );
-              }) : (
-                <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>
-                  {queue.kind === 'empty'
-                    ? 'No one is listed in this queue.'
-                    : queue.kind === 'unavailable'
-                      ? 'Queue participants are unavailable right now.'
-                      : 'Queue participants are shown when Bluebird returns them.'}
-                </Text>
-              )}
-            </View>
-          </>
-        )}
-        {mutation.leftMessage === QUEUE_LEFT_CONFIRMED ? (
-          <Text testID="queue-status-left" style={[styles.body, { color: colors.textOnSurface }]}>{mutation.leftMessage}</Text>
         ) : null}
-        {mutation.failure ? (
-          <Text testID="queue-status-leave-error" style={[styles.body, { color: colors.textOnSurface }]}>{mutation.failure.body}</Text>
+        {flightId !== null && !flightQuery.isPending && !flightQuery.isError ? (
+          <>
+            {ring.positionText ? (
+              <QueuePositionRing
+                positionText={ring.positionText}
+                totalText={ring.totalText}
+                fraction={ring.fraction}
+              />
+            ) : (
+              <Text testID="queue-status-position" style={[styles.unavailablePosition, { color: colors.textOnSurface }]}>
+                {memberInQueue ? 'Your position is not available for this flight.' : 'You are not in this queue.'}
+              </Text>
+            )}
+            {decision.kind === 'unavailable' ? null : (
+              <Text testID="queue-status-decision" style={[styles.decision, { color: colors.primary }]}>
+                {decision.label}
+              </Text>
+            )}
+            <View testID="queue-status-flight-status" style={[styles.card, styles.statusCard, cardShadow, { backgroundColor: colors.surface }]}>
+              <View style={styles.statusRow}>
+                <Text style={[styles.cardTitle, { color: colors.textOnSurface }]}>Flight Status</Text>
+                {flightState ? (
+                  <View style={styles.statusBadge}>
+                    <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                    <Text style={[styles.statusText, { color: statusColor }]}>{flightState.label}</Text>
+                  </View>
+                ) : (
+                  <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Not available</Text>
+                )}
+              </View>
+            </View>
+            {offerCopy && offer.kind !== 'non-winner' && offer.kind !== 'unavailable' ? (
+              <View testID="queue-status-winner" style={[styles.card, cardShadow, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.cardTitle, { color: colors.textOnSurface }]}>{offerCopy.title}</Text>
+                <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>{offerCopy.body}</Text>
+                {offer.kind === 'pending' ? (
+                  <PrimaryButton
+                    label="Review & Confirm Flight"
+                    testID="queue-status-review-winner"
+                    onPress={() => router.push({ pathname: '/flight/winner', params: { flightId: String(flightId) } })}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+            <View testID="queue-status-notice" style={[styles.notice, { backgroundColor: colors.primary + '14' }]}>
+              <Text style={[styles.body, { color: colors.textOnSurface }]}>{OPERATIONAL_NOTICE}</Text>
+            </View>
+            {mutation.leftMessage === QUEUE_LEFT_CONFIRMED ? (
+              <Text testID="queue-status-left" style={[styles.body, { color: colors.textOnSurface, textAlign: 'center' }]}>{mutation.leftMessage}</Text>
+            ) : null}
+            {mutation.failure ? (
+              <Text testID="queue-status-leave-error" style={[styles.body, { color: colors.textOnSurface, textAlign: 'center' }]}>{mutation.failure.body}</Text>
+            ) : null}
+          </>
         ) : null}
       </ScrollView>
       {memberInQueue && mutation.leftMessage !== QUEUE_LEFT_CONFIRMED ? (
-        <View style={[styles.footer, { paddingBottom: bottomPad + 12, borderTopColor: colors.separator, backgroundColor: colors.offWhite }]}>
+        <View style={[styles.footer, { paddingBottom: bottomPad + 12, backgroundColor: colors.offWhite }]}>
           {mutation.skipMessage ? (
             <Text testID="queue-status-skip-success" style={[styles.hint, { color: colors.textOnSurface }]}>{mutation.skipMessage}</Text>
           ) : null}
@@ -293,7 +423,7 @@ export default function ProductionQueueStatusScreen() {
             <View testID="queue-status-skip-unavailable">
               <Text style={[styles.hint, { color: colors.textOnSurface }]}>{QUEUE_SKIP_BALANCE_UNAVAILABLE}</Text>
               <TouchableOpacity accessibilityRole="button" onPress={() => setPassAttempt((attempt) => attempt + 1)} testID="queue-status-skip-retry">
-                <Text style={[styles.back, { color: colors.primary, textAlign: 'center' }]}>Try again</Text>
+                <Text style={[styles.retry, { color: colors.primary, textAlign: 'center' }]}>Try again</Text>
               </TouchableOpacity>
             </View>
           ) : null}
@@ -336,31 +466,16 @@ export default function ProductionQueueStatusScreen() {
               void mutation.leave();
             }}
           />
-          <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>
-            {canSubmitProductionQueueJoin()
-              ? 'Leaving removes you from this queue after you confirm.'
-              : QUEUE_LEAVE_UNAVAILABLE}
-          </Text>
+          {!canSubmitProductionQueueJoin() ? (
+            <Text style={[styles.hint, { color: colors.mutedForegroundLight }]}>
+              {QUEUE_LEAVE_UNAVAILABLE}
+            </Text>
+          ) : null}
         </View>
       ) : null}
-      <MemberProfileSheet
-        visible={rosterRow !== null}
-        name={queueRosterLabel(rosterRow?.initials)}
-        lines={rosterRow ? [
-          queueRosterTierLabel(rosterRow.tier),
-          `Queue position #${rosterRow.position}`,
-          ...(rosterRow.isViewer ? ['You'] : []),
-          ...(rosterRow.hasLineSkip ? ['Skip the Line'] : []),
-        ] : []}
-        onClose={() => setSelectedRow(null)}
-      />
       {currentWinner ? (
         <CurrentWinnerCelebration
-          queueClosesAt={
-            typeof flightQuery.data?.queueClosesAt === 'string'
-              ? flightQuery.data.queueClosesAt
-              : currentWinner.queueClosesAt
-          }
+          queueClosesAt={closesAt ?? currentWinner.queueClosesAt}
           onContinue={() => {
             if (!clerkUserId || flightId === null) return;
             dismissCurrentWinnerCelebration({ clerkUserId, flightId });
@@ -385,20 +500,30 @@ export default function ProductionQueueStatusScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  content: { paddingHorizontal: 20, gap: 12 },
-  back: { fontFamily: 'Inter_600SemiBold', fontSize: 16, paddingVertical: 8 },
-  kicker: { fontFamily: 'Inter_700Bold', fontSize: 11, letterSpacing: 0.7 },
-  title: { fontFamily: 'Inter_700Bold', fontSize: 26, lineHeight: 32 },
-  body: { fontFamily: 'Inter_400Regular', fontSize: 15, lineHeight: 22 },
-  position: { fontFamily: 'Inter_700Bold', fontSize: 20, lineHeight: 26 },
-  card: { borderRadius: 22, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-  cardTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, marginBottom: 8 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 68 },
-  rowCopy: { flex: 1, gap: 2 },
-  rowName: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
-  rowTier: { fontFamily: 'Inter_400Regular', fontSize: 13 },
-  you: { fontFamily: 'Inter_700Bold', fontSize: 13 },
-  footer: { borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 12, gap: 8 },
+  content: { paddingHorizontal: 22, alignItems: 'center', gap: 18 },
+  header: { width: '100%', minHeight: 44, flexDirection: 'row', alignItems: 'center' },
+  backButton: { width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' },
+  route: { flex: 1, textAlign: 'center', fontFamily: 'Inter_700Bold', fontSize: 22, letterSpacing: -0.4 },
+  loading: { marginTop: 32 },
+  errorBlock: { alignItems: 'center', gap: 8, marginTop: 24 },
+  ringWrap: { width: 168, height: 168, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  ringLabel: { position: 'absolute', alignItems: 'center' },
+  ringValue: { fontFamily: 'Inter_700Bold', fontSize: 34, letterSpacing: -0.8 },
+  ringTotal: { fontFamily: 'Inter_400Regular', fontSize: 18 },
+  ringCaption: { fontFamily: 'Inter_600SemiBold', fontSize: 11, letterSpacing: 1.1, marginTop: 2 },
+  unavailablePosition: { fontFamily: 'Inter_600SemiBold', fontSize: 16, lineHeight: 22, textAlign: 'center', marginTop: 24 },
+  decision: { fontFamily: 'Inter_700Bold', fontSize: 16, marginTop: 4 },
+  card: { width: '100%', borderRadius: 18, padding: 16, gap: 10 },
+  statusCard: { marginTop: 8 },
+  cardTitle: { fontFamily: 'Inter_700Bold', fontSize: 16 },
+  body: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  notice: { width: '100%', borderRadius: 16, padding: 14 },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 22, paddingTop: 12, gap: 8 },
   skipLoading: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   hint: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  retry: { fontFamily: 'Inter_600SemiBold', fontSize: 16, paddingVertical: 8 },
 });

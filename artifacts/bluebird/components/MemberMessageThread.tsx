@@ -77,7 +77,7 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
         <View style={styles.state} testID="member-message-unavailable">
           <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Messages are not available yet</Text>
           <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]}>
-            Private messages stay off until that service is ready.
+            Try again later.
           </Text>
         </View>
       ) : thread.status === 'signed-out' ? (
@@ -94,7 +94,7 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
             </TouchableOpacity>
           ) : null}
           {thread.status === 'ready' && thread.messages.length === 0 ? (
-            <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]} testID="member-message-empty">No messages yet.</Text>
+            <Text style={[styles.stateTitle, { color: colors.textOnSurface }]} testID="member-message-empty">No Messages Yet</Text>
           ) : null}
           {thread.messages.map((message) => {
             const mine = message.senderUserId === thread.viewerId;
