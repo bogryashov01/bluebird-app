@@ -19,7 +19,9 @@ import {
   areProductionMembershipDashboardReadsEnabled,
   classifyMembershipReadError,
   clearDashboardMembershipCache,
+  forgetSkipTheLinePasses,
   loadDashboardProductionMembership,
+  loadDashboardUpgradeCreditBalances,
   logMembershipDashboardDiagnostic,
   logMembershipDashboardPresentation,
   logMembershipNormalizedFields,
@@ -27,9 +29,13 @@ import {
   membershipNormalizedFieldRecord,
   readApprovedDashboardMembership,
   readFreshDashboardMembership,
+  readFreshInternationalPasses,
   readFreshSkipTheLinePasses,
+  readInternationalPassBalance,
   readSkipTheLineBalance,
+  readUpgradeCreditBalances,
   rememberDashboardMembership,
+  rememberInternationalPasses,
   rememberSkipTheLinePasses,
   loadDashboardSkipTheLinePasses,
   retainDashboardMembershipForAccount,
@@ -440,17 +446,25 @@ test('the membership dashboard shows a verified tier and leaves unknown statisti
   assert.equal(baseMember.upgrade.title, 'Base → Plus');
   assert.equal(baseMember.annualUsage, null);
   assert.equal(baseMember.metrics.find((metric) => metric.label === 'Skip the Line Passes').value, '2');
+  assert.equal(baseMember.metrics.find((metric) => metric.label === 'Total Saved').available, false);
   assert.equal(baseMember.metrics.find((metric) => metric.label === 'Referral Balance').available, false);
   assert.equal(JSON.stringify(baseMember).includes('14 / 20'), false);
 
   const plusMember = presentMembershipDashboard({
     signedIn: true,
-    membership: { ...member, tier: 'plus' },
+    membership: {
+      ...member,
+      tier: 'plus',
+      internationalPassPasses: 0,
+      skipTheLineUnlimited: false,
+      internationalUnlimited: true,
+    },
     account: { resolved: true, isMember: true, memberTier: 'plus' },
     referralBalanceCents: 25000,
   });
   assert.equal(plusMember.tierBadge, 'Plus Member');
   assert.equal(plusMember.upgrade, null);
+  assert.equal(plusMember.metrics.find((metric) => metric.label === 'Total Saved').available, false);
   assert.equal(plusMember.metrics.find((metric) => metric.label === 'Referral Balance').value, '$250.00');
 
   const missing = presentMembershipDashboard({ signedIn: true, membership: nonMember });
@@ -503,6 +517,20 @@ test('the membership dashboard shows a verified tier and leaves unknown statisti
     account: { resolved: true, isMember: true, memberTier: 'base' },
   });
   assert.equal(zeroPasses.metrics.find((metric) => metric.label === 'Skip the Line Passes').value, '0');
+
+  const unlimitedSkip = presentMembershipDashboard({
+    signedIn: true,
+    membership: {
+      ...member,
+      skipTheLinePasses: 0,
+      skipTheLineUnlimited: true,
+      internationalPassPasses: 2,
+      internationalUnlimited: false,
+    },
+    account: { resolved: true, isMember: true, memberTier: 'base' },
+  });
+  assert.equal(unlimitedSkip.metrics.find((metric) => metric.label === 'Skip the Line Passes').value, 'Unlimited');
+  assert.equal(unlimitedSkip.metrics.find((metric) => metric.label === 'Total Saved').available, false);
 });
 
 test('the production membership adapter feeds the dashboard without card data or invented credits', async () => {
@@ -558,6 +586,9 @@ test('the production membership adapter feeds the dashboard without card data or
   assert.equal(baseDashboard.metrics.find((metric) => metric.label === 'Flights Flown').available, false);
   assert.equal(baseDashboard.metrics.find((metric) => metric.label === 'Total Saved').available, false);
   assert.equal(baseDashboard.annualUsage, null);
+  assert.equal(base.internationalPassPasses, null);
+  assert.equal(base.skipTheLineUnlimited, null);
+  assert.equal(base.internationalUnlimited, null);
 
   const plus = presentMembershipDashboard({
     signedIn: true,
@@ -867,7 +898,7 @@ test('the Clerk membership screen keeps the original layout without prototype da
   assert.ok(clerkBranch > 0);
   assert.ok(demoOverview > clerkBranch);
   assert.equal(source.includes('loadDashboardProductionMembership'), true);
-  assert.equal(source.includes('loadDashboardSkipTheLinePasses'), true);
+  assert.equal(source.includes('loadDashboardUpgradeCreditBalances'), true);
   assert.equal(source.includes('logMembershipDashboardPresentation'), true);
   assert.ok(source.indexOf('rememberDashboardMembership({') > source.indexOf("loaded.kind === 'invalid'"));
   assert.ok(source.indexOf('rememberDashboardMembership({') > source.indexOf("loaded.kind === 'error'"));
@@ -879,7 +910,8 @@ test('the Clerk membership screen keeps the original layout without prototype da
   assert.equal(source.includes('loadClerkBluebirdMembership'), false);
   assert.equal(source.includes('getProfile'), false);
   assert.equal(source.includes('fetchProductionMembershipPlans'), false);
-  assert.equal(source.includes("authMode !== 'clerk'"), true);
+  assert.equal(source.includes('enabled: !demoMode'), true);
+  assert.equal(source.includes("enabled: !demoMode && authMode !== 'clerk'"), false);
   assert.equal(source.includes('Bluebird could not load your membership details.'), true);
   const clerkSource = source.slice(clerkBranch, demoOverview);
   assert.equal(clerkSource.includes('presentMembershipDashboard'), true);
@@ -893,6 +925,8 @@ test('the Clerk membership screen keeps the original layout without prototype da
   assert.equal(clerkSource.includes('design.paymentLine'), false);
   assert.equal(clerkSource.includes('design.periodLine'), false);
   assert.equal(clerkSource.includes('accessibilityState={{ disabled: true }}'), false);
+  assert.equal(clerkSource.includes('Plan benefits'), false);
+  assert.equal(clerkSource.includes('clerk-membership-browse-plans'), false);
   assert.equal(clerkSource.includes("color: '#0A1128'"), false);
   assert.equal(source.includes("upgradeBtnText, { color: colors.textOnSurface }"), true);
   assert.equal(clerkSource.includes('getReferrals'), false);
@@ -906,6 +940,10 @@ test('the Clerk membership screen keeps the original layout without prototype da
     'design.statusNote',
     'membership-settings',
     'memberTier: completedAccount.memberTier',
+    'findProductionPlan',
+    'internationalPassPasses',
+    'skipTheLineUnlimited',
+    'internationalUnlimited',
   ]) {
     assert.equal(clerkSource.includes(label), true, label);
   }
@@ -955,13 +993,18 @@ test('the Clerk membership screen keeps the original layout without prototype da
     'Legal',
     'Sign Out',
     "router.push('/account/contacts'",
-    "router.push('/account/delete-account'",
+    'confirmOpenDeleteAccount',
     "router.push('/concierge'",
     "router.push('/support/help-center'",
     "router.push('/support/legal'",
   ]) {
     assert.equal(profileBranch.includes(row), true, row);
   }
+  // Delete Account navigation is gated by the native confirmation helper, then
+  // router.push('/account/delete-account') runs from confirmOpenDeleteAccount.
+  assert.equal(profile.includes('confirmOpenDeleteAccount'), true);
+  assert.equal(profile.includes("router.push('/account/delete-account'"), true);
+  assert.equal(profile.includes('confirmDialog('), true);
   assert.equal(profileBranch.includes('Unavailable for this account'), false);
   assert.equal(profileBranch.includes('/api/membership'), false);
 });
@@ -1029,6 +1072,16 @@ test('active membership stays visible when payment is not succeeded, and credit 
     known: true,
     count: 0,
   });
+  assert.deepEqual(readInternationalPassBalance({ upgradeCreditBalances: { skipTheLine: 0, internationalPass: 1 } }), {
+    known: true,
+    count: 1,
+  });
+  assert.deepEqual(readUpgradeCreditBalances({ upgradeCreditBalances: { skipTheLine: 0, internationalPass: 1 } }), {
+    known: true,
+    skipTheLine: 0,
+    internationalPass: 1,
+  });
+  assert.equal(readUpgradeCreditBalances({ upgradeCreditBalances: { skipTheLine: 2 } }).known, false);
   assert.equal(readSkipTheLineBalance({ upgradeCreditBalances: { skipTheLine: 1.5 } }).known, false);
   assert.equal(readSkipTheLineBalance({ firstName: 'Ada' }).known, false);
 
@@ -1048,6 +1101,21 @@ test('active membership stays visible when payment is not succeeded, and credit 
   assert.deepEqual(cached, { kind: 'loaded', count: 0 });
   assert.equal(tokenReads, 0);
 
+  const cachedBoth = await loadDashboardUpgradeCreditBalances({
+    configuration: {
+      environment: 'production',
+      apiBaseUrl: 'https://bluebirdjets.com/api',
+      clerkPublishableKey: 'pk_live_example',
+    },
+    cachedProfiles: [{ upgradeCreditBalances: { skipTheLine: 1, internationalPass: 3 } }],
+    getAccessToken: async () => {
+      tokenReads += 1;
+      return 'mock-only-token-never-log';
+    },
+  });
+  assert.deepEqual(cachedBoth, { kind: 'loaded', skipTheLine: 1, internationalPass: 3 });
+  assert.equal(tokenReads, 0);
+
   clearDashboardMembershipCache();
   rememberSkipTheLinePasses({
     environment: 'production',
@@ -1056,11 +1124,67 @@ test('active membership stays visible when payment is not succeeded, and credit 
     count: 0,
     loadedAt: 1_000,
   });
+  rememberInternationalPasses({
+    environment: 'production',
+    apiBaseUrl: 'https://bluebirdjets.com/api',
+    clerkUserId: 'user-a',
+    count: 4,
+    loadedAt: 1_000,
+  });
   retainDashboardMembershipForAccount('user-b');
   assert.equal(readFreshSkipTheLinePasses({
     environment: 'production',
     apiBaseUrl: 'https://bluebirdjets.com/api',
     clerkUserId: 'user-a',
+    now: 1_000,
+  }), null);
+  assert.equal(readFreshInternationalPasses({
+    environment: 'production',
+    apiBaseUrl: 'https://bluebirdjets.com/api',
+    clerkUserId: 'user-a',
+    now: 1_000,
+  }), null);
+  rememberSkipTheLinePasses({
+    environment: 'production',
+    apiBaseUrl: 'https://bluebirdjets.com/api',
+    clerkUserId: 'user-b',
+    count: 2,
+    loadedAt: 1_000,
+  });
+  rememberInternationalPasses({
+    environment: 'production',
+    apiBaseUrl: 'https://bluebirdjets.com/api',
+    clerkUserId: 'user-b',
+    count: 5,
+    loadedAt: 1_000,
+  });
+  assert.deepEqual(readFreshSkipTheLinePasses({
+    environment: 'production',
+    apiBaseUrl: 'https://bluebirdjets.com/api',
+    clerkUserId: 'user-b',
+    now: 1_000,
+  }), { count: 2 });
+  assert.deepEqual(readFreshInternationalPasses({
+    environment: 'production',
+    apiBaseUrl: 'https://bluebirdjets.com/api',
+    clerkUserId: 'user-b',
+    now: 1_000,
+  }), { count: 5 });
+  forgetSkipTheLinePasses({
+    environment: 'production',
+    apiBaseUrl: 'https://bluebirdjets.com/api',
+    clerkUserId: 'user-b',
+  });
+  assert.equal(readFreshSkipTheLinePasses({
+    environment: 'production',
+    apiBaseUrl: 'https://bluebirdjets.com/api',
+    clerkUserId: 'user-b',
+    now: 1_000,
+  }), null);
+  assert.equal(readFreshInternationalPasses({
+    environment: 'production',
+    apiBaseUrl: 'https://bluebirdjets.com/api',
+    clerkUserId: 'user-b',
     now: 1_000,
   }), null);
   rememberSkipTheLinePasses({
@@ -1093,6 +1217,18 @@ test('active membership stays visible when payment is not succeeded, and credit 
       },
     });
     assert.deepEqual(blocked, { kind: 'unavailable' });
+    const blockedBoth = await loadDashboardUpgradeCreditBalances({
+      configuration: {
+        environment: 'production',
+        apiBaseUrl: 'https://bluebirdjets.com/api',
+        clerkPublishableKey: 'pk_live_example',
+      },
+      getAccessToken: async () => {
+        tokenReads += 1;
+        return 'mock-only-token-never-log';
+      },
+    });
+    assert.deepEqual(blockedBoth, { kind: 'unavailable' });
     assert.equal(tokenReads, 0);
   } finally {
     if (previousAuthTest === undefined) delete process.env.EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST;

@@ -285,6 +285,7 @@ export default function FlightChecklistScreen() {
           list: 'current',
           awarded: trip.checklist.awarded,
           remainingSteps: trip.checklist.remainingSteps,
+          status: trip.status ?? null,
         })}
       </Text>
       <View testID="checklist-progress" style={styles.progressBlock}>

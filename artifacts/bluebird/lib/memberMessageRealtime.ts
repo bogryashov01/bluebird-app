@@ -49,6 +49,38 @@ export function isMemberMessageRealtimeEnabled(input?: {
   return flag === 'true' && messagesEnabled === true && nativeAuthTest !== true;
 }
 
+export interface MemberMessageGatewayConfiguration {
+  gatewayUrl: string;
+  gatewayOrigin: string | null;
+}
+
+/**
+ * Reads only EXPO_PUBLIC_BLUEBIRD_MESSAGING_* vars. Never reuses web Vite env
+ * names and never invents a production hostname. Returns null until the
+ * gateway URL is valid.
+ */
+export function resolveMemberMessageGatewayConfiguration(input?: {
+  gatewayUrl?: unknown;
+  gatewayOrigin?: unknown;
+}): MemberMessageGatewayConfiguration | null {
+  const gatewayUrl = acceptMessagingGatewayUrl(
+    input?.gatewayUrl !== undefined
+      ? input.gatewayUrl
+      : process.env[MEMBER_MESSAGE_GATEWAY_URL],
+  );
+  if (!gatewayUrl) return null;
+  const origin = resolveMessagingGatewayOrigin(
+    input?.gatewayOrigin !== undefined
+      ? input.gatewayOrigin
+      : process.env[MEMBER_MESSAGE_GATEWAY_ORIGIN],
+  );
+  if (origin.status === 'invalid') return null;
+  return {
+    gatewayUrl,
+    gatewayOrigin: origin.status === 'configured' ? origin.origin : null,
+  };
+}
+
 export function acceptMessagingGatewayUrl(value: unknown): string | null {
   if (typeof value !== 'string' || !value || value !== value.trim() || /\s/.test(value)) return null;
   let parsed: URL;

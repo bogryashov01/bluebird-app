@@ -28,7 +28,7 @@ import {
  *
  * Pending (unawarded) Trips after queue join are product-correct and are NOT
  * treated as winner offers here. Winner notices require pendingWinnerOfferFlightIdsFromTrips,
- * which stays empty until trips expose verified winner-selection fields.
+ * which only surfaces trips with status winner_confirmation_required.
  */
 export function WinnerOfferObserver() {
   const colors = useColors();

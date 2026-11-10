@@ -268,7 +268,7 @@ test("network failure and an unauthorized session do not claim a queue change", 
   assert.equal(JSON.stringify(rejected.failure).includes("token"), false);
 });
 
-test("a confirmed join refreshes flight details, the roster, My Queues, and trips for that account only", () => {
+test("a confirmed join refreshes flight details, the roster, My Queues, trips, and profile for that account only", () => {
   const invalidated = [];
   const refreshed = applyQueueMutationRefresh({
     gateOpen: true,
@@ -280,7 +280,7 @@ test("a confirmed join refreshes flight details, the roster, My Queues, and trip
     invalidate: (key) => invalidated.push(key),
   });
   assert.equal(refreshed, true);
-  assert.equal(invalidated.length, 5);
+  assert.equal(invalidated.length, 6);
   assert.deepEqual(invalidated[0], ["production-empty-leg", 42, "user_a"]);
   assert.equal(invalidated[1][3], "empty-leg-queue");
   assert.equal(invalidated[1][4], 42);
@@ -288,6 +288,7 @@ test("a confirmed join refreshes flight details, the roster, My Queues, and trip
   assert.equal(invalidated[2].length, 4);
   assert.equal(invalidated[3][3], "trips");
   assert.equal(invalidated[4][3], "empty-leg-list");
+  assert.equal(invalidated[5][3], "profile");
   assert.equal(invalidated.every((key) => key.includes("user_a")), true);
 
   const otherAccount = [];
@@ -373,8 +374,10 @@ test("the production gate stays closed and the app does not call the client", as
   assert.match(hook, /applyQueueMutationRefresh/);
   assert.match(hook, /submitProductionQueueSkipLine/);
   assert.match(hook, /Use 1 Skip the Line Pass\?/);
-  assert.match(hook, /status === 'applied'[\s\S]*markCurrentWinnerCelebration\([\s\S]*viewerIsEffectiveWinner: result\.flight\.viewerIsEffectiveWinner === true/);
+  assert.match(hook, /presentQueueSkipConfirmedMessage\(result\.flight\.viewerQueuePosition \?\? 0\)/);
+  assert.doesNotMatch(hook, /markCurrentWinnerCelebration/);
   assert.doesNotMatch(hook, /PassCelebration|\/flight\/confirmed|Flight Confirmed|You've Won the Flight/);
+  assert.match(hook, /inFlight\.current \|\| submitting/);
   assert.match(confirmation, /joinFlightConfirmNote\(demoEnabled\)/);
   const presentation = readFileSync(resolve(projectRoot, "lib/joinFlightPresentation.ts"), "utf8");
   assert.match(presentation, /Joining is unavailable right now\./);
@@ -402,8 +405,16 @@ test("an unconfirmed join response does not invent a position", async () => {
   assert.equal(JSON.stringify(result).includes('"position":1'), false);
 });
 
-test("Skip the Line applies an existing credit after joining and confirms current-winner status", async () => {
+test("Skip the Line applies an existing credit and requires Task #1820 rank fields", async () => {
   const calls = [];
+  const appliedFlight = {
+    id: 42,
+    viewerHasLineSkip: true,
+    viewerQueuePosition: 1,
+    queueCount: 4,
+    lineSkipSold: true,
+    viewerIsEffectiveWinner: false,
+  };
   const input = {
     gateOpen: true,
     flightId: 42,
@@ -414,30 +425,38 @@ test("Skip the Line applies an existing credit after joining and confirms curren
     createClient: () => ({
       skipLine: async (id, body) => {
         calls.push([id, body]);
-        return { id: 42, viewerIsEffectiveWinner: true };
+        return appliedFlight;
       },
     }),
   };
   const unconfirmed = await submitProductionQueueSkipLine({ ...input, explicitConfirm: false });
   const noCredit = await submitProductionQueueSkipLine({ ...input, existingCreditCount: 0 });
   const applied = await submitProductionQueueSkipLine(input);
-  const notWinner = await submitProductionQueueSkipLine({
+  const incomplete = await submitProductionQueueSkipLine({
     ...input,
     createClient: () => ({
       skipLine: async (id, body) => {
         calls.push([id, body]);
-        return { id: 42, viewerIsEffectiveWinner: false, viewerQueuePosition: 1 };
+        return { id: 42, viewerIsEffectiveWinner: true };
       },
     }),
+  });
+  const duplicate = await submitProductionQueueSkipLine({
+    ...input,
+    inFlight: { current: true },
   });
   assert.equal(unconfirmed.status, "needs-confirmation");
   assert.equal(noCredit.status, "needs-credit");
   assert.equal(applied.status, "applied");
-  assert.equal(applied.flight.viewerIsEffectiveWinner, true);
-  assert.equal(applied.flight.viewerQueuePosition, undefined);
-  assert.equal(notWinner.status, "failed");
-  assert.match(notWinner.failure.body, /did not confirm Skip the Line/);
-  assert.equal(notWinner.failure.keepsExistingQueue, true);
+  assert.equal(applied.flight.viewerQueuePosition, 1);
+  assert.equal(applied.flight.viewerHasLineSkip, true);
+  assert.equal(applied.flight.lineSkipSold, true);
+  assert.equal(applied.flight.queueCount, 4);
+  assert.equal(applied.flight.viewerIsEffectiveWinner, false);
+  assert.equal(incomplete.status, "failed");
+  assert.match(incomplete.failure.body, /did not confirm Skip the Line/);
+  assert.equal(incomplete.failure.keepsExistingQueue, true);
+  assert.equal(duplicate.status, "duplicate");
   assert.deepEqual(calls, [
     [42, { useCredit: true }],
     [42, { useCredit: true }],

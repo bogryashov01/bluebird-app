@@ -35,9 +35,9 @@ function validIdentity(clerkUserId: string, flightId: number): boolean {
 }
 
 /**
- * Records one celebration for a skip-line response that already confirmed
- * the viewer is the current winner. A later response for the same account
- * and flight does not open another celebration or use another pass.
+ * Records one celebration when the backend has already confirmed the viewer
+ * is the current winner. Skip the Line redemption must not call this —
+ * position updates are not a confirmed win.
  */
 export function markCurrentWinnerCelebration(input: {
   clerkUserId: string;

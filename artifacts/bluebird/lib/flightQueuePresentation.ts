@@ -22,9 +22,7 @@ export function readFlightQueue(value: unknown): FlightQueueMemberView[] | null 
     const raw = entry as Record<string, unknown>;
     const initials = typeof raw.initials === 'string' ? raw.initials.trim().toUpperCase() : '';
     const position = raw.position;
-    const memberRef = typeof raw.memberRef === 'string' && raw.memberRef.trim() !== ''
-      ? raw.memberRef.trim()
-      : null;
+    const memberRef = typeof raw.memberRef === 'string' && raw.memberRef.trim() !== '' ? raw.memberRef.trim() : null;
     if (!INITIALS.test(initials) || typeof position !== 'number' || !Number.isSafeInteger(position) || position < 1) {
       continue;
     }
@@ -38,6 +36,8 @@ export interface ProductionQueueMemberView {
   position: number;
   isViewer: boolean;
   connectionTargetReference: string | null;
+  /** Present only when the backend reveals the eligible leader display name. */
+  displayName: string | null;
 }
 
 const CONNECTION_TARGET_REFERENCE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -54,12 +54,22 @@ export function normalizeConnectionTargetReference(value: unknown): string | nul
  * roster. A missing or non-UUID reference stays off the row. The reference is
  * retained for the server payload and is not a permission to contact that row.
  */
+export function normalizeQueueDisplayName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const name = value.trim().replace(/\s+/g, ' ');
+  if (!name || name.length > 80) return null;
+  if (name.includes('@') || /user_/i.test(name) || /clerk/i.test(name)) return null;
+  if (/\d{3,}/.test(name) || /[+]?\d[\d\s().-]{6,}\d/.test(name)) return null;
+  return name;
+}
+
 export function presentProductionQueueRoster(
   rows: readonly {
     position: number;
     initials: string;
     isViewer: boolean;
     connectionTargetReference?: string | null;
+    displayName?: string | null;
   }[],
 ): ProductionQueueMemberView[] | null {
   const members: ProductionQueueMemberView[] = [];
@@ -81,6 +91,7 @@ export function presentProductionQueueRoster(
       position,
       isViewer: row.isViewer,
       connectionTargetReference: normalizeConnectionTargetReference(row.connectionTargetReference),
+      displayName: normalizeQueueDisplayName(row.displayName),
     });
   }
   if (members.filter((member) => member.isViewer).length > 1) return null;
@@ -90,11 +101,9 @@ export function presentProductionQueueRoster(
 export type FrontQueueConnectionKind = 'hidden' | 'unavailable' | 'request' | 'pending' | 'accepted' | 'declined';
 
 /**
- * A waiting member who is not first may request the position-1 member.
- * The production queue does not issue a reference for that direction.
- * `connectionTargetReference` belongs to the opposite flow, where the first
- * member contacts someone else, and must not turn this action on.
- * Local networking already identifies the front member on its own API.
+ * Local demo networking for the front-of-queue member.
+ * Production queue requests use presentLeaderQueueConnection with
+ * connectionTargetReference from the position-1 row.
  */
 export function presentFrontQueueConnection(input: {
   viewerInQueue: boolean;
@@ -113,15 +122,15 @@ export function presentFrontQueueConnection(input: {
   return 'unavailable';
 }
 
-export const FRONT_QUEUE_REQUEST_UNAVAILABLE =
-  'A connection request to the first member is not available from this queue yet.';
-export const FRONT_QUEUE_MEMBER_UNAVAILABLE =
-  'This member is not available for a connection request.';
-export const FRONT_QUEUE_PENDING = 'Request sent.';
+export const FRONT_QUEUE_REQUEST_UNAVAILABLE = 'A connection request to the first member is not available from this queue yet.';
+export const FRONT_QUEUE_MEMBER_UNAVAILABLE = 'This member is not available for a connection request.';
+export const FRONT_QUEUE_PENDING = 'Request Sent';
 export const FRONT_QUEUE_DECLINED = 'The previous request was declined.';
-export const FRONT_QUEUE_AMBIGUOUS =
-  'Review this flight in Connections before sending another request.';
+export const FRONT_QUEUE_AMBIGUOUS = 'Review this flight in Connections before sending another request.';
 export const FRONT_QUEUE_STATUS_UNAVAILABLE = 'Connection status could not be loaded.';
+export const JOIN_TO_CONNECT_COPY = "Join this flight's queue to connect with this member.";
+export const JOIN_TO_CONNECT_CTA = 'Join the Flight to Connect';
+export const SELF_QUEUE_MEMBER_COPY = 'This is you. You cannot send a connection request to yourself.';
 
 export interface LeaderQueueRelationship {
   connectionId: number;
@@ -132,6 +141,8 @@ export interface LeaderQueueRelationship {
 
 export type LeaderQueueConnection =
   | { kind: 'hidden' }
+  | { kind: 'join-to-connect' }
+  | { kind: 'self' }
   | { kind: 'loading' }
   | { kind: 'unavailable'; reason: 'reference' | 'status' }
   | { kind: 'request'; reference: string }
@@ -176,26 +187,88 @@ export function leaderQueueViewerIsBelowFirst(position: number | null): boolean 
 }
 
 /**
- * Preview title uses the secured first and last name when present.
- * Initials remain the fallback when the name request fails or is unavailable.
+ * Position-1 is the only queue connection target. Never take a reference from
+ * the viewer's own row. Self-request is blocked when the viewer is first.
+ */
+export function resolveProductionLeaderQueueTarget(input: {
+  roster: readonly ProductionQueueMemberView[] | null | undefined;
+  viewerPosition: number | null;
+}): {
+  target: ProductionQueueMemberView | null;
+  reference: string | null;
+  viewerBelowFirst: boolean;
+  viewerIsLeader: boolean;
+} {
+  const roster = input.roster ?? null;
+  const target = roster?.find((member) => member.position === 1) ?? null;
+  const viewerIsLeader = input.viewerPosition === 1 || target?.isViewer === true;
+  const viewerBelowFirst = leaderQueueViewerIsBelowFirst(input.viewerPosition) && !viewerIsLeader;
+  const reference = viewerBelowFirst
+    ? normalizeConnectionTargetReference(target?.connectionTargetReference)
+    : null;
+  return { target, reference, viewerBelowFirst, viewerIsLeader };
+}
+
+/**
+ * Flight Details modal state for the first queue member.
+ * Before join → join-to-connect. Viewer first → self. Otherwise the joined
+ * Send / pending / accepted path.
+ */
+export function presentLeaderQueuePreviewState(input: {
+  viewerInQueue: boolean;
+  viewerIsLeader: boolean;
+  viewerBelowFirst: boolean;
+  reference: string | null;
+  requestsEnabled: boolean;
+  status: 'ready' | 'loading' | 'error';
+  relationships: readonly LeaderQueueRelationship[];
+  flightId: number;
+  sendBlocked?: boolean;
+}): LeaderQueueConnection {
+  if (input.viewerIsLeader) return { kind: 'self' };
+  if (!input.viewerInQueue) return { kind: 'join-to-connect' };
+  return presentLeaderQueueConnection({
+    viewerBelowFirst: input.viewerBelowFirst,
+    reference: input.reference,
+    requestsEnabled: input.requestsEnabled,
+    status: input.status,
+    relationships: input.relationships,
+    flightId: input.flightId,
+    sendBlocked: input.sendBlocked,
+  });
+}
+
+/**
+ * Prefer the queue displayName when the backend reveals it for an eligible
+ * leader. Otherwise use secured first/last from the target-preview API, then
+ * a clean initials fallback. Never invent a name from the viewer's profile.
  */
 export function presentLeaderPreviewTitle(input: {
+  displayName?: string | null;
   firstName: string | null;
   lastName: string | null;
-  initials: string;
+  initials?: string | null;
 }): string {
+  const displayName = normalizeQueueDisplayName(input.displayName);
+  if (displayName) return displayName;
   const firstName = typeof input.firstName === 'string' ? input.firstName.trim() : '';
   const lastName = typeof input.lastName === 'string' ? input.lastName.trim() : '';
   if (firstName && lastName) return `${firstName} ${lastName}`;
   if (firstName) return firstName;
-  return input.initials.trim().toUpperCase();
+  const initials = presentLeaderPreviewInitials(input.initials);
+  return initials ? `Queue Member · ${initials}` : 'Queue Member';
+}
+
+export function presentLeaderPreviewInitials(initials: string | null | undefined): string | null {
+  if (typeof initials !== 'string') return null;
+  const value = initials.trim().toUpperCase();
+  return INITIALS.test(value) ? value : null;
 }
 
 /**
  * Opening the position-1 preview is separate from whether Send is enabled.
- * Any signed-in viewer who is not that row can open it, including when their
- * queue position is still unknown. The member who is first cannot request
- * themselves. Pending, Accepted, and an ambiguous relationship stay open.
+ * Viewers may open it before joining. The member who is first cannot open a
+ * self-request. Pending, Accepted, and ambiguous stay open.
  */
 export function canOpenLeaderQueuePreview(input: {
   viewerIsLeader: boolean;
@@ -204,6 +277,7 @@ export function canOpenLeaderQueuePreview(input: {
   if (input.connection === 'pending' || input.connection === 'accepted' || input.connection === 'ambiguous') {
     return true;
   }
+  if (input.connection === 'self') return false;
   return input.viewerIsLeader !== true;
 }
 
@@ -264,6 +338,12 @@ export function explainLeaderQueueSendDisabled(input: {
   if (connection === 'ambiguous') {
     return { ...base, sendEnabled: false, reason: 'ambiguous_relationships' };
   }
+  if (connection === 'join-to-connect') {
+    return { ...base, sendEnabled: false, reason: 'join_required' };
+  }
+  if (connection === 'self') {
+    return { ...base, sendEnabled: false, reason: 'viewer_is_first' };
+  }
   if (connection === 'loading') {
     return { ...base, sendEnabled: false, reason: 'queue_status_loading' };
   }
@@ -290,10 +370,7 @@ export function mergeLeaderQueueRelationships<T extends { connectionId: number; 
   confirmed: readonly T[],
 ): T[] {
   const seen = new Set(server.map((row) => `${row.connectionId}\0${row.direction}`));
-  return [
-    ...server,
-    ...confirmed.filter((row) => !seen.has(`${row.connectionId}\0${row.direction}`)),
-  ];
+  return [...server, ...confirmed.filter((row) => !seen.has(`${row.connectionId}\0${row.direction}`))];
 }
 
 const MEMBER_USER_ID = /^\S{1,255}$/;
@@ -325,11 +402,7 @@ export function presentProductionQueueConnection(input: {
   relationshipKnown: boolean;
   requestsEnabled: boolean;
 }): ProductionQueueConnectionState | null {
-  if (
-    input.connectionId != null &&
-    Number.isSafeInteger(input.connectionId) &&
-    input.acceptedConnectionIds.includes(input.connectionId)
-  ) {
+  if (input.connectionId != null && Number.isSafeInteger(input.connectionId) && input.acceptedConnectionIds.includes(input.connectionId)) {
     return 'accepted';
   }
   if (input.connectionId != null && Number.isSafeInteger(input.connectionId)) return 'pending';
@@ -360,31 +433,19 @@ export function rememberQueueConnectionRequest(input: {
   queueRelationships.delete(key);
 }
 
-export function readQueueConnectionRequest(input: {
-  accountId: string;
-  flightId: number;
-  reference: string;
-}): number | null {
+export function readQueueConnectionRequest(input: { accountId: string; flightId: number; reference: string }): number | null {
   const key = queueConnectionKey(input);
   if (!key) return null;
   return queueConnectionRequests.get(key) ?? null;
 }
 
-export function rememberQueueRelationship(input: {
-  accountId: string;
-  flightId: number;
-  reference: string;
-}): void {
+export function rememberQueueRelationship(input: { accountId: string; flightId: number; reference: string }): void {
   const key = queueConnectionKey(input);
   if (!key || queueConnectionRequests.has(key)) return;
   queueRelationships.add(key);
 }
 
-export function readQueueRelationship(input: {
-  accountId: string;
-  flightId: number;
-  reference: string;
-}): boolean {
+export function readQueueRelationship(input: { accountId: string; flightId: number; reference: string }): boolean {
   const key = queueConnectionKey(input);
   return key != null && queueRelationships.has(key);
 }
@@ -418,10 +479,9 @@ export function queueConnectionRequestFailureCopy(code: string): string {
 }
 
 export function queueConnectionRequestShouldRefresh(code: string): boolean {
-  return code === 'self_request' ||
-    code === 'first_in_queue_required' ||
-    code === 'queue_target_unavailable' ||
-    code === 'relationship_exists';
+  return (
+    code === 'self_request' || code === 'first_in_queue_required' || code === 'queue_target_unavailable' || code === 'relationship_exists'
+  );
 }
 
 /**

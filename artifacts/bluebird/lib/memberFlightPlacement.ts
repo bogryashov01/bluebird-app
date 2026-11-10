@@ -6,6 +6,7 @@
 export interface PlacementTrip {
   leg: { id: number };
   checklist: { emptyLegId: number; awarded: boolean };
+  status?: string | null;
 }
 
 export interface PlacementQueueFlight {
@@ -32,6 +33,29 @@ export function upcomingFlightDetailsTarget(input: {
 }): { pathname: '/flight/[id]'; params: { id: string } } | null {
   if (input.list !== 'current') return null;
   if (!Number.isSafeInteger(input.legId) || input.legId < 1) return null;
+  return { pathname: '/flight/[id]', params: { id: String(input.legId) } };
+}
+
+/** Queue-pending trips open queue status; winner confirmation opens the winner review. */
+export function tripLifecycleOpenTarget(input: {
+  list: 'current' | 'past';
+  legId: number;
+  status?: string | null;
+  awarded: boolean;
+}):
+  | { pathname: '/flight/queue-status'; params: { flightId: string } }
+  | { pathname: '/flight/winner'; params: { flightId: string } }
+  | { pathname: '/flight/[id]'; params: { id: string } }
+  | null {
+  if (input.list !== 'current') return null;
+  if (!Number.isSafeInteger(input.legId) || input.legId < 1) return null;
+  const status = typeof input.status === 'string' ? input.status.trim().toLowerCase() : '';
+  if (status === 'queue_pending' || (!status && input.awarded !== true)) {
+    return { pathname: '/flight/queue-status', params: { flightId: String(input.legId) } };
+  }
+  if (status === 'winner_confirmation_required') {
+    return { pathname: '/flight/winner', params: { flightId: String(input.legId) } };
+  }
   return { pathname: '/flight/[id]', params: { id: String(input.legId) } };
 }
 
@@ -161,16 +185,24 @@ export function pendingOfferFlightIds(trips: readonly PlacementTrip[] | null | u
 }
 
 /**
- * Winner-selection offer IDs derived from the trips list alone.
- * Trips currently expose only checklist.awarded — not viewerIsEffectiveWinner
- * or confirmation status — so this returns [] until the Replit trips contract
- * adds verified winner-offer fields. Queue Status / flight detail still use
- * empty-leg winner fields for the real offer path.
+ * Trips that need winner confirmation. queue_pending is never a winner offer.
+ * Empty-leg viewerIsEffectiveWinner remains authoritative on Flight Details /
+ * Queue Status; this list only supplements Trips-driven notices.
  */
 export function pendingWinnerOfferFlightIdsFromTrips(
-  _trips: readonly PlacementTrip[] | null | undefined,
+  trips: readonly PlacementTrip[] | null | undefined,
 ): number[] {
-  return [];
+  if (!trips) return [];
+  const ids: number[] = [];
+  for (const trip of trips) {
+    const status = typeof trip.status === 'string' ? trip.status.trim().toLowerCase() : '';
+    if (status !== 'winner_confirmation_required') continue;
+    if (trip.checklist?.awarded === true) continue;
+    const id = canonicalTripFlightId(trip);
+    if (id === null || ids.includes(id)) continue;
+    ids.push(id);
+  }
+  return ids;
 }
 
 export function winnerNoticeKey(accountKey: string, flightId: number): string {

@@ -407,8 +407,9 @@ test("the messages screens stay off the demo store and the networking API", () =
   const auth = readFileSync(resolve(projectRoot, "context/AuthContext.tsx"), "utf8");
   assert.equal(auth.match(/clearMemberMessagesCache\(\)/g).length, 3);
   const screen = readFileSync(resolve(projectRoot, "components/MemberConnectionsScreen.tsx"), "utf8");
-  assert.match(screen, /Messages are not available yet/);
+  assert.match(screen, /Connections are not available yet/);
   assert.match(screen, /connection\.member\.userId/);
+  assert.match(screen, /messages\.open|useOpenAcceptedConversation/);
   assert.doesNotMatch(screen, /participantUserId/);
   const policy = readFileSync(resolve(projectRoot, "lib/nativeAuthTestPolicy.ts"), "utf8");
   assert.doesNotMatch(policy, /\/me\/messages/);

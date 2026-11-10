@@ -31,7 +31,7 @@ const PUBLIC_QUEUE_CONTRACT_KEYS = [
   'isViewer',
 ] as const satisfies readonly (keyof ProductionPublicQueueEntry)[];
 
-const OPTIONAL_PUBLIC_QUEUE_KEYS = ['connectionTargetReference'] as const;
+const OPTIONAL_PUBLIC_QUEUE_KEYS = ['connectionTargetReference', 'displayName'] as const;
 const CONNECTION_TARGET_REFERENCE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function parsePublicQueue(value: unknown): FullAppDemoPublicQueueEntry[] {
@@ -54,6 +54,12 @@ function parsePublicQueue(value: unknown): FullAppDemoPublicQueueEntry[] {
     if (
       raw.connectionTargetReference !== undefined &&
       (typeof raw.connectionTargetReference !== 'string' || !CONNECTION_TARGET_REFERENCE.test(raw.connectionTargetReference))
+    ) {
+      throw new Error(`Queue entry ${index + 1} does not match the established public queue contract.`);
+    }
+    if (
+      raw.displayName !== undefined &&
+      (typeof raw.displayName !== 'string' || raw.displayName.trim().length === 0 || raw.displayName.length > 80)
     ) {
       throw new Error(`Queue entry ${index + 1} does not match the established public queue contract.`);
     }

@@ -81,6 +81,9 @@ export function adaptProductionMembershipForDashboard(
     paymentStatus,
     currentPeriodEnd,
     skipTheLinePasses: null,
+    internationalPassPasses: null,
+    skipTheLineUnlimited: null,
+    internationalUnlimited: null,
   };
 }
 
@@ -251,14 +254,15 @@ interface DashboardMembershipCacheEntry {
   loadedAt: number;
 }
 
-interface DashboardSkipTheLineCacheEntry {
+interface DashboardPassBalanceCacheEntry {
   clerkUserId: string;
   count: number;
   loadedAt: number;
 }
 
 const dashboardMembershipCache = new Map<string, DashboardMembershipCacheEntry>();
-const dashboardSkipTheLineCache = new Map<string, DashboardSkipTheLineCacheEntry>();
+const dashboardSkipTheLineCache = new Map<string, DashboardPassBalanceCacheEntry>();
+const dashboardInternationalPassCache = new Map<string, DashboardPassBalanceCacheEntry>();
 let membershipDiagnosticSnapshot: MembershipDashboardDiagnostic | null = null;
 let membershipDiagnosticLine = '';
 let membershipFieldDiagnosticLine = '';
@@ -318,6 +322,7 @@ export function rememberDashboardMembership(input: {
 export function clearDashboardMembershipCache(): void {
   dashboardMembershipCache.clear();
   dashboardSkipTheLineCache.clear();
+  dashboardInternationalPassCache.clear();
   membershipDiagnosticAccountKey = null;
   resetMembershipDashboardDiagnostic();
 }
@@ -333,15 +338,49 @@ export function retainDashboardMembershipForAccount(clerkUserId: string): void {
   for (const [key, entry] of dashboardSkipTheLineCache) {
     if (entry.clerkUserId !== clerkUserId) dashboardSkipTheLineCache.delete(key);
   }
+  for (const [key, entry] of dashboardInternationalPassCache) {
+    if (entry.clerkUserId !== clerkUserId) dashboardInternationalPassCache.delete(key);
+  }
+}
+
+function readCreditBalanceField(
+  balances: object,
+  field: 'skipTheLine' | 'internationalPass',
+): { known: true; count: number } | { known: false } {
+  const count = (balances as Record<string, unknown>)[field];
+  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) return { known: false };
+  return { known: true, count };
 }
 
 export function readSkipTheLineBalance(profile: unknown): { known: true; count: number } | { known: false } {
   if (!profile || typeof profile !== 'object') return { known: false };
   const balances = (profile as { upgradeCreditBalances?: unknown }).upgradeCreditBalances;
   if (!balances || typeof balances !== 'object') return { known: false };
-  const count = (balances as { skipTheLine?: unknown }).skipTheLine;
-  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) return { known: false };
-  return { known: true, count };
+  return readCreditBalanceField(balances, 'skipTheLine');
+}
+
+export function readInternationalPassBalance(profile: unknown): { known: true; count: number } | { known: false } {
+  if (!profile || typeof profile !== 'object') return { known: false };
+  const balances = (profile as { upgradeCreditBalances?: unknown }).upgradeCreditBalances;
+  if (!balances || typeof balances !== 'object') return { known: false };
+  return readCreditBalanceField(balances, 'internationalPass');
+}
+
+/**
+ * Both remaining pass balances from GET /api/me/profile.
+ * Returns known only when skipTheLine and internationalPass are present and valid.
+ */
+export function readUpgradeCreditBalances(profile: unknown):
+  | { known: true; skipTheLine: number; internationalPass: number }
+  | { known: false } {
+  const skip = readSkipTheLineBalance(profile);
+  const international = readInternationalPassBalance(profile);
+  if (!skip.known || !international.known) return { known: false };
+  return {
+    known: true,
+    skipTheLine: skip.count,
+    internationalPass: international.count,
+  };
 }
 
 export function readFreshSkipTheLinePasses(input: {
@@ -381,6 +420,59 @@ export function rememberSkipTheLinePasses(input: {
   });
 }
 
+/** Drops a cached Skip the Line balance so the next read refetches /api/me/profile. */
+export function forgetSkipTheLinePasses(input: {
+  environment: string;
+  apiBaseUrl: string;
+  clerkUserId: string;
+}): void {
+  if (!input.clerkUserId) return;
+  const key = dashboardMembershipCacheKey(
+    input.environment,
+    input.apiBaseUrl,
+    input.clerkUserId,
+  );
+  dashboardSkipTheLineCache.delete(key);
+  dashboardInternationalPassCache.delete(key);
+}
+
+export function readFreshInternationalPasses(input: {
+  environment: string;
+  apiBaseUrl: string;
+  clerkUserId: string;
+  now?: number;
+}): { count: number } | null {
+  if (!input.clerkUserId) return null;
+  const entry = dashboardInternationalPassCache.get(dashboardMembershipCacheKey(
+    input.environment,
+    input.apiBaseUrl,
+    input.clerkUserId,
+  ));
+  if (!entry || entry.clerkUserId !== input.clerkUserId) return null;
+  const now = input.now ?? Date.now();
+  if (now - entry.loadedAt > DASHBOARD_MEMBERSHIP_FRESH_MS) return null;
+  return { count: entry.count };
+}
+
+export function rememberInternationalPasses(input: {
+  environment: string;
+  apiBaseUrl: string;
+  clerkUserId: string;
+  count: number;
+  loadedAt?: number;
+}): void {
+  if (!input.clerkUserId || !Number.isSafeInteger(input.count) || input.count < 0) return;
+  dashboardInternationalPassCache.set(dashboardMembershipCacheKey(
+    input.environment,
+    input.apiBaseUrl,
+    input.clerkUserId,
+  ), {
+    clerkUserId: input.clerkUserId,
+    count: input.count,
+    loadedAt: input.loadedAt ?? Date.now(),
+  });
+}
+
 /**
  * Remaining Skip-the-Line credits are upgradeCreditBalances.skipTheLine on
  * GET /api/me/profile. That GET can copy a verified phone number onto the
@@ -407,6 +499,59 @@ export async function loadDashboardSkipTheLinePasses(input: {
     if (input.signal?.aborted) return { kind: 'unavailable' };
     const balance = readSkipTheLineBalance(profile);
     return balance.known ? { kind: 'loaded', count: balance.count } : { kind: 'unavailable' };
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
+
+/**
+ * Reads both remaining pass balances from GET /api/me/profile.
+ * Does not purchase, redeem, or invent credits. Demo balances are never used.
+ */
+export async function loadDashboardUpgradeCreditBalances(input: {
+  signal?: AbortSignal;
+  configuration: MainBluebirdApiConfiguration | null;
+  getAccessToken: () => Promise<string | null>;
+  cachedProfiles?: readonly unknown[];
+}): Promise<
+  | { kind: 'loaded'; skipTheLine: number; internationalPass: number }
+  | { kind: 'partial'; skipTheLine: number; internationalPass: null }
+  | { kind: 'unavailable' }
+> {
+  if (isNativeProductionAuthTestEnabled() || !input.configuration) {
+    return { kind: 'unavailable' };
+  }
+  for (const profile of input.cachedProfiles ?? []) {
+    const balances = readUpgradeCreditBalances(profile);
+    if (balances.known) {
+      return {
+        kind: 'loaded',
+        skipTheLine: balances.skipTheLine,
+        internationalPass: balances.internationalPass,
+      };
+    }
+    const skip = readSkipTheLineBalance(profile);
+    if (skip.known) {
+      return { kind: 'partial', skipTheLine: skip.count, internationalPass: null };
+    }
+  }
+  if (input.signal?.aborted) return { kind: 'unavailable' };
+  try {
+    const profile = await readProductionProfile(input.configuration, input.getAccessToken, input.signal);
+    if (input.signal?.aborted) return { kind: 'unavailable' };
+    const balances = readUpgradeCreditBalances(profile);
+    if (balances.known) {
+      return {
+        kind: 'loaded',
+        skipTheLine: balances.skipTheLine,
+        internationalPass: balances.internationalPass,
+      };
+    }
+    const skip = readSkipTheLineBalance(profile);
+    if (skip.known) {
+      return { kind: 'partial', skipTheLine: skip.count, internationalPass: null };
+    }
+    return { kind: 'unavailable' };
   } catch {
     return { kind: 'unavailable' };
   }

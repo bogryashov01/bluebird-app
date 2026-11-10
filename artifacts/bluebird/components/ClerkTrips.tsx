@@ -26,7 +26,7 @@ import { separateDemoTrip } from '@/lib/demoJoinFlow';
 import { MyQueuesPanel } from '@/components/MyQueuesPanel';
 import { awardedCurrentFlightIds, memberQueueFlightId } from '@/lib/myQueuesPresentation';
 import { checklistFullyComplete, currentTripChecklistTarget, presentTripChecklistStatus, resolveCurrentTripChecklistNavigation } from '@/lib/winnerChecklist';
-import { canonicalTripFlightId, declinedCurrentFlightIds, upcomingFlightDetailsTarget, upcomingOwnedFlightIds } from '@/lib/memberFlightPlacement';
+import { canonicalTripFlightId, declinedCurrentFlightIds, tripLifecycleOpenTarget, upcomingOwnedFlightIds } from '@/lib/memberFlightPlacement';
 import { queueRosterQueryPrefix, queueViewerListQueryKey, useMyQueues } from '@/lib/useMyQueues';
 
 type TripList = 'current' | 'queues' | 'past';
@@ -61,15 +61,28 @@ function ClerkTripCard({
     list,
     awarded: trip.checklist.awarded,
     remainingSteps: trip.checklist.remainingSteps,
+    status: trip.status ?? null,
   });
   const flightId = canonicalTripFlightId(trip);
-  const detailsTarget = flightId === null ? null : upcomingFlightDetailsTarget({ list, legId: flightId });
+  const detailsTarget = flightId === null
+    ? null
+    : tripLifecycleOpenTarget({
+      list,
+      legId: flightId,
+      status: trip.status ?? null,
+      awarded: trip.checklist.awarded,
+    });
   const checklistTarget = currentTripChecklistTarget({
     list,
     awarded: trip.checklist.awarded,
     legId: flightId ?? leg.id,
   });
   const checklistComplete = list === 'current' && checklistFullyComplete(trip.checklist);
+  const openLabel = status === 'Pending'
+    ? 'Open queue'
+    : status === 'Winner confirmation required'
+      ? 'Review winner offer'
+      : 'Review flight';
   const body = (
     <>
       <View style={[styles.badge, { backgroundColor: colors.primary }]}>
@@ -93,7 +106,7 @@ function ClerkTripCard({
         </TouchableOpacity>
       ) : detailsTarget && !checklistTarget ? (
         <Text testID="clerk-trip-confirm-label" style={[styles.meta, { color: colors.primary }]}>
-          Review flight
+          {openLabel}
         </Text>
       ) : !detailsTarget && !checklistTarget ? (
         <Text testID="clerk-trip-unavailable" style={[styles.meta, { color: colors.mutedForeground }]}>
@@ -114,9 +127,13 @@ function ClerkTripCard({
       accessibilityRole="button"
       accessibilityLabel={checklistTarget
         ? `${origin} to ${destination}. Confirmed flight`
-        : `${origin} to ${destination}. Awaiting confirmation`}
+        : `${origin} to ${destination}. ${status}`}
       accessibilityHint="Opens flight details"
-      testID={checklistTarget ? 'clerk-trip-open-checklist' : 'clerk-trip-review-winner'}
+      testID={checklistTarget
+        ? 'clerk-trip-open-checklist'
+        : status === 'Winner confirmation required'
+          ? 'clerk-trip-review-winner'
+          : 'clerk-trip-open-pending'}
       style={[styles.tripCard, { backgroundColor: colors.card }]}
       activeOpacity={0.85}
       onPress={() => {

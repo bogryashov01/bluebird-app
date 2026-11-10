@@ -101,7 +101,13 @@ export default function FlightConfirmedScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundMid }]}>
-      {celebrating && <PassCelebration onDone={() => setCelebrating(false)} />}
+      {celebrating && (
+        <PassCelebration
+          title="Flight Secured"
+          subtitle="Your Skip the Line Pass closed the queue and your seat has been confirmed."
+          onDone={() => setCelebrating(false)}
+        />
+      )}
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: topPad + 40, paddingBottom: bottomPad + 110 }]}
         showsVerticalScrollIndicator={false}

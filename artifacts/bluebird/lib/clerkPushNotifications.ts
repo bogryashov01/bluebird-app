@@ -442,6 +442,37 @@ export function pushUsesExistingWinnerNotice(payload: unknown): boolean {
   return !!versioned && versioned !== 'reject' && versioned.type === 'winner.selected';
 }
 
+export const WINNER_LIFECYCLE_PUSH_EVENTS = [
+  'queue.updated',
+  'winner.selected',
+  'winner.confirmed',
+] as const;
+
+export type WinnerLifecyclePushEvent = (typeof WINNER_LIFECYCLE_PUSH_EVENTS)[number];
+
+/**
+ * Push is a refetch signal. Extract the flight id for authoritative trips/flight/queue reads.
+ * Does not invent winner state from the notification payload.
+ */
+export function parseWinnerLifecyclePushRefresh(payload: unknown): {
+  event: WinnerLifecyclePushEvent;
+  flightId: number;
+} | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const versioned = versionedRecord(payload as Record<string, unknown>);
+  if (!versioned || versioned === 'reject') return null;
+  const event = versioned.type;
+  if (typeof event !== 'string') return null;
+  if (!(WINNER_LIFECYCLE_PUSH_EVENTS as readonly string[]).includes(event)) return null;
+  const navigation = versioned.navigation;
+  if (!navigation || typeof navigation !== 'object' || Array.isArray(navigation)) return null;
+  const flightId = recordId((navigation as Record<string, unknown>).flightId);
+  if (!flightId) return null;
+  const numeric = Number(flightId);
+  if (!Number.isSafeInteger(numeric) || numeric < 1) return null;
+  return { event: event as WinnerLifecyclePushEvent, flightId: numeric };
+}
+
 export function pushRepeatsOpenConversation(payload: unknown, pathname: string | null): boolean {
   if (!pathname || !payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
   const versioned = versionedRecord(payload as Record<string, unknown>);

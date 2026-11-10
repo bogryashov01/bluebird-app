@@ -24,6 +24,7 @@ import { useColors } from '@/hooks/useColors';
 import { bluebirdNavigationTheme, useBluebirdStackScreenOptions } from '@/lib/bluebirdNavigationTheme';
 import { QueueConfirmationWatcher } from '@/lib/queueCelebration';
 import { WinnerOfferObserver } from '@/components/WinnerOfferObserver';
+import { WinnerCelebrationPersistence } from '@/components/WinnerCelebrationPersistence';
 import { ClerkPushCoordinator } from '@/components/ClerkPushCoordinator';
 import { MemberMessageRealtime } from '@/components/MemberMessageRealtime';
 import { DormantClerkProvider } from '@/lib/dormantClerkIntegration';
@@ -190,6 +191,7 @@ function RootLayoutNav() {
         when the member isn't on the Queue Status screen. */}
     <QueueConfirmationWatcher />
     <WinnerOfferObserver />
+    <WinnerCelebrationPersistence />
     <ClerkPushCoordinator />
     <MemberMessageRealtime />
     <Stack screenOptions={stackScreenOptions}>

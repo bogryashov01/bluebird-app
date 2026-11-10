@@ -25,6 +25,7 @@ import {
 } from '@/lib/winnerChecklist';
 import {
   claimWinnerCelebration,
+  hydrateWinnerCelebrations,
   presentWinnerOffer,
   presentWinnerOfferCopy,
 } from '@/lib/winnerOfferPresentation';
@@ -104,14 +105,24 @@ export default function WinnerReviewScreen() {
   const scale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
+    void hydrateWinnerCelebrations();
+  }, []);
+  useEffect(() => {
     if (offer.kind !== 'pending' || !clerkUserId || flightId === null) return;
-    if (!claimWinnerCelebration(clerkUserId, flightId)) return;
-    opacity.setValue(0);
-    scale.setValue(0.94);
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 420, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 12, bounciness: 6 }),
-    ]).start();
+    let cancelled = false;
+    void hydrateWinnerCelebrations().then(() => {
+      if (cancelled) return;
+      if (!claimWinnerCelebration(clerkUserId, flightId)) return;
+      opacity.setValue(0);
+      scale.setValue(0.94);
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: 420, useNativeDriver: true }),
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 12, bounciness: 6 }),
+      ]).start();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [clerkUserId, flightId, offer.kind, opacity, scale]);
 
   const refetchFlight = flightQuery.refetch;

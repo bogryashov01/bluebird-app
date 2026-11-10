@@ -54,6 +54,7 @@ export interface QueueRosterRow {
   hasLineSkip: boolean;
   isViewer: boolean;
   connectionTargetReference?: string;
+  displayName?: string;
 }
 
 export type JoinFlightQueuePanel =
@@ -194,6 +195,7 @@ export function presentJoinFlightQueuePanel(input: {
         hasLineSkip: entry.hasLineSkip,
         isViewer: entry.isViewer,
         ...(entry.connectionTargetReference ? { connectionTargetReference: entry.connectionTargetReference } : {}),
+        ...(entry.displayName ? { displayName: entry.displayName } : {}),
       })),
   };
 }
@@ -616,11 +618,21 @@ export const QUEUE_LEFT_CONFIRMED = 'Bluebird confirmed that you left this queue
 export const QUEUE_SKIP_UNAVAILABLE = 'Skip the Line is unavailable right now.';
 export const QUEUE_SKIP_NONE = 'No Skip the Line passes are available.';
 export const QUEUE_SKIP_ALREADY_USED = 'A Skip the Line pass is already applied to this flight.';
-export const QUEUE_SKIP_WINNER = 'You are the current winner for this flight. Skip the Line is not offered again.';
-export const QUEUE_SKIP_CONFIRMED = 'Skip the Line was confirmed. You are the current winner for this flight. This does not award the flight or confirm the seat.';
-export const QUEUE_SKIP_NOTE = 'Using a pass applies one existing credit. A confirmed pass makes you the current winner. It does not award the flight or only change your queue number.';
+export const QUEUE_SKIP_WINNER = 'Skip the Line is not offered again for this flight.';
+export const QUEUE_SKIP_CONFIRMED =
+  'Skip the Line was confirmed. Your queue position was updated. This does not award the flight or confirm the seat.';
+export const QUEUE_SKIP_NOTE =
+  'Using a pass applies one existing credit and updates your queue rank. It does not award the flight or confirm the seat.';
 export const QUEUE_SKIP_UNCONFIRMED = 'Bluebird did not confirm Skip the Line. No pass use was confirmed.';
 export const QUEUE_SKIP_BALANCE_UNAVAILABLE = 'Skip the Line pass balance could not be loaded.';
+
+/** Success copy after a verified Skip the Line response with viewerQueuePosition. */
+export function presentQueueSkipConfirmedMessage(viewerQueuePosition: number): string {
+  if (!Number.isSafeInteger(viewerQueuePosition) || viewerQueuePosition < 1) {
+    return QUEUE_SKIP_CONFIRMED;
+  }
+  return `Skip the Line was confirmed. You are now #${viewerQueuePosition} in this queue. This does not award the flight or confirm the seat.`;
+}
 
 export type QueueSkipLineBalance = 'loading' | 'unavailable' | { count: number };
 
@@ -636,18 +648,17 @@ export type QueueSkipLineOffer =
 
 /**
  * A pass is offered only to a member who is already in the queue, has a known
- * remaining credit, and is not already the current winner or pass holder.
- * The confirmed result is current-winner status, not a new queue number.
+ * remaining credit, and has not already applied a Skip the Line pass.
+ * Position #1 alone is not treated as a confirmed winner.
  */
 export function presentQueueSkipLineOffer(input: {
   inQueue: boolean;
   mutationsEnabled: boolean;
   balance: QueueSkipLineBalance;
   passAlreadyApplied: boolean;
-  viewerIsEffectiveWinner: boolean | null;
+  viewerIsEffectiveWinner?: boolean | null;
 }): QueueSkipLineOffer {
   if (input.inQueue !== true) return { kind: 'hidden' };
-  if (input.viewerIsEffectiveWinner === true) return { kind: 'winner' };
   if (input.passAlreadyApplied === true) return { kind: 'already-used' };
   if (input.mutationsEnabled !== true) return { kind: 'closed' };
   if (input.balance === 'loading') return { kind: 'loading' };
@@ -666,10 +677,42 @@ export function presentQueueSkipFailure(input: {
   if (status === 401) {
     return failure(status, code, 'Sign in required', 'Sign in again before using a Skip the Line pass. No pass use was confirmed.', null, true);
   }
+  if (status === 402 || code === 'insufficient_credit') {
+    return failure(
+      status ?? 402,
+      code ?? 'insufficient_credit',
+      'No passes available',
+      'You do not have an available Skip the Line pass. No pass use was confirmed.',
+      null,
+      true,
+    );
+  }
+  if (status === 403 || code === 'ineligible') {
+    return failure(
+      status ?? 403,
+      code ?? 'ineligible',
+      'Not eligible',
+      'Skip the Line is not available for this account on this flight. No pass use was confirmed.',
+      null,
+      true,
+    );
+  }
   if (status === 404) {
     return failure(status, code, 'Flight unavailable', 'This flight is no longer available. No pass use was confirmed.', null, true);
   }
   if (status === 409) {
+    const closed = code === 'closed' || code === 'departed';
+    const awarded = code === 'awarded';
+    const slot = code === 'unavailable' || code === 'unavailable_slot';
+    if (closed) {
+      return failure(status, code, 'Queue closed', 'This queue is closed. No pass use was confirmed.', null, true);
+    }
+    if (awarded) {
+      return failure(status, code, 'Flight awarded', 'This flight has already been awarded. No pass use was confirmed.', null, true);
+    }
+    if (slot) {
+      return failure(status, code, 'Pass not applied', 'That Skip the Line slot is no longer available. No pass use was confirmed.', null, true);
+    }
     return failure(status, code, 'Pass not applied', 'Bluebird did not apply a Skip the Line pass. Your place in this queue was not changed on this device.', null, true);
   }
   if (status === 400) {
@@ -710,6 +753,7 @@ export function joinFlightRefreshTargets(input: {
     myQueues: mainBluebirdAuthenticatedQueryKey(input.environment, input.clerkUserId, 'empty-leg-queue'),
     trips: mainBluebirdAuthenticatedQueryKey(input.environment, input.clerkUserId, 'trips'),
     flightList: mainBluebirdAuthenticatedQueryKey(input.environment, input.clerkUserId, 'empty-leg-list'),
+    profile: mainBluebirdAuthenticatedQueryKey(input.environment, input.clerkUserId, 'profile'),
   };
 }
 
@@ -741,6 +785,7 @@ export function applyQueueMutationRefresh(input: {
   input.invalidate(keys.myQueues);
   input.invalidate(keys.trips);
   input.invalidate(keys.flightList);
+  input.invalidate(keys.profile);
   return true;
 }
 

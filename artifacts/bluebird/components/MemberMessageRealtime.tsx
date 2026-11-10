@@ -4,11 +4,12 @@ import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import {
   isMemberMessageRealtimeEnabled,
-  MEMBER_MESSAGE_GATEWAY_ORIGIN,
-  MEMBER_MESSAGE_GATEWAY_URL,
+  resolveMemberMessageGatewayConfiguration,
   startMemberMessageRealtime,
   stopMemberMessageRealtime,
 } from '@/lib/memberMessageRealtime';
+
+type FreshTokenReader = (options?: { skipCache?: boolean }) => Promise<string | null>;
 
 function useForeground(): boolean {
   const [foreground, setForeground] = useState(AppState.currentState === 'active');
@@ -21,6 +22,15 @@ function useForeground(): boolean {
   return foreground;
 }
 
+async function readFreshClerkToken(getToken: FreshTokenReader): Promise<string | null> {
+  try {
+    const token = await getToken({ skipCache: true });
+    return typeof token === 'string' && token.trim() ? token : null;
+  } catch {
+    return null;
+  }
+}
+
 export function MemberMessageRealtime() {
   const session = useClerkAuthSnapshot();
   const foreground = useForeground();
@@ -29,22 +39,24 @@ export function MemberMessageRealtime() {
 
   useEffect(() => {
     const configuration = getMainBluebirdApiConfigurationOrNull();
+    const gateway = resolveMemberMessageGatewayConfiguration();
     if (
       !foreground ||
       !clerkUserId ||
       !getToken ||
+      !gateway ||
       configuration?.environment !== 'production' ||
       !isMemberMessageRealtimeEnabled()
     ) {
       stopMemberMessageRealtime();
       return;
     }
-    const readToken = getToken;
+    const readToken = getToken as FreshTokenReader;
     startMemberMessageRealtime({
       clerkUserId,
-      gatewayUrl: process.env[MEMBER_MESSAGE_GATEWAY_URL],
-      gatewayOrigin: process.env[MEMBER_MESSAGE_GATEWAY_ORIGIN],
-      getAccessToken: () => readToken(),
+      gatewayUrl: gateway.gatewayUrl,
+      gatewayOrigin: gateway.gatewayOrigin,
+      getAccessToken: () => readFreshClerkToken(readToken),
     });
     return () => stopMemberMessageRealtime();
   }, [clerkUserId, foreground, getToken]);

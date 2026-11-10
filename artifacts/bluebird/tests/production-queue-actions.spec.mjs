@@ -106,15 +106,23 @@ test("join and leave return success only when the API confirms the requested tra
   await assert.rejects(rejectedJoin.leave(81001), { code: "invalid_transition" });
 });
 
-test("Skip the Line requires explicit confirmation, uses an existing credit only, and needs a confirmed winner response", async () => {
+test("Skip the Line requires confirmation, an existing credit, and Task #1820 rank fields", async () => {
   const calls = [];
+  const appliedFlight = {
+    id: 81001,
+    viewerHasLineSkip: true,
+    viewerQueuePosition: 1,
+    queueCount: 3,
+    lineSkipSold: true,
+    viewerIsEffectiveWinner: false,
+  };
   const actions = createProductionQueueActions({
     getEmptyLegQueue: async () => [],
     joinEmptyLegQueue: async () => joinedEntry,
     leaveEmptyLegQueue: async () => ({ emptyLegId: 81001, queueCount: 1, memberQueueCount: 1, userInQueue: false, lockedForFreeUsers: false }),
     skipLine: async (id, body) => {
       calls.push([id, body]);
-      return { id, viewerIsEffectiveWinner: true };
+      return appliedFlight;
     },
   });
 
@@ -122,14 +130,18 @@ test("Skip the Line requires explicit confirmation, uses an existing credit only
   await assert.rejects(actions.skipLine(81001, 0, true), { code: "credit_required" });
   await assert.rejects(actions.skipLine(81001, -1, true), { code: "credit_required" });
   assert.deepEqual(calls, []);
-  assert.equal((await actions.skipLine(81001, 1, true)).viewerIsEffectiveWinner, true);
+  const applied = await actions.skipLine(81001, 1, true);
+  assert.equal(applied.viewerQueuePosition, 1);
+  assert.equal(applied.viewerHasLineSkip, true);
+  assert.equal(applied.lineSkipSold, true);
+  assert.equal(applied.queueCount, 3);
   assert.deepEqual(calls, [[81001, { useCredit: true }]]);
 
   const notConfirmed = createProductionQueueActions({
     getEmptyLegQueue: async () => [],
     joinEmptyLegQueue: async () => joinedEntry,
     leaveEmptyLegQueue: async () => ({ emptyLegId: 81001, queueCount: 1, memberQueueCount: 1, userInQueue: false, lockedForFreeUsers: false }),
-    skipLine: async () => ({ id: 81001, viewerIsEffectiveWinner: false }),
+    skipLine: async () => ({ id: 81001, viewerIsEffectiveWinner: true }),
   });
   await assert.rejects(notConfirmed.skipLine(81001, 1, true), { code: "invalid_transition" });
 });

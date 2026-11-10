@@ -258,8 +258,8 @@ export async function submitProductionQueueLeave(input: {
 /**
  * POST /api/empty-legs/:id/skip-line for a member who is already queued.
  * useCredit spends an existing pass. A closed gate, a missing confirmation,
- * or a missing credit returns before the client is created. Success is the
- * server marking the viewer as the current winner, not a new queue position.
+ * or a missing credit returns before the client is created. Success updates
+ * viewerQueuePosition and viewerHasLineSkip — not a confirmed winner or seat.
  */
 export async function submitProductionQueueSkipLine(input: {
   gateOpen: boolean;

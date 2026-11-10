@@ -83,18 +83,40 @@ export function labelCurrentTrips(trips: ProductionTrips): Array<{ flightId: num
       list: 'current',
       awarded: trip.checklist.awarded,
       remainingSteps: trip.checklist.remainingSteps,
+      status: trip.status ?? null,
     }),
   }));
 }
 
+export type TripListStatusLabel =
+  | 'Past trip'
+  | 'Pending'
+  | 'Winner confirmation required'
+  | 'Awaiting award'
+  | 'Awaiting confirmation'
+  | 'Checklist in progress'
+  | 'Confirmed';
+
+/**
+ * Trips labels follow GET /trips lifecycle status when present.
+ * queue_pending must never look like a winner confirmation prompt.
+ * Older backends without status keep the unawarded → Pending fallback.
+ */
 export function presentTripChecklistStatus(input: {
   list: 'current' | 'past';
   awarded: boolean;
   remainingSteps: readonly string[];
-}): 'Past trip' | 'Awaiting confirmation' | 'Checklist in progress' | 'Confirmed' {
+  status?: string | null;
+}): TripListStatusLabel {
   if (input.list === 'past') return 'Past trip';
-  if (!input.awarded) return 'Awaiting confirmation';
-  return input.remainingSteps.length > 0 ? 'Checklist in progress' : 'Confirmed';
+  const status = typeof input.status === 'string' ? input.status.trim().toLowerCase() : '';
+  if (status === 'queue_pending') return 'Pending';
+  if (status === 'winner_confirmation_required') return 'Winner confirmation required';
+  if (status === 'awaiting_award') return 'Awaiting award';
+  if (status === 'awarded' || input.awarded === true) {
+    return input.remainingSteps.length > 0 ? 'Checklist in progress' : 'Confirmed';
+  }
+  return 'Pending';
 }
 
 /**

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import {
   fetchProductionMembershipPlans,
+  findProductionPlan,
   formatProductionPlanPrice,
   mapProductionMembershipPlans,
   productionPlanFeatureLabel,
   productionPlanPurchaseNotice,
+  readPlanInternationalUnlimited,
   MAIN_BLUEBIRD_MEMBERSHIP_PLANS_PATH,
 } from "../scripts/.production-membership-plans.test.mjs";
 
@@ -16,29 +18,48 @@ process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_CLERK_PUBLISHABLE_KEY =
 process.env.EXPO_PUBLIC_BLUEBIRD_DEVELOPMENT_API_CLERK_ISSUER =
   "https://clerk.example.com";
 
+const legacyPlans = [
+  {
+    tier: "base",
+    name: "Base",
+    priceUsd: 3995,
+    cadence: "annual",
+    priceLabel: "$3,995",
+    cadenceLabel: "/ year",
+    tagline: "The basics to start flying.",
+    highlight: false,
+  },
+  {
+    tier: "plus",
+    name: "Plus",
+    priceUsd: 9995,
+    cadence: "annual",
+    priceLabel: "$9,995",
+    cadenceLabel: "/ year",
+    tagline: "Move up the queue with priority access.",
+    highlight: true,
+  },
+];
+
+const entitlementPlans = [
+  {
+    ...legacyPlans[0],
+    includedSkipTheLinePasses: 0,
+    skipTheLineUnlimited: false,
+    includedInternationalPasses: 0,
+    internationalUnlimited: false,
+  },
+  {
+    ...legacyPlans[1],
+    includedSkipTheLinePasses: 5,
+    skipTheLineUnlimited: false,
+    includedInternationalPasses: 0,
+    internationalUnlimited: true,
+  },
+];
+
 const responseFixture = {
-  plans: [
-    {
-      tier: "base",
-      name: "Base",
-      priceUsd: 3995,
-      cadence: "annual",
-      priceLabel: "$3,995",
-      cadenceLabel: "/ year",
-      tagline: "The basics to start flying.",
-      highlight: false,
-    },
-    {
-      tier: "plus",
-      name: "Plus",
-      priceUsd: 9995,
-      cadence: "annual",
-      priceLabel: "$9,995",
-      cadenceLabel: "/ year",
-      tagline: "Move up the queue with priority access.",
-      highlight: true,
-    },
-  ],
+  plans: entitlementPlans,
   features: [
     { label: "Unlimited Empty Leg Access", base: true, plus: true },
     { label: "International Empty Legs", base: "Extra Fee", plus: true },
@@ -68,9 +89,17 @@ const responseFixture = {
 };
 
 const mapped = mapProductionMembershipPlans(responseFixture);
-assert.deepEqual(mapped.plans.map(({ tier, name, priceUsd, cadence, priceLabel, cadenceLabel, tagline, highlight }) => ({
-  tier, name, priceUsd, cadence, priceLabel, cadenceLabel, tagline, highlight,
-})), responseFixture.plans);
+assert.deepEqual(mapped.plans, entitlementPlans);
+assert.equal(findProductionPlan(mapped, "plus")?.includedSkipTheLinePasses, 5);
+assert.equal(findProductionPlan(mapped, "plus")?.internationalUnlimited, true);
+assert.equal(findProductionPlan(mapped, "base")?.skipTheLineUnlimited, false);
+assert.equal(readPlanInternationalUnlimited(mapped, "plus"), true);
+assert.equal(readPlanInternationalUnlimited(mapped, "base"), false);
+
+const legacyMapped = mapProductionMembershipPlans({ ...responseFixture, plans: legacyPlans });
+assert.equal(legacyMapped.plans[0].includedSkipTheLinePasses, null);
+assert.equal(legacyMapped.plans[0].internationalUnlimited, null);
+assert.equal(readPlanInternationalUnlimited(legacyMapped, "plus"), true);
 assert.equal(formatProductionPlanPrice(mapped.plans[0]), "$3,995 / year");
 assert.equal(formatProductionPlanPrice(mapped.plans[1]), "$9,995 / year");
 assert.equal(mapped.features[3].label, "5 Complimentary Skip the Line Passes");
@@ -100,6 +129,27 @@ assert.equal(mapped.plans.some((plan) => plan.tier === "concierge"), false);
 assert.throws(
   () => mapProductionMembershipPlans({ ...responseFixture, buyNowEnabled: "false" }),
   /buyNowEnabled.*boolean/i,
+);
+assert.throws(
+  () => mapProductionMembershipPlans({
+    ...responseFixture,
+    plans: [{
+      ...legacyPlans[0],
+      includedSkipTheLinePasses: 0,
+      skipTheLineUnlimited: false,
+    }],
+  }),
+  /includedInternationalPasses.*required/i,
+);
+assert.throws(
+  () => mapProductionMembershipPlans({
+    ...responseFixture,
+    plans: [{
+      ...entitlementPlans[0],
+      includedSkipTheLinePasses: -1,
+    }],
+  }),
+  /includedSkipTheLinePasses.*non-negative integer/i,
 );
 assert.throws(
   () => mapProductionMembershipPlans({

@@ -26,6 +26,7 @@ import {
   useClerkStartupSnapshotStatus,
 } from '@/lib/dormantClerkIntegration';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
+import { clearAiConciergeCache } from '@/lib/aiConcierge';
 import { clearMemberConnectionsCache } from '@/lib/memberConnections';
 import { clearMemberMessagesCache } from '@/lib/memberMessages';
 import { revokeHeldClerkPushToken } from '@/lib/clerkPushRuntime';
@@ -328,6 +329,7 @@ function ActiveAuthProvider({
       clearDashboardMembershipCache();
       clearMemberConnectionsCache();
       clearMemberMessagesCache();
+      clearAiConciergeCache();
       previousClerkIdentity.current = nextIdentity;
     }
     setToken(null);
@@ -540,6 +542,7 @@ function ActiveAuthProvider({
       clearDashboardMembershipCache();
       clearMemberConnectionsCache();
       clearMemberMessagesCache();
+      clearAiConciergeCache();
       queryClient.clear();
       setClerkMemberResolution({ status: 'signed_out' });
       await clerkSession?.signOut();
@@ -569,6 +572,7 @@ function ActiveAuthProvider({
     clearDashboardMembershipCache();
     clearMemberConnectionsCache();
     clearMemberMessagesCache();
+    clearAiConciergeCache();
     queryClient.clear();
     router.replace('/(auth)/welcome');
   };

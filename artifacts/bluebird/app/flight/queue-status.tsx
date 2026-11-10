@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { CurrentWinnerCelebration } from '@/components/CurrentWinnerCelebration';
+import { PassCelebration } from '@/components/PassCelebration';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
@@ -31,6 +32,7 @@ import {
 import { mainBluebirdAuthenticatedQueryKey } from '@/lib/mainBluebirdApi';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import {
+  forgetSkipTheLinePasses,
   loadDashboardSkipTheLinePasses,
   readFreshSkipTheLinePasses,
   rememberSkipTheLinePasses,
@@ -250,10 +252,19 @@ export default function ProductionQueueStatusScreen() {
     });
     return () => controller.abort();
   }, [clerkUserId, memberInQueue, passApiBaseUrl, passAttempt, passEnvironment, signedIn]);
+  const [showSkipCelebration, setShowSkipCelebration] = React.useState(false);
   React.useEffect(() => {
     if (!mutation.skipMessage) return;
+    setShowSkipCelebration(true);
+    if (passEnvironment && passApiBaseUrl && clerkUserId) {
+      forgetSkipTheLinePasses({
+        environment: passEnvironment,
+        apiBaseUrl: passApiBaseUrl,
+        clerkUserId,
+      });
+    }
     setPassAttempt((attempt) => attempt + 1);
-  }, [mutation.skipMessage]);
+  }, [clerkUserId, mutation.skipMessage, passApiBaseUrl, passEnvironment]);
   const [celebrationRevision, setCelebrationRevision] = React.useState(0);
   const currentWinner = celebrationRevision >= 0 && clerkUserId && flightId !== null
     ? readCurrentWinnerCelebration({ clerkUserId, flightId })
@@ -263,7 +274,6 @@ export default function ProductionQueueStatusScreen() {
     mutationsEnabled: canSubmitProductionQueueJoin(),
     balance: passBalance,
     passAlreadyApplied: flight?.viewerHasLineSkip === true || viewerRosterRow?.hasLineSkip === true,
-    viewerIsEffectiveWinner: flight?.viewerIsEffectiveWinner ?? null,
   });
   const refetchFlight = flightQuery.refetch;
   const closedRefresh = React.useRef(false);
@@ -275,33 +285,60 @@ export default function ProductionQueueStatusScreen() {
       void queryClient.invalidateQueries({
         queryKey: mainBluebirdAuthenticatedQueryKey(configuration.environment, clerkUserId, 'trips'),
       });
+      void queryClient.invalidateQueries({
+        queryKey: mainBluebirdAuthenticatedQueryKey(
+          configuration.environment,
+          clerkUserId,
+          'empty-leg-queue',
+          flightId,
+        ),
+      });
     }
   }, [clerkUserId, configuration, decision.kind, flightId, queryClient, refetchFlight]);
-  const winnerUnresolved = decision.kind === 'closed' && offer.kind === 'unavailable';
+  // Closed countdown without a server winner field → wait; never invent a win.
+  const winnerUnresolved =
+    decision.kind === 'closed' && (offer.kind === 'unavailable' || offer.kind === 'waiting');
   React.useEffect(() => {
     if (!winnerUnresolved || flightId === null) return undefined;
     let attempts = 0;
+    const refreshAuthoritative = () => {
+      void refetchFlight();
+      if (configuration && clerkUserId) {
+        void queryClient.invalidateQueries({
+          queryKey: mainBluebirdAuthenticatedQueryKey(configuration.environment, clerkUserId, 'trips'),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: mainBluebirdAuthenticatedQueryKey(
+            configuration.environment,
+            clerkUserId,
+            'empty-leg-queue',
+            flightId,
+          ),
+        });
+      }
+    };
     const timer = setInterval(() => {
       attempts += 1;
       if (attempts > 6) {
         clearInterval(timer);
         return;
       }
-      void refetchFlight();
+      refreshAuthoritative();
     }, 20000);
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void refetchFlight();
+      if (state === 'active') refreshAuthoritative();
     });
     return () => {
       clearInterval(timer);
       subscription.remove();
     };
-  }, [flightId, refetchFlight, winnerUnresolved]);
+  }, [clerkUserId, configuration, flightId, queryClient, refetchFlight, winnerUnresolved]);
   const celebratedFlight = React.useRef<string | null>(null);
   React.useEffect(() => {
     celebratedFlight.current = null;
   }, [clerkUserId]);
   React.useEffect(() => {
+    // Navigate only when the backend marks this viewer as the effective winner.
     if (offer.kind !== 'pending' || !clerkUserId || flightId === null) return;
     const celebrationKey = `${clerkUserId}:${flightId}`;
     if (celebratedFlight.current === celebrationKey) return;
@@ -473,7 +510,10 @@ export default function ProductionQueueStatusScreen() {
           ) : null}
         </View>
       ) : null}
-      {currentWinner ? (
+      {showSkipCelebration && mutation.skipMessage ? (
+        <PassCelebration onDone={() => setShowSkipCelebration(false)} />
+      ) : null}
+      {currentWinner && !showSkipCelebration ? (
         <CurrentWinnerCelebration
           queueClosesAt={closesAt ?? currentWinner.queueClosesAt}
           onContinue={() => {

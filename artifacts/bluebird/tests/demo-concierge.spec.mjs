@@ -88,8 +88,11 @@ test("concierge navigation stays local and does not add a production request", (
   const readiness = readFileSync(resolve(projectRoot, "lib/productionQueueReadiness.ts"), "utf8");
   assert.match(layout, /name="concierge"/);
   assert.match(concierge, /if \(demoMode\) \{\s*return <DemoConciergeChat \/>;/);
+  assert.match(concierge, /isAiConciergeIntegrationEnabled\(\)/);
+  assert.match(concierge, /ProductionAiConciergeChat/);
   assert.match(concierge, /AI Concierge unavailable/);
   assert.match(concierge, /clerk-concierge-unavailable/);
+  assert.doesNotMatch(concierge, /EXPO_PUBLIC_BLUEBIRD_AI_CONCIERGE=true/);
   assert.match(flight, /pathname: '\/concierge'/);
   assert.match(flight, /authMode !== 'clerk'/);
   assert.match(flight, /joinFlightRouteParams\(productionFlightId, f\)/);

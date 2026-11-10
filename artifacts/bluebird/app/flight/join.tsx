@@ -8,8 +8,9 @@ import { DemoPolicyScreen } from '@/components/DemoJoinReference';
 import { ProductionReadOnlyNotice } from '@/components/ProductionReadOnlyNotice';
 import { JoinQueueLoading } from '@/components/JoinQueueLoading';
 import { useAuth } from '@/context/AuthContext';
-import { canSubmitProductionQueueJoin, formatInternationalPassPrice, parseJoinFlightDisplay, productionInternationalJoinStep, readInternationalUnlimited } from '@/lib/joinFlightPresentation';
+import { canSubmitProductionQueueJoin, formatInternationalPassPrice, parseJoinFlightDisplay, productionInternationalJoinStep } from '@/lib/joinFlightPresentation';
 import { useProductionMembershipPlans } from '@/hooks/useProductionMembershipPlans';
+import { readPlanInternationalUnlimited } from '@/lib/productionMembershipPlans';
 import { useJoinFlightQueueRead } from '@/lib/useJoinFlightQueueRead';
 import { useProductionQueueMutation } from '@/lib/useProductionQueueMutation';
 import { useDemoJoinFlow } from '@/lib/demoJoinFlowStore';
@@ -32,7 +33,7 @@ export default function JoinFlightScreen() {
     || clerkMemberResolution.status === 'not_checked'
   );
   const internationalUnlimited = plansQuery.isSuccess
-    ? readInternationalUnlimited(plansQuery.data.features, memberTier)
+    ? readPlanInternationalUnlimited(plansQuery.data, memberTier)
     : null;
   const internationalStep = productionInternationalJoinStep({
     isInternational: flight?.international ?? null,

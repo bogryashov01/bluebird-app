@@ -29,6 +29,8 @@ import {
   presentAirportCountryRead,
   productionInternationalJoinStep,
   queueJoinSuccessModel,
+  presentQueueSkipConfirmedMessage,
+  presentQueueSkipFailure,
   presentQueueSkipLineOffer,
   QUEUE_SKIP_NOTE,
   queueRosterLabel,
@@ -235,7 +237,14 @@ test("queue read display uses participant count and viewer position without seat
     failed: false,
     read: {
       entries: [
-        { position: 1, initials: "AM", tier: "plus", hasLineSkip: false, isViewer: true },
+        {
+          position: 1,
+          initials: "AM",
+          tier: "plus",
+          hasLineSkip: false,
+          isViewer: true,
+          displayName: "Alex Morgan",
+        },
         {
           position: 2,
           initials: "BM",
@@ -250,7 +259,9 @@ test("queue read display uses participant count and viewer position without seat
   });
   assert.equal(referenced.kind, "participants");
   assert.equal(referenced.rows[0].connectionTargetReference, undefined);
+  assert.equal(referenced.rows[0].displayName, "Alex Morgan");
   assert.equal(referenced.rows[1].connectionTargetReference, "8f99b61f-5c0b-44e9-93bf-55fbb2a0b925");
+  assert.equal(referenced.rows[1].displayName, undefined);
   assert.equal(JSON.stringify(referenced).includes("user_"), false);
   assert.equal(JSON.stringify(watching).includes("seat"), false);
 });
@@ -339,49 +350,47 @@ test("the join screens do not call queue, payment, or membership mutations", () 
   assert.match(queueStatus, /mutationsEnabled: canSubmitProductionQueueJoin\(\)/);
   assert.match(queueStatus, /Use Skip the Line Pass/);
   assert.match(queueStatus, /testID="queue-status-skip-line"/);
-  assert.doesNotMatch(queueStatus, /skipLine\(|joinEmptyLegQueue|PassCelebration|\/flight\/confirmed|Flight Confirmed|Booking Confirmed/);
+  assert.doesNotMatch(queueStatus, /skipLine\(|joinEmptyLegQueue|\/flight\/confirmed|Flight Confirmed|Booking Confirmed/);
+  assert.match(queueStatus, /PassCelebration/);
+  assert.match(queueStatus, /showSkipCelebration && mutation\.skipMessage/);
+  assert.match(queueStatus, /forgetSkipTheLinePasses/);
   assert.match(queueStatus, /readCurrentWinnerCelebration/);
+  assert.match(queueStatus, /currentWinner && !showSkipCelebration/);
   assert.equal(presentQueueSkipLineOffer({
     inQueue: true,
     mutationsEnabled: true,
     balance: { count: 2 },
     passAlreadyApplied: false,
-    viewerIsEffectiveWinner: false,
   }).kind, "ready");
   assert.equal(presentQueueSkipLineOffer({
     inQueue: false,
     mutationsEnabled: true,
     balance: { count: 2 },
     passAlreadyApplied: false,
-    viewerIsEffectiveWinner: false,
   }).kind, "hidden");
   assert.equal(presentQueueSkipLineOffer({
     inQueue: true,
     mutationsEnabled: true,
     balance: "loading",
     passAlreadyApplied: false,
-    viewerIsEffectiveWinner: null,
   }).kind, "loading");
   assert.equal(presentQueueSkipLineOffer({
     inQueue: true,
     mutationsEnabled: true,
     balance: { count: 0 },
     passAlreadyApplied: false,
-    viewerIsEffectiveWinner: false,
   }).kind, "none");
   assert.equal(presentQueueSkipLineOffer({
     inQueue: true,
     mutationsEnabled: true,
     balance: "unavailable",
     passAlreadyApplied: false,
-    viewerIsEffectiveWinner: false,
   }).kind, "unavailable");
   assert.equal(presentQueueSkipLineOffer({
     inQueue: true,
     mutationsEnabled: true,
     balance: { count: 2 },
     passAlreadyApplied: true,
-    viewerIsEffectiveWinner: false,
   }).kind, "already-used");
   assert.equal(presentQueueSkipLineOffer({
     inQueue: true,
@@ -389,17 +398,23 @@ test("the join screens do not call queue, payment, or membership mutations", () 
     balance: { count: 2 },
     passAlreadyApplied: false,
     viewerIsEffectiveWinner: true,
-  }).kind, "winner");
+  }).kind, "ready");
   assert.equal(presentQueueSkipLineOffer({
     inQueue: true,
     mutationsEnabled: false,
     balance: { count: 2 },
     passAlreadyApplied: false,
-    viewerIsEffectiveWinner: false,
   }).kind, "closed");
-  assert.match(QUEUE_SKIP_NOTE, /current winner/);
-  assert.match(QUEUE_SKIP_NOTE, /does not award the flight or only change your queue number/);
-  assert.doesNotMatch(queueStatus, /position:\s*1|You are #1/);
+  assert.match(QUEUE_SKIP_NOTE, /updates your queue rank/);
+  assert.match(QUEUE_SKIP_NOTE, /does not award the flight or confirm the seat/);
+  assert.match(presentQueueSkipConfirmedMessage(1), /You are now #1/);
+  assert.match(presentQueueSkipConfirmedMessage(1), /does not award the flight/);
+  assert.equal(presentQueueSkipFailure({ status: 402, code: "insufficient_credit" }).title, "No passes available");
+  assert.equal(presentQueueSkipFailure({ status: 403, code: "ineligible" }).title, "Not eligible");
+  assert.equal(presentQueueSkipFailure({ status: 409, code: "closed" }).title, "Queue closed");
+  assert.equal(presentQueueSkipFailure({ status: 409, code: "awarded" }).title, "Flight awarded");
+  assert.equal(presentQueueSkipFailure({ status: 409, code: "unavailable" }).title, "Pass not applied");
+  assert.doesNotMatch(queueStatus, /You are #1|confirmed winner|Flight Secured/);
   assert.match(confirmation, /View My Trips/);
   assert.doesNotMatch(confirmation, /DEMO_PET|simulatedQueue|demo-status-view-trips/);
   const queueRead = readFileSync(resolve(projectRoot, "lib/useJoinFlightQueueRead.ts"), "utf8");
@@ -502,8 +517,10 @@ test("join request bodies, pass consent, conflicts, and account refresh stay beh
   assert.notDeepEqual(first.detail, second.detail);
   assert.notDeepEqual(first.queue, second.queue);
   assert.notDeepEqual(first.myQueues, second.myQueues);
+  assert.notDeepEqual(first.profile, second.profile);
   assert.equal(first.detail[2], "user_a");
   assert.equal(first.queue[3], "empty-leg-queue");
+  assert.equal(first.profile[3], "profile");
   assert.equal(shouldRefreshAfterJoin({
     gateOpen: canSubmitProductionQueueJoin(),
     requestedUserId: "user_a",
@@ -647,7 +664,7 @@ test("queue acknowledgements and the international step gate the production join
   }).status, "unavailable");
   const joinScreen = readFileSync(resolve(projectRoot, "app/flight/join.tsx"), "utf8");
   assert.match(joinScreen, /isInternational: flight\?\.international \?\? null/);
-  assert.match(joinScreen, /readInternationalUnlimited/);
+  assert.match(joinScreen, /readPlanInternationalUnlimited/);
   assert.doesNotMatch(joinScreen, /useJoinAirportCountryRead|compareAirportCountries/);
   assert.doesNotMatch(joinScreen, /Bluebird is checking whether you are already in this queue/);
   assert.match(joinScreen, /JoinQueueLoading/);

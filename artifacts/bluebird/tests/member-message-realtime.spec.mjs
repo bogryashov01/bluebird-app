@@ -16,6 +16,7 @@ import {
   realtimeHintRequestsHistory,
   realtimeHintRequestsInbox,
   realtimeReconnectDelayMs,
+  resolveMemberMessageGatewayConfiguration,
   resolveMessagingGatewayOrigin,
   startMemberMessageRealtime,
   stopMemberMessageRealtime,
@@ -140,6 +141,23 @@ test("realtime stays off unless the flag and member messages are both enabled", 
   });
   assert.deepEqual(resolveMessagingGatewayOrigin("http://members.example.test"), { status: "invalid" });
   assert.deepEqual(resolveMessagingGatewayOrigin("https://members.example.test/app"), { status: "invalid" });
+  assert.equal(resolveMemberMessageGatewayConfiguration({ gatewayUrl: undefined }), null);
+  assert.equal(resolveMemberMessageGatewayConfiguration({ gatewayUrl: "https://bluebirdjets.com/api" }), null);
+  assert.deepEqual(resolveMemberMessageGatewayConfiguration({ gatewayUrl: GATEWAY }), {
+    gatewayUrl: GATEWAY,
+    gatewayOrigin: null,
+  });
+  assert.deepEqual(resolveMemberMessageGatewayConfiguration({
+    gatewayUrl: GATEWAY,
+    gatewayOrigin: "https://members.example.test",
+  }), {
+    gatewayUrl: GATEWAY,
+    gatewayOrigin: "https://members.example.test",
+  });
+  assert.equal(resolveMemberMessageGatewayConfiguration({
+    gatewayUrl: GATEWAY,
+    gatewayOrigin: "http://members.example.test",
+  }), null);
 });
 
 test("the handshake sends authenticate and accepts authenticated without a user id", async () => {
@@ -250,6 +268,28 @@ test("close code 1008 does not reuse the rejected token", async () => {
   assert.equal(JSON.parse(sockets[1].sent[0]).token, REFRESHED_JWT);
   assert.equal(sockets[0].onclose, null);
   assert.equal(sockets.length, 2);
+});
+
+test("a missing or invalid token fails authentication and reconnects with a fresh token", async () => {
+  let token = null;
+  const { sockets, hints, clock, live } = session({
+    getAccessToken: async () => token,
+  });
+  sockets[0].onopen();
+  await settle();
+  assert.deepEqual(sockets[0].sent, []);
+  assert.equal(sockets[0].closed, true);
+  assert.deepEqual(hints, []);
+  assert.equal(live.at(-1), false);
+  assert.equal(clock.pending().length, 1);
+  token = JWT;
+  clock.flush();
+  await settle();
+  assert.equal(sockets.length, 2);
+  sockets[1].onopen();
+  await settle();
+  assert.deepEqual(JSON.parse(sockets[1].sent[0]), { type: "authenticate", token: JWT });
+  assert.equal(sockets[1].url.includes(JWT), false);
 });
 
 test("a connection limit backs off and foreground recovery can try the same token again", async () => {
@@ -407,6 +447,28 @@ test("connection hints refresh REST lists and ignore duplicates, bodies, and una
   assert.doesNotMatch(coordinator, /expo-notifications|scheduleNotificationAsync/);
 });
 
+test("connection.accepted refreshes conversations through HTTP hooks and preserves Open Chat", () => {
+  assert.equal(realtimeHintRequestsInbox({
+    kind: "connection-accepted",
+    clerkUserId: "user_a",
+    connectionId: 16,
+  }), true);
+  assert.equal(realtimeHintRequestsConnections({
+    kind: "connection-accepted",
+    clerkUserId: "user_a",
+    connectionId: 16,
+  }), true);
+  const messagesHook = readFileSync(resolve(projectRoot, "lib/useMemberMessages.ts"), "utf8");
+  const connectionsHook = readFileSync(resolve(projectRoot, "lib/useMemberConnections.ts"), "utf8");
+  const connectionsScreen = readFileSync(resolve(projectRoot, "components/MemberConnectionsScreen.tsx"), "utf8");
+  assert.match(messagesHook, /realtimeHintRequestsInbox/);
+  assert.match(messagesHook, /subscribeMemberMessageHints/);
+  assert.match(messagesHook, /mergeMessages/);
+  assert.match(connectionsHook, /realtimeHintRequestsConnections/);
+  assert.match(connectionsScreen, /pathname: '\/messages\/\[conversationId\]'/);
+  assert.match(connectionsScreen, /useOpenAcceptedConversation|messages\.open/);
+});
+
 test("the production profile does not enable the gateway and HTTP sending stays in place", () => {
   const eas = readFileSync(resolve(projectRoot, "eas.json"), "utf8");
   assert.equal(eas.includes("EXPO_PUBLIC_BLUEBIRD_MESSAGING_REALTIME"), false);
@@ -415,6 +477,7 @@ test("the production profile does not enable the gateway and HTTP sending stays 
   const messages = readFileSync(resolve(projectRoot, "lib/memberMessages.ts"), "utf8");
   const hook = readFileSync(resolve(projectRoot, "lib/useMemberMessages.ts"), "utf8");
   const realtime = readFileSync(resolve(projectRoot, "lib/memberMessageRealtime.ts"), "utf8");
+  const coordinator = readFileSync(resolve(projectRoot, "components/MemberMessageRealtime.tsx"), "utf8");
   assert.equal(messages.includes("WebSocket"), false);
   assert.equal(hook.includes("WebSocket"), false);
   assert.match(messages, /messages: \(conversationId: number\)/);
@@ -427,5 +490,10 @@ test("the production profile does not enable the gateway and HTTP sending stays 
   assert.match(realtime, /SocketRocket 0\.7\.1/);
   assert.match(realtime, /headers: \{ Origin: origin \}/);
   assert.equal(realtime.includes("https://bluebird"), false);
+  assert.doesNotMatch(realtime, /VITE_/);
+  assert.doesNotMatch(coordinator, /VITE_/);
+  assert.match(coordinator, /resolveMemberMessageGatewayConfiguration/);
+  assert.match(coordinator, /skipCache:\s*true/);
+  assert.match(coordinator, /!gateway/);
   assert.match(readFileSync(resolve(projectRoot, "app/_layout.tsx"), "utf8"), /MemberMessageRealtime/);
 });

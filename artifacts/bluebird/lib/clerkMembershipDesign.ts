@@ -1,4 +1,9 @@
 import type { MobileMembershipSnapshot } from './mobileMembership';
+import {
+  formatPassBalanceValue,
+  passBalanceAccessibilityLabel,
+  presentPassBalance,
+} from './membershipEntitlements';
 
 export interface ClerkMembershipMetric {
   label: string;
@@ -136,7 +141,14 @@ export interface MembershipDashboardMembership {
   status: 'active' | 'canceled' | 'expired' | 'pending_payment' | null;
   paymentStatus: 'none' | 'pending' | 'succeeded' | 'failed' | null;
   currentPeriodEnd: string | null;
+  /** Remaining Skip the Line Passes from GET /api/me/profile. */
   skipTheLinePasses: number | null;
+  /** Remaining International Passes from GET /api/me/profile. */
+  internationalPassPasses: number | null;
+  /** Plan entitlement from GET /api/plans when the member's tier is known. */
+  skipTheLineUnlimited: boolean | null;
+  /** Plan entitlement from GET /api/plans when the member's tier is known. */
+  internationalUnlimited: boolean | null;
 }
 
 export function membershipDashboardPhase(input: {
@@ -305,22 +317,20 @@ function dashboardMetrics(
   membership: MembershipDashboardMembership | null,
   referralBalanceCents: number | null | undefined,
 ): MembershipDashboardStat[] {
-  const passes = membership?.skipTheLinePasses;
-  const passesKnown = typeof passes === 'number' && Number.isSafeInteger(passes) && passes >= 0;
+  // Approved 2x2 labels stay fixed: Flights Flown, Total Saved,
+  // Skip the Line Passes, Referral Balance. International pass balances are
+  // parsed for production use but are not shown until an approved UI slot exists.
+  const skipPresentation = presentPassBalance({
+    unlimited: membership?.skipTheLineUnlimited,
+    remaining: membership?.skipTheLinePasses,
+  });
   const referralKnown = typeof referralBalanceCents === 'number' &&
     Number.isSafeInteger(referralBalanceCents) &&
     referralBalanceCents >= 0;
   return [
     unavailableStat('Flights Flown'),
     unavailableStat('Total Saved'),
-    passesKnown
-      ? {
-          label: 'Skip the Line Passes',
-          value: String(passes),
-          available: true,
-          accessibilityLabel: `Skip the Line passes, ${passes}`,
-        }
-      : unavailableStat('Skip the Line Passes'),
+    passStat('Skip the Line Passes', 'Skip the Line passes', skipPresentation),
     referralKnown
       ? {
           label: 'Referral Balance',
@@ -330,6 +340,20 @@ function dashboardMetrics(
         }
       : unavailableStat('Referral Balance'),
   ];
+}
+
+function passStat(
+  label: string,
+  accessibilityNoun: string,
+  presentation: ReturnType<typeof presentPassBalance>,
+): MembershipDashboardStat {
+  if (presentation.kind === 'unknown') return unavailableStat(label);
+  return {
+    label,
+    value: formatPassBalanceValue(presentation),
+    available: true,
+    accessibilityLabel: passBalanceAccessibilityLabel(accessibilityNoun, presentation),
+  };
 }
 
 function unavailableStat(label: string): MembershipDashboardStat {

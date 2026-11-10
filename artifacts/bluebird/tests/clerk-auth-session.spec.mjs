@@ -408,7 +408,7 @@ test("tab bars keep Connections mountable and hide it when both member integrati
   const profileSource = readFileSync(resolve(projectRoot, "app/(tabs)/profile/index.tsx"), "utf8");
   assert.doesNotMatch(profileSource, /router\.push\(['"]\/\(tabs\)\/connections/);
   assert.match(profileSource, /connectionsEnabled \? \(/);
-  assert.match(profileSource, /accountDeletionEnabled \? \[/);
+  assert.match(profileSource, /confirmOpenDeleteAccount/);
   const unreadHookSource = readFileSync(resolve(projectRoot, "hooks/useUnreadNotifications.ts"), "utf8");
   assert.match(unreadHookSource, /authMode === 'legacy' && isLocalFlightReadMode\(\)/);
 });
@@ -454,12 +454,11 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(clerkProfile, /router\.push\('\/account\/contacts'/);
   assert.match(clerkProfile, /label: 'Payment Methods'/);
   assert.match(clerkProfile, /router\.push\('\/account\/payment-methods'/);
-  assert.match(clerkProfile, /accountDeletionEnabled \? \[/);
   assert.match(clerkProfile, /label: 'Delete Account'/);
   assert.match(clerkProfile, /testID: 'clerk-delete-account'/);
-  assert.match(clerkProfile, /router\.push\('\/account\/delete-account'/);
+  assert.match(clerkProfile, /confirmOpenDeleteAccount/);
+  assert.match(profileSource, /router\.push\('\/account\/delete-account'/);
   assert.match(clerkProfile, /connectionsEnabled \? \(/);
-  assert.match(clerkProfile, /isAccountDeletionMutationEnabled/);
   assert.match(clerkProfile, /label: 'Notification Settings'/);
   assert.match(clerkProfile, /router\.push\('\/notifications'/);
   assert.doesNotMatch(clerkProfile, /label: 'Community'/);
@@ -497,6 +496,8 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(conciergeSource, /authMode === 'clerk'/);
   assert.match(conciergeSource, /demoMode/);
   assert.match(conciergeSource, /<DemoConciergeChat \/>/);
+  assert.match(conciergeSource, /isAiConciergeIntegrationEnabled\(\)/);
+  assert.match(conciergeSource, /ProductionAiConciergeChat/);
   assert.match(conciergeSource, /AI Concierge unavailable/);
   assert.match(conciergeSource, /clerk-concierge-unavailable/);
   assert.match(conciergeSource, /ProductionAuthenticatedUnavailableNotice/);

@@ -87,12 +87,28 @@ export function validateProductionQueueLeave(
   return status;
 }
 
+/**
+ * Task #1820 success contract: Skip the Line updates rank and marks the pass
+ * applied. It does not award the flight or mean a confirmed winner.
+ */
 export function validateProductionSkipLine(
   emptyLegId: number,
   flight: ProductionEmptyLeg,
 ): ProductionEmptyLeg {
   assertLegId(emptyLegId, flight.id);
-  if (flight.viewerIsEffectiveWinner !== true) {
+  const position = flight.viewerQueuePosition;
+  const rankOk =
+    typeof position === 'number' && Number.isSafeInteger(position) && position >= 1;
+  const countOk =
+    typeof flight.queueCount === 'number' &&
+    Number.isSafeInteger(flight.queueCount) &&
+    flight.queueCount >= 0;
+  if (
+    flight.viewerHasLineSkip !== true ||
+    typeof flight.lineSkipSold !== 'boolean' ||
+    !rankOk ||
+    !countOk
+  ) {
     throw new ProductionQueueContractError(
       'The Main API did not confirm Skip the Line for this flight.',
       'invalid_transition',

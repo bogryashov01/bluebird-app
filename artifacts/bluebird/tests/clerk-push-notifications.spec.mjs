@@ -21,6 +21,7 @@ import {
   syncHeldPushRegistration,
   isClerkPushRegistrationEnabled,
   planClerkPushRegistration,
+  parseWinnerLifecyclePushRefresh,
   pushRepeatsOpenConversation,
   shouldRegisterPushToken,
   shouldRevokeHeldPushToken,
@@ -628,6 +629,30 @@ test("versioned message, connection, flight, and queue taps resolve to existing 
     payload: selected,
     pathname: "/(tabs)/discover",
   }).show, false);
+  assert.deepEqual(parseWinnerLifecyclePushRefresh(versioned("queue.updated", "flight", { flightId: 9 })), {
+    event: "queue.updated",
+    flightId: 9,
+  });
+  assert.deepEqual(parseWinnerLifecyclePushRefresh(selected), {
+    event: "winner.selected",
+    flightId: 9,
+  });
+  assert.deepEqual(parseWinnerLifecyclePushRefresh(versioned("winner.confirmed", "flight", { flightId: 9 })), {
+    event: "winner.confirmed",
+    flightId: 9,
+  });
+  assert.equal(parseWinnerLifecyclePushRefresh(versioned("flight.published", "flight", { flightId: 9 })), null);
+  const coordinator = readFileSync(resolve(projectRoot, "components/ClerkPushCoordinator.tsx"), "utf8");
+  assert.match(coordinator, /parseWinnerLifecyclePushRefresh/);
+  assert.match(coordinator, /joinFlightRefreshTargets/);
+  assert.match(coordinator, /addNotificationReceivedListener/);
+  assert.equal(coordinator.includes("AsyncStorage"), false);
+  const celebrationPersistence = readFileSync(
+    resolve(projectRoot, "components/WinnerCelebrationPersistence.tsx"),
+    "utf8",
+  );
+  assert.match(celebrationPersistence, /hydrateWinnerCelebrations/);
+  assert.match(celebrationPersistence, /setWinnerCelebrationStorage/);
 });
 
 test("cold-start versioned navigation waits for auth and a different account cannot reuse it", () => {

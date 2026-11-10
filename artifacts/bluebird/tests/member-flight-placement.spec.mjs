@@ -13,6 +13,7 @@ import {
   queueEntryVisible,
   rememberWinnerNotice,
   resetWinnerNotices,
+  tripLifecycleOpenTarget,
   upcomingFlightDetailsTarget,
   upcomingOwnedFlightIds,
   visibleQueueFlightIds,
@@ -95,12 +96,30 @@ test("pending and confirmed Upcoming cards open flight details, and the checklis
     params: { id: "42" },
   });
   assert.equal(upcomingFlightDetailsTarget({ list: "past", legId: 42 }), null);
+  assert.deepEqual(tripLifecycleOpenTarget({
+    list: "current",
+    legId: 42,
+    status: "queue_pending",
+    awarded: false,
+  }), { pathname: "/flight/queue-status", params: { flightId: "42" } });
+  assert.deepEqual(tripLifecycleOpenTarget({
+    list: "current",
+    legId: 42,
+    status: "winner_confirmation_required",
+    awarded: false,
+  }), { pathname: "/flight/winner", params: { flightId: "42" } });
+  assert.deepEqual(tripLifecycleOpenTarget({
+    list: "current",
+    legId: 42,
+    status: "awarded",
+    awarded: true,
+  }), { pathname: "/flight/[id]", params: { id: "42" } });
   const trips = readFileSync(resolve(projectRoot, "components/ClerkTrips.tsx"), "utf8");
   const session = readFileSync(resolve(projectRoot, "lib/clerkAuthSession.ts"), "utf8");
   assert.match(trips, /router\.push\(detailsTarget\)/);
-  assert.match(trips, /upcomingFlightDetailsTarget/);
+  assert.match(trips, /tripLifecycleOpenTarget/);
   assert.match(trips, /onOpenChecklist\(flightId\)/);
-  assert.doesNotMatch(trips, /pathname: '\/flight\/winner'|router\.replace\('\/\(tabs\)\/discover'\)|router\.replace\("\/\(tabs\)\/discover"\)/);
+  assert.doesNotMatch(trips, /router\.replace\('\/\(tabs\)\/discover'\)|router\.replace\("\/\(tabs\)\/discover"\)/);
   assert.match(session, /isClerkWinnerPath/);
 });
 
@@ -205,6 +224,10 @@ test("queue join Pending trips stay visible and are not winner offers", () => {
   assert.deepEqual(pendingTripFlightIds([trip(11, true)]), []);
   assert.deepEqual(pendingTripFlightIds(null), []);
   assert.deepEqual(pendingWinnerOfferFlightIdsFromTrips([trip(10, false), trip(12, false)]), []);
+  assert.deepEqual(pendingWinnerOfferFlightIdsFromTrips([
+    { ...trip(10, false), status: "queue_pending" },
+    { ...trip(12, false), status: "winner_confirmation_required" },
+  ]), [12]);
   const observer = readFileSync(resolve(projectRoot, "components/WinnerOfferObserver.tsx"), "utf8");
   assert.match(observer, /pendingWinnerOfferFlightIdsFromTrips/);
   assert.doesNotMatch(observer, /pendingOfferFlightIds\(|pendingTripFlightIds\(/);

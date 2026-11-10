@@ -631,6 +631,21 @@ test("trips use numeric Empty Leg identifiers and reject invented trip/status/UU
   const response = await sourceWithUnmodeledFields.listTrips();
   assert.equal("id" in response.current[0], false);
   assert.equal("status" in response.current[0], false);
+
+  const lifecycle = makeClient(async () => jsonResponse({
+    current: [{ ...trip, status: "queue_pending" }],
+    past: [],
+  }));
+  const lifecycleTrips = await lifecycle.listTrips();
+  assert.equal(lifecycleTrips.current[0].status, "queue_pending");
+
+  for (const status of ["winner_confirmation_required", "awaiting_award", "awarded"]) {
+    const clientForStatus = makeClient(async () => jsonResponse({
+      current: [{ ...trip, status }],
+      past: [],
+    }));
+    assert.equal((await clientForStatus.listTrips()).current[0].status, status);
+  }
 });
 
 test("trip list handles successful empty arrays and keeps request, authorization, and schema failures unavailable", async () => {
@@ -1050,7 +1065,15 @@ test("queue references and connection preference survive only when the server re
     if (init.method === "PUT" && contractPath(url) === "/me/profile") return jsonResponse(currentUser);
     if (contractPath(url) === "/empty-legs/81001/queue") {
       return jsonResponse([
-        { position: 1, initials: "AM", tier: "plus", hasLineSkip: false, isViewer: true, email: "first@example.test" },
+        {
+          position: 1,
+          initials: "AM",
+          tier: "plus",
+          hasLineSkip: false,
+          isViewer: true,
+          email: "first@example.test",
+          displayName: "Alex Morgan",
+        },
         {
           position: 2,
           initials: "BM",
@@ -1059,6 +1082,7 @@ test("queue references and connection preference survive only when the server re
           isViewer: false,
           connectionTargetReference: reference.toUpperCase(),
           userId: "user_secret",
+          displayName: "user_clerk_secret",
         },
         {
           position: 3,
@@ -1067,6 +1091,7 @@ test("queue references and connection preference survive only when the server re
           hasLineSkip: false,
           isViewer: false,
           connectionTargetReference: "member-name",
+          displayName: "cm@example.test",
         },
       ]);
     }
@@ -1079,12 +1104,21 @@ test("queue references and connection preference survive only when the server re
   assert.equal(loaded.weightLbs, profile.weightLbs);
   const queue = await client.getEmptyLegQueue(81001);
   assert.deepEqual(queue, [
-    { position: 1, initials: "AM", tier: "plus", hasLineSkip: false, isViewer: true },
+    {
+      position: 1,
+      initials: "AM",
+      tier: "plus",
+      hasLineSkip: false,
+      isViewer: true,
+      displayName: "Alex Morgan",
+    },
     { position: 2, initials: "BM", tier: "base", hasLineSkip: false, isViewer: false, connectionTargetReference: reference },
     { position: 3, initials: "CM", tier: "free", hasLineSkip: false, isViewer: false },
   ]);
   assert.equal(JSON.stringify(queue).includes("user_secret"), false);
+  assert.equal(JSON.stringify(queue).includes("user_clerk"), false);
   assert.equal(JSON.stringify(queue).includes("first@"), false);
+  assert.equal(JSON.stringify(queue).includes("cm@"), false);
   await client.updateProfile({ ...profileUpdate, allowIncomingConnectionRequests: false, homeAirportLabel: "Naples" });
   const written = JSON.parse(requests[2].body);
   assert.equal(written.allowIncomingConnectionRequests, false);

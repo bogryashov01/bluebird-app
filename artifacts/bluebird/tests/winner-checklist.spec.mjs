@@ -196,26 +196,36 @@ test("trip checklist reads are account scoped and the detail read is not used by
 });
 
 test("current trips keep an unconfirmed effective winner and distinguish award progress", () => {
-  // Product rule: queue join → Trips Pending ("Awaiting confirmation") is CORRECT
-  // while the member awaits the queue outcome. Do not hide unawarded current trips.
+  // Product rule: queue join → Trips Pending is CORRECT while awaiting the queue outcome.
+  // Do not hide unawarded current trips or treat queue_pending as winner confirmation.
   const labels = labelCurrentTrips({
     current: [
-      { checklist: { emptyLegId: 7, awarded: false, remainingSteps: ["confirmed"] } },
-      { checklist: { emptyLegId: 8, awarded: true, remainingSteps: ["policyAck"] } },
-      { checklist: { emptyLegId: 9, awarded: true, remainingSteps: [] } },
+      { checklist: { emptyLegId: 7, awarded: false, remainingSteps: ["confirmed"] }, status: "queue_pending" },
+      { checklist: { emptyLegId: 8, awarded: true, remainingSteps: ["policyAck"] }, status: "awarded" },
+      { checklist: { emptyLegId: 9, awarded: true, remainingSteps: [] }, status: "awarded" },
+      { checklist: { emptyLegId: 10, awarded: false, remainingSteps: [] }, status: "winner_confirmation_required" },
+      { checklist: { emptyLegId: 11, awarded: false, remainingSteps: [] }, status: "awaiting_award" },
     ],
     past: [],
   });
   assert.deepEqual(labels, [
-    { flightId: 7, label: "Awaiting confirmation" },
+    { flightId: 7, label: "Pending" },
     { flightId: 8, label: "Checklist in progress" },
     { flightId: 9, label: "Confirmed" },
+    { flightId: 10, label: "Winner confirmation required" },
+    { flightId: 11, label: "Awaiting award" },
   ]);
   assert.equal(presentTripChecklistStatus({
     list: "current",
     awarded: false,
     remainingSteps: [],
-  }), "Awaiting confirmation");
+  }), "Pending");
+  assert.equal(presentTripChecklistStatus({
+    list: "current",
+    awarded: false,
+    remainingSteps: [],
+    status: "queue_pending",
+  }), "Pending");
   assert.equal(presentTripChecklistStatus({
     list: "past",
     awarded: false,

@@ -271,6 +271,16 @@ export interface ProductionTripLegSummary {
 
 export type ProductionTripRemainingStep = 'confirmed' | 'fboVerified' | 'manifestAck' | 'policyAck';
 
+/** Authoritative trip lifecycle from GET /trips (Task #1816). Absent on older backends. */
+export const PRODUCTION_TRIP_LIFECYCLE_STATUSES = [
+  'queue_pending',
+  'winner_confirmation_required',
+  'awaiting_award',
+  'awarded',
+] as const;
+
+export type ProductionTripLifecycleStatus = (typeof PRODUCTION_TRIP_LIFECYCLE_STATUSES)[number];
+
 export interface ProductionTripChecklist {
   emptyLegId: number;
   confirmedAt: Nullable<string>;
@@ -289,6 +299,8 @@ export interface ProductionTripChecklist {
 export interface ProductionTrip {
   leg: ProductionTripLegSummary;
   checklist: ProductionTripChecklist;
+  /** Present when the deployed trips API includes lifecycle status. */
+  status?: ProductionTripLifecycleStatus;
 }
 
 export interface ProductionTrips {
@@ -324,6 +336,12 @@ export interface ProductionPublicQueueEntry {
   isViewer: boolean;
   /** Present only for eligible recipients seen by the active first-ranked member. */
   connectionTargetReference?: string;
+  /**
+   * Present only for the current leader when the authenticated viewer is below
+   * first and eligible to connect. Anonymous, nonparticipants, and the leader
+   * receive initials only.
+   */
+  displayName?: string;
 }
 
 export interface JoinProductionQueueRequest {
@@ -1099,11 +1117,22 @@ function parseTripChecklist(value: unknown, field: string): ProductionTripCheckl
   };
 }
 
+function parseTripLifecycleStatus(value: unknown): ProductionTripLifecycleStatus | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== 'string') return undefined;
+  const status = value.trim().toLowerCase();
+  return (PRODUCTION_TRIP_LIFECYCLE_STATUSES as readonly string[]).includes(status)
+    ? (status as ProductionTripLifecycleStatus)
+    : undefined;
+}
+
 function parseTrip(value: unknown, field: string): ProductionTrip {
   const raw = objectValue(value, field);
+  const status = parseTripLifecycleStatus(raw.status);
   return {
     leg: parseTripLeg(raw.leg, `${field}.leg`),
     checklist: parseTripChecklist(raw.checklist, `${field}.checklist`),
+    ...(status ? { status } : {}),
   };
 }
 
@@ -1149,6 +1178,20 @@ function readConnectionTargetReference(value: unknown): string | undefined {
   return value.toLowerCase();
 }
 
+const QUEUE_DISPLAY_NAME = /^[\p{L}\p{M}][\p{L}\p{M}'’.\- ]{0,78}[\p{L}\p{M}'’.]$/u;
+const QUEUE_DISPLAY_NAME_SINGLE = /^[\p{L}\p{M}]{2,40}$/u;
+
+/** Keeps a public leader display name; drops emails, phones, and account ids. */
+function readQueueDisplayName(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const name = value.trim().replace(/\s+/g, ' ');
+  if (!name || name.length > 80) return undefined;
+  if (name.includes('@') || /user_/i.test(name) || /clerk/i.test(name)) return undefined;
+  if (/\d{3,}/.test(name) || /[+]?\d[\d\s().-]{6,}\d/.test(name)) return undefined;
+  if (!(QUEUE_DISPLAY_NAME.test(name) || QUEUE_DISPLAY_NAME_SINGLE.test(name))) return undefined;
+  return name;
+}
+
 function readAllowIncomingConnectionRequests(
   raw: Record<string, unknown>,
   field: string,
@@ -1165,6 +1208,7 @@ function readAllowIncomingConnectionRequests(
 function parsePublicQueueEntry(value: unknown, field: string): ProductionPublicQueueEntry {
   const raw = objectValue(value, field);
   const connectionTargetReference = readConnectionTargetReference(raw.connectionTargetReference);
+  const displayName = readQueueDisplayName(raw.displayName);
   return {
     position: integerValue(raw.position, `${field}.position`),
     initials: stringValue(raw.initials, `${field}.initials`),
@@ -1172,6 +1216,7 @@ function parsePublicQueueEntry(value: unknown, field: string): ProductionPublicQ
     hasLineSkip: booleanValue(raw.hasLineSkip, `${field}.hasLineSkip`),
     isViewer: booleanValue(raw.isViewer, `${field}.isViewer`),
     ...(connectionTargetReference ? { connectionTargetReference } : {}),
+    ...(displayName ? { displayName } : {}),
   };
 }
 

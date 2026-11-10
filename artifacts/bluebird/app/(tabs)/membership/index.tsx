@@ -20,6 +20,7 @@ import {
   TIER_ORDER,
 } from '@/lib/membershipPlans';
 import {
+  findProductionPlan,
   formatProductionPlanPrice,
   productionPlanPurchaseNotice,
 } from '@/lib/productionMembershipPlans';
@@ -37,14 +38,16 @@ import { membershipDashboardPhase, presentMembershipDashboard } from '@/lib/cler
 import {
   clearDashboardMembershipCache,
   loadDashboardProductionMembership,
-  loadDashboardSkipTheLinePasses,
+  loadDashboardUpgradeCreditBalances,
   logMembershipDashboardDiagnostic,
   logMembershipDashboardPresentation,
   logMembershipNormalizedFields,
   membershipDiagnostic,
   readFreshDashboardMembership,
+  readFreshInternationalPasses,
   readFreshSkipTheLinePasses,
   rememberDashboardMembership,
+  rememberInternationalPasses,
   rememberSkipTheLinePasses,
   retainDashboardMembershipForAccount,
   shouldDisplayDashboardMembership,
@@ -120,7 +123,11 @@ export default function MembershipScreen() {
   });
   const queryClient = useQueryClient();
   const [clerkMembershipState, setClerkMembershipState] = React.useState<ClerkMembershipLoadState>({ kind: 'loading' });
-  const [skipTheLinePasses, setSkipTheLinePasses] = React.useState<{ clerkUserId: string; count: number } | null>(null);
+  const [passBalances, setPassBalances] = React.useState<{
+    clerkUserId: string;
+    skipTheLine: number | null;
+    internationalPass: number | null;
+  } | null>(null);
   const [clerkMembershipAttempt, setClerkMembershipAttempt] = React.useState(0);
   const cachedClerkMembership = React.useRef<{
     clerkUserId: string;
@@ -246,7 +253,7 @@ export default function MembershipScreen() {
         : { kind: 'error', message });
     }
   }, [authMode, ...membershipRequestDependencies]);
-  const loadSkipTheLinePasses = React.useCallback(async (signal: AbortSignal) => {
+  const loadPassBalances = React.useCallback(async (signal: AbortSignal) => {
     if (
       authMode !== 'clerk' ||
       !clerkSession?.isLoaded ||
@@ -255,18 +262,29 @@ export default function MembershipScreen() {
       !mainApiConfiguration
     ) return;
     const requestedClerkUserId = clerkSession.userId;
-    const freshPasses = clerkMembershipAttempt === 0
+    const freshSkip = clerkMembershipAttempt === 0
       ? readFreshSkipTheLinePasses({
           environment: mainApiConfiguration.environment,
           apiBaseUrl: mainApiConfiguration.apiBaseUrl,
           clerkUserId: requestedClerkUserId,
         })
       : null;
-    if (freshPasses) {
-      setSkipTheLinePasses({ clerkUserId: requestedClerkUserId, count: freshPasses.count });
-      return;
+    const freshInternational = clerkMembershipAttempt === 0
+      ? readFreshInternationalPasses({
+          environment: mainApiConfiguration.environment,
+          apiBaseUrl: mainApiConfiguration.apiBaseUrl,
+          clerkUserId: requestedClerkUserId,
+        })
+      : null;
+    if (freshSkip || freshInternational) {
+      setPassBalances({
+        clerkUserId: requestedClerkUserId,
+        skipTheLine: freshSkip?.count ?? null,
+        internationalPass: freshInternational?.count ?? null,
+      });
+      if (freshSkip && freshInternational) return;
     }
-    const loaded = await loadDashboardSkipTheLinePasses({
+    const loaded = await loadDashboardUpgradeCreditBalances({
       signal,
       configuration: mainApiConfiguration,
       cachedProfiles: [
@@ -298,17 +316,35 @@ export default function MembershipScreen() {
       currentClerkUserId: currentClerkIdentity.current,
       aborted: signal.aborted,
     })) return;
-    if (loaded.kind !== 'loaded') {
-      setSkipTheLinePasses((current) => current?.clerkUserId === requestedClerkUserId ? null : current);
+    if (loaded.kind === 'unavailable') {
+      setPassBalances((current) => current?.clerkUserId === requestedClerkUserId ? null : current);
       return;
     }
     rememberSkipTheLinePasses({
       environment: mainApiConfiguration.environment,
       apiBaseUrl: mainApiConfiguration.apiBaseUrl,
       clerkUserId: requestedClerkUserId,
-      count: loaded.count,
+      count: loaded.skipTheLine,
     });
-    setSkipTheLinePasses({ clerkUserId: requestedClerkUserId, count: loaded.count });
+    if (loaded.kind === 'loaded') {
+      rememberInternationalPasses({
+        environment: mainApiConfiguration.environment,
+        apiBaseUrl: mainApiConfiguration.apiBaseUrl,
+        clerkUserId: requestedClerkUserId,
+        count: loaded.internationalPass,
+      });
+      setPassBalances({
+        clerkUserId: requestedClerkUserId,
+        skipTheLine: loaded.skipTheLine,
+        internationalPass: loaded.internationalPass,
+      });
+      return;
+    }
+    setPassBalances({
+      clerkUserId: requestedClerkUserId,
+      skipTheLine: loaded.skipTheLine,
+      internationalPass: null,
+    });
   }, [authMode, clerkMembershipAttempt, queryClient, ...membershipRequestDependencies]);
   React.useEffect(() => {
     if (authMode !== 'clerk') return;
@@ -319,17 +355,17 @@ export default function MembershipScreen() {
     if (clerkSession.isSignedIn !== true || !clerkSession.userId) {
       cachedClerkMembership.current = null;
       clearDashboardMembershipCache();
-      setSkipTheLinePasses(null);
+      setPassBalances(null);
       setClerkMembershipState({ kind: 'not_authenticated' });
       return;
     }
     const controller = new AbortController();
     void loadClerkMembership(controller.signal);
-    void loadSkipTheLinePasses(controller.signal);
+    void loadPassBalances(controller.signal);
     return () => controller.abort();
-  }, [authMode, loadClerkMembership, loadSkipTheLinePasses, ...membershipRequestDependencies]);
+  }, [authMode, loadClerkMembership, loadPassBalances, ...membershipRequestDependencies]);
   const plansQuery = useProductionMembershipPlans({
-    enabled: !demoMode && authMode !== 'clerk',
+    enabled: !demoMode,
   });
 
   if (authMode === 'clerk') {
@@ -338,7 +374,11 @@ export default function MembershipScreen() {
       ? { kind: 'loading' as const }
       : clerkMembershipState;
     const signedIn = clerkSession?.isSignedIn === true && visibleState.kind !== 'not_authenticated';
-    const confirmedMembership = shouldDisplayDashboardMembership({
+    const accountMatchedBalances = passBalances !== null
+      && passBalances.clerkUserId === clerkSession?.userId
+      ? passBalances
+      : null;
+    const confirmedMembershipBase = shouldDisplayDashboardMembership({
       signedIn,
       membershipClerkUserId: 'clerkUserId' in visibleState ? visibleState.clerkUserId : null,
       activeClerkUserId: clerkSession?.userId ?? null,
@@ -347,11 +387,19 @@ export default function MembershipScreen() {
       visibleState.kind === 'refreshing' ||
       visibleState.kind === 'stale_error'
     )
+      ? visibleState.membership
+      : null;
+    const currentPlan = findProductionPlan(
+      plansQuery.data,
+      confirmedMembershipBase?.tier ?? null,
+    );
+    const confirmedMembership = confirmedMembershipBase
       ? {
-          ...visibleState.membership,
-          skipTheLinePasses: skipTheLinePasses !== null && skipTheLinePasses.clerkUserId === clerkSession?.userId
-            ? skipTheLinePasses.count
-            : null,
+          ...confirmedMembershipBase,
+          skipTheLinePasses: accountMatchedBalances?.skipTheLine ?? null,
+          internationalPassPasses: accountMatchedBalances?.internationalPass ?? null,
+          skipTheLineUnlimited: currentPlan?.skipTheLineUnlimited ?? null,
+          internationalUnlimited: currentPlan?.internationalUnlimited ?? null,
         }
       : null;
     const verifiedAccount = 'currentUser' in clerkMemberResolution &&

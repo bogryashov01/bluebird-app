@@ -75,14 +75,24 @@ function Particle({ spec, colors: palette }: { spec: ParticleSpec; colors: strin
 type Props = {
   /** Called when the celebration finishes (auto or tap-to-skip). */
   onDone: () => void;
+  /** Production Skip the Line defaults avoid seat-confirmed wording. */
+  title?: string;
+  subtitle?: string;
 };
 
+export const PASS_CELEBRATION_TITLE = 'Skip the Line Confirmed';
+export const PASS_CELEBRATION_SUBTITLE =
+  'Your queue position was updated. This does not award the flight or confirm the seat.';
+
 /**
- * Full-screen "Flight Secured" celebration shown when a Skip the Line Pass
- * wins a seat. Brand-navy backdrop in both modes; degrades to simpler
- * timing animations on web.
+ * Full-screen Skip the Line celebration. Production copy updates rank only.
+ * Demo confirmed screens may pass seat-confirmed title/subtitle explicitly.
  */
-export function PassCelebration({ onDone }: Props) {
+export function PassCelebration({
+  onDone,
+  title = PASS_CELEBRATION_TITLE,
+  subtitle = PASS_CELEBRATION_SUBTITLE,
+}: Props) {
   const colors = useColors();
   const [finished, setFinished] = useState(false);
 
@@ -187,9 +197,9 @@ export function PassCelebration({ onDone }: Props) {
           </Animated.View>
         </View>
         <Animated.View style={[styles.textBlock, textStyle]}>
-          <Text style={[styles.headline, { color: colors.textOnBrand }]}>Flight Secured</Text>
+          <Text style={[styles.headline, { color: colors.textOnBrand }]}>{title}</Text>
           <Text style={[styles.subheadline, { color: colors.mutedOnBrand }]}>
-            Your Skip the Line Pass closed the queue and your seat has been confirmed.
+            {subtitle}
           </Text>
         </Animated.View>
       </View>

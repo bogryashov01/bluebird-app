@@ -36,7 +36,7 @@ test("a confirmed current winner celebrates once and a repeat does not use anoth
   assert.equal(readCurrentWinnerCelebration({ clerkUserId: "member-b", flightId: 42 }), null);
 });
 
-test("an unconfirmed skip-line response and a later visit do not open the celebration", () => {
+test("a non-winner response and invalid identity do not open the celebration", () => {
   resetCurrentWinnerCelebrations();
   assert.equal(markCurrentWinnerCelebration({ ...confirmed, viewerIsEffectiveWinner: false }), "ignored");
   assert.equal(readCurrentWinnerCelebration({ clerkUserId: "member-a", flightId: 42 }), null);
@@ -64,9 +64,10 @@ test("the countdown uses the scheduled closing time", () => {
   assert.doesNotMatch(`${CURRENT_WINNER_TITLE} ${CURRENT_WINNER_BODY}`, /Flight Confirmed|Booking Confirmed|You've Won the Flight/);
 });
 
-test("the production celebration stays separate from the legacy demo win", () => {
+test("the production celebration stays separate from Skip Pass and the legacy demo win", () => {
   const celebration = readFileSync(resolve(projectRoot, "components/CurrentWinnerCelebration.tsx"), "utf8");
   const queueStatus = readFileSync(resolve(projectRoot, "app/flight/queue-status.tsx"), "utf8");
+  const mutationHook = readFileSync(resolve(projectRoot, "lib/useProductionQueueMutation.ts"), "utf8");
   const legacy = readFileSync(resolve(projectRoot, "components/PassCelebration.tsx"), "utf8");
   const demoWin = readFileSync(resolve(projectRoot, "lib/flightWinCelebration.ts"), "utf8");
   assert.match(celebration, /useColors\(\)/);
@@ -77,9 +78,15 @@ test("the production celebration stays separate from the legacy demo win", () =>
   assert.doesNotMatch(celebration, /skipLine\(|fetch\(|PassCelebration|markFlightWinCelebration|Flight Confirmed|Booking Confirmed|You've Won the Flight/);
   assert.match(queueStatus, /CurrentWinnerCelebration/);
   assert.match(queueStatus, /dismissCurrentWinnerCelebration/);
-  assert.doesNotMatch(queueStatus, /PassCelebration|markFlightWinCelebration|Flight Confirmed|Booking Confirmed|You've Won the Flight/);
-  assert.match(legacy, /Flight Secured/);
+  assert.match(queueStatus, /PassCelebration/);
+  assert.match(queueStatus, /showSkipCelebration && mutation\.skipMessage/);
+  assert.match(queueStatus, /currentWinner && !showSkipCelebration/);
+  assert.doesNotMatch(queueStatus, /markFlightWinCelebration|Flight Confirmed|Booking Confirmed|You've Won the Flight|Flight Secured/);
+  assert.doesNotMatch(mutationHook, /markCurrentWinnerCelebration/);
+  assert.match(legacy, /PASS_CELEBRATION_TITLE/);
+  assert.match(legacy, /Skip the Line Confirmed/);
   assert.doesNotMatch(demoWin, /currentWinnerCelebration|markCurrentWinnerCelebration/);
   const moduleSource = readFileSync(resolve(projectRoot, "lib/currentWinnerCelebration.ts"), "utf8");
   assert.doesNotMatch(moduleSource, /fetch\(|skipLine\(|joinEmptyLegQueue/);
+  assert.match(moduleSource, /Skip the Line redemption must not call this/);
 });

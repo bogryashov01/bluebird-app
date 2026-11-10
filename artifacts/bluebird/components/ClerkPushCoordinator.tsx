@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import * as Notifications from 'expo-notifications';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
@@ -10,6 +11,7 @@ import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { confirmClerkPushDestination } from '@/lib/clerkPushDestination';
 import {
   considerPushResponse,
+  parseWinnerLifecyclePushRefresh,
   type PushNavigationDecision,
   type QueuedPushResponse,
 } from '@/lib/clerkPushNotifications';
@@ -21,6 +23,7 @@ import {
   setClerkPushSession,
   syncClerkPushToken,
 } from '@/lib/clerkPushRuntime';
+import { joinFlightRefreshTargets } from '@/lib/joinFlightPresentation';
 
 function notificationPayload(response: Notifications.NotificationResponse): unknown {
   return response.notification.request.content.data ?? null;
@@ -34,6 +37,7 @@ export function ClerkPushCoordinator() {
   const { authMode, clerkMemberResolution } = useAuth();
   const session = useClerkAuthSnapshot();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const consumedIds = useRef<string[]>([]);
   const queued = useRef<QueuedPushResponse | null>(null);
   const previousUserId = useRef<string | null>(null);
@@ -48,6 +52,7 @@ export function ClerkPushCoordinator() {
     clerkMemberResolution,
     CLERK_MEMBER_NAVIGATION_READINESS,
   );
+  const configuration = getMainBluebirdApiConfigurationOrNull();
 
   useEffect(() => {
     configureClerkForegroundNotifications();
@@ -92,6 +97,31 @@ export function ClerkPushCoordinator() {
     return () => subscription.remove();
   }, [activeUserId, navigationReady]);
 
+  const refreshWinnerLifecycle = (payload: unknown) => {
+    if (!configuration || !activeUserId) return;
+    const signal = parseWinnerLifecyclePushRefresh(payload);
+    if (!signal) return;
+    const targets = joinFlightRefreshTargets({
+      environment: configuration.environment,
+      clerkUserId: activeUserId,
+      flightId: signal.flightId,
+    });
+    if (!targets) return;
+    void queryClient.invalidateQueries({ queryKey: targets.detail });
+    void queryClient.invalidateQueries({ queryKey: targets.queue });
+    void queryClient.invalidateQueries({ queryKey: targets.myQueues });
+    void queryClient.invalidateQueries({ queryKey: targets.trips });
+    void queryClient.invalidateQueries({ queryKey: targets.flightList });
+  };
+
+  useEffect(() => {
+    if (!signedIn || !activeUserId) return;
+    const received = Notifications.addNotificationReceivedListener((notification) => {
+      refreshWinnerLifecycle(notification.request.content.data ?? null);
+    });
+    return () => received.remove();
+  }, [activeUserId, configuration, queryClient, signedIn]);
+
   useEffect(() => {
     const openIfAuthorized = (decision: PushNavigationDecision) => {
       if (decision.outcome !== 'navigated' || !decision.href) return;
@@ -102,13 +132,13 @@ export function ClerkPushCoordinator() {
         Notifications.clearLastNotificationResponse();
         return;
       }
-      const configuration = getMainBluebirdApiConfigurationOrNull();
-      if (!configuration) return;
+      const activeConfiguration = getMainBluebirdApiConfigurationOrNull();
+      if (!activeConfiguration) return;
       const generation = navigationGeneration.current;
       void confirmClerkPushDestination({
         check,
-        environment: configuration.environment,
-        baseUrl: configuration.apiBaseUrl,
+        environment: activeConfiguration.environment,
+        baseUrl: activeConfiguration.apiBaseUrl,
         getAccessToken: () => readToken.current(),
       }).then((allowed) => {
         if (!allowed || navigationGeneration.current !== generation) return;
@@ -119,9 +149,11 @@ export function ClerkPushCoordinator() {
 
     const take = (response: Notifications.NotificationResponse | null) => {
       if (!response || response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
+      const payload = notificationPayload(response);
+      refreshWinnerLifecycle(payload);
       const decision = considerPushResponse({
         responseId: response.notification.request.identifier,
-        payload: notificationPayload(response),
+        payload,
         activeUserId,
         navigationReady,
         consumedIds: consumedIds.current,
@@ -156,7 +188,7 @@ export function ClerkPushCoordinator() {
     take(Notifications.getLastNotificationResponse());
     const subscription = Notifications.addNotificationResponseReceivedListener(take);
     return () => subscription.remove();
-  }, [activeUserId, navigationReady, sessionLoaded, signedIn]);
+  }, [activeUserId, configuration, navigationReady, queryClient, sessionLoaded, signedIn]);
 
   return null;
 }

@@ -26,7 +26,6 @@ import type { ProductionUserProfile } from '@/lib/productionAuthApi';
 import { getFullAppDemoProfile } from '@/lib/fullAppDemo';
 import { presentClerkMembershipDesign } from '@/lib/clerkMembershipDesign';
 import { isMemberConnectionsIntegrationEnabled } from '@/lib/memberConnections';
-import { isAccountDeletionMutationEnabled } from '@/lib/accountDeletion';
 import {
   IncomingConnectionPreferenceError,
   saveIncomingConnectionRequestsPreference,
@@ -110,6 +109,7 @@ export default function ProfileScreen() {
     hasLegacyUser: !!user,
   });
   const signOutPromptOpen = React.useRef(false);
+  const deleteAccountPromptOpen = React.useRef(false);
   const confirmSignOut = async () => {
     if (signOutPromptOpen.current) return;
     signOutPromptOpen.current = true;
@@ -123,6 +123,21 @@ export default function ProfileScreen() {
       if (ok) signOut();
     } finally {
       signOutPromptOpen.current = false;
+    }
+  };
+  const confirmOpenDeleteAccount = async () => {
+    if (deleteAccountPromptOpen.current) return;
+    deleteAccountPromptOpen.current = true;
+    try {
+      const ok = await confirmDialog(
+        'Delete account?',
+        'This permanently deletes your Bluebird member account. You will need a fresh phone verification to continue.',
+        'Continue',
+        true,
+      );
+      if (ok) router.push('/account/delete-account' as any);
+    } finally {
+      deleteAccountPromptOpen.current = false;
     }
   };
   const [appearanceOpen, setAppearanceOpen] = React.useState(false);
@@ -285,7 +300,6 @@ export default function ProfileScreen() {
         ? clerkMemberResolution.currentUser
         : null;
     const connectionsEnabled = isMemberConnectionsIntegrationEnabled();
-    const accountDeletionEnabled = isAccountDeletionMutationEnabled();
     const incomingSupported = connectionsEnabled && profile?.allowIncomingConnectionRequestsSupported === true;
     const incomingValue = incomingPreference ?? profile?.allowIncomingConnectionRequests !== false;
     const saveIncomingPreference = async (next: boolean) => {
@@ -391,12 +405,6 @@ export default function ProfileScreen() {
                 label: 'Payment Methods',
                 onPress: () => router.push('/account/payment-methods' as any),
               },
-              ...(accountDeletionEnabled ? [{
-                label: 'Delete Account',
-                hint: 'Permanent',
-                testID: 'clerk-delete-account',
-                onPress: () => router.push('/account/delete-account' as any),
-              }] : []),
             ]}
           />
           {visibleProfileState.kind === 'error' && (
@@ -477,6 +485,16 @@ export default function ProfileScreen() {
                 label: 'Sign Out',
                 onPress: confirmSignOut,
                 right: <Text style={[styles.signOutChevron, { color: colors.mutedForegroundLight }]}>›</Text>,
+              },
+            ]}
+          />
+          <SettingsGroup
+            rows={[
+              {
+                label: 'Delete Account',
+                hint: 'Permanent',
+                testID: 'clerk-delete-account',
+                onPress: () => { void confirmOpenDeleteAccount(); },
               },
             ]}
           />

@@ -11,7 +11,9 @@ import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
 import { DemoConciergeChat } from '@/components/DemoConciergeChat';
+import { ProductionAiConciergeChat } from '@/components/ProductionAiConciergeChat';
 import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
+import { isAiConciergeIntegrationEnabled } from '@/lib/aiConcierge';
 import { useConciergeChat, useGetConciergeHistory, useRequestConciergeCallback } from '@workspace/api-client-react';
 import * as Haptics from 'expo-haptics';
 
@@ -289,11 +291,15 @@ function ConciergeContent() {
 export default function ConciergeScreen() {
   const { authMode, demoMode } = useAuth();
   // Preserve scripted demo chat for the full-app demo only. Production Clerk
-  // must not present those replies as a live AI Concierge service.
+  // uses the Main API when the dedicated flag is enabled; otherwise it stays
+  // unavailable and never presents demo replies as a live service.
   if (demoMode) {
     return <DemoConciergeChat />;
   }
   if (authMode === 'clerk') {
+    if (isAiConciergeIntegrationEnabled()) {
+      return <ProductionAiConciergeChat />;
+    }
     return (
       <ProductionAuthenticatedUnavailableNotice
         title="AI Concierge unavailable"

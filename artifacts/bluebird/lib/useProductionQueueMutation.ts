@@ -2,7 +2,6 @@ import React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { confirmDialog } from '@/lib/confirmDialog';
-import { markCurrentWinnerCelebration } from '@/lib/currentWinnerCelebration';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { createClerkProductionTokenProvider, type ClerkSessionSnapshot } from '@/lib/clerkProductionTokenProvider';
 import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
@@ -10,9 +9,9 @@ import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConf
 import {
   applyQueueMutationRefresh,
   canSubmitProductionQueueJoin,
+  presentQueueSkipConfirmedMessage,
   queueJoinSuccessModel,
   QUEUE_LEFT_CONFIRMED,
-  QUEUE_SKIP_CONFIRMED,
   type JoinFlightFailure,
   type QueueJoinConsent,
   type QueueJoinSuccessModel,
@@ -182,9 +181,10 @@ export function useProductionQueueMutation(
   const skip = React.useCallback(async (existingCreditCount: number) => {
     if (!canSubmitProductionQueueJoin()) return;
     if (!Number.isSafeInteger(existingCreditCount) || existingCreditCount < 1) return;
+    if (inFlight.current || submitting) return;
     const confirmed = await confirmDialog(
       'Use 1 Skip the Line Pass?',
-      'This uses one existing pass for this flight. Bluebird confirms the pass by making you the current winner. It does not award the flight, confirm the seat, or only change your queue number.',
+      'This uses one existing pass for this flight. Bluebird confirms by updating your queue rank. It does not award the flight or confirm the seat.',
       'Use Pass',
     );
     if (!confirmed) return;
@@ -202,17 +202,10 @@ export function useProductionQueueMutation(
       });
       if (sessionRef.current?.userId !== requestedUserId && requestedUserId) return;
       if (result.status === 'applied') {
-        const closing = result.flight.queueClosesAt;
-        markCurrentWinnerCelebration({
-          clerkUserId: requestedUserId,
-          flightId: result.flight.id,
-          queueClosesAt: typeof closing === 'string' && closing.trim() ? closing : null,
-          viewerIsEffectiveWinner: result.flight.viewerIsEffectiveWinner === true,
-        });
         setFailure(null);
         setSkipFailure(null);
         setLeftMessage(null);
-        setSkipMessage(QUEUE_SKIP_CONFIRMED);
+        setSkipMessage(presentQueueSkipConfirmedMessage(result.flight.viewerQueuePosition ?? 0));
         refresh(requestedUserId);
         return;
       }
@@ -223,7 +216,7 @@ export function useProductionQueueMutation(
     } finally {
       setSubmitting(false);
     }
-  }, [createClient, flightId, refresh, signedIn]);
+  }, [createClient, flightId, refresh, signedIn, submitting]);
 
   return { submitting, failure, success, leftMessage, skipMessage, skipFailure, join, leave, skip };
 }

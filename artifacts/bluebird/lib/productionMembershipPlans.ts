@@ -16,6 +16,14 @@ export interface ProductionPlan {
   cadenceLabel: string;
   tagline: string;
   highlight: boolean;
+  /** Included Skip the Line Pass allotment for this plan, when the catalog provides it. */
+  includedSkipTheLinePasses: number | null;
+  /** When true, Skip the Line Passes are unlimited for this plan. */
+  skipTheLineUnlimited: boolean | null;
+  /** Included International Pass allotment for this plan, when the catalog provides it. */
+  includedInternationalPasses: number | null;
+  /** When true, International Passes are unlimited for this plan. */
+  internationalUnlimited: boolean | null;
 }
 
 export interface ProductionPlanFeature {
@@ -66,6 +74,13 @@ function booleanValue(value: unknown, field: string): boolean {
   return value;
 }
 
+function nonNegativeInteger(value: unknown, field: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`Production plans field "${field}" must be a non-negative integer.`);
+  }
+  return value;
+}
+
 function normalizeSkipTheLineProductName(value: string): string {
   // The public catalog still calls these "upgrades"; customer-facing copy
   // uses the approved Skip the Line Pass name without changing plan benefits.
@@ -73,6 +88,46 @@ function normalizeSkipTheLineProductName(value: string): string {
     /Skip[-\s]+the[-\s]+Line\s+upgrades?/gi,
     (match) => `Skip the Line Pass${/upgrades$/i.test(match) ? 'es' : ''}`,
   );
+}
+
+function mapPlanEntitlements(raw: Record<string, unknown>, field: string): {
+  includedSkipTheLinePasses: number | null;
+  skipTheLineUnlimited: boolean | null;
+  includedInternationalPasses: number | null;
+  internationalUnlimited: boolean | null;
+} {
+  const keys = [
+    'includedSkipTheLinePasses',
+    'skipTheLineUnlimited',
+    'includedInternationalPasses',
+    'internationalUnlimited',
+  ] as const;
+  const present = keys.some((key) => Object.prototype.hasOwnProperty.call(raw, key));
+  if (!present) {
+    return {
+      includedSkipTheLinePasses: null,
+      skipTheLineUnlimited: null,
+      includedInternationalPasses: null,
+      internationalUnlimited: null,
+    };
+  }
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(raw, key)) {
+      throw new Error(`Production plans field "${field}.${key}" is required when plan entitlements are present.`);
+    }
+  }
+  return {
+    includedSkipTheLinePasses: nonNegativeInteger(
+      raw.includedSkipTheLinePasses,
+      `${field}.includedSkipTheLinePasses`,
+    ),
+    skipTheLineUnlimited: booleanValue(raw.skipTheLineUnlimited, `${field}.skipTheLineUnlimited`),
+    includedInternationalPasses: nonNegativeInteger(
+      raw.includedInternationalPasses,
+      `${field}.includedInternationalPasses`,
+    ),
+    internationalUnlimited: booleanValue(raw.internationalUnlimited, `${field}.internationalUnlimited`),
+  };
 }
 
 function mapPlan(value: unknown, index: number): ProductionPlan {
@@ -91,6 +146,7 @@ function mapPlan(value: unknown, index: number): ProductionPlan {
     cadenceLabel: nonEmptyString(raw.cadenceLabel, `${field}.cadenceLabel`),
     tagline: nonEmptyString(raw.tagline, `${field}.tagline`),
     highlight: booleanValue(raw.highlight, `${field}.highlight`),
+    ...mapPlanEntitlements(raw, field),
   };
 }
 
@@ -171,6 +227,32 @@ export function formatProductionPlanPrice(plan: ProductionPlan): string {
 
 export function productionPlanFeatureLabel(value: ProductionPlanFeatureValue): string {
   return typeof value === 'boolean' ? (value ? 'Included' : 'Not included') : value;
+}
+
+export function findProductionPlan(
+  catalog: ProductionMembershipPlanCatalog | null | undefined,
+  tier: string | null | undefined,
+): ProductionPlan | null {
+  if (!catalog || !tier) return null;
+  return catalog.plans.find((plan) => plan.tier === tier) ?? null;
+}
+
+/**
+ * Prefer the plan's internationalUnlimited flag. Fall back to the features
+ * matrix label used by older catalog payloads.
+ */
+export function readPlanInternationalUnlimited(
+  catalog: ProductionMembershipPlanCatalog | null | undefined,
+  tier: string | null | undefined,
+): boolean | null {
+  const plan = findProductionPlan(catalog, tier);
+  if (plan?.internationalUnlimited !== null && plan?.internationalUnlimited !== undefined) {
+    return plan.internationalUnlimited;
+  }
+  if (!tier || !catalog) return null;
+  const feature = catalog.features.find((item) => item.label === 'International Empty Legs');
+  if (!feature || !Object.prototype.hasOwnProperty.call(feature.values, tier)) return null;
+  return feature.values[tier] === true;
 }
 
 export function productionPlanPurchaseNotice(
