@@ -18,6 +18,11 @@ import { JoinQueueBody } from "@workspace/api-zod";
 import { exceedsPassengerCapacity, passengerCapacityError } from "../lib/passenger-capacity";
 import { activeFamilyMemberForUser, syncFamilyPlans } from "../lib/family";
 import { presentQueueRoster } from "../lib/queueVisibility";
+import {
+  SKIP_PASS_ENTRY_INACTIVE,
+  skipPassAlreadySettled,
+  skipPassFlightRejection,
+} from "../lib/skipTheLine";
 
 const router = Router();
 const PET_CLEANING_FEE_USD = 500;
@@ -552,7 +557,7 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Queue entry not found" });
     }
-    if (entry.status === "confirmed") {
+    if (skipPassAlreadySettled(entry.status)) {
       // Race with the queue engine: the seat was auto-confirmed while the
       // pass sheet was open. This is good news, not an error — return the
       // confirmed entry, flag it, and leave the pass balance untouched.
@@ -585,8 +590,7 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
     if (entry.status !== "waiting") {
       await client.query("ROLLBACK");
       return res.status(400).json({
-        error:
-          "This queue entry is no longer active, so a Skip the Line pass can't be used on it. Your pass was not used.",
+        error: SKIP_PASS_ENTRY_INACTIVE,
       });
     }
     // 2. Verify that the flight is still open before touching the pass balance.
@@ -596,6 +600,11 @@ router.post("/:id/use-pass", authMiddleware, async (req, res) => {
       .select()
       .from(flightsTable)
       .where(eq(flightsTable.id, entry.flightId));
+    const closedReason = skipPassFlightRejection(flight);
+    if (closedReason) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: closedReason });
+    }
     const familyMember = await activeFamilyMemberForUser(userId, txDb);
     let usedFamilyPass = false;
     let familyPassCycle: string | null = null;

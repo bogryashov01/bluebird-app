@@ -8,27 +8,10 @@ import {
 import { and, eq, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { logger } from "./logger";
 import { isSimUserId } from "./simulation";
+export { departurePassed, flightAcceptsQueueActions } from "./flightQueueGuards";
 
 function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
-}
-
-/**
- * Single source of truth for "has this flight's departure passed?".
- * Compares departureDate + departureTime (both stored as UTC-naive strings)
- * against the current UTC date/time — the exact comparison used by the
- * trip-cancellation guard, so the two can never disagree.
- */
-export function departurePassed(
-  flight: { departureDate: string; departureTime: string },
-  now: Date = new Date(),
-): boolean {
-  const today = now.toISOString().slice(0, 10);
-  const hhmm = now.toISOString().slice(11, 16);
-  return (
-    flight.departureDate < today ||
-    (flight.departureDate === today && flight.departureTime <= hhmm)
-  );
 }
 
 /** SQL predicate mirroring departurePassed() for set-based sweeps. */
@@ -42,19 +25,6 @@ function departurePassedSql(now: Date): SQL {
       sql`${flightsTable.departureTime} <= ${hhmm}`,
     ),
   )!;
-}
-
-/**
- * Queue-action guard: true when a flight can still accept queue transitions
- * (joins, pass use, promotions, simulated advancement). A flight that is not
- * 'available' or whose departure has passed must never gain new
- * confirmations or trips.
- */
-export function flightAcceptsQueueActions(
-  flight: { status: string; departureDate: string; departureTime: string },
-  now: Date = new Date(),
-): boolean {
-  return flight.status === "available" && !departurePassed(flight, now);
 }
 
 /**

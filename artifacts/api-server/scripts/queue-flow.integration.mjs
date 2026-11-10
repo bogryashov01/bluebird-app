@@ -405,6 +405,41 @@ if (m1Now?.status === "waiting") {
     closedJoin.status === 400 && /no longer available/i.test(closedJoin.json?.error ?? "") &&
       !/This flight is fully booked/i.test(JSON.stringify(closedJoin.json)),
     JSON.stringify(closedJoin.json));
+
+  // Closed / departed flights must reject use-pass before consuming a balance.
+  const closedPassMember = await makeVerifiedUser("closed-pass");
+  const openThenCloseId = `queue-flow-close-pass-${fixtureSuffix}`;
+  await pool.query(
+    `INSERT INTO flights (
+       id, from_airport, from_city, to_airport, to_city, aircraft_type,
+       aircraft_capacity, departure_date, departure_time, duration,
+       seats_available, international, international_fee_usd, status
+     ) VALUES (
+       $1, 'BFI', 'Seattle', 'SAN', 'San Diego', 'Citation Latitude',
+       4, '2099-01-01', '23:00', '2h 00m', 4, false, 0, 'available'
+     )`,
+    [openThenCloseId],
+  );
+  const closedPassJoin = await api("POST", "/queue/join", {
+    token: closedPassMember.token,
+    body: { flightId: openThenCloseId, bringingPet: false },
+  });
+  check("member can join before the flight closes",
+    closedPassJoin.status === 201 && closedPassJoin.json?.status === "waiting",
+    JSON.stringify(closedPassJoin.json));
+  const balanceBeforeClosed = (await api("GET", "/auth/me", { token: closedPassMember.token })).json?.linePassCount;
+  await pool.query(`UPDATE flights SET status = 'departed' WHERE id = $1`, [openThenCloseId]);
+  const closedUsePass = await api("POST", `/queue/${closedPassJoin.json.id}/use-pass`, {
+    token: closedPassMember.token,
+  });
+  const balanceAfterClosed = (await api("GET", "/auth/me", { token: closedPassMember.token })).json?.linePassCount;
+  check("closed flights reject use-pass without consuming a pass",
+    closedUsePass.status === 400 &&
+      /no longer available for Skip the Line/i.test(closedUsePass.json?.error ?? "") &&
+      balanceAfterClosed === balanceBeforeClosed,
+    JSON.stringify({ closedUsePass, balanceBeforeClosed, balanceAfterClosed }));
+  await pool.query(`DELETE FROM queue_entries WHERE flight_id = $1`, [openThenCloseId]);
+  await pool.query(`DELETE FROM flights WHERE id = $1`, [openThenCloseId]);
 }
 
 // ── 6. International fee enforcement for Base members ────────────────────────
