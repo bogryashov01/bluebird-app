@@ -122,8 +122,8 @@ test("realtime stays off unless the flag and member messages are both enabled", 
   assert.equal(acceptMessagingGatewayUrl(`${GATEWAY}?token=${JWT}`), null);
   assert.equal(memberMessageAuthFrame(` ${JWT}`), null);
   assert.equal(memberMessageAuthFrame(JWT), JSON.stringify({ type: "authenticate", token: JWT }));
-  assert.equal(memberMessagePollIntervalMs({ realtimeEnabled: false, socketLive: false }), 15000);
-  assert.equal(memberMessagePollIntervalMs({ realtimeEnabled: true, socketLive: false }), 15000);
+  assert.equal(memberMessagePollIntervalMs({ realtimeEnabled: false, socketLive: false }), 10000);
+  assert.equal(memberMessagePollIntervalMs({ realtimeEnabled: true, socketLive: false }), 10000);
   assert.equal(memberMessagePollIntervalMs({ realtimeEnabled: true, socketLive: true }), null);
   assert.equal(realtimeReconnectDelayMs(1, 0), 1000);
   assert.equal(realtimeReconnectDelayMs(2, 0), 2000);
@@ -228,13 +228,13 @@ test("an unavailable gateway keeps HTTP polling and a dropped socket reconnects"
   });
   assert.equal(clock.pending().length, 1);
   assert.equal(clock.pending()[0].delayMs, 1000);
-  assert.equal(memberMessagePollIntervalMs({ realtimeEnabled: true, socketLive: false }), 15000);
+  assert.equal(memberMessagePollIntervalMs({ realtimeEnabled: true, socketLive: false }), 10000);
 
   const live = session();
   await authenticate(live.sockets[0]);
   live.sockets[0].onclose({ code: 1006, reason: "" });
   assert.deepEqual(live.live, [true, false]);
-  assert.equal(memberMessagePollIntervalMs({ realtimeEnabled: true, socketLive: false }), 15000);
+  assert.equal(memberMessagePollIntervalMs({ realtimeEnabled: true, socketLive: false }), 10000);
   assert.equal(live.clock.pending().length, 1);
   assert.equal(live.clock.pending()[0].delayMs, 1000);
   live.clock.flush();
@@ -398,8 +398,8 @@ test("a configured origin is sent and an invalid origin does not connect", () =>
 });
 
 test("connection hints refresh REST lists and ignore duplicates, bodies, and unauthenticated frames", async () => {
-  assert.equal(connectionRefreshIntervalMs({ realtimeEnabled: false, socketLive: false }), null);
-  assert.equal(connectionRefreshIntervalMs({ realtimeEnabled: true, socketLive: false }), 15000);
+  assert.equal(connectionRefreshIntervalMs({ realtimeEnabled: false, socketLive: false }), 10000);
+  assert.equal(connectionRefreshIntervalMs({ realtimeEnabled: true, socketLive: false }), 10000);
   assert.equal(connectionRefreshIntervalMs({ realtimeEnabled: true, socketLive: true }), null);
   const requested = parseMemberMessageRealtimeFrame(JSON.stringify({
     type: "connection.requested",

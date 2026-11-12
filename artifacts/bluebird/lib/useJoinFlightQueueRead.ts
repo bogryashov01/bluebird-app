@@ -1,4 +1,6 @@
 import React from 'react';
+import { AppState } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
@@ -13,6 +15,7 @@ import {
   presentJoinFlightQueuePanel,
   type JoinFlightQueuePanel,
 } from '@/lib/joinFlightPresentation';
+import { MEMBER_MESSAGE_POLL_MS } from '@/lib/memberMessages';
 import { createProductionQueueActions } from '@/lib/productionQueue';
 import { ProductionAuthHttpError } from '@/lib/productionAuthApi';
 import { parseProductionFlightId } from '@/lib/productionFlights';
@@ -42,6 +45,22 @@ export function useJoinFlightQueueRead(
     signedIn &&
     parsedFlightId !== null &&
     !!configuration;
+  const [focused, setFocused] = React.useState(false);
+  const [foreground, setForeground] = React.useState(AppState.currentState === 'active');
+
+  useFocusEffect(React.useCallback(() => {
+    setFocused(true);
+    return () => setFocused(false);
+  }, []));
+
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      setForeground(state === 'active');
+    });
+    return () => subscription.remove();
+  }, []);
+
+  const shouldPoll = ready && focused && foreground;
 
   const query = useQuery({
     queryKey: configuration && session?.userId && parsedFlightId !== null
@@ -51,6 +70,8 @@ export function useJoinFlightQueueRead(
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+    refetchInterval: shouldPoll ? MEMBER_MESSAGE_POLL_MS : false,
+    refetchIntervalInBackground: false,
     queryFn: async ({ signal }) => {
       if (!configuration || parsedFlightId === null || !signedIn || !session?.userId) {
         throw new Error('A signed-in Clerk session is required to read this queue.');
@@ -78,6 +99,12 @@ export function useJoinFlightQueueRead(
       return createProductionQueueActions(api.authenticated).read(requestedFlightId, { signal });
     },
   });
+  const refetch = query.refetch;
+
+  React.useEffect(() => {
+    if (!shouldPoll) return;
+    void refetch();
+  }, [refetch, shouldPoll]);
 
   return {
     panel: presentJoinFlightQueuePanel({
@@ -89,6 +116,6 @@ export function useJoinFlightQueueRead(
       unauthorized: query.error instanceof ProductionAuthHttpError && query.error.status === 401,
       read: query.data ?? null,
     }),
-    refetch: query.refetch,
+    refetch,
   };
 }

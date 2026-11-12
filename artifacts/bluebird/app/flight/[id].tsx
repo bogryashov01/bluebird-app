@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
+  AppState,
   ImageBackground,
   useWindowDimensions,
   Modal,
@@ -439,6 +440,16 @@ export default function FlightDetailScreen() {
   const apiConfiguration = getMainBluebirdApiConfigurationOrNull();
   const queueConnectionsEnabled =
     !localReadMode && signedInClerk && numericFlightId !== null && apiConfiguration !== null && isMemberConnectionsIntegrationEnabled();
+  const [queueScreenFocused, setQueueScreenFocused] = React.useState(false);
+  const [queueScreenForeground, setQueueScreenForeground] = React.useState(AppState.currentState === 'active');
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      setQueueScreenForeground(state === 'active');
+    });
+    return () => subscription.remove();
+  }, []);
+  const pollQueueConnections =
+    queueConnectionsEnabled && queueScreenFocused && queueScreenForeground;
   const queueConnectionStatus = useQuery({
     queryKey:
       queueConnectionsEnabled && clerkUserId && apiConfiguration ?
@@ -446,6 +457,8 @@ export default function FlightDetailScreen() {
       : ['connection-queue-status', 'disabled'],
     enabled: queueConnectionsEnabled,
     retry: false,
+    refetchInterval: pollQueueConnections ? 10_000 : false,
+    refetchIntervalInBackground: false,
     queryFn: async () => {
       const configuration = getMainBluebirdApiConfigurationOrNull();
       const accountId = clerkSessionRef.current?.isSignedIn === true ? clerkSessionRef.current.userId : null;
@@ -464,10 +477,19 @@ export default function FlightDetailScreen() {
   });
   useFocusEffect(
     useCallback(() => {
-      if (!queueConnectionsEnabled) return;
-      void queueConnectionStatus.refetch();
-      void memberConnections.refresh();
-    }, [memberConnections.refresh, queueConnectionStatus.refetch, queueConnectionsEnabled]),
+      setQueueScreenFocused(true);
+      if (queueConnectionsEnabled) {
+        void queueConnectionStatus.refetch();
+        void memberConnections.refresh();
+      }
+      void refetchProductionQueue();
+      return () => setQueueScreenFocused(false);
+    }, [
+      memberConnections.refresh,
+      queueConnectionStatus.refetch,
+      queueConnectionsEnabled,
+      refetchProductionQueue,
+    ]),
   );
   useEffect(() => {
     if (!queueConnectionStatus.isSuccess) return;

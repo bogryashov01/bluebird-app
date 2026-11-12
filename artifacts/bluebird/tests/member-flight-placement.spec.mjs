@@ -181,7 +181,7 @@ test("a global notice shows once away from Queue Status, and Later does not chan
   assert.doesNotMatch(observer, /confirmEmptyLegWinner|declineEmptyLegWinner|confirmTripChecklist/);
   assert.match(layout, /<WinnerOfferObserver \/>/);
   assert.match(observer, /refetchIntervalInBackground: false/);
-  assert.equal(WINNER_OFFER_POLL_MS, 15000);
+  assert.equal(WINNER_OFFER_POLL_MS, 10000);
 });
 
 test("Queue Status celebration suppresses the notice, and polling pauses on that screen", () => {
@@ -203,7 +203,7 @@ test("Queue Status celebration suppresses the notice, and polling pauses on that
     foreground: true,
     signedIn: true,
     pathname: "/(tabs)/membership",
-  }), 15000);
+  }), 10000);
   assert.equal(winnerOfferPollInterval({
     foreground: true,
     signedIn: true,

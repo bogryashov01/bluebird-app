@@ -1,4 +1,6 @@
 import React from 'react';
+import { AppState } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { isClerkBluebirdProfileResultCurrent } from '@/lib/clerkBluebirdProfile';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
@@ -43,15 +45,28 @@ export function memberConnectionsFailureCopy(code: MemberConnectionsFailure): st
   return FAILURE_COPY[code];
 }
 
+function useForeground(): boolean {
+  const [foreground, setForeground] = React.useState(AppState.currentState === 'active');
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      setForeground(state === 'active');
+    });
+    return () => subscription.remove();
+  }, []);
+  return foreground;
+}
+
 export function useMemberConnections() {
   const session = useClerkAuthSnapshot();
   const enabled = isMemberConnectionsIntegrationEnabled();
+  const foreground = useForeground();
   const accountId = session?.isLoaded && session.isSignedIn === true ? session.userId : null;
   const accountRef = React.useRef(accountId);
   const sessionRef = React.useRef(session);
   const generationRef = React.useRef(0);
   sessionRef.current = session;
 
+  const [focused, setFocused] = React.useState(false);
   const [incoming, setIncoming] = React.useState<ConnectionRelationship[]>([]);
   const [accepted, setAccepted] = React.useState<AcceptedConnection[]>([]);
   const [status, setStatus] = React.useState<'disabled' | 'signed-out' | 'loading' | 'ready' | 'error'>(
@@ -63,6 +78,7 @@ export function useMemberConnections() {
   const [pending, setPending] = React.useState(false);
   const [socketLive, setSocketLive] = React.useState(false);
   const pendingRef = React.useRef(false);
+  const inFlight = React.useRef<string | null>(null);
 
   if (accountRef.current !== accountId) {
     accountRef.current = accountId;
@@ -87,6 +103,7 @@ export function useMemberConnections() {
       clearMemberConnectionsCache();
       return;
     }
+    if (inFlight.current === requestedAccountId) return;
     const configuration = getMainBluebirdApiConfigurationOrNull();
     if (!configuration) {
       if (current(requestedAccountId, requestedGeneration, signal.aborted)) {
@@ -95,55 +112,65 @@ export function useMemberConnections() {
       }
       return;
     }
+    inFlight.current = requestedAccountId;
     retainMemberConnectionsForAccount(requestedAccountId);
-    const cached = readMemberConnectionsSnapshot({
-      environment: configuration.environment,
-      apiBaseUrl: configuration.apiBaseUrl,
-      clerkUserId: requestedAccountId,
-    });
-    if (cached && current(requestedAccountId, requestedGeneration, signal.aborted)) {
-      setIncoming(cached.incoming);
-      setAccepted(cached.accepted);
+    try {
+      const cached = readMemberConnectionsSnapshot({
+        environment: configuration.environment,
+        apiBaseUrl: configuration.apiBaseUrl,
+        clerkUserId: requestedAccountId,
+      });
+      if (cached && current(requestedAccountId, requestedGeneration, signal.aborted)) {
+        setIncoming(cached.incoming);
+        setAccepted(cached.accepted);
+        setStatus('ready');
+      }
+      const client = createMemberConnectionsClient({
+        enabled: true,
+        environment: configuration.environment,
+        baseUrl: configuration.apiBaseUrl,
+        getAccessToken: () => sessionRef.current?.getToken() ?? Promise.resolve(null),
+      });
+      const [incomingResult, acceptedResult] = await Promise.all([
+        client.listIncoming(),
+        client.listAccepted(),
+      ]);
+      if (!current(requestedAccountId, requestedGeneration, signal.aborted)) return;
+      if (incomingResult.kind === 'disabled' || acceptedResult.kind === 'disabled') {
+        clearMemberConnectionsCache();
+        setIncoming([]);
+        setAccepted([]);
+        setStatus('disabled');
+        return;
+      }
+      if (incomingResult.kind === 'error' && incomingResult.code === 'cancelled') return;
+      if (acceptedResult.kind === 'error' && acceptedResult.code === 'cancelled') return;
+      if (incomingResult.kind === 'error' || acceptedResult.kind === 'error') {
+        const code = incomingResult.kind === 'error' ? incomingResult.code : acceptedResult.kind === 'error' ? acceptedResult.code : 'unavailable';
+        setStatus(cached ? 'ready' : 'error');
+        setMessage(FAILURE_COPY[code]);
+        return;
+      }
+      setIncoming(incomingResult.data.requests);
+      setAccepted(acceptedResult.data.connections);
       setStatus('ready');
+      setMessage(null);
+      rememberMemberConnectionsSnapshot({
+        clerkUserId: requestedAccountId,
+        environment: configuration.environment,
+        apiBaseUrl: configuration.apiBaseUrl,
+        incoming: incomingResult.data.requests,
+        accepted: acceptedResult.data.connections,
+      });
+    } finally {
+      if (inFlight.current === requestedAccountId) inFlight.current = null;
     }
-    const client = createMemberConnectionsClient({
-      enabled: true,
-      environment: configuration.environment,
-      baseUrl: configuration.apiBaseUrl,
-      getAccessToken: () => sessionRef.current?.getToken() ?? Promise.resolve(null),
-    });
-    const [incomingResult, acceptedResult] = await Promise.all([
-      client.listIncoming(),
-      client.listAccepted(),
-    ]);
-    if (!current(requestedAccountId, requestedGeneration, signal.aborted)) return;
-    if (incomingResult.kind === 'disabled' || acceptedResult.kind === 'disabled') {
-      clearMemberConnectionsCache();
-      setIncoming([]);
-      setAccepted([]);
-      setStatus('disabled');
-      return;
-    }
-    if (incomingResult.kind === 'error' && incomingResult.code === 'cancelled') return;
-    if (acceptedResult.kind === 'error' && acceptedResult.code === 'cancelled') return;
-    if (incomingResult.kind === 'error' || acceptedResult.kind === 'error') {
-      const code = incomingResult.kind === 'error' ? incomingResult.code : acceptedResult.kind === 'error' ? acceptedResult.code : 'unavailable';
-      setStatus(cached ? 'ready' : 'error');
-      setMessage(FAILURE_COPY[code]);
-      return;
-    }
-    setIncoming(incomingResult.data.requests);
-    setAccepted(acceptedResult.data.connections);
-    setStatus('ready');
-    setMessage(null);
-    rememberMemberConnectionsSnapshot({
-      clerkUserId: requestedAccountId,
-      environment: configuration.environment,
-      apiBaseUrl: configuration.apiBaseUrl,
-      incoming: incomingResult.data.requests,
-      accepted: acceptedResult.data.connections,
-    });
   }, [current, enabled]);
+
+  useFocusEffect(React.useCallback(() => {
+    setFocused(true);
+    return () => setFocused(false);
+  }, []));
 
   React.useEffect(() => {
     if (!enabled) {
@@ -158,6 +185,7 @@ export function useMemberConnections() {
       setStatus('signed-out');
       return;
     }
+    if (!focused || !foreground) return;
     const requestedAccountId = accountId;
     const requestedGeneration = generationRef.current;
     const controller = new AbortController();
@@ -175,7 +203,7 @@ export function useMemberConnections() {
       controller.abort();
       if (timer) clearInterval(timer);
     };
-  }, [accountId, enabled, load, socketLive]);
+  }, [accountId, enabled, focused, foreground, load, socketLive]);
 
   React.useEffect(() => subscribeMemberMessageSocketLive(setSocketLive), []);
 

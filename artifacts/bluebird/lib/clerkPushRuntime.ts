@@ -20,6 +20,7 @@ import {
   PUSH_DELIVERY_UNAVAILABLE,
   PUSH_REGISTRATION_FAILED,
   PUSH_REGISTRATION_REGISTERED,
+  PUSH_REGISTRATION_WAITING,
   resolveExpoProjectId,
   shouldOfferNotificationSettings,
   shouldPromptForPushPermission,
@@ -62,7 +63,7 @@ let session: {
 let uiState: ClerkPushUiState = {
   permission: 'checking',
   permissionLabel: describePushPermission('checking'),
-  deliveryLabel: 'Push delivery is unavailable until the production registration endpoint is confirmed. This app does not send the device token.',
+  deliveryLabel: PUSH_DELIVERY_UNAVAILABLE,
   accountPreferencesLabel: 'Email and SMS preferences belong to the Bluebird account. They do not control iOS notification permission or push delivery.',
   promptAvailable: false,
   settingsAvailable: false,
@@ -93,7 +94,7 @@ function currentDeliveryLabel(): string {
   if (!registrationEnabled()) return PUSH_DELIVERY_UNAVAILABLE;
   if (deliveryStatus === 'registered') return PUSH_REGISTRATION_REGISTERED;
   if (deliveryStatus === 'unavailable') return PUSH_REGISTRATION_FAILED;
-  return PUSH_DELIVERY_UNAVAILABLE;
+  return PUSH_REGISTRATION_WAITING;
 }
 
 function publish(permission: PushPermissionState | 'checking') {
@@ -154,6 +155,8 @@ function readProjectId(): string | null {
 
 function readPhysicalDevice(): boolean | null {
   if (Platform.OS === 'web') return false;
+  // expo-constants reports device class on native builds; null means unknown.
+  if (typeof Constants.isDevice === 'boolean') return Constants.isDevice;
   return null;
 }
 
@@ -242,6 +245,8 @@ async function retrieveTokenForCurrentAccount(): Promise<void> {
             registeredToken = { clerkUserId: requestedUserId, token: requestedToken };
             deliveryStatus = 'registered';
           } else if (result.kind !== 'disabled') {
+            // Clear so the next foreground sync retries (expired/rejected tokens).
+            registeredToken = null;
             deliveryStatus = 'unavailable';
           }
         }

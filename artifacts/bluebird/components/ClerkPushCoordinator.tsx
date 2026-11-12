@@ -11,6 +11,7 @@ import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { confirmClerkPushDestination } from '@/lib/clerkPushDestination';
 import {
   considerPushResponse,
+  parseMemberPushRefresh,
   parseWinnerLifecyclePushRefresh,
   type PushNavigationDecision,
   type QueuedPushResponse,
@@ -24,6 +25,7 @@ import {
   syncClerkPushToken,
 } from '@/lib/clerkPushRuntime';
 import { joinFlightRefreshTargets } from '@/lib/joinFlightPresentation';
+import { publishMemberMessageHint } from '@/lib/memberMessageRealtime';
 
 function notificationPayload(response: Notifications.NotificationResponse): unknown {
   return response.notification.request.content.data ?? null;
@@ -97,27 +99,63 @@ export function ClerkPushCoordinator() {
     return () => subscription.remove();
   }, [activeUserId, navigationReady]);
 
-  const refreshWinnerLifecycle = (payload: unknown) => {
-    if (!configuration || !activeUserId) return;
-    const signal = parseWinnerLifecyclePushRefresh(payload);
-    if (!signal) return;
-    const targets = joinFlightRefreshTargets({
-      environment: configuration.environment,
+  const refreshFromPush = (payload: unknown) => {
+    if (!activeUserId) return;
+    if (configuration) {
+      const signal = parseWinnerLifecyclePushRefresh(payload);
+      if (signal) {
+        const targets = joinFlightRefreshTargets({
+          environment: configuration.environment,
+          clerkUserId: activeUserId,
+          flightId: signal.flightId,
+        });
+        if (targets) {
+          void queryClient.invalidateQueries({ queryKey: targets.detail });
+          void queryClient.invalidateQueries({ queryKey: targets.queue });
+          void queryClient.invalidateQueries({ queryKey: targets.myQueues });
+          void queryClient.invalidateQueries({ queryKey: targets.trips });
+          void queryClient.invalidateQueries({ queryKey: targets.flightList });
+        }
+      }
+    }
+    const member = parseMemberPushRefresh(payload);
+    if (!member) return;
+    if (member.event === 'connection.requested') {
+      publishMemberMessageHint({
+        kind: 'connection-request',
+        clerkUserId: activeUserId,
+        connectionId: member.connectionId,
+      });
+      return;
+    }
+    if (member.event === 'connection.accepted') {
+      publishMemberMessageHint({
+        kind: 'connection-accepted',
+        clerkUserId: activeUserId,
+        connectionId: member.connectionId,
+      });
+      return;
+    }
+    if (member.messageId !== null) {
+      publishMemberMessageHint({
+        kind: 'message',
+        clerkUserId: activeUserId,
+        conversationId: member.conversationId,
+        messageId: member.messageId,
+      });
+      return;
+    }
+    publishMemberMessageHint({
+      kind: 'conversation',
       clerkUserId: activeUserId,
-      flightId: signal.flightId,
+      conversationId: member.conversationId,
     });
-    if (!targets) return;
-    void queryClient.invalidateQueries({ queryKey: targets.detail });
-    void queryClient.invalidateQueries({ queryKey: targets.queue });
-    void queryClient.invalidateQueries({ queryKey: targets.myQueues });
-    void queryClient.invalidateQueries({ queryKey: targets.trips });
-    void queryClient.invalidateQueries({ queryKey: targets.flightList });
   };
 
   useEffect(() => {
     if (!signedIn || !activeUserId) return;
     const received = Notifications.addNotificationReceivedListener((notification) => {
-      refreshWinnerLifecycle(notification.request.content.data ?? null);
+      refreshFromPush(notification.request.content.data ?? null);
     });
     return () => received.remove();
   }, [activeUserId, configuration, queryClient, signedIn]);
@@ -150,7 +188,7 @@ export function ClerkPushCoordinator() {
     const take = (response: Notifications.NotificationResponse | null) => {
       if (!response || response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
       const payload = notificationPayload(response);
-      refreshWinnerLifecycle(payload);
+      refreshFromPush(payload);
       const decision = considerPushResponse({
         responseId: response.notification.request.identifier,
         payload,

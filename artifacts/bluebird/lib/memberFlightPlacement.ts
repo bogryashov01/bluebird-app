@@ -159,7 +159,7 @@ export function productionQueueActionsVisible(input: {
   return queueEntryVisible({ ...input, ownedByUpcoming: false });
 }
 
-export const WINNER_OFFER_POLL_MS = 15_000;
+export const WINNER_OFFER_POLL_MS = 10_000;
 
 /**
  * Pending current trips: unawarded entries after queue join (and until award).

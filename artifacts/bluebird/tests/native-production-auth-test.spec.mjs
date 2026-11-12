@@ -539,7 +539,7 @@ test('EAS TestFlight profile is Production-only and keeps the existing approval 
   assert.match(layoutSource, /!isNativeProductionAuthTestEnabled\(\) && process\.env\.EXPO_PUBLIC_DOMAIN/);
 });
 
-test('the live internal TestFlight profile enables queue mutations, keeps connections/messages off until Neon ready, and leaves auth-test unchanged', async () => {
+test('the live internal TestFlight profile enables queue mutations, connections, and messages while leaving auth-test unchanged', async () => {
   const eas = JSON.parse(await readFile(new URL('../eas.json', import.meta.url), 'utf8'));
   const authTest = eas.build['production-auth-test'];
   const live = eas.build['production-live-internal'];
@@ -568,11 +568,13 @@ test('the live internal TestFlight profile enables queue mutations, keeps connec
     EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG: 'false',
     EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE: 'production',
     EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE: 'production',
-    EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS: 'false',
-    EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES: 'false',
+    EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS: 'true',
+    EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES: 'true',
     EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION: 'true',
   });
+  assert.equal(Object.hasOwn(live.env, 'EXPO_PUBLIC_BLUEBIRD_MESSAGING_REALTIME'), false);
   assert.equal(Object.hasOwn(live.env, 'EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION'), false);
+  assert.equal(Object.hasOwn(live.env, 'EXPO_PUBLIC_BLUEBIRD_AI_CONCIERGE'), false);
   const production = eas.build.production.env ?? {};
   const clerkDebug = eas.build['production-clerk-debug'].env;
   assert.notEqual(production.EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS, 'true');

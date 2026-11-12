@@ -121,7 +121,9 @@ test("the production queue status screen keeps the member's position and hides t
   assert.match(screen, /Leave the Queue/);
   assert.match(screen, /CurrentWinnerCelebration/);
   assert.doesNotMatch(screen, /queueRosterLabel|MemberProfileSheet|initials/);
-  assert.doesNotMatch(screen, /refetchInterval|useFocusEffect/);
+  assert.match(screen, /useFocusEffect/);
+  assert.match(screen, /refetchInterval: shouldPoll \? MEMBER_MESSAGE_POLL_MS : false/);
+  assert.match(screen, /refetchIntervalInBackground: false/);
   assert.match(join, /pathname: '\/flight\/queue-status'/);
   assert.match(details, /pathname: '\/flight\/queue-status'/);
   assert.match(myQueues, /pathname: '\/flight\/\[id\]'/);

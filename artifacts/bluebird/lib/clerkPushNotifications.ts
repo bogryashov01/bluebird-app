@@ -8,7 +8,10 @@
  */
 
 export const PUSH_DELIVERY_UNAVAILABLE =
-  'Push delivery is unavailable until the production registration endpoint is confirmed. This app does not send the device token.';
+  'This build does not register the device token with Bluebird. Notifications stay off until a live-internal build enables registration.';
+
+export const PUSH_REGISTRATION_WAITING =
+  'Bluebird is registering this iPhone for notifications.';
 
 export const PUSH_REGISTRATION_REGISTERED =
   'This iPhone is registered for Bluebird notifications.';
@@ -18,8 +21,9 @@ export const PUSH_REGISTRATION_FAILED =
 
 /**
  * Registration stays off unless this is exactly "true".
- * production-live-internal sets it. That selects POST and DELETE
- * /me/push-tokens and does not enable backend push delivery.
+ * production-live-internal sets it so the app can POST and DELETE
+ * /me/push-tokens. Backend event delivery still depends on production
+ * push outbox + Expo/APNs credentials.
  */
 export const CLERK_PUSH_REGISTRATION_FLAG = 'EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION';
 export const CLERK_PUSH_TOKEN_PATH = '/me/push-tokens';
@@ -471,6 +475,51 @@ export function parseWinnerLifecyclePushRefresh(payload: unknown): {
   const numeric = Number(flightId);
   if (!Number.isSafeInteger(numeric) || numeric < 1) return null;
   return { event: event as WinnerLifecyclePushEvent, flightId: numeric };
+}
+
+export const MEMBER_PUSH_REFRESH_EVENTS = [
+  'connection.requested',
+  'connection.accepted',
+  'message.created',
+] as const;
+
+export type MemberPushRefreshEvent = (typeof MEMBER_PUSH_REFRESH_EVENTS)[number];
+
+export type MemberPushRefresh =
+  | { event: 'connection.requested'; connectionId: number }
+  | { event: 'connection.accepted'; connectionId: number }
+  | { event: 'message.created'; conversationId: number; messageId: number | null };
+
+/**
+ * Push is a refetch signal for Connections and Messages HTTP lists.
+ * Does not invent connection or message bodies from the payload.
+ */
+export function parseMemberPushRefresh(payload: unknown): MemberPushRefresh | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const versioned = versionedRecord(payload as Record<string, unknown>);
+  if (!versioned || versioned === 'reject') return null;
+  const event = versioned.type;
+  if (typeof event !== 'string') return null;
+  if (!(MEMBER_PUSH_REFRESH_EVENTS as readonly string[]).includes(event)) return null;
+  const navigation = versioned.navigation;
+  if (!navigation || typeof navigation !== 'object' || Array.isArray(navigation)) return null;
+  const fields = navigation as Record<string, unknown>;
+  if (event === 'message.created') {
+    const conversationId = recordId(fields.conversationId);
+    if (!conversationId) return null;
+    const messageId = recordId(fields.messageId);
+    return {
+      event: 'message.created',
+      conversationId: Number(conversationId),
+      messageId: messageId ? Number(messageId) : null,
+    };
+  }
+  const connectionId = recordId(fields.connectionId);
+  if (!connectionId) return null;
+  return {
+    event: event as 'connection.requested' | 'connection.accepted',
+    connectionId: Number(connectionId),
+  };
 }
 
 export function pushRepeatsOpenConversation(payload: unknown, pathname: string | null): boolean {

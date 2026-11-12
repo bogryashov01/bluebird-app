@@ -21,6 +21,7 @@ import {
   syncHeldPushRegistration,
   isClerkPushRegistrationEnabled,
   planClerkPushRegistration,
+  parseMemberPushRefresh,
   parseWinnerLifecyclePushRefresh,
   pushRepeatsOpenConversation,
   shouldRegisterPushToken,
@@ -349,11 +350,19 @@ test("Clerk push registration does not call the legacy JWT endpoint or persist t
   assert.equal(live.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG, "false");
   assert.equal(live.EXPO_PUBLIC_BLUEBIRD_FLIGHT_READ_MODE, "production");
   assert.equal(live.EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE, "production");
-  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS, "false");
-  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES, "false");
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS, "true");
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES, "true");
+  assert.equal(Object.hasOwn(live, "EXPO_PUBLIC_BLUEBIRD_MESSAGING_REALTIME"), false);
   assert.equal(Object.hasOwn(live, "EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION"), false);
+  assert.equal(Object.hasOwn(live, "EXPO_PUBLIC_BLUEBIRD_AI_CONCIERGE"), false);
+  const journey = builds["production-live-journey-internal"].env;
+  assert.equal(journey.EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS, "true");
+  assert.equal(journey.EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES, "true");
+  assert.equal(Object.hasOwn(journey, "EXPO_PUBLIC_BLUEBIRD_MESSAGING_REALTIME"), false);
+  assert.equal(Object.hasOwn(journey, "EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION"), false);
+  assert.equal(Object.hasOwn(journey, "EXPO_PUBLIC_BLUEBIRD_AI_CONCIERGE"), false);
   for (const [name, profile] of Object.entries(builds)) {
-    if (name === "production-live-internal") continue;
+    if (name === "production-live-internal" || name === "production-live-journey-internal") continue;
     assert.equal(profile.env?.EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION, undefined);
   }
   const app = JSON.parse(readFileSync(resolve(projectRoot, "app.json"), "utf8")).expo;
@@ -366,6 +375,7 @@ test("Clerk push registration does not call the legacy JWT endpoint or persist t
   assert.equal(iosApnsModeForProfile("production", builds), "production");
   assert.equal(iosApnsModeForProfile("production-auth-test", builds), "production");
   assert.equal(iosApnsModeForProfile("production-live-internal", builds), "production");
+  assert.equal(iosApnsModeForProfile("production-live-journey-internal", builds), "production");
   assert.equal(iosApnsModeForProfile("development", builds), "development");
   assert.equal(iosApnsModeForProfile("development-simulator", builds), "development");
   assert.equal(iosApnsModeForProfile("production-clerk-debug", builds), "development");
@@ -383,7 +393,7 @@ test("Clerk push registration does not call the legacy JWT endpoint or persist t
     method: "DELETE",
     path: "/me/push-tokens",
   });
-  assert.match(PUSH_DELIVERY_UNAVAILABLE, /does not send the device token/);
+  assert.match(PUSH_DELIVERY_UNAVAILABLE, /does not register the device token/);
   const registration = readFileSync(resolve(projectRoot, "lib/clerkPushRegistration.ts"), "utf8");
   const destination = readFileSync(resolve(projectRoot, "lib/clerkPushDestination.ts"), "utf8");
   for (const source of [registration, destination, runtime, coordinator]) {
@@ -642,8 +652,32 @@ test("versioned message, connection, flight, and queue taps resolve to existing 
     flightId: 9,
   });
   assert.equal(parseWinnerLifecyclePushRefresh(versioned("flight.published", "flight", { flightId: 9 })), null);
+  assert.deepEqual(parseMemberPushRefresh(versioned("connection.requested", "connections", { connectionId: 15 })), {
+    event: "connection.requested",
+    connectionId: 15,
+  });
+  assert.deepEqual(parseMemberPushRefresh(versioned("connection.accepted", "connections", { connectionId: 16 })), {
+    event: "connection.accepted",
+    connectionId: 16,
+  });
+  assert.deepEqual(parseMemberPushRefresh(versioned("message.created", "messages", { conversationId: 123 })), {
+    event: "message.created",
+    conversationId: 123,
+    messageId: null,
+  });
+  assert.deepEqual(parseMemberPushRefresh(versioned("message.created", "messages", {
+    conversationId: 123,
+    messageId: 44,
+  })), {
+    event: "message.created",
+    conversationId: 123,
+    messageId: 44,
+  });
+  assert.equal(parseMemberPushRefresh(versioned("winner.selected", "flight", { flightId: 9 })), null);
   const coordinator = readFileSync(resolve(projectRoot, "components/ClerkPushCoordinator.tsx"), "utf8");
   assert.match(coordinator, /parseWinnerLifecyclePushRefresh/);
+  assert.match(coordinator, /parseMemberPushRefresh/);
+  assert.match(coordinator, /publishMemberMessageHint/);
   assert.match(coordinator, /joinFlightRefreshTargets/);
   assert.match(coordinator, /addNotificationReceivedListener/);
   assert.equal(coordinator.includes("AsyncStorage"), false);

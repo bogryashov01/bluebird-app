@@ -106,20 +106,22 @@ export function memberMessagePollIntervalMs(input: {
   realtimeEnabled: boolean;
   socketLive: boolean;
 }): number | null {
+  // This release uses HTTP polling as the authoritative foreground update path.
+  // Skip only while a live gateway socket is already delivering hints.
   if (input.realtimeEnabled === true && input.socketLive === true) return null;
   return MEMBER_MESSAGE_POLL_MS;
 }
 
 /**
- * Connections keep their existing mount refresh when the gateway is off.
- * While the gateway is enabled and the socket is down, the REST lists poll.
+ * Connections poll over HTTP while the app is focused in the foreground.
+ * Skip only while a live gateway socket is already delivering connection hints.
  */
 export function connectionRefreshIntervalMs(input: {
   realtimeEnabled: boolean;
   socketLive: boolean;
 }): number | null {
-  if (input.realtimeEnabled === true && input.socketLive !== true) return MEMBER_MESSAGE_POLL_MS;
-  return null;
+  if (input.realtimeEnabled === true && input.socketLive === true) return null;
+  return MEMBER_MESSAGE_POLL_MS;
 }
 
 export function realtimeReconnectDelayMs(attempt: number, random: number): number {
@@ -595,6 +597,20 @@ export function subscribeMemberMessageHints(
 ): () => void {
   hintListeners.add(listener);
   return () => hintListeners.delete(listener);
+}
+
+/**
+ * Publishes an HTTP refresh hint without the WebSocket gateway.
+ * Used when a native push arrives so Connections/Messages reload over REST.
+ */
+export function publishMemberMessageHint(hint: MemberMessageRealtimeHint): void {
+  hintListeners.forEach((listener) => {
+    try {
+      listener(hint);
+    } catch {
+      // One screen cannot block the others.
+    }
+  });
 }
 
 export function subscribeMemberMessageSocketLive(listener: (live: boolean) => void): () => void {

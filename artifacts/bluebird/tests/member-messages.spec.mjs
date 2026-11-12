@@ -413,5 +413,5 @@ test("the messages screens stay off the demo store and the networking API", () =
   assert.doesNotMatch(screen, /participantUserId/);
   const policy = readFileSync(resolve(projectRoot, "lib/nativeAuthTestPolicy.ts"), "utf8");
   assert.doesNotMatch(policy, /\/me\/messages/);
-  assert.equal(MEMBER_MESSAGE_POLL_MS, 15000);
+  assert.equal(MEMBER_MESSAGE_POLL_MS, 10000);
 });

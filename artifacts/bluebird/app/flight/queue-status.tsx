@@ -1,7 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, AppState, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
@@ -17,6 +17,7 @@ import {
   productionFlightDetailQueryKey,
   readProductionFlightDetailCache,
 } from '@/lib/flightDetailPresentation';
+import { MEMBER_MESSAGE_POLL_MS } from '@/lib/memberMessages';
 import {
   QUEUE_LEAVE_UNAVAILABLE,
   QUEUE_LEFT_CONFIRMED,
@@ -121,6 +122,21 @@ export default function ProductionQueueStatusScreen() {
     session.isSignedIn === true &&
     session.userId === clerkUserId &&
     !!clerkUserId;
+  const [focused, setFocused] = React.useState(false);
+  const [foreground, setForeground] = React.useState(AppState.currentState === 'active');
+  useFocusEffect(
+    React.useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      setForeground(state === 'active');
+    });
+    return () => subscription.remove();
+  }, []);
+  const shouldPoll = signedIn && !!configuration && flightId !== null && focused && foreground;
   const flightQuery = useQuery({
     queryKey: configuration && clerkUserId && flightId !== null
       ? productionFlightDetailQueryKey(flightId, clerkUserId)
@@ -128,6 +144,8 @@ export default function ProductionQueueStatusScreen() {
     enabled: signedIn && !!configuration && flightId !== null,
     retry: false,
     ...FLIGHT_DETAIL_QUERY_BEHAVIOR,
+    refetchInterval: shouldPoll ? MEMBER_MESSAGE_POLL_MS : false,
+    refetchIntervalInBackground: false,
     queryFn: async ({ signal }) => {
       if (!configuration || flightId === null || !clerkUserId) {
         throw new Error('A signed-in account is required.');
@@ -276,6 +294,23 @@ export default function ProductionQueueStatusScreen() {
     passAlreadyApplied: flight?.viewerHasLineSkip === true || viewerRosterRow?.hasLineSkip === true,
   });
   const refetchFlight = flightQuery.refetch;
+  React.useEffect(() => {
+    if (!shouldPoll || flightId === null) return;
+    void refetchFlight();
+    if (configuration && clerkUserId) {
+      void queryClient.invalidateQueries({
+        queryKey: mainBluebirdAuthenticatedQueryKey(
+          configuration.environment,
+          clerkUserId,
+          'empty-leg-queue',
+          flightId,
+        ),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: mainBluebirdAuthenticatedQueryKey(configuration.environment, clerkUserId, 'trips'),
+      });
+    }
+  }, [clerkUserId, configuration, flightId, queryClient, refetchFlight, shouldPoll]);
   const closedRefresh = React.useRef(false);
   React.useEffect(() => {
     if (decision.kind !== 'closed' || closedRefresh.current || flightId === null) return;
@@ -324,7 +359,7 @@ export default function ProductionQueueStatusScreen() {
         return;
       }
       refreshAuthoritative();
-    }, 20000);
+    }, MEMBER_MESSAGE_POLL_MS);
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') refreshAuthoritative();
     });

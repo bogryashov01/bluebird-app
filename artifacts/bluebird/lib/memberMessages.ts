@@ -26,7 +26,8 @@ import { requestProductionJson } from './productionRequestTransport';
 export const MEMBER_MESSAGES_FLAG = 'EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES';
 export const MEMBER_MESSAGE_MAX_LENGTH = 4000;
 export const MEMBER_MESSAGE_PAGE_SIZE = 50;
-export const MEMBER_MESSAGE_POLL_MS = 15_000;
+/** Foreground HTTP poll interval for messages, connections, and related screens. */
+export const MEMBER_MESSAGE_POLL_MS = 10_000;
 
 export const MEMBER_MESSAGE_PATHS = {
   conversations: '/me/messages/conversations',
