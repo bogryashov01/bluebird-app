@@ -32,7 +32,10 @@ export function isClerkPushRegistrationEnabled(input?: {
   flag?: string;
   nativeAuthTest?: boolean;
 }): boolean {
-  const flag = input?.flag ?? process.env[CLERK_PUSH_REGISTRATION_FLAG];
+  // Static process.env.EXPO_PUBLIC_* access is required so Expo production
+  // Babel can inline the value. Computed process.env[FLAG] is left as a
+  // runtime lookup and stays undefined in release binaries.
+  const flag = input?.flag ?? process.env.EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION;
   return flag === 'true' && input?.nativeAuthTest !== true;
 }
 

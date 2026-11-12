@@ -382,6 +382,10 @@ test("Clerk push registration does not call the legacy JWT endpoint or persist t
   assert.equal(isClerkPushRegistrationEnabled({ flag: "false" }), false);
   assert.equal(isClerkPushRegistrationEnabled({ flag: "true", nativeAuthTest: true }), false);
   assert.equal(isClerkPushRegistrationEnabled({ flag: "true" }), true);
+  const pushPolicy = readFileSync(resolve(projectRoot, "lib/clerkPushNotifications.ts"), "utf8");
+  assert.match(pushPolicy, /process\.env\.EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION/);
+  assert.doesNotMatch(pushPolicy, /process\.env\[CLERK_PUSH_REGISTRATION_FLAG\]/);
+  assert.match(pushPolicy, /nativeAuthTest !== true/);
   assert.deepEqual(planClerkPushRegistration({ enabled: false }), { status: "disabled" });
   assert.deepEqual(planClerkPushRegistration({ enabled: true }), {
     status: "ready",
