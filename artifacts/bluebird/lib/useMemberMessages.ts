@@ -10,6 +10,7 @@ import {
   isMemberMessagesIntegrationEnabled,
   nextMemberMessageSend,
   readMemberMessagesSnapshot,
+  refreshMemberMessageThreadLatest,
   rememberMemberMessagesSnapshot,
   retainMemberMessagesForAccount,
   type MemberMessage,
@@ -255,7 +256,10 @@ export function useMemberMessageThread(conversationId: number | null) {
   const [status, setStatus] = React.useState<'disabled' | 'signed-out' | 'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
-  const inFlight = React.useRef(false);
+  const historyInFlight = React.useRef(false);
+  const markReadInFlight = React.useRef(false);
+  const historyLockGeneration = React.useRef(0);
+  const markReadLockGeneration = React.useRef(0);
   const sendLock = React.useRef(false);
   const markedId = React.useRef<number | null>(null);
   const [socketLive, setSocketLive] = React.useState(false);
@@ -269,7 +273,11 @@ export function useMemberMessageThread(conversationId: number | null) {
     accountRef.current = accountId;
     conversationRef.current = conversationId;
     generationRef.current += 1;
+    historyLockGeneration.current += 1;
+    markReadLockGeneration.current += 1;
     markedId.current = null;
+    historyInFlight.current = false;
+    markReadInFlight.current = false;
     paged.current = false;
     setMessages([]);
     setNextCursor(null);
@@ -286,7 +294,6 @@ export function useMemberMessageThread(conversationId: number | null) {
 
   const loadLatest = React.useCallback(async (requestedAccountId: string, requestedGeneration: number) => {
     if (!enabled || conversationId === null) return;
-    if (inFlight.current) return;
     const client = clientForAccount();
     if (!client) {
       if (current(requestedAccountId, requestedGeneration)) {
@@ -295,37 +302,36 @@ export function useMemberMessageThread(conversationId: number | null) {
       }
       return;
     }
-    inFlight.current = true;
-    try {
-      const result = await client.history({ conversationId });
-      if (!current(requestedAccountId, requestedGeneration)) return;
-      if (result.kind === 'disabled') {
+    await refreshMemberMessageThreadLatest({
+      historyInFlight,
+      markReadInFlight,
+      historyLockGeneration,
+      markReadLockGeneration,
+      markedId,
+      isCurrent: () => current(requestedAccountId, requestedGeneration),
+      isActive: () => activeRef.current,
+      fetchHistory: () => client.history({ conversationId }),
+      applyDisabled: () => {
         setMessages([]);
         setStatus('disabled');
-        return;
-      }
-      if (result.kind === 'error') {
-        if (result.code === 'cancelled') return;
+      },
+      applyError: (code) => {
         setStatus(messagesRef.current.length > 0 ? 'ready' : 'error');
-        setMessage(FAILURE_COPY[result.code]);
-        return;
-      }
-      setMessages((currentMessages) => mergeMessages(currentMessages, result.data.messages));
-      if (!paged.current) {
-        setNextCursor(result.data.nextCursor);
-        setHasMore(result.data.hasMore);
-      }
-      setStatus('ready');
-      setMessage(null);
-      const newest = result.data.messages[result.data.messages.length - 1];
-      if (newest && markedId.current !== newest.id && activeRef.current) {
-        const read = await client.markRead(conversationId);
-        if (!current(requestedAccountId, requestedGeneration)) return;
-        if (read.kind === 'loaded') markedId.current = read.data.lastReadMessageId;
-      }
-    } finally {
-      inFlight.current = false;
-    }
+        setMessage(FAILURE_COPY[code]);
+      },
+      applyLoaded: (page) => {
+        setMessages((currentMessages) => mergeMessages(currentMessages, page.messages));
+        if (!paged.current) {
+          setNextCursor(page.nextCursor);
+          setHasMore(page.hasMore);
+        }
+        setStatus('ready');
+        setMessage(null);
+        const newest = page.messages[page.messages.length - 1];
+        return newest?.id ?? null;
+      },
+      markRead: () => client.markRead(conversationId),
+    });
   }, [clientForAccount, conversationId, current, enabled]);
 
   useFocusEffect(React.useCallback(() => {
@@ -378,12 +384,13 @@ export function useMemberMessageThread(conversationId: number | null) {
   }, [accountId, conversationId, enabled, loadLatest]);
 
   const loadEarlier = React.useCallback(async () => {
-    if (!enabled || !accountId || conversationId === null || !hasMore || !nextCursor || inFlight.current) return;
+    if (!enabled || !accountId || conversationId === null || !hasMore || !nextCursor || historyInFlight.current) return;
     const client = clientForAccount();
     if (!client) return;
     const requestedAccountId = accountId;
     const requestedGeneration = generationRef.current;
-    inFlight.current = true;
+    historyInFlight.current = true;
+    const historyLock = historyLockGeneration.current;
     paged.current = true;
     try {
       const result = await client.history({ conversationId, before: nextCursor });
@@ -396,7 +403,9 @@ export function useMemberMessageThread(conversationId: number | null) {
       setNextCursor(result.data.nextCursor);
       setHasMore(result.data.hasMore);
     } finally {
-      inFlight.current = false;
+      if (historyLockGeneration.current === historyLock) {
+        historyInFlight.current = false;
+      }
     }
   }, [accountId, clientForAccount, conversationId, current, enabled, hasMore, nextCursor]);
 

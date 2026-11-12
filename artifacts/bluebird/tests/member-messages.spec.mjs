@@ -18,6 +18,7 @@ import {
   parseMessageConversation,
   parseMessageHistory,
   readMemberMessagesSnapshot,
+  refreshMemberMessageThreadLatest,
   rememberMemberMessagesSnapshot,
   retainMemberMessagesForAccount,
 } from "../scripts/.member-messages.test.mjs";
@@ -401,6 +402,9 @@ test("the messages screens stay off the demo store and the networking API", () =
   assert.equal(hook.match(/setInterval\(/g).length, 2);
   assert.match(hook, /AppState/);
   assert.match(hook, /memberMessagePollIntervalMs/);
+  assert.match(hook, /refreshMemberMessageThreadLatest/);
+  assert.match(hook, /historyInFlight/);
+  assert.match(hook, /markReadInFlight/);
   assert.match(readFileSync(resolve(projectRoot, "lib/memberMessageRealtime.ts"), "utf8"), /MEMBER_MESSAGE_POLL_MS/);
   assert.match(hook, /if \(!active \|\| !focused \|\| !foreground\) return;/);
   assert.match(hook, /clearMemberMessagesCache\(\)/);
@@ -414,4 +418,292 @@ test("the messages screens stay off the demo store and the networking API", () =
   const policy = readFileSync(resolve(projectRoot, "lib/nativeAuthTestPolicy.ts"), "utf8");
   assert.doesNotMatch(policy, /\/me\/messages/);
   assert.equal(MEMBER_MESSAGE_POLL_MS, 10000);
+});
+
+function threadPollState() {
+  return {
+    historyInFlight: { current: false },
+    markReadInFlight: { current: false },
+    historyLockGeneration: { current: 0 },
+    markReadLockGeneration: { current: 0 },
+    markedId: { current: null },
+  };
+}
+
+test("a slow markRead cannot block the next history poll", async () => {
+  const state = threadPollState();
+  let historyCalls = 0;
+  let markReadCalls = 0;
+  let releaseMarkRead;
+  const markReadGate = new Promise((resolve) => {
+    releaseMarkRead = resolve;
+  });
+  const loaded = [];
+  const first = refreshMemberMessageThreadLatest({
+    ...state,
+    isCurrent: () => true,
+    isActive: () => true,
+    fetchHistory: async () => {
+      historyCalls += 1;
+      return {
+        kind: "loaded",
+        data: { messages: [message(11)], nextCursor: null, hasMore: false },
+      };
+    },
+    applyDisabled: () => {},
+    applyError: () => {},
+    applyLoaded: (page) => {
+      loaded.push(...page.messages.map((item) => item.id));
+      return page.messages[page.messages.length - 1]?.id ?? null;
+    },
+    markRead: async () => {
+      markReadCalls += 1;
+      await markReadGate;
+      return { kind: "loaded", data: { conversationId: 7, lastReadMessageId: 11, unreadCount: 0 } };
+    },
+  });
+  await Promise.resolve();
+  assert.equal(historyCalls, 1);
+  assert.equal(state.historyInFlight.current, false);
+  assert.equal(state.markReadInFlight.current, true);
+
+  const second = await refreshMemberMessageThreadLatest({
+    ...state,
+    isCurrent: () => true,
+    isActive: () => true,
+    fetchHistory: async () => {
+      historyCalls += 1;
+      return {
+        kind: "loaded",
+        data: { messages: [message(11), message(12)], nextCursor: null, hasMore: false },
+      };
+    },
+    applyDisabled: () => {},
+    applyError: () => {},
+    applyLoaded: (page) => {
+      loaded.push(...page.messages.map((item) => item.id));
+      return page.messages[page.messages.length - 1]?.id ?? null;
+    },
+    markRead: async () => {
+      markReadCalls += 1;
+      return { kind: "loaded", data: { conversationId: 7, lastReadMessageId: 12, unreadCount: 0 } };
+    },
+  });
+  assert.equal(second, "ran");
+  assert.equal(historyCalls, 2);
+  assert.equal(markReadCalls, 1);
+  assert.deepEqual(loaded, [11, 11, 12]);
+  releaseMarkRead();
+  assert.equal(await first, "ran");
+  assert.equal(state.markedId.current, 11);
+  assert.equal(state.markReadInFlight.current, false);
+});
+
+test("a failed markRead still leaves history polling free and retries later", async () => {
+  const state = threadPollState();
+  let markReadCalls = 0;
+  const first = await refreshMemberMessageThreadLatest({
+    ...state,
+    isCurrent: () => true,
+    isActive: () => true,
+    fetchHistory: async () => ({
+      kind: "loaded",
+      data: { messages: [message(21)], nextCursor: null, hasMore: false },
+    }),
+    applyDisabled: () => {},
+    applyError: () => {},
+    applyLoaded: (page) => page.messages[page.messages.length - 1]?.id ?? null,
+    markRead: async () => {
+      markReadCalls += 1;
+      return { kind: "error", code: "network" };
+    },
+  });
+  assert.equal(first, "ran");
+  assert.equal(state.historyInFlight.current, false);
+  assert.equal(state.markReadInFlight.current, false);
+  assert.equal(state.markedId.current, null);
+  assert.equal(markReadCalls, 1);
+
+  const second = await refreshMemberMessageThreadLatest({
+    ...state,
+    isCurrent: () => true,
+    isActive: () => true,
+    fetchHistory: async () => ({
+      kind: "loaded",
+      data: { messages: [message(21)], nextCursor: null, hasMore: false },
+    }),
+    applyDisabled: () => {},
+    applyError: () => {},
+    applyLoaded: (page) => page.messages[page.messages.length - 1]?.id ?? null,
+    markRead: async () => {
+      markReadCalls += 1;
+      return { kind: "loaded", data: { conversationId: 7, lastReadMessageId: 21, unreadCount: 0 } };
+    },
+  });
+  assert.equal(second, "ran");
+  assert.equal(markReadCalls, 2);
+  assert.equal(state.markedId.current, 21);
+});
+
+test("overlapping history polls are skipped while one history request is active", async () => {
+  const state = threadPollState();
+  let historyCalls = 0;
+  let releaseHistory;
+  const historyGate = new Promise((resolve) => {
+    releaseHistory = resolve;
+  });
+  const first = refreshMemberMessageThreadLatest({
+    ...state,
+    isCurrent: () => true,
+    isActive: () => true,
+    fetchHistory: async () => {
+      historyCalls += 1;
+      await historyGate;
+      return {
+        kind: "loaded",
+        data: { messages: [message(31)], nextCursor: null, hasMore: false },
+      };
+    },
+    applyDisabled: () => {},
+    applyError: () => {},
+    applyLoaded: (page) => page.messages[page.messages.length - 1]?.id ?? null,
+    markRead: async () => ({ kind: "loaded", data: { conversationId: 7, lastReadMessageId: 31, unreadCount: 0 } }),
+  });
+  await Promise.resolve();
+  assert.equal(state.historyInFlight.current, true);
+  assert.equal(
+    await refreshMemberMessageThreadLatest({
+      ...state,
+      isCurrent: () => true,
+      isActive: () => true,
+      fetchHistory: async () => {
+        historyCalls += 1;
+        return {
+          kind: "loaded",
+          data: { messages: [message(32)], nextCursor: null, hasMore: false },
+        };
+      },
+      applyDisabled: () => {},
+      applyError: () => {},
+      applyLoaded: () => 32,
+      markRead: async () => ({ kind: "loaded", data: { conversationId: 7, lastReadMessageId: 32, unreadCount: 0 } }),
+    }),
+    "skipped",
+  );
+  releaseHistory();
+  assert.equal(await first, "ran");
+  assert.equal(historyCalls, 1);
+});
+
+test("unmount or stale generation suppresses history and markRead side effects", async () => {
+  const state = threadPollState();
+  let current = true;
+  let applied = 0;
+  let marked = 0;
+  let releaseHistory;
+  const historyGate = new Promise((resolve) => {
+    releaseHistory = resolve;
+  });
+  const pending = refreshMemberMessageThreadLatest({
+    ...state,
+    isCurrent: () => current,
+    isActive: () => true,
+    fetchHistory: async () => {
+      await historyGate;
+      return {
+        kind: "loaded",
+        data: { messages: [message(41)], nextCursor: null, hasMore: false },
+      };
+    },
+    applyDisabled: () => {
+      applied += 1;
+    },
+    applyError: () => {
+      applied += 1;
+    },
+    applyLoaded: () => {
+      applied += 1;
+      return 41;
+    },
+    markRead: async () => {
+      marked += 1;
+      return { kind: "loaded", data: { conversationId: 7, lastReadMessageId: 41, unreadCount: 0 } };
+    },
+  });
+  current = false;
+  releaseHistory();
+  assert.equal(await pending, "ran");
+  assert.equal(applied, 0);
+  assert.equal(marked, 0);
+  assert.equal(state.markedId.current, null);
+  assert.equal(state.historyInFlight.current, false);
+});
+
+test("conversation switching invalidates in-flight locks and allows a fresh poll", async () => {
+  const state = threadPollState();
+  let generation = 0;
+  let historyCalls = 0;
+  let appliedIds = [];
+  let releaseFirst;
+  const firstGate = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  const first = refreshMemberMessageThreadLatest({
+    ...state,
+    isCurrent: () => generation === 0,
+    isActive: () => true,
+    fetchHistory: async () => {
+      historyCalls += 1;
+      await firstGate;
+      return {
+        kind: "loaded",
+        data: { messages: [message(51, 7)], nextCursor: null, hasMore: false },
+      };
+    },
+    applyDisabled: () => {},
+    applyError: () => {},
+    applyLoaded: (page) => {
+      appliedIds.push(page.messages[0].id);
+      return page.messages[0].id;
+    },
+    markRead: async () => ({ kind: "loaded", data: { conversationId: 7, lastReadMessageId: 51, unreadCount: 0 } }),
+  });
+  await Promise.resolve();
+  assert.equal(state.historyInFlight.current, true);
+
+  generation = 1;
+  state.historyLockGeneration.current += 1;
+  state.markReadLockGeneration.current += 1;
+  state.historyInFlight.current = false;
+  state.markReadInFlight.current = false;
+  state.markedId.current = null;
+
+  const second = await refreshMemberMessageThreadLatest({
+    ...state,
+    isCurrent: () => generation === 1,
+    isActive: () => true,
+    fetchHistory: async () => {
+      historyCalls += 1;
+      return {
+        kind: "loaded",
+        data: { messages: [message(61, 8)], nextCursor: null, hasMore: false },
+      };
+    },
+    applyDisabled: () => {},
+    applyError: () => {},
+    applyLoaded: (page) => {
+      appliedIds.push(page.messages[0].id);
+      return page.messages[0].id;
+    },
+    markRead: async () => ({ kind: "loaded", data: { conversationId: 8, lastReadMessageId: 61, unreadCount: 0 } }),
+  });
+  assert.equal(second, "ran");
+  assert.deepEqual(appliedIds, [61]);
+  assert.equal(state.markedId.current, 61);
+
+  releaseFirst();
+  assert.equal(await first, "ran");
+  assert.deepEqual(appliedIds, [61]);
+  assert.equal(historyCalls, 2);
+  assert.equal(state.historyInFlight.current, false);
 });

@@ -389,6 +389,74 @@ export function createMemberMessagesClient(options: MemberMessagesClientOptions)
   };
 }
 
+/**
+ * One foreground thread history refresh. The history gate releases before
+ * markRead starts, so a slow or failed read receipt cannot block the next poll.
+ * Concurrent history calls share one gate; concurrent markRead calls share another.
+ * Lock generations ignore finally handlers from a superseded conversation/account.
+ */
+export async function refreshMemberMessageThreadLatest(input: {
+  historyInFlight: { current: boolean };
+  markReadInFlight: { current: boolean };
+  historyLockGeneration: { current: number };
+  markReadLockGeneration: { current: number };
+  markedId: { current: number | null };
+  isCurrent: () => boolean;
+  isActive: () => boolean;
+  fetchHistory: () => Promise<MemberMessagesResult<MessageHistoryPage>>;
+  applyDisabled: () => void;
+  applyError: (code: MemberMessagesFailure) => void;
+  applyLoaded: (page: MessageHistoryPage) => number | null;
+  markRead: () => Promise<MemberMessagesResult<MessageReadState>>;
+}): Promise<'skipped' | 'ran'> {
+  if (input.historyInFlight.current) return 'skipped';
+  input.historyInFlight.current = true;
+  const historyLock = input.historyLockGeneration.current;
+  let newestId: number | null = null;
+  try {
+    const result = await input.fetchHistory();
+    if (!input.isCurrent()) return 'ran';
+    if (result.kind === 'disabled') {
+      input.applyDisabled();
+      return 'ran';
+    }
+    if (result.kind === 'error') {
+      if (result.code !== 'cancelled') input.applyError(result.code);
+      return 'ran';
+    }
+    newestId = input.applyLoaded(result.data);
+  } finally {
+    if (input.historyLockGeneration.current === historyLock) {
+      input.historyInFlight.current = false;
+    }
+  }
+
+  if (
+    newestId === null ||
+    input.markedId.current === newestId ||
+    !input.isCurrent() ||
+    !input.isActive() ||
+    input.markReadInFlight.current
+  ) {
+    return 'ran';
+  }
+
+  input.markReadInFlight.current = true;
+  const markReadLock = input.markReadLockGeneration.current;
+  try {
+    const read = await input.markRead();
+    if (!input.isCurrent()) return 'ran';
+    if (read.kind === 'loaded') {
+      input.markedId.current = read.data.lastReadMessageId;
+    }
+  } finally {
+    if (input.markReadLockGeneration.current === markReadLock) {
+      input.markReadInFlight.current = false;
+    }
+  }
+  return 'ran';
+}
+
 function failureCode(error: unknown): MemberMessagesFailure {
   if (error instanceof ProductionAuthHttpError) {
     const code = error.serverCode;
