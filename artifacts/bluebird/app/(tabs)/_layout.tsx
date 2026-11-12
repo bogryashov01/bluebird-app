@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View, type ColorValue } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import { useTheme } from '@/context/ThemeContext';
 import { Feather } from '@expo/vector-icons';
@@ -15,7 +15,8 @@ import { CLERK_MEMBER_NAVIGATION_READINESS } from '@/lib/productionAuthState';
 import { isClerkHomeAvailable } from '@/lib/clerkMemberResolution';
 import { useJoinNavDecision } from '@/lib/joinNavDiagnostics';
 import { isMemberConnectionsIntegrationEnabled } from '@/lib/memberConnections';
-import { isMemberMessagesIntegrationEnabled } from '@/lib/memberMessages';
+import { formatMemberMessagesUnreadBadge, isMemberMessagesIntegrationEnabled } from '@/lib/memberMessages';
+import { useMemberMessagesUnreadCount } from '@/lib/useMemberMessages';
 
 /** Connections tab stays mounted for deep links; hide it when both live integrations are off. */
 export function isMemberConnectionsTabVisible(input?: {
@@ -27,13 +28,74 @@ export function isMemberConnectionsTabVisible(input?: {
   return connectionsEnabled === true || messagesEnabled === true;
 }
 
+function ConnectionsTabIcon({
+  color,
+  unreadCount,
+  ios,
+}: {
+  color: ColorValue;
+  unreadCount: number;
+  ios: boolean;
+}) {
+  const colors = useColors();
+  const badge = formatMemberMessagesUnreadBadge(unreadCount);
+  const tint = typeof color === 'string' ? color : colors.mutedForeground;
+  return (
+    <View style={tabIconStyles.wrap} testID="connections-tab-icon">
+      {ios ? (
+        <SymbolView name="bubble.left.and.bubble.right" tintColor={tint} size={22} />
+      ) : (
+        <Feather name="message-circle" size={20} color={tint} />
+      )}
+      {badge ? (
+        <View
+          style={[tabIconStyles.badge, { backgroundColor: colors.primary }]}
+          testID="connections-tab-unread-badge"
+          accessibilityLabel={`${unreadCount} unread messages`}
+        >
+          <Text style={[tabIconStyles.badgeLabel, { color: colors.primaryForeground }]}>{badge}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const tabIconStyles = StyleSheet.create({
+  wrap: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -10,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeLabel: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 10,
+    lineHeight: 12,
+    textAlign: 'center',
+  },
+});
+
 function NativeTabLayout({
   unreadCount,
+  messagesUnreadCount,
   connectionsVisible,
 }: {
   unreadCount: number;
+  messagesUnreadCount: number;
   connectionsVisible: boolean;
 }) {
+  const messagesBadge = formatMemberMessagesUnreadBadge(messagesUnreadCount);
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index" hidden />
@@ -48,6 +110,7 @@ function NativeTabLayout({
       <NativeTabs.Trigger name="connections" hidden={!connectionsVisible}>
         <NativeTabs.Trigger.Icon sf={{ default: 'bubble.left.and.bubble.right', selected: 'bubble.left.and.bubble.right.fill' }} />
         <NativeTabs.Trigger.Label>Connections</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Badge hidden={messagesBadge === null}>{messagesBadge ?? ''}</NativeTabs.Trigger.Badge>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="membership/index">
         <NativeTabs.Trigger.Icon sf={{ default: 'star', selected: 'star.fill' }} />
@@ -64,9 +127,11 @@ function NativeTabLayout({
 
 function ClassicTabLayout({
   unreadCount,
+  messagesUnreadCount,
   connectionsVisible,
 }: {
   unreadCount: number;
+  messagesUnreadCount: number;
   connectionsVisible: boolean;
 }) {
   const colors = useColors();
@@ -137,12 +202,9 @@ function ClassicTabLayout({
           connectionsVisible
             ? {
                 title: 'Connections',
-                tabBarIcon: ({ color }) =>
-                  isIOS ? (
-                    <SymbolView name="bubble.left.and.bubble.right" tintColor={color} size={22} />
-                  ) : (
-                    <Feather name="message-circle" size={20} color={color} />
-                  ),
+                tabBarIcon: ({ color }) => (
+                  <ConnectionsTabIcon color={color} unreadCount={messagesUnreadCount} ios={isIOS} />
+                ),
               }
             : { href: null }
         }
@@ -185,6 +247,7 @@ function ClassicTabLayout({
 export default function TabLayout() {
   const { preference } = useTheme();
   const unreadCount = useUnreadNotificationsCount();
+  const messagesUnreadCount = useMemberMessagesUnreadCount();
   const { token, isLoading, authMode, clerkSignedIn, clerkMemberResolution, demoMode } = useAuth();
   const colors = useColors();
   const connectionsVisible = isMemberConnectionsTabVisible();
@@ -213,9 +276,21 @@ export default function TabLayout() {
   });
   if (demoMode) {
     if (isLiquidGlassAvailable() && preference === 'system') {
-      return <NativeTabLayout unreadCount={0} connectionsVisible={connectionsVisible} />;
+      return (
+        <NativeTabLayout
+          unreadCount={0}
+          messagesUnreadCount={0}
+          connectionsVisible={connectionsVisible}
+        />
+      );
     }
-    return <ClassicTabLayout unreadCount={0} connectionsVisible={connectionsVisible} />;
+    return (
+      <ClassicTabLayout
+        unreadCount={0}
+        messagesUnreadCount={0}
+        connectionsVisible={connectionsVisible}
+      />
+    );
   }
   // Do not mount tab screens while the stored demo session is being checked.
   // A direct /discover route otherwise renders Flights briefly before the
@@ -234,9 +309,21 @@ export default function TabLayout() {
         : <Redirect href="/(clerk-auth)/sign-in" />;
     }
     if (isLiquidGlassAvailable() && preference === 'system') {
-      return <NativeTabLayout unreadCount={0} connectionsVisible={connectionsVisible} />;
+      return (
+        <NativeTabLayout
+          unreadCount={0}
+          messagesUnreadCount={messagesUnreadCount}
+          connectionsVisible={connectionsVisible}
+        />
+      );
     }
-    return <ClassicTabLayout unreadCount={0} connectionsVisible={connectionsVisible} />;
+    return (
+      <ClassicTabLayout
+        unreadCount={0}
+        messagesUnreadCount={messagesUnreadCount}
+        connectionsVisible={connectionsVisible}
+      />
+    );
   }
   // Centralized guard: no session → auth flow. Prevents deep links from
   // bypassing sign-in.
@@ -244,7 +331,19 @@ export default function TabLayout() {
   // Native tabs follow the OS appearance only — use them just when the user's
   // theme preference is "System"; a forced Light/Dark needs the themed classic tabs.
   if (isLiquidGlassAvailable() && preference === 'system') {
-    return <NativeTabLayout unreadCount={unreadCount} connectionsVisible={connectionsVisible} />;
+    return (
+      <NativeTabLayout
+        unreadCount={unreadCount}
+        messagesUnreadCount={messagesUnreadCount}
+        connectionsVisible={connectionsVisible}
+      />
+    );
   }
-  return <ClassicTabLayout unreadCount={unreadCount} connectionsVisible={connectionsVisible} />;
+  return (
+    <ClassicTabLayout
+      unreadCount={unreadCount}
+      messagesUnreadCount={messagesUnreadCount}
+      connectionsVisible={connectionsVisible}
+    />
+  );
 }

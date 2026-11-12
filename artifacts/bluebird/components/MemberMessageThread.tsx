@@ -20,9 +20,11 @@ import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConf
 import { connectionMemberLabel, readMemberConnectionsSnapshot } from '@/lib/memberConnections';
 import {
   conversationTitle,
+  formatMemberMessageDaySeparator,
   limitMemberMessageBody,
   memberMessageBodyIssue,
-  MEMBER_MESSAGE_MAX_LENGTH,
+  memberMessageComposerLengthWarning,
+  memberMessageDayKey,
 } from '@/lib/memberMessages';
 import { useMemberMessageThread } from '@/lib/useMemberMessages';
 
@@ -53,6 +55,8 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
   const issue = memberMessageBodyIssue(draft);
   const canSend = thread.enabled && thread.status === 'ready' && !thread.pending && issue === null;
   const topInset = Platform.OS === 'web' ? 16 : insets.top;
+  const lengthWarning = memberMessageComposerLengthWarning(draft);
+  const composerBottom = Math.max(insets.bottom, Platform.OS === 'web' ? 12 : 6);
 
   const send = () => {
     if (!canSend) return;
@@ -87,7 +91,11 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : (
-        <ScrollView style={{ backgroundColor: colors.offWhite }} contentContainerStyle={styles.messages}>
+        <ScrollView
+          style={{ backgroundColor: colors.offWhite, flex: 1 }}
+          contentContainerStyle={styles.messages}
+          keyboardShouldPersistTaps="handled"
+        >
           {thread.hasMore ? (
             <TouchableOpacity accessibilityRole="button" testID="member-message-earlier" onPress={() => { void thread.loadEarlier(); }} style={styles.earlier}>
               <Text style={[styles.earlierLabel, { color: colors.primary }]}>Load earlier messages</Text>
@@ -96,12 +104,46 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
           {thread.status === 'ready' && thread.messages.length === 0 ? (
             <Text style={[styles.stateTitle, { color: colors.textOnSurface }]} testID="member-message-empty">No Messages Yet</Text>
           ) : null}
-          {thread.messages.map((message) => {
+          {thread.messages.map((message, index) => {
             const mine = message.senderUserId === thread.viewerId;
+            const previous = index > 0 ? thread.messages[index - 1] : null;
+            const dayKey = memberMessageDayKey(message.createdAt);
+            const previousDayKey = previous ? memberMessageDayKey(previous.createdAt) : null;
+            const showDay = dayKey !== null && dayKey !== previousDayKey;
+            const sameSender = previous?.senderUserId === message.senderUserId && !showDay;
+            const dayLabel = showDay ? formatMemberMessageDaySeparator(message.createdAt) : null;
             return (
-              <View key={message.id} style={[styles.bubbleWrap, { alignSelf: mine ? 'flex-end' : 'flex-start' }]}>
-                <View testID={`member-message-${message.id}`} style={[styles.bubble, { backgroundColor: mine ? colors.primary : colors.surface }]}>
-                  <Text style={[styles.body, { color: mine ? colors.primaryForeground : colors.textOnSurface }]}>{message.body}</Text>
+              <View key={message.id} style={[styles.messageBlock, { marginTop: sameSender ? 4 : 12 }]}>
+                {dayLabel ? (
+                  <Text
+                    style={[styles.daySeparator, { color: colors.mutedForegroundLight }]}
+                    testID={`member-message-day-${dayKey}`}
+                  >
+                    {dayLabel}
+                  </Text>
+                ) : null}
+                <View style={[styles.bubbleWrap, { alignSelf: mine ? 'flex-end' : 'flex-start' }]}>
+                  <View
+                    testID={`member-message-${message.id}`}
+                    style={[
+                      styles.bubble,
+                      {
+                        backgroundColor: mine ? colors.primary : colors.surface,
+                        borderBottomRightRadius: mine ? 6 : 18,
+                        borderBottomLeftRadius: mine ? 18 : 6,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.body,
+                        { color: mine ? colors.primaryForeground : colors.textOnSurface },
+                      ]}
+                      selectable
+                    >
+                      {message.body}
+                    </Text>
+                  </View>
                 </View>
               </View>
             );
@@ -112,30 +154,44 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
         <Text style={[styles.feedback, { color: colors.textOnSurface }]} testID="member-message-feedback">{thread.message}</Text>
       ) : null}
       {thread.enabled && thread.status !== 'disabled' && thread.status !== 'signed-out' ? (
-        <View style={[styles.composer, { paddingBottom: insets.bottom + 8 }]}>
-          <ThemedTextInput
-            value={draft}
-            onChangeText={(value) => setDraft(limitMemberMessageBody(value))}
-            editable={!thread.pending}
-            multiline
-            placeholder="Message"
-            placeholderTextColor={colors.mutedForegroundLight}
-            testID="member-message-composer"
-            style={[styles.input, { color: colors.textOnSurface, backgroundColor: colors.surface }]}
-          />
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Send"
-            disabled={!canSend}
-            testID="member-message-send"
-            onPress={send}
-            style={[styles.send, { backgroundColor: colors.primary, opacity: canSend ? 1 : 0.45 }]}
-          >
-            <Text style={[styles.sendLabel, { color: colors.primaryForeground }]}>{thread.pending ? 'Sending' : 'Send'}</Text>
-          </TouchableOpacity>
-          <Text style={[styles.counter, { color: colors.mutedForegroundLight }]} testID="member-message-count">
-            {Array.from(draft).length}/{MEMBER_MESSAGE_MAX_LENGTH}
-          </Text>
+        <View style={[styles.composer, { paddingBottom: composerBottom }]} testID="member-message-composer-bar">
+          <View style={styles.composerRow}>
+            <ThemedTextInput
+              value={draft}
+              onChangeText={(value) => setDraft(limitMemberMessageBody(value))}
+              editable={!thread.pending}
+              multiline
+              placeholder="Message"
+              placeholderTextColor={colors.mutedForegroundLight}
+              testID="member-message-composer"
+              style={[styles.input, { color: colors.textOnSurface, backgroundColor: colors.surface }]}
+            />
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Send"
+              disabled={!canSend}
+              testID="member-message-send"
+              onPress={send}
+              style={[
+                styles.send,
+                {
+                  backgroundColor: colors.primary,
+                  opacity: canSend ? 1 : 0.45,
+                },
+              ]}
+            >
+              {thread.pending ? (
+                <ActivityIndicator color={colors.primaryForeground} size="small" />
+              ) : (
+                <Feather name="arrow-up" size={20} color={colors.primaryForeground} />
+              )}
+            </TouchableOpacity>
+          </View>
+          {lengthWarning ? (
+            <Text style={[styles.counter, { color: colors.mutedForegroundLight }]} testID="member-message-count">
+              {lengthWarning}
+            </Text>
+          ) : null}
         </View>
       ) : null}
     </KeyboardAvoidingView>
@@ -148,19 +204,69 @@ const styles = StyleSheet.create({
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1 },
   name: { fontFamily: 'Inter_700Bold', fontSize: 17 },
-  messages: { paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
-  bubbleWrap: { maxWidth: '86%' },
-  bubble: { borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8 },
-  body: { fontFamily: 'Inter_400Regular', fontSize: 16, lineHeight: 22 },
-  earlier: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  messages: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16, flexGrow: 1 },
+  messageBlock: { width: '100%' },
+  daySeparator: {
+    alignSelf: 'center',
+    fontFamily: 'Inter_500Medium',
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  bubbleWrap: { maxWidth: '80%' },
+  bubble: {
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  body: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 16,
+    lineHeight: 22,
+    flexShrink: 1,
+  },
+  earlier: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   earlierLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
-  composer: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: 8, paddingHorizontal: 12, paddingTop: 8 },
-  input: { flex: 1, minHeight: 44, maxHeight: 120, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, fontFamily: 'Inter_400Regular', fontSize: 16 },
-  send: { minHeight: 44, minWidth: 72, borderRadius: 22, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
-  sendLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
-  counter: { width: '100%', fontFamily: 'Inter_400Regular', fontSize: 11, textAlign: 'right' },
-  feedback: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, paddingHorizontal: 16 },
-  state: { alignItems: 'center', justifyContent: 'center', padding: 28, gap: 8 },
+  composer: {
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  composerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  input: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 120,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingTop: Platform.OS === 'ios' ? 10 : 8,
+    paddingBottom: Platform.OS === 'ios' ? 10 : 8,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  send: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  counter: {
+    marginTop: 4,
+    marginRight: 48,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 11,
+    textAlign: 'right',
+  },
+  feedback: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, paddingHorizontal: 16, paddingBottom: 4 },
+  state: { alignItems: 'center', justifyContent: 'center', padding: 28, gap: 8, flex: 1 },
   stateTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, textAlign: 'center' },
   stateBody: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20, textAlign: 'center' },
 });

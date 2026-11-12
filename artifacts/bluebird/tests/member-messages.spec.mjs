@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import {
+  MEMBER_MESSAGE_COMPOSER_WARN_REMAINING,
   MEMBER_MESSAGE_MAX_LENGTH,
   MEMBER_MESSAGE_PAGE_SIZE,
   MEMBER_MESSAGE_PATHS,
@@ -10,9 +11,13 @@ import {
   clearMemberMessagesCache,
   conversationTitle,
   createMemberMessagesClient,
+  formatMemberMessageDaySeparator,
+  formatMemberMessagesUnreadBadge,
   isMemberMessagesIntegrationEnabled,
   limitMemberMessageBody,
   memberMessageBodyIssue,
+  memberMessageComposerLengthWarning,
+  memberMessageDayKey,
   messageHistoryPath,
   nextMemberMessageSend,
   parseMessageConversation,
@@ -399,12 +404,14 @@ test("the messages screens stay off the demo store and the networking API", () =
     assert.doesNotMatch(source, /AsyncStorage|console\.|WebSocket|Avery Lang|demo-avery|\/api\/networking|useListNetworking/);
   }
   const hook = readFileSync(resolve(projectRoot, "lib/useMemberMessages.ts"), "utf8");
-  assert.equal(hook.match(/setInterval\(/g).length, 2);
+  assert.equal(hook.match(/setInterval\(/g).length, 3);
   assert.match(hook, /AppState/);
   assert.match(hook, /memberMessagePollIntervalMs/);
   assert.match(hook, /refreshMemberMessageThreadLatest/);
   assert.match(hook, /historyInFlight/);
   assert.match(hook, /markReadInFlight/);
+  assert.match(hook, /useMemberMessagesUnreadCount/);
+  assert.match(hook, /rememberUnreadFromReadState|publishMemberMessageHint/);
   assert.match(readFileSync(resolve(projectRoot, "lib/memberMessageRealtime.ts"), "utf8"), /MEMBER_MESSAGE_POLL_MS/);
   assert.match(hook, /if \(!active \|\| !focused \|\| !foreground\) return;/);
   assert.match(hook, /clearMemberMessagesCache\(\)/);
@@ -415,9 +422,113 @@ test("the messages screens stay off the demo store and the networking API", () =
   assert.match(screen, /connection\.member\.userId/);
   assert.match(screen, /messages\.open|useOpenAcceptedConversation/);
   assert.doesNotMatch(screen, /participantUserId/);
+  const list = readFileSync(resolve(projectRoot, "components/MemberConversationList.tsx"), "utf8");
+  assert.doesNotMatch(list, /member-messages-unread-total|unread messages/);
+  assert.match(list, /formatMemberMessagesUnreadBadge/);
+  const thread = readFileSync(resolve(projectRoot, "components/MemberMessageThread.tsx"), "utf8");
+  assert.match(thread, /memberMessageComposerLengthWarning/);
+  assert.match(thread, /formatMemberMessageDaySeparator/);
+  assert.match(thread, /maxWidth: '80%'/);
+  assert.match(thread, /arrow-up/);
+  assert.doesNotMatch(thread, /\{Array\.from\(draft\)\.length\}\/\{MEMBER_MESSAGE_MAX_LENGTH\}/);
+  const tabs = readFileSync(resolve(projectRoot, "app/(tabs)/_layout.tsx"), "utf8");
+  assert.match(tabs, /useMemberMessagesUnreadCount/);
+  assert.match(tabs, /connections-tab-unread-badge|NativeTabs\.Trigger\.Badge/);
+  assert.match(tabs, /formatMemberMessagesUnreadBadge/);
   const policy = readFileSync(resolve(projectRoot, "lib/nativeAuthTestPolicy.ts"), "utf8");
   assert.doesNotMatch(policy, /\/me\/messages/);
   assert.equal(MEMBER_MESSAGE_POLL_MS, 10000);
+});
+
+test("unread badges hide at zero and cap at 9+", () => {
+  assert.equal(formatMemberMessagesUnreadBadge(0), null);
+  assert.equal(formatMemberMessagesUnreadBadge(-1), null);
+  assert.equal(formatMemberMessagesUnreadBadge(1), "1");
+  assert.equal(formatMemberMessagesUnreadBadge(9), "9");
+  assert.equal(formatMemberMessagesUnreadBadge(10), "9+");
+  assert.equal(formatMemberMessagesUnreadBadge(99), "9+");
+});
+
+test("composer length warning appears only near the limit", () => {
+  assert.equal(memberMessageComposerLengthWarning(""), null);
+  assert.equal(memberMessageComposerLengthWarning("a".repeat(MEMBER_MESSAGE_MAX_LENGTH - MEMBER_MESSAGE_COMPOSER_WARN_REMAINING - 1)), null);
+  assert.equal(
+    memberMessageComposerLengthWarning("a".repeat(MEMBER_MESSAGE_MAX_LENGTH - MEMBER_MESSAGE_COMPOSER_WARN_REMAINING)),
+    `${MEMBER_MESSAGE_MAX_LENGTH - MEMBER_MESSAGE_COMPOSER_WARN_REMAINING}/${MEMBER_MESSAGE_MAX_LENGTH}`,
+  );
+  assert.equal(
+    memberMessageComposerLengthWarning("a".repeat(MEMBER_MESSAGE_MAX_LENGTH)),
+    `${MEMBER_MESSAGE_MAX_LENGTH}/${MEMBER_MESSAGE_MAX_LENGTH}`,
+  );
+  assert.equal(limitMemberMessageBody("a".repeat(MEMBER_MESSAGE_MAX_LENGTH + 20)).length, MEMBER_MESSAGE_MAX_LENGTH);
+});
+
+test("message day separators use createdAt when present", () => {
+  const now = new Date(2026, 10, 13, 12, 0, 0);
+  const today = new Date(2026, 10, 13, 9, 0, 0).toISOString();
+  const laterToday = new Date(2026, 10, 13, 18, 0, 0).toISOString();
+  const yesterday = new Date(2026, 10, 12, 9, 0, 0).toISOString();
+  const older = new Date(2026, 9, 1, 12, 0, 0).toISOString();
+  assert.equal(memberMessageDayKey(today), memberMessageDayKey(laterToday));
+  assert.notEqual(memberMessageDayKey(today), memberMessageDayKey(yesterday));
+  assert.equal(memberMessageDayKey("not-a-date"), null);
+  assert.equal(formatMemberMessageDaySeparator(today, now.getTime()), "Today");
+  assert.equal(formatMemberMessageDaySeparator(yesterday, now.getTime()), "Yesterday");
+  assert.match(formatMemberMessageDaySeparator(older, now.getTime()) ?? "", /Oct/);
+});
+
+test("markRead success can refresh shared unread snapshot state", async () => {
+  clearMemberMessagesCache();
+  rememberMemberMessagesSnapshot({
+    clerkUserId: "user_a",
+    environment: "production",
+    apiBaseUrl: baseUrl,
+    unreadCount: 4,
+    conversations: [conversation(7, 2), conversation(8, 2)],
+  });
+  const state = threadPollState();
+  await refreshMemberMessageThreadLatest({
+    ...state,
+    isCurrent: () => true,
+    isActive: () => true,
+    fetchHistory: async () => ({
+      kind: "loaded",
+      data: { messages: [message(71)], nextCursor: null, hasMore: false },
+    }),
+    applyDisabled: () => {},
+    applyError: () => {},
+    applyLoaded: (page) => page.messages[page.messages.length - 1]?.id ?? null,
+    markRead: async () => ({
+      kind: "loaded",
+      data: { conversationId: 7, lastReadMessageId: 71, unreadCount: 2 },
+    }),
+    onReadState: (readState) => {
+      const existing = readMemberMessagesSnapshot({
+        environment: "production",
+        apiBaseUrl: baseUrl,
+        clerkUserId: "user_a",
+      });
+      rememberMemberMessagesSnapshot({
+        clerkUserId: "user_a",
+        environment: "production",
+        apiBaseUrl: baseUrl,
+        unreadCount: readState.unreadCount,
+        conversations: (existing?.conversations ?? []).map((item) => (
+          item.id === 7 ? { ...item, unreadCount: 0 } : item
+        )),
+      });
+    },
+  });
+  const snapshot = readMemberMessagesSnapshot({
+    environment: "production",
+    apiBaseUrl: baseUrl,
+    clerkUserId: "user_a",
+  });
+  assert.equal(snapshot?.unreadCount, 2);
+  assert.equal(snapshot?.conversations.find((item) => item.id === 7)?.unreadCount, 0);
+  assert.equal(snapshot?.conversations.find((item) => item.id === 8)?.unreadCount, 2);
+  assert.equal(formatMemberMessagesUnreadBadge(snapshot?.unreadCount ?? 0), "2");
+  assert.equal(formatMemberMessagesUnreadBadge(0), null);
 });
 
 function threadPollState() {

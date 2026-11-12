@@ -13,7 +13,7 @@ import { router } from 'expo-router';
 import { MemberInitialsAvatar } from '@/components/MemberProfileSheet';
 import { useColors } from '@/hooks/useColors';
 import { formatMemberActivityTime } from '@/lib/memberConnectPresentation';
-import { conversationTitle } from '@/lib/memberMessages';
+import { conversationTitle, formatMemberMessagesUnreadBadge } from '@/lib/memberMessages';
 import { useMemberConversations } from '@/lib/useMemberMessages';
 
 export function MemberConversationList({
@@ -84,11 +84,6 @@ export function MemberConversationList({
           <Text style={[styles.retryLabel, { color: colors.primary }]}>Try again</Text>
         </TouchableOpacity>
       ) : null}
-      {inbox.unreadCount > 0 ? (
-        <Text style={[styles.unreadTotal, { color: colors.mutedForegroundLight }]} testID="member-messages-unread-total">
-          {inbox.unreadCount === 1 ? '1 unread message' : `${inbox.unreadCount} unread messages`}
-        </Text>
-      ) : null}
       {inbox.conversations.length === 0 && inbox.status === 'ready' ? (
         <View testID="member-messages-empty" style={styles.empty}>
           <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>No Messages Yet</Text>
@@ -98,6 +93,7 @@ export function MemberConversationList({
       {inbox.conversations.map((conversation) => {
         const title = conversationTitle(conversation.participantUserId, names);
         const activity = conversation.latestMessage?.createdAt ?? conversation.updatedAt;
+        const unreadBadge = formatMemberMessagesUnreadBadge(conversation.unreadCount);
         return (
           <TouchableOpacity
             key={conversation.id}
@@ -121,9 +117,9 @@ export function MemberConversationList({
                 {conversation.latestMessage?.body ?? 'No messages yet'}
               </Text>
             </View>
-            {conversation.unreadCount > 0 ? (
+            {unreadBadge ? (
               <View style={[styles.badge, { backgroundColor: colors.primary }]} testID={`member-messages-unread-${conversation.id}`}>
-                <Text style={[styles.badgeLabel, { color: colors.primaryForeground }]}>{conversation.unreadCount}</Text>
+                <Text style={[styles.badgeLabel, { color: colors.primaryForeground }]}>{unreadBadge}</Text>
               </View>
             ) : null}
             <Feather name="chevron-right" size={18} color={colors.mutedForegroundLight} />
@@ -143,7 +139,6 @@ const styles = StyleSheet.create({
   name: { flex: 1, fontFamily: 'Inter_600SemiBold', fontSize: 16 },
   time: { fontFamily: 'Inter_400Regular', fontSize: 13 },
   preview: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 18 },
-  unreadTotal: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, paddingHorizontal: 20, marginBottom: 4 },
   meta: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, paddingHorizontal: 20 },
   badge: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
   badgeLabel: { fontFamily: 'Inter_700Bold', fontSize: 12 },

@@ -398,6 +398,9 @@ test("tab bars keep Connections mountable and hide it when both member integrati
   assert.match(source, /export function isMemberConnectionsTabVisible/);
   assert.match(source, /isMemberConnectionsIntegrationEnabled/);
   assert.match(source, /isMemberMessagesIntegrationEnabled/);
+  assert.match(source, /useMemberMessagesUnreadCount/);
+  assert.match(source, /formatMemberMessagesUnreadBadge/);
+  assert.match(source, /connections-tab-unread-badge|messagesUnreadCount/);
   assert.match(source, /hidden=\{!connectionsVisible\}/);
   assert.match(source, /connectionsVisible\s*\?\s*\{[\s\S]*title: 'Connections'/);
   assert.match(source, /:\s*\{\s*href:\s*null\s*\}/);

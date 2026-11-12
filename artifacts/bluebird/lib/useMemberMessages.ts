@@ -16,10 +16,12 @@ import {
   type MemberMessage,
   type MemberMessagesFailure,
   type MessageConversation,
+  type MessageReadState,
 } from '@/lib/memberMessages';
 import {
   isMemberMessageRealtimeEnabled,
   memberMessagePollIntervalMs,
+  publishMemberMessageHint,
   realtimeHintRequestsHistory,
   realtimeHintRequestsInbox,
   subscribeMemberMessageHints,
@@ -80,6 +82,145 @@ function useClient(enabled: boolean) {
     });
   }, [enabled]);
   return { accountId, clientForAccount, sessionRef };
+}
+
+function rememberUnreadFromReadState(input: {
+  clerkUserId: string;
+  conversationId: number;
+  state: MessageReadState;
+}) {
+  const configuration = getMainBluebirdApiConfigurationOrNull();
+  if (!configuration) return;
+  const existing = readMemberMessagesSnapshot({
+    environment: configuration.environment,
+    apiBaseUrl: configuration.apiBaseUrl,
+    clerkUserId: input.clerkUserId,
+  });
+  rememberMemberMessagesSnapshot({
+    clerkUserId: input.clerkUserId,
+    environment: configuration.environment,
+    apiBaseUrl: configuration.apiBaseUrl,
+    unreadCount: input.state.unreadCount,
+    conversations: (existing?.conversations ?? []).map((conversation) => (
+      conversation.id === input.conversationId
+        ? { ...conversation, unreadCount: 0 }
+        : conversation
+    )),
+  });
+  publishMemberMessageHint({
+    kind: 'unread',
+    clerkUserId: input.clerkUserId,
+    conversationId: input.conversationId,
+  });
+}
+
+/**
+ * Keeps the Connections tab badge aligned with the production unread-count
+ * endpoint and the shared messages snapshot. Polls while the app is
+ * foregrounded; does not require the Connections tab to be focused.
+ */
+export function useMemberMessagesUnreadCount(): number {
+  const enabled = isMemberMessagesIntegrationEnabled();
+  const foreground = useForeground();
+  const { accountId, clientForAccount } = useClient(enabled);
+  const accountRef = React.useRef(accountId);
+  const generationRef = React.useRef(0);
+  const [unreadCount, setUnreadCount] = React.useState(0);
+  const [socketLive, setSocketLive] = React.useState(false);
+  const inFlight = React.useRef(false);
+
+  if (accountRef.current !== accountId) {
+    accountRef.current = accountId;
+    generationRef.current += 1;
+    setUnreadCount(0);
+  }
+
+  const current = React.useCallback((requestedAccountId: string, requestedGeneration: number) => {
+    return requestedGeneration === generationRef.current && isClerkBluebirdProfileResultCurrent({
+      requestedClerkUserId: requestedAccountId,
+      currentClerkUserId: accountRef.current,
+      aborted: false,
+    });
+  }, []);
+
+  const load = React.useCallback(async (requestedAccountId: string, requestedGeneration: number) => {
+    if (!enabled || inFlight.current) return;
+    const configuration = getMainBluebirdApiConfigurationOrNull();
+    const client = clientForAccount();
+    if (!configuration || !client) return;
+    inFlight.current = true;
+    retainMemberMessagesForAccount(requestedAccountId);
+    try {
+      const result = await client.unreadCount();
+      if (!current(requestedAccountId, requestedGeneration)) return;
+      if (result.kind !== 'loaded') return;
+      setUnreadCount(result.data.unreadCount);
+      const existing = readMemberMessagesSnapshot({
+        environment: configuration.environment,
+        apiBaseUrl: configuration.apiBaseUrl,
+        clerkUserId: requestedAccountId,
+      });
+      rememberMemberMessagesSnapshot({
+        clerkUserId: requestedAccountId,
+        environment: configuration.environment,
+        apiBaseUrl: configuration.apiBaseUrl,
+        conversations: existing?.conversations ?? [],
+        unreadCount: result.data.unreadCount,
+      });
+    } finally {
+      inFlight.current = false;
+    }
+  }, [clientForAccount, current, enabled]);
+
+  React.useEffect(() => {
+    if (!enabled || !accountId) {
+      setUnreadCount(0);
+      return;
+    }
+    if (!foreground) return;
+    const requestedAccountId = accountId;
+    const requestedGeneration = generationRef.current;
+    const configuration = getMainBluebirdApiConfigurationOrNull();
+    if (configuration) {
+      const cached = readMemberMessagesSnapshot({
+        environment: configuration.environment,
+        apiBaseUrl: configuration.apiBaseUrl,
+        clerkUserId: requestedAccountId,
+      });
+      if (cached) setUnreadCount(cached.unreadCount);
+    }
+    void load(requestedAccountId, requestedGeneration);
+    const pollMs = memberMessagePollIntervalMs({
+      realtimeEnabled: isMemberMessageRealtimeEnabled(),
+      socketLive,
+    });
+    if (pollMs === null) return;
+    const timer = setInterval(() => {
+      void load(requestedAccountId, requestedGeneration);
+    }, pollMs);
+    return () => clearInterval(timer);
+  }, [accountId, enabled, foreground, load, socketLive]);
+
+  React.useEffect(() => subscribeMemberMessageSocketLive(setSocketLive), []);
+
+  React.useEffect(() => {
+    if (!enabled || !accountId) return;
+    return subscribeMemberMessageHints((hint) => {
+      if (!realtimeHintRequestsInbox(hint) || hint.clerkUserId !== accountId) return;
+      const configuration = getMainBluebirdApiConfigurationOrNull();
+      if (configuration) {
+        const cached = readMemberMessagesSnapshot({
+          environment: configuration.environment,
+          apiBaseUrl: configuration.apiBaseUrl,
+          clerkUserId: accountId,
+        });
+        if (cached) setUnreadCount(cached.unreadCount);
+      }
+      void load(accountId, generationRef.current);
+    });
+  }, [accountId, enabled, load]);
+
+  return enabled && accountId ? unreadCount : 0;
 }
 
 export function useMemberConversations(active: boolean) {
@@ -331,6 +472,13 @@ export function useMemberMessageThread(conversationId: number | null) {
         return newest?.id ?? null;
       },
       markRead: () => client.markRead(conversationId),
+      onReadState: (state) => {
+        rememberUnreadFromReadState({
+          clerkUserId: requestedAccountId,
+          conversationId,
+          state,
+        });
+      },
     });
   }, [clientForAccount, conversationId, current, enabled]);
 
@@ -432,7 +580,14 @@ export function useMemberMessageThread(conversationId: number | null) {
       setMessages((currentMessages) => mergeMessages(currentMessages, [result.data.message]));
       setMessage(null);
       markedId.current = result.data.message.id;
-      await client.markRead(conversationId);
+      const read = await client.markRead(conversationId);
+      if (current(requestedAccountId, requestedGeneration) && read.kind === 'loaded') {
+        rememberUnreadFromReadState({
+          clerkUserId: requestedAccountId,
+          conversationId,
+          state: read.data,
+        });
+      }
       return true;
     } finally {
       sendLock.current = false;

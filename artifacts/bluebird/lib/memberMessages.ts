@@ -28,6 +28,8 @@ export const MEMBER_MESSAGE_MAX_LENGTH = 4000;
 export const MEMBER_MESSAGE_PAGE_SIZE = 50;
 /** Foreground HTTP poll interval for messages, connections, and related screens. */
 export const MEMBER_MESSAGE_POLL_MS = 10_000;
+/** Show the composer length hint once this many characters remain. */
+export const MEMBER_MESSAGE_COMPOSER_WARN_REMAINING = 100;
 
 export const MEMBER_MESSAGE_PATHS = {
   conversations: '/me/messages/conversations',
@@ -147,6 +149,45 @@ export function conversationTitle(
 ): string {
   const name = names.get(participantUserId)?.trim();
   return name || 'Bluebird member';
+}
+
+/** Tab / list unread badge label. Hides at zero; caps display at 9+. */
+export function formatMemberMessagesUnreadBadge(count: number): string | null {
+  if (!Number.isSafeInteger(count) || count <= 0) return null;
+  return count > 9 ? '9+' : String(count);
+}
+
+/** Subtle composer warning once the draft is near the 4,000-character limit. */
+export function memberMessageComposerLengthWarning(body: string): string | null {
+  const length = Array.from(body).length;
+  if (length < MEMBER_MESSAGE_MAX_LENGTH - MEMBER_MESSAGE_COMPOSER_WARN_REMAINING) return null;
+  return `${length}/${MEMBER_MESSAGE_MAX_LENGTH}`;
+}
+
+/** Local calendar day key for optional thread date separators. */
+export function memberMessageDayKey(createdAt: string): string | null {
+  const ms = Date.parse(createdAt);
+  if (!Number.isFinite(ms)) return null;
+  const date = new Date(ms);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function formatMemberMessageDaySeparator(createdAt: string, nowMs = Date.now()): string | null {
+  const key = memberMessageDayKey(createdAt);
+  if (!key) return null;
+  const ms = Date.parse(createdAt);
+  if (!Number.isFinite(ms)) return null;
+  const message = new Date(ms);
+  const now = new Date(nowMs);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfMessage = new Date(message.getFullYear(), message.getMonth(), message.getDate()).getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  if (startOfMessage === startOfToday) return 'Today';
+  if (startOfMessage === startOfToday - dayMs) return 'Yesterday';
+  return message.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function memberMessagesCacheKey(input: {
@@ -408,6 +449,7 @@ export async function refreshMemberMessageThreadLatest(input: {
   applyError: (code: MemberMessagesFailure) => void;
   applyLoaded: (page: MessageHistoryPage) => number | null;
   markRead: () => Promise<MemberMessagesResult<MessageReadState>>;
+  onReadState?: (state: MessageReadState) => void;
 }): Promise<'skipped' | 'ran'> {
   if (input.historyInFlight.current) return 'skipped';
   input.historyInFlight.current = true;
@@ -448,6 +490,7 @@ export async function refreshMemberMessageThreadLatest(input: {
     if (!input.isCurrent()) return 'ran';
     if (read.kind === 'loaded') {
       input.markedId.current = read.data.lastReadMessageId;
+      input.onReadState?.(read.data);
     }
   } finally {
     if (input.markReadLockGeneration.current === markReadLock) {
