@@ -282,7 +282,7 @@ function ClerkAuthForm({
                 style={styles.secondaryAction}
                 testID="clerk-startup-retry"
               >
-                <Text style={[styles.linkText, { color: colors.paleBlue }]}>Retry</Text>
+                <Text style={[styles.linkText, { color: colors.paleBlue }]}>Try again</Text>
               </Pressable>
             </View>
           ) : (!isLoaded || !resourcesLoaded) && (
@@ -321,7 +321,7 @@ function ClerkAuthForm({
                     testID="clerk-phone-input"
                   />
                   <Text style={[styles.helperText, { color: colors.mutedOnBrand }]}>
-                    Numbers start with +. Add your country code (for example +1… or +44…), or enter 10 US digits after +.
+                    Include your country code, such as +1 or +44. For US numbers, you can enter just the 10 digits.
                   </Text>
                 </View>
               ) : (

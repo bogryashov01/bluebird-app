@@ -22,7 +22,7 @@ export function usePendingReferralCode(routeCode?: string) {
           if (!cancelled) setState({ code, ready: true, error: null });
         })
         .catch(() => {
-          if (!cancelled) setState({ code: '', ready: true, error: 'Your invite could not be saved on this device.' });
+          if (!cancelled) setState({ code: '', ready: true, error: 'Your invite couldn’t be saved on this device.' });
         });
     } else {
       void readPendingReferralCode(AsyncStorage)
@@ -30,7 +30,7 @@ export function usePendingReferralCode(routeCode?: string) {
           if (!cancelled) setState({ code: code ?? '', ready: true, error: null });
         })
         .catch(() => {
-          if (!cancelled) setState({ code: '', ready: true, error: 'Your saved invite could not be restored.' });
+          if (!cancelled) setState({ code: '', ready: true, error: 'Your saved invite couldn’t be restored.' });
         });
     }
     return () => { cancelled = true; };

@@ -551,7 +551,7 @@ export async function verifyClerkPhoneCode(
       return {
         ok: false,
         stage: 'verification',
-        message: 'Clerk has not confirmed this phone number. You remain signed out. Request another code or ask the app owner to check the Clerk sign-up verification settings.',
+        message: 'We couldn’t verify this phone number. You’re still signed out. Request a new code, or contact Bluebird support if this keeps happening.',
       };
     }
     if (attempt.status !== 'complete' || !attempt.createdSessionId) {
@@ -559,8 +559,8 @@ export async function verifyClerkPhoneCode(
         ok: false,
         stage: 'verification',
         message: mode === 'sign-in'
-          ? 'Clerk needs another sign-in step that this screen cannot complete. You remain signed out; contact the app owner for help.'
-          : 'Clerk requires additional sign-up information. You remain signed out; contact the app owner for help.',
+          ? 'Sign-in needs an extra step that isn’t available in the app. You’re still signed out. Contact Bluebird support for help.'
+          : 'Creating your account needs details we can’t collect in the app. You’re still signed out. Contact Bluebird support for help.',
       };
     }
 

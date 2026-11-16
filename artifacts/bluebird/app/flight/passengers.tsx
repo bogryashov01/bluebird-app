@@ -278,7 +278,7 @@ export default function FlightPassengersScreen() {
   if (manifestAccess === 'error') {
     const failure = tripQuery.error instanceof ProductionAuthHttpError
       ? presentPassengerFailure(tripQuery.error.status)
-      : { title: 'Passenger information unavailable', body: 'This flight could not be loaded. Nothing was changed.' };
+      : { title: 'Passenger information unavailable', body: 'This flight couldn’t be loaded. Nothing was changed.' };
     const canRetry = !(tripQuery.error instanceof ProductionAuthHttpError &&
       [400, 401, 403, 404, 409].includes(tripQuery.error.status)) &&
       !(tripQuery.error instanceof TripChecklistMismatchError);
@@ -287,7 +287,7 @@ export default function FlightPassengersScreen() {
         title={failure.title}
         body={failure.body}
         colors={colors}
-        actionLabel={canRetry ? 'Try Again' : undefined}
+        actionLabel={canRetry ? 'Try again' : undefined}
         onAction={canRetry ? () => { void tripQuery.refetch(); } : undefined}
       />
     );
@@ -311,7 +311,7 @@ export default function FlightPassengersScreen() {
         title={failure.title}
         body={failure.body}
         colors={colors}
-        actionLabel={canRetry ? 'Try Again' : undefined}
+        actionLabel={canRetry ? 'Try again' : undefined}
         onAction={canRetry ? () => { void query.refetch(); } : undefined}
       />
     );

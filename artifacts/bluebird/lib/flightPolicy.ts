@@ -59,9 +59,9 @@ export function presentFlightPolicyFailure(kind: 'missing' | 'invalid' | 'networ
     return { title: 'Flight policy unavailable', body: 'The active flight policy is not available right now.' };
   }
   if (kind === 'invalid') {
-    return { title: 'Flight policy unavailable', body: 'The active flight policy could not be shown.' };
+    return { title: 'Flight policy unavailable', body: 'The active flight policy couldn’t be shown.' };
   }
-  return { title: 'Connection problem', body: 'The flight policy could not be loaded.' };
+  return { title: 'Connection problem', body: 'The flight policy couldn’t be loaded.' };
 }
 
 export function measurePolicyScroll(input: {

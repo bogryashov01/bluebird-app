@@ -75,7 +75,7 @@ test("a failed browser open stays on the screen with a recovery note", async () 
   assert.match(screen, /accessibilityRole="alert"/);
   assert.equal(
     MEMBERSHIP_PAYMENT_WEBSITE_OPEN_ERROR,
-    "The Bluebird website could not be opened. Try again in a moment.",
+    "The Bluebird website couldn’t be opened. Try again in a moment.",
   );
 });
 

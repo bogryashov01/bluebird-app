@@ -106,7 +106,7 @@ function ConnectContactsScreen() {
       if (outcome.status === 'cancelled') return;
       setNotice(finishSmsComposer(contacts, outcome.result).notice);
     } catch {
-      setNotice('The message composer could not be opened. You can share the invitation another way.');
+      setNotice('The message composer couldn’t be opened. You can share the invitation another way.');
     } finally {
       setBusy(null);
     }
@@ -138,7 +138,7 @@ function ConnectContactsScreen() {
       setNotice(finishShareSheet(action).notice);
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return;
-      setNotice('The share sheet could not be opened.');
+      setNotice('The share sheet couldn’t be opened.');
     } finally {
       setBusy(null);
     }

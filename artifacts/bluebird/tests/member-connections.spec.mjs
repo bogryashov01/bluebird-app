@@ -982,3 +982,11 @@ test("declined outgoing request releases the create-confirmed pending mark", () 
   assert.match(hook, /reconcilePendingOutgoingRecipients\(/);
   assert.match(hook, /requestId: created\.id, confirmedAt: Date\.now\(\)/);
 });
+
+test("Find Member is phone-only and its validation copy says so", () => {
+  const hook = readFileSync(resolve(projectRoot, "lib/useMemberConnections.ts"), "utf8");
+  const screen = readFileSync(resolve(projectRoot, "components/MemberConnectionsScreen.tsx"), "utf8");
+  assert.match(hook, /invalid_contact: 'Enter a valid phone number\.'/);
+  assert.match(screen, /connections\.discover\(\{ phoneE164: phone \}\)/);
+  assert.doesNotMatch(screen, /connections\.discover\(\{[^}]*email/);
+});

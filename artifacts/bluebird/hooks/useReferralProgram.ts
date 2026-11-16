@@ -24,7 +24,7 @@ const EMPTY_ERROR_STATE = 'Referral details are unavailable because the selected
 function errorMessage(error: unknown): string {
   const typed = error as { code?: string; status?: number; message?: string };
   if (typed?.code === 'network' || typed?.code === 'timeout') {
-    return 'Bluebird could not be reached. Check your connection and try again.';
+    return 'Bluebird couldn’t be reached. Check your connection and try again.';
   }
   if (typed?.code === 'session_expired' || typed?.status === 401) {
     return 'Your sign-in has expired. Sign in again, then reopen Referral Program.';

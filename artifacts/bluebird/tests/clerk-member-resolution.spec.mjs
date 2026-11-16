@@ -437,7 +437,7 @@ test("unauthorized, network, backend, malformed, and cancelled requests remain e
     assert.match(getClerkPostLoginStatusMessage(result, {
       registeredHome: true,
       linkedMember: true,
-    }), /could not verify/);
+    }), /couldn’t verify/);
   }
 
   const cancelled = new AbortController();

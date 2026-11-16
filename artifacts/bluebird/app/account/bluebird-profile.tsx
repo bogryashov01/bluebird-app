@@ -132,10 +132,10 @@ export default function BluebirdProfileScreen() {
   if (!session.isLoaded) return <CenteredState loading title="Loading your profile" />;
   if (session.isSignedIn !== true) return <Redirect href="/(clerk-auth)/sign-in" />;
   if (!session.userId) {
-    return <CenteredState title="Profile unavailable" message="Your Bluebird profile could not be loaded." />;
+    return <CenteredState title="Profile unavailable" message="Your Bluebird profile couldn’t be loaded." />;
   }
   if (!configuration) {
-    return <CenteredState title="Profile unavailable" message="Your Bluebird profile could not be loaded." />;
+    return <CenteredState title="Profile unavailable" message="Your Bluebird profile couldn’t be loaded." />;
   }
 
   const visibleLoadState: LoadState = 'clerkUserId' in loadState &&
@@ -537,9 +537,9 @@ function getProfileErrorMessage(error: unknown): string {
     return 'Your sign-in has expired. Sign in again, then reopen your profile.';
   }
   if (typed?.code === 'network' || typed?.code === 'timeout') {
-    return 'Bluebird could not be reached. Check your connection and try again.';
+    return 'Bluebird couldn’t be reached. Check your connection and try again.';
   }
-  return 'Bluebird could not load your profile. Please try again.';
+  return 'Bluebird couldn’t load your profile. Please try again.';
 }
 
 const styles = StyleSheet.create({

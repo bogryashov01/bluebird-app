@@ -216,10 +216,10 @@ export default function ProfileScreen() {
       if (signal.aborted || currentClerkIdentity.current !== requestedClerkUserId) return;
       const typed = error as { code?: string; status?: number };
       const message = typed?.code === 'network' || typed?.code === 'timeout'
-        ? 'Bluebird could not be reached. Check your connection and try again.'
+        ? 'Bluebird couldn’t be reached. Check your connection and try again.'
         : typed?.code === 'session_expired' || typed?.status === 401
           ? 'Your sign-in has expired. Sign in again, then reopen your profile.'
-          : 'Bluebird could not load your profile details.';
+          : 'Bluebird couldn’t load your profile details.';
       const retained = cachedClerkProfile.current?.clerkUserId === requestedClerkUserId
         ? cachedClerkProfile.current
         : null;
@@ -352,7 +352,7 @@ export default function ProfileScreen() {
         setIncomingPreference(null);
         setIncomingPreferenceError(
           outcome.writeAccepted
-            ? 'Bluebird could not confirm this preference yet. Refresh your profile if the toggle looks wrong.'
+            ? 'Bluebird couldn’t confirm this preference yet. Refresh your profile if the toggle looks wrong.'
             : 'Couldn’t save this preference. Try again.',
         );
       } catch (error) {

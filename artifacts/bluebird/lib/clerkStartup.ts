@@ -33,6 +33,19 @@ export function getClerkStartupFailureReason(input: {
   return null;
 }
 
+/**
+ * Technical startup diagnostics (failure stage, snapshot, Clerk state) are for
+ * development and support only. They show when the production Clerk debug flag
+ * is exactly "true", or for the existing native auth-test support build.
+ * Normal release builds show only the friendly error and retry action.
+ */
+export function shouldShowClerkStartupDiagnostics(input: {
+  productionClerkDebug: unknown;
+  nativeAuthTestDiagnostics: boolean;
+}): boolean {
+  return input.productionClerkDebug === 'true' || input.nativeAuthTestDiagnostics === true;
+}
+
 export function getClerkStartupDiagnosticLines(input: {
   failureReason: ClerkStartupFailureReason;
   snapshotReceived: boolean;

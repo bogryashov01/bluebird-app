@@ -393,10 +393,10 @@ export default function TripsScreen() {
     if (tripsError || queueError) {
       return (
         <View style={styles.empty}>
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Could not load your trips</Text>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Couldn’t load your trips</Text>
           <Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>Check your connection and try again.</Text>
           <TouchableOpacity style={[styles.discoverBtn, { backgroundColor: colors.primary }]} onPress={() => { refetchTrips(); refetchQueue(); }}>
-            <Text style={[styles.discoverBtnText, { color: colors.primaryForeground }]}>Try Again</Text>
+            <Text style={[styles.discoverBtnText, { color: colors.primaryForeground }]}>Try again</Text>
           </TouchableOpacity>
         </View>
       );

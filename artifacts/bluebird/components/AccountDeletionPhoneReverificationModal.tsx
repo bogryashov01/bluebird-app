@@ -74,7 +74,7 @@ export function AccountDeletionPhoneReverificationModal({
         setError(
           prepared.reason === 'no_phone_factor'
             ? 'Phone verification is not available for this session. Your account was not deleted.'
-            : 'Bluebird could not start phone verification. Your account was not deleted.',
+            : 'Bluebird couldn’t start phone verification. Your account was not deleted.',
         );
         return;
       }
@@ -125,7 +125,7 @@ export function AccountDeletionPhoneReverificationModal({
       setError('That code did not work. Try again with the latest SMS code.');
       return;
     }
-    setError('Bluebird could not verify this phone code. Your account was not deleted.');
+    setError('Bluebird couldn’t verify this phone code. Your account was not deleted.');
   };
 
   return (

@@ -101,7 +101,7 @@ async function addNativeEvent(info: FlightCalendarInfo, start: Date, end: Date):
     calendarId = (writable.find((c) => (c as { isPrimary?: boolean }).isPrimary) ?? writable[0])?.id;
   }
   if (!calendarId) {
-    Alert.alert('No calendar found', 'Could not find a writable calendar on this device.');
+    Alert.alert('No calendar found', 'Couldn’t find a writable calendar on this device.');
     return false;
   }
 

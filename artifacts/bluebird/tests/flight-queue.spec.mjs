@@ -296,7 +296,7 @@ test('production connection actions follow the opaque reference and the saved co
   // Queue-path copy must not reveal privacy opt-out.
   assert.equal(
     queueConnectionRequestFailureCopy('incoming_requests_disabled'),
-    'The connection request could not be sent.',
+    'The connection request couldn’t be sent.',
   );
   assert.doesNotMatch(
     queueConnectionRequestFailureCopy('queue_target_unavailable'),

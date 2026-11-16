@@ -912,7 +912,7 @@ test('the Clerk membership screen keeps the original layout without prototype da
   assert.equal(source.includes('fetchProductionMembershipPlans'), false);
   assert.equal(source.includes('enabled: !demoMode'), true);
   assert.equal(source.includes("enabled: !demoMode && authMode !== 'clerk'"), false);
-  assert.equal(source.includes('Bluebird could not load your membership details.'), true);
+  assert.equal(source.includes('Bluebird couldn’t load your membership details.'), true);
   const clerkSource = source.slice(clerkBranch, demoOverview);
   assert.equal(clerkSource.includes('presentMembershipDashboard'), true);
   assert.equal(clerkSource.includes('logMembershipDashboardPresentation'), true);

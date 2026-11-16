@@ -41,7 +41,7 @@ export default function ManagePlanScreen() {
       },
       onError: (err: any) => {
         setConfirming(null);
-        setErrorMsg(err?.response?.data?.error ?? 'Could not update your plan. Please try again.');
+        setErrorMsg(err?.response?.data?.error ?? 'Couldn’t update your plan. Please try again.');
       },
     },
   });
@@ -66,10 +66,10 @@ export default function ManagePlanScreen() {
   if (isError || !mem) {
     return (
       <View style={[styles.centered, styles.errorState, { backgroundColor: colors.offWhite }]}>
-        <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>Could not load your plan</Text>
+        <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>Couldn’t load your plan</Text>
         <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>Check your connection and try again.</Text>
         <TouchableOpacity style={[styles.retryBtn, { backgroundColor: colors.primary }]} onPress={() => refetch()}>
-          <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>
+          <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try again</Text>
         </TouchableOpacity>
       </View>
     );

@@ -100,7 +100,7 @@ test("each confirmed destination opens exactly once, and a handler failure stays
     }),
     "unavailable",
   );
-  assert.equal(EXTERNAL_RESOURCE_OPEN_ERROR, "This link could not be opened. Try again in a moment.");
+  assert.equal(EXTERNAL_RESOURCE_OPEN_ERROR, "This link couldn’t be opened. Try again in a moment.");
   assert.match(help, /help-center-open-error/);
   assert.match(legal, /legal-open-error/);
   assert.doesNotMatch(`${help}\n${legal}`, /email was sent|call completed|message sent/i);

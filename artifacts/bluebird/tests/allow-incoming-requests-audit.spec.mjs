@@ -115,7 +115,7 @@ test("preference PUT confirms only the signed-in account and does not false-fail
   );
 
   const source = readFileSync(resolve(projectRoot, "app/(tabs)/profile/index.tsx"), "utf8");
-  assert.match(source, /could not confirm this preference yet/i);
+  assert.match(source, /couldn’t confirm this preference yet/i);
   assert.match(source, /outcome\.kind === 'confirmed'/);
 });
 

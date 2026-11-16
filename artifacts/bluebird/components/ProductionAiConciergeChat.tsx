@@ -67,7 +67,7 @@ export function ProductionAiConciergeChat() {
       {concierge.status === 'error' && concierge.messages.length === 0 ? (
         <View style={styles.historyError} testID="production-ai-concierge-error">
           <Text style={[styles.statusText, { color: colors.destructive }]}>
-            {concierge.message ?? 'Could not load earlier messages.'}
+            {concierge.message ?? 'Couldn’t load earlier messages.'}
           </Text>
           <TouchableOpacity accessibilityRole="button" onPress={() => { void concierge.refresh(); }}>
             <Text style={[styles.retryText, { color: colors.primary }]}>Try again</Text>
@@ -129,7 +129,7 @@ export function ProductionAiConciergeChat() {
                   {needsSupport ? (
                     <View style={styles.supportArea}>
                       <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
-                        I could not fully answer that. Contact Bluebird support for help. No staff handoff was created automatically.
+                        I couldn’t fully answer that. Contact Bluebird support for help. No staff handoff was created automatically.
                       </Text>
                       {item.supportUrl ? (
                         <TouchableOpacity
@@ -173,7 +173,7 @@ export function ProductionAiConciergeChat() {
                       onPress={() => { void concierge.retryFailed(item.localId); }}
                     >
                       <Text style={[styles.supportButtonText, { color: colors.primaryForeground }]}>
-                        Retry
+                        Try again
                       </Text>
                     </TouchableOpacity>
                   </View>

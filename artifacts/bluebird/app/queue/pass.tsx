@@ -134,7 +134,7 @@ export default function SkipLinePassScreen() {
         pendingNavRef.current = goConfirmed;
         setOverlayPhase('success');
       } catch (error) {
-        setActionError(error instanceof Error ? error.message : 'The local demo pass could not be used.');
+        setActionError(error instanceof Error ? error.message : 'The local demo pass couldn’t be used.');
       } finally {
         setDemoActionPending(false);
       }

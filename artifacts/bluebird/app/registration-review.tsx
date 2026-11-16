@@ -227,7 +227,7 @@ export default function RegistrationReviewScreen() {
       profileResult.completion !== 'completion_required' ||
       !configuration
     ) {
-      setSaveError('Your registration could not be verified. Go back and reload your profile.');
+      setSaveError('Your registration couldn’t be verified. Go back and reload your profile.');
       return;
     }
 
@@ -557,7 +557,7 @@ function RegistrationProfileDiagnosticResult({
     return (
       <View style={styles.diagnosticResults} testID="registration-profile-diagnostic-result">
         <Text style={[styles.bodyText, { color: colors.destructive }]}>
-          {endpoint} could not be read (HTTP {status ?? 'unknown'}). Profile field values are unavailable.
+          {endpoint} couldn’t be read (HTTP {status ?? 'unknown'}). Profile field values are unavailable.
         </Text>
       </View>
     );
@@ -680,9 +680,9 @@ function getRegistrationSaveErrorMessage(error: unknown): string {
     return 'Your sign-in has expired. Sign in again, then reopen registration.';
   }
   if (typed?.code === 'network' || typed?.code === 'timeout') {
-    return 'Bluebird could not be reached. Your details are still here; check your connection before continuing.';
+    return 'Bluebird couldn’t be reached. Your details are still here; check your connection before continuing.';
   }
-  return 'Bluebird could not save your registration. Your details are still here; review them and try again.';
+  return 'Bluebird couldn’t save your registration. Your details are still here; review them and try again.';
 }
 
 function describeRegistrationWriteOutcome(outcome: ClerkRegistrationWriteOutcome): string {

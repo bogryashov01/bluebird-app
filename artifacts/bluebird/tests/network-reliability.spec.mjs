@@ -208,7 +208,7 @@ test("Discover leaves loading after HTTP 500 and 503, then preserves a valid emp
   });
 
   await page.goto("/discover");
-  await expect(page.getByText("Could not load flights", { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Couldn’t load flights", { exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText("temporarily unavailable", { exact: false })).toHaveCount(0);
   await page.getByText("Try again", { exact: true }).click();
   await expect(page.getByText("No flights match", { exact: true })).toBeVisible();
@@ -228,7 +228,7 @@ test("offline empty-leg reads show a retry state without exposing raw network er
   });
 
   await page.goto("/discover");
-  await expect(page.getByText("Could not load flights", { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Couldn’t load flights", { exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(/Failed to fetch|NetworkError|fetch failed/i)).toHaveCount(0);
   await page.getByText("Try again", { exact: true }).click();
   await expect(page.getByText("No flights match", { exact: true })).toBeVisible();
@@ -250,7 +250,7 @@ test("invalid JSON and schemas stay out of demo data and recover only after Retr
   });
 
   await page.goto("/discover");
-  const error = page.getByText("Could not load flights", { exact: true });
+  const error = page.getByText("Couldn’t load flights", { exact: true });
   await expect(error).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/valid JSON|flight array|Unexpected token/i)).toHaveCount(0);
   await expect(page.locator('[data-testid^="production-flight-card-"]')).toHaveCount(0);
@@ -308,10 +308,10 @@ test("Flight Details reports a timed-out detail read and recovers with Retry", a
   });
 
   await page.goto("/flight/81001");
-  await expect(page.getByText("Could not load flight details", { exact: true })).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByText("Couldn’t load flight details", { exact: true })).toBeVisible({ timeout: 25_000 });
   await page.getByTestId("flight-detail-retry").click();
   await expect(page.getByTestId("flight-detail-route")).toHaveText("DAL → SFO");
-  await expect(page.getByText("Could not load flight details", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Couldn’t load flight details", { exact: true })).toHaveCount(0);
   expect(detailRequests).toBe(3);
   expect(legacyFlightRequests).toEqual([]);
 });
@@ -712,7 +712,7 @@ test("Direct Flight Details rejects a response whose ID does not match the reque
 
   await page.goto("/flight/99999");
   await expect(page.getByText("Flight unavailable", { exact: true })).toBeVisible();
-  await expect(page.getByText("This flight could not be found in the selected flight service.", { exact: true })).toBeVisible();
+  await expect(page.getByText("We couldn’t find this flight. It may have been removed or rescheduled.", { exact: true })).toBeVisible();
   expect(detailRequests).toEqual(["/api/empty-legs/99999"]);
   expect(listRequests).toEqual([]);
   expect(legacyFlightRequests).toEqual([]);
@@ -903,11 +903,11 @@ test("Map retries missing airport coordinates and does not invent a route", asyn
   await page.goto("/discover");
   await expect(page.getByTestId("production-flight-card-81001")).toBeVisible();
   await page.getByText("Map", { exact: true }).click();
-  await expect(page.getByText("Could not load airport locations", { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Couldn’t load airport locations", { exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText("No flights to display", { exact: true })).toHaveCount(0);
   await page.getByText("Try again", { exact: true }).click();
   await expect(page.locator(".leaflet-container")).toBeVisible();
-  await expect(page.getByText("Could not load airport locations", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Couldn’t load airport locations", { exact: true })).toHaveCount(0);
   expect(airportLookups).toBe(3);
 });
 

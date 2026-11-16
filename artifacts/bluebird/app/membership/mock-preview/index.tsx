@@ -58,7 +58,7 @@ function EnabledMembershipMockPreview({ mode }: { mode: 'mock' | 'production' })
 
   if (failed) {
     return (
-      <MembershipMockPreviewUnavailable message="The local membership fixture could not be loaded." />
+      <MembershipMockPreviewUnavailable message="The local membership fixture couldn’t be loaded." />
     );
   }
   if (!membership) {

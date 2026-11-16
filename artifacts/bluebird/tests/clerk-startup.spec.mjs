@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   CLERK_STARTUP_TIMEOUT_MS,
   getClerkStartupDiagnosticLines,
+  shouldShowClerkStartupDiagnostics,
   getClerkStartupFailureReason,
   getClerkStartupState,
   getNextClerkStartupAttempt,
@@ -303,6 +304,13 @@ test('the live auth layout remounts Clerk on Retry and keeps startup on the phon
   assert.match(startupLogic, /Failure stage:/);
   assert.match(startupLogic, /Auth snapshot received:/);
   assert.match(startupLogic, /Clerk isLoaded:/);
+  // Release builds hide technical diagnostics; debug flag or auth-test support build shows them.
+  assert.match(startupView, /if \(!clerkStartupDiagnosticsVisible\(\)\) return null;/);
+  assert.match(startupView, /productionClerkDebug: process\.env\.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG/);
+  assert.doesNotMatch(startupView, /accessibilityLabel="Clerk startup diagnostics"/);
+  const configError = await readFile(new URL('../components/ClerkAuthConfigurationError.tsx', import.meta.url), 'utf8');
+  assert.match(configError, /clerkStartupDiagnosticsVisible\(\) \? CLERK_AUTH_CONFIGURATION\.configurationError : null/);
+  assert.match(configError, /Sign-in is temporarily unavailable\. Please try again later\./);
   assert.match(provider, /failureReason="error_boundary"/);
   assert.match(configErrorView, /failureReason="configuration_invalid"/);
   assert.match(panel, /backgroundColor: colors\.input, borderColor: error \? colors\.destructive : colors\.border, color: colors\.foreground/);
@@ -310,4 +318,12 @@ test('the live auth layout remounts Clerk on Retry and keeps startup on the phon
   assert.match(startupView, /backgroundColor: colors\.input, borderColor: colors\.border, color: colors\.foreground/);
   assert.match(nativeAuthPolicy, /input\.platformOS === 'ios'/);
   assert.match(nativeAuthPolicy, /input\.apiEnvironment === 'production'/);
+});
+
+test('technical startup diagnostics are hidden in normal release builds', () => {
+  assert.equal(shouldShowClerkStartupDiagnostics({ productionClerkDebug: undefined, nativeAuthTestDiagnostics: false }), false);
+  assert.equal(shouldShowClerkStartupDiagnostics({ productionClerkDebug: 'false', nativeAuthTestDiagnostics: false }), false);
+  assert.equal(shouldShowClerkStartupDiagnostics({ productionClerkDebug: 'TRUE', nativeAuthTestDiagnostics: false }), false);
+  assert.equal(shouldShowClerkStartupDiagnostics({ productionClerkDebug: 'true', nativeAuthTestDiagnostics: false }), true);
+  assert.equal(shouldShowClerkStartupDiagnostics({ productionClerkDebug: undefined, nativeAuthTestDiagnostics: true }), true);
 });

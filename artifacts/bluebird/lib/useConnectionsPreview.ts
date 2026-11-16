@@ -28,8 +28,8 @@ const ACTION_COPY: Record<ConnectionsPreviewFailure, string> = {
   'missing-conversation': 'That demo conversation is not on this device.',
   'empty-message': 'Enter a message.',
   'message-too-long': 'Messages are limited to 2,000 characters.',
-  corrupt: 'Saved Connections Preview data on this device could not be read.',
-  unavailable: 'Connections Preview could not be saved on this device.',
+  corrupt: 'Saved Connections Preview data on this device couldn’t be read.',
+  unavailable: 'Connections Preview couldn’t be saved on this device.',
 };
 
 function createClock() {

@@ -100,9 +100,9 @@ export default function TripDetailsScreen() {
     }
     return (
       <TripAvailabilityState
-        title="Could not load trip details"
-        description="Trip details could not be loaded. Check your connection and try again."
-        actionLabel="Try Again"
+        title="Couldn’t load trip details"
+        description="Trip details couldn’t be loaded. Check your connection and try again."
+        actionLabel="Try again"
         onAction={() => { void query.refetch(); }}
         testID="trip-details-api-error"
       />

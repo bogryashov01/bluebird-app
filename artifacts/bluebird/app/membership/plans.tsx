@@ -116,10 +116,10 @@ export default function AllPlansScreen() {
       if (signal.aborted || currentClerkIdentity.current !== requestedClerkUserId) return;
       const typed = error as { code?: string; status?: number };
       const message = typed?.code === 'network' || typed?.code === 'timeout'
-        ? 'Bluebird could not be reached. Check your connection and try again.'
+        ? 'Bluebird couldn’t be reached. Check your connection and try again.'
         : typed?.code === 'session_expired' || typed?.status === 401
           ? 'Your sign-in has expired. Sign in again, then reopen Plans.'
-          : 'Bluebird could not load your membership details.';
+          : 'Bluebird couldn’t load your membership details.';
       setClerkMembershipState({ kind: 'error', message });
     }
   }, [authMode, createClerkApi, ...membershipRequestDependencies]);
@@ -189,7 +189,7 @@ export default function AllPlansScreen() {
               : 'Membership details are unavailable.'
           : null
     : legacyMembershipError
-      ? 'Your membership details could not be loaded. Public plan pricing remains available.'
+      ? 'Your membership details couldn’t be loaded. Public plan pricing remains available.'
     : legacyMembershipEnabled && !legacyMembershipLoading
       ? legacyTier === 'none'
         ? 'Not a member'
@@ -223,7 +223,7 @@ export default function AllPlansScreen() {
         >
           {plansQuery.isFetching
             ? <ActivityIndicator color={colors.primaryForeground} />
-            : <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>}
+            : <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try again</Text>}
         </TouchableOpacity>
       </View>
     );

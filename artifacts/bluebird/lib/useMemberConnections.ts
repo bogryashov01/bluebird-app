@@ -33,18 +33,18 @@ import {
 const FAILURE_COPY: Record<MemberConnectionsFailure, string> = {
   configuration: 'Connections are not available yet.',
   token: 'Sign in again to view Connections.',
-  network: 'Connections could not be loaded. Try again.',
-  timeout: 'Connections could not be loaded. Try again.',
+  network: 'Connections couldn’t be loaded. Try again.',
+  timeout: 'Connections couldn’t be loaded. Try again.',
   cancelled: '',
-  schema: 'Connections could not be read.',
-  invalid_contact: 'Enter one exact email address or phone number.',
-  invalid_body: 'That connection could not be updated.',
+  schema: 'Connections couldn’t be read.',
+  invalid_contact: 'Enter a valid phone number.',
+  invalid_body: 'That connection couldn’t be updated.',
   unauthorized: 'Sign in again to view Connections.',
   membership_required: 'An active Bluebird membership is required.',
   incoming_requests_disabled: 'This member is not accepting connection requests.',
   not_found: 'That member or request is no longer available.',
   conflict: 'A connection request already exists for this member.',
-  unavailable: 'Connections could not be loaded. Try again.',
+  unavailable: 'Connections couldn’t be loaded. Try again.',
   outgoing_unsupported: '',
 };
 
@@ -226,7 +226,7 @@ export function useMemberConnections() {
         nextOutgoing = outgoingRef.current;
         nextPendingRecipientUserIds = pendingOutgoingRecipientUserIdsRef.current;
       } else {
-        outgoingMessage = FAILURE_COPY[outgoingResult.code] || 'Sent requests could not be loaded. Try again.';
+        outgoingMessage = FAILURE_COPY[outgoingResult.code] || 'Sent requests couldn’t be loaded. Try again.';
         nextOutgoing = outgoingRef.current;
         nextPendingRecipientUserIds = pendingOutgoingRecipientUserIdsRef.current;
       }

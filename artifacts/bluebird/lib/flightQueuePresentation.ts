@@ -127,7 +127,7 @@ export const FRONT_QUEUE_MEMBER_UNAVAILABLE = 'This member is not available for 
 export const FRONT_QUEUE_PENDING = 'Request Sent';
 export const FRONT_QUEUE_DECLINED = 'The previous request was declined.';
 export const FRONT_QUEUE_AMBIGUOUS = 'Review this flight in Connections before sending another request.';
-export const FRONT_QUEUE_STATUS_UNAVAILABLE = 'Connection status could not be loaded.';
+export const FRONT_QUEUE_STATUS_UNAVAILABLE = 'Connection status couldn’t be loaded.';
 export const JOIN_TO_CONNECT_COPY = "Join this flight's queue to connect with this member.";
 export const JOIN_TO_CONNECT_CTA = 'Join the Flight to Connect';
 export const SELF_QUEUE_MEMBER_COPY = 'This is you. You cannot send a connection request to yourself.';
@@ -475,8 +475,8 @@ export function queueConnectionRequestFailureCopy(code: string): string {
     return 'A connection request to the first member is not available from this queue yet.';
   }
   if (code === 'relationship_exists') return 'A connection with this member already exists.';
-  if (code === 'invalid_body') return 'The connection request could not be sent.';
-  return 'The connection request could not be sent.';
+  if (code === 'invalid_body') return 'The connection request couldn’t be sent.';
+  return 'The connection request couldn’t be sent.';
 }
 
 export function queueConnectionRequestShouldRefresh(code: string): boolean {
@@ -518,5 +518,5 @@ export function queueRequestFailureCopy(code: string | null): string {
   if (code === 'NETWORKING_PROFILE_INCOMPLETE') return 'Complete your profile before sending a request.';
   if (code === 'MEMBER_UNAVAILABLE') return 'This member is not available.';
   if (code === 'MEMBERSHIP_REQUIRED') return 'An active membership is required.';
-  return 'The connection request could not be sent.';
+  return 'The connection request couldn’t be sent.';
 }

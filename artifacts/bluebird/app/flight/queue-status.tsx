@@ -415,7 +415,7 @@ export default function ProductionQueueStatusScreen() {
         ) : null}
         {flightId !== null && flightQuery.isError ? (
           <View testID="queue-status-error" style={styles.errorBlock}>
-            <Text style={[styles.body, { color: colors.textOnSurface }]}>Queue status could not be loaded.</Text>
+            <Text style={[styles.body, { color: colors.textOnSurface }]}>Queue status couldn’t be loaded.</Text>
             <TouchableOpacity accessibilityRole="button" onPress={() => { void flightQuery.refetch(); }}>
               <Text style={[styles.retry, { color: colors.primary }]}>Try again</Text>
             </TouchableOpacity>

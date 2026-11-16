@@ -59,7 +59,7 @@ test("a complete policy response parses and incomplete documents are rejected", 
   const { body: _body, ...missingBody } = document;
   assert.throws(() => parseActiveFlightPolicy(missingBody), TypeError);
   assert.equal(presentFlightPolicyFailure("missing").title, "Flight policy unavailable");
-  assert.equal(presentFlightPolicyFailure("invalid").body.includes("could not be shown"), true);
+  assert.equal(presentFlightPolicyFailure("invalid").body.includes("couldn’t be shown"), true);
   assert.doesNotMatch(presentFlightPolicyFailure("network").body, /token|Full policy/);
 });
 

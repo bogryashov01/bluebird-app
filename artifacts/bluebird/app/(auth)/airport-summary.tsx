@@ -89,7 +89,7 @@ export default function AirportSummaryScreen() {
             onPress={() => refetch()}
             activeOpacity={0.85}
           >
-            <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>
+            <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try again</Text>
           </TouchableOpacity>
         </View>
       ) : (

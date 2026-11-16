@@ -156,7 +156,7 @@ export default function PassengersScreen() {
     return (
       <View style={[styles.center, { backgroundColor: colors.offWhite, paddingHorizontal: 28 }]}>
         <Feather name="alert-circle" size={26} color={colors.destructive} />
-        <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>Passengers could not load</Text>
+        <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>Passengers couldn’t load</Text>
         <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>{errorMessage(error, 'Please try again.')}</Text>
         <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => refetch()}>
           <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Try again</Text>

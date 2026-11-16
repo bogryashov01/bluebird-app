@@ -109,7 +109,7 @@ export function MyQueuesPanel({
             style={[styles.refresh, { backgroundColor: colors.primary }]}
             onPress={refresh}
           >
-            <Text style={[styles.refreshLabel, { color: colors.primaryForeground }]}>Try Again</Text>
+            <Text style={[styles.refreshLabel, { color: colors.primaryForeground }]}>Try again</Text>
           </TouchableOpacity>
         </View>
       ) : null}

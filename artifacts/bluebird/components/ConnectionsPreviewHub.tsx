@@ -101,7 +101,7 @@ export function ConnectionsHome({ showBack = false }: { showBack?: boolean }) {
       const finished = finishShareSheet(result.action);
       if (finished.notice) setContactNotice(finished.notice);
     } catch {
-      setContactNotice('The share sheet could not be opened.');
+      setContactNotice('The share sheet couldn’t be opened.');
     }
   };
 
@@ -163,7 +163,7 @@ export function ConnectionsHome({ showBack = false }: { showBack?: boolean }) {
         <View style={styles.state} testID="connections-preview-error">
           <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Connections are unavailable</Text>
           <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]}>
-            {preview.actionMessage ?? 'Saved preview data could not be read on this device.'}
+            {preview.actionMessage ?? 'Saved preview data couldn’t be read on this device.'}
           </Text>
           <TouchableOpacity accessibilityRole="button" testID="connections-preview-retry" onPress={preview.refresh} style={[styles.outline, { borderColor: colors.border }]}>
             <Text style={[styles.outlineLabel, { color: colors.primary }]}>Try again</Text>

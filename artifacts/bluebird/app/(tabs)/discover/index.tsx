@@ -345,7 +345,7 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
             <View style={styles.mapPlaceholder}>
               <Feather name="wifi-off" size={28} color={colors.mutedForeground} />
       <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                Could not load airport locations
+                Couldn’t load airport locations
               </Text>
               <TouchableOpacity
                 style={[styles.retryBtn, { borderColor: colors.border }]}
@@ -600,7 +600,7 @@ export default function DiscoverScreen() {
         <View style={styles.centered}>
           <Feather name="wifi-off" size={32} color={colors.mutedForeground} />
           <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            Could not load flights. Check your connection and try again.
+            Couldn’t load flights. Check your connection and try again.
           </Text>
           <TouchableOpacity
             testID={demoMode ? 'discover-flight-retry' : undefined}

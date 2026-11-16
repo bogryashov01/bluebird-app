@@ -13,7 +13,7 @@ export default function FamilyInvitationScreen() {
   const acceptMutation = useAcceptFamilyInvitation({
     mutation: {
       onSuccess: () => router.replace('/membership/family' as any),
-      onError: (err: any) => setError(err?.response?.data?.error ?? err?.data?.error ?? 'This invitation could not be accepted.'),
+      onError: (err: any) => setError(err?.response?.data?.error ?? err?.data?.error ?? 'This invitation couldn’t be accepted.'),
     },
   });
 

@@ -47,7 +47,7 @@ export default function NetworkingRequestsScreen() {
     });
   };
   if (isLoading) return <View style={[styles.center, { backgroundColor: colors.offWhite }]}><ActivityIndicator color={colors.primary} /></View>;
-  if (isError) return <View style={[styles.center, { backgroundColor: colors.offWhite }]}><Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Could not load requests.</Text><TouchableOpacity onPress={() => refetch()}><Text style={[styles.link, { color: colors.primary }]}>Try again</Text></TouchableOpacity></View>;
+  if (isError) return <View style={[styles.center, { backgroundColor: colors.offWhite }]}><Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Couldn’t load requests.</Text><TouchableOpacity onPress={() => refetch()}><Text style={[styles.link, { color: colors.primary }]}>Try again</Text></TouchableOpacity></View>;
   return (
     <FlatList
       data={requests}

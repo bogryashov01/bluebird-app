@@ -292,13 +292,13 @@ export function presentAccountDeletionFailure(input: {
     case 'unauthorized':
       return {
         title: 'Sign in required',
-        body: 'Your session could not authorize account deletion. Sign in again and try once more. Your account was not deleted.',
+        body: 'Your session couldn’t authorize account deletion. Sign in again and try once more. Your account was not deleted.',
         canRetry: false,
       };
     case 'forbidden':
       return {
         title: 'Deletion unavailable',
-        body: 'Bluebird could not authorize account deletion for this session. Your account was not deleted.',
+        body: 'Bluebird couldn’t authorize account deletion for this session. Your account was not deleted.',
         canRetry: false,
       };
     case 'self_service_only':
@@ -310,7 +310,7 @@ export function presentAccountDeletionFailure(input: {
     case 'invalid_body':
       return {
         title: 'Confirmation required',
-        body: 'Bluebird could not accept this deletion request. Confirm DELETE and any required membership cancellation acknowledgement, then try again. Your account was not deleted.',
+        body: 'Bluebird couldn’t accept this deletion request. Confirm DELETE and any required membership cancellation acknowledgement, then try again. Your account was not deleted.',
         canRetry: true,
       };
     case 'membership_ack_required':
@@ -336,14 +336,14 @@ export function presentAccountDeletionFailure(input: {
     case 'network':
       return {
         title: 'Connection problem',
-        body: 'Bluebird could not reach the server. Check your connection and try again. Your account was not deleted.',
+        body: 'Bluebird couldn’t reach the server. Check your connection and try again. Your account was not deleted.',
         canRetry: true,
       };
     case 'unavailable':
     case 'server':
       return {
         title: 'Deletion unavailable',
-        body: 'Bluebird could not process account deletion right now. Try again later. Your account was not deleted.',
+        body: 'Bluebird couldn’t process account deletion right now. Try again later. Your account was not deleted.',
         canRetry: retryable || input.code === 'server',
       };
     case 'configuration':
@@ -351,7 +351,7 @@ export function presentAccountDeletionFailure(input: {
     case 'invalid_response':
       return {
         title: 'Deletion unavailable',
-        body: 'Account deletion could not be completed. Your account was not deleted.',
+        body: 'Account deletion couldn’t be completed. Your account was not deleted.',
         canRetry: false,
       };
     case 'cancelled':
@@ -364,7 +364,7 @@ export function presentAccountDeletionFailure(input: {
     case 'reverification_unavailable':
       return {
         title: 'Verification required',
-        body: 'Bluebird could not start phone verification for this sensitive action. Your account was not deleted.',
+        body: 'Bluebird couldn’t start phone verification for this sensitive action. Your account was not deleted.',
         canRetry: true,
       };
     default:

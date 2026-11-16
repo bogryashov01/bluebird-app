@@ -286,7 +286,7 @@ export function presentPassengerFailure(status: number | null): { title: string;
   if (status === 409) {
     return { title: 'No remaining seats', body: 'This aircraft has no remaining passenger seats. Nothing was changed.' };
   }
-  return { title: 'Connection problem', body: 'Passenger information could not be loaded. Nothing was changed.' };
+  return { title: 'Connection problem', body: 'Passenger information couldn’t be loaded. Nothing was changed.' };
 }
 
 export function shouldApplyPassengerManifest(input: { requestedUserId: string; activeUserId: string | null; signedIn: boolean }): boolean {

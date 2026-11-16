@@ -518,7 +518,8 @@ test("unverified and incomplete sign-up results stay signed out without sending 
     assert.equal(started.ok, true);
     const unverified = await verifyClerkPhoneCode("sign-up", "123456", unverifiedFixture.actions);
     assert.equal(unverified.ok, false);
-    assert.match(unverified.message, /has not confirmed this phone number/);
+    assert.match(unverified.message, /couldn’t verify this phone number/);
+    assert.doesNotMatch(unverified.message, /Clerk|app owner/);
     assert.equal(unverifiedFixture.getActivationCalls(), 0);
     assert.deepEqual(unverifiedFixture.calls.map(([name]) => name), [
       "create-sign-up",
@@ -536,7 +537,8 @@ test("unverified and incomplete sign-up results stay signed out without sending 
     const incomplete = await verifyClerkPhoneCode("sign-up", "123456", incompleteFixture.actions);
     assert.equal(incomplete.ok, false);
     assert.equal(incomplete.stage, "verification");
-    assert.match(incomplete.message, /additional sign-up information/);
+    assert.match(incomplete.message, /Creating your account needs details/);
+    assert.doesNotMatch(incomplete.message, /Clerk|app owner/);
     assert.equal(incompleteFixture.getActivationCalls(), 0);
     assert.equal(fetchCalls, 0);
   } finally {

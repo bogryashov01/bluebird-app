@@ -92,7 +92,7 @@ export default function VerifyCodeScreen() {
         inputRef.current?.focus();
       },
       onError: (err: any) => {
-        setError(err?.response?.data?.error || err?.message || 'Could not resend the code');
+        setError(err?.response?.data?.error || err?.message || 'Couldn’t resend the code');
       },
     },
   });

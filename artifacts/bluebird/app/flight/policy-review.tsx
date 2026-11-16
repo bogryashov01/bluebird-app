@@ -126,7 +126,7 @@ export default function FlightPolicyReviewScreen() {
         title={failure.title}
         body={failure.body}
         colors={colors}
-        actionLabel="Try Again"
+        actionLabel="Try again"
         onAction={() => { void query.refetch(); }}
       />
     );

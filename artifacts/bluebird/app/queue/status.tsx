@@ -608,9 +608,9 @@ export default function QueueStatusScreen() {
         </View>
        ) : isError ? (
          <View style={styles.empty}>
-           <Text style={[styles.emptyTitle, { color: colors.textOnSurface }]}>Could not load your queues</Text>
+           <Text style={[styles.emptyTitle, { color: colors.textOnSurface }]}>Couldn’t load your queues</Text>
            <Text style={[styles.emptyBody, { color: colors.mutedForegroundLight }]}>Check your connection and try again.</Text>
-           <SecondaryButton label="Try Again" onPress={() => refetch()} backgroundColor={colors.primary} textColor={colors.primaryForeground} style={styles.browseBtn} />
+           <SecondaryButton label="Try again" onPress={() => refetch()} backgroundColor={colors.primary} textColor={colors.primaryForeground} style={styles.browseBtn} />
          </View>
        ) : !hasAny ? (
         <View style={styles.empty}>

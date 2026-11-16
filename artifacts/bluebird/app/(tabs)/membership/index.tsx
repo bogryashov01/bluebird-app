@@ -80,12 +80,12 @@ type ClerkMembershipLoadState =
 
 function membershipLoadErrorMessage(code: DashboardMembershipErrorCode): string {
   if (code === 'network' || code === 'timeout') {
-    return 'Bluebird could not be reached. Check your connection and try again.';
+    return 'Bluebird couldn’t be reached. Check your connection and try again.';
   }
   if (code === 'session_expired') {
     return 'Your sign-in has expired. Sign in again, then reopen Membership.';
   }
-  return 'Bluebird could not load your membership details.';
+  return 'Bluebird couldn’t load your membership details.';
 }
 
 function formatMembershipDate(value: string | null | undefined): string {
@@ -469,7 +469,7 @@ export default function MembershipScreen() {
         <View style={[styles.root, styles.centered, { backgroundColor: colors.offWhite, padding: 28 }]} testID="clerk-membership">
           <Text style={[styles.errorTitle, { color: colors.textOnSurface }]}>Membership unavailable</Text>
           <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]} testID="clerk-membership-error">
-            {visibleState.kind === 'error' ? visibleState.message : 'Bluebird could not load your membership details.'}
+            {visibleState.kind === 'error' ? visibleState.message : 'Bluebird couldn’t load your membership details.'}
           </Text>
           <TouchableOpacity
             onPress={() => setClerkMembershipAttempt((attempt) => attempt + 1)}
@@ -656,12 +656,12 @@ export default function MembershipScreen() {
         </Text>
         <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
           {isError
-            ? 'We could not confirm your membership. This does not mean your membership has ended.'
+            ? 'We couldn’t confirm your membership. This does not mean your membership has ended.'
             : 'Membership details for this account aren’t available right now.'}
         </Text>
         {isError ? (
           <TouchableOpacity testID="legacy-membership-retry" style={[styles.retryBtn, { backgroundColor: colors.primary }]} onPress={() => refetch()}>
-            <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>
+            <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try again</Text>
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity onPress={() => router.push('/membership/plans' as any)} style={styles.plansLink}>
@@ -726,7 +726,7 @@ export default function MembershipScreen() {
             ) : plansQuery.isError || !plansQuery.data ? (
               <View style={styles.planLoadError}>
                 <Text style={[styles.planLoadErrorText, { color: colors.mutedForegroundLight }]}>
-                  Could not load plan information. Please try again.
+                  Couldn’t load plan information. Please try again.
                 </Text>
                 <TouchableOpacity
                   style={[styles.retryBtn, { backgroundColor: colors.primary }]}
@@ -735,7 +735,7 @@ export default function MembershipScreen() {
                 >
                   {plansQuery.isFetching
                     ? <ActivityIndicator color={colors.primaryForeground} />
-                    : <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>}
+                    : <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try again</Text>}
                 </TouchableOpacity>
               </View>
             ) : plans.length === 0 ? (
@@ -1009,7 +1009,7 @@ export default function MembershipScreen() {
         ) : !family && plansQuery.isError ? (
           <View style={[styles.catalogStatusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight }]}>
-              Production plan details could not be loaded.
+              Production plan details couldn’t be loaded.
             </Text>
             <TouchableOpacity disabled={plansQuery.isFetching} onPress={() => plansQuery.refetch()}>
               {plansQuery.isFetching

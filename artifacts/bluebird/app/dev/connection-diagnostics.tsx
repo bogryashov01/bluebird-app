@@ -38,7 +38,7 @@ export default function ConnectionDiagnosticsScreen() {
       setResults(next);
     }).catch(() => {
       setResults(null);
-      setNotice('The checks could not be completed.');
+      setNotice('The checks couldn’t be completed.');
     }).finally(() => {
       setRunning(false);
     });

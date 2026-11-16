@@ -404,7 +404,7 @@ export function useAiConcierge() {
       await Linking.openURL(supportUrl);
       return true;
     } catch {
-      setMessage('Support could not be opened right now.');
+      setMessage('Support couldn’t be opened right now.');
       return false;
     }
   }, []);

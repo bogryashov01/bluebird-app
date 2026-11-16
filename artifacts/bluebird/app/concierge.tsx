@@ -161,7 +161,7 @@ function ConciergeContent() {
       )}
       {historyQuery.isError && (
         <View style={styles.historyError}>
-          <Text style={[styles.callbackStatus, { color: colors.destructive }]}>Could not load earlier messages.</Text>
+          <Text style={[styles.callbackStatus, { color: colors.destructive }]}>Couldn’t load earlier messages.</Text>
           <TouchableOpacity onPress={() => historyQuery.refetch()}>
             <Text style={[styles.retryText, { color: colors.primary }]}>Try again</Text>
           </TouchableOpacity>

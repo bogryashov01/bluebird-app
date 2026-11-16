@@ -252,7 +252,7 @@ function smsComposerNotice(result: string | null | undefined): string | null {
   if (result === 'unavailable') {
     return 'Text messages are not available on this iPhone. You can share the invitation another way.';
   }
-  return 'The message composer could not be opened. You can share the invitation another way.';
+  return 'The message composer couldn’t be opened. You can share the invitation another way.';
 }
 
 export function shareInvitationPayload(
@@ -267,7 +267,7 @@ export function finishShareSheet(
   action: string | null | undefined,
 ): { notice: string | null; claimedDelivery: false } {
   if (interpretShareResult(action) === 'unavailable') {
-    return { notice: 'The share sheet could not be opened.', claimedDelivery: false };
+    return { notice: 'The share sheet couldn’t be opened.', claimedDelivery: false };
   }
   return { notice: null, claimedDelivery: false };
 }

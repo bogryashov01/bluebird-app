@@ -244,21 +244,21 @@ export function aiConciergeFailureCopy(code: AiConciergeFailure): string {
     case 'timeout':
       return 'The Concierge is taking longer than expected. You can retry the same message.';
     case 'network':
-      return 'The Concierge request could not reach Bluebird. Check your connection and try again.';
+      return 'The Concierge request couldn’t reach Bluebird. Check your connection and try again.';
     case 'conflict':
       return 'That message may already have been sent. Refreshing your conversation.';
     case 'invalid_message':
     case 'invalid_body':
-      return 'That message could not be sent.';
+      return 'That message couldn’t be sent.';
     case 'cancelled':
       return '';
     case 'schema':
-      return 'The Concierge response could not be read.';
+      return 'The Concierge response couldn’t be read.';
     case 'invalid_cursor':
     case 'invalid_page_size':
-      return 'Earlier messages could not be loaded.';
+      return 'Earlier messages couldn’t be loaded.';
     default:
-      return 'AI Concierge could not complete that request. Please try again.';
+      return 'AI Concierge couldn’t complete that request. Please try again.';
   }
 }
 

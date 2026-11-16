@@ -590,7 +590,7 @@ function LegacyNotificationsScreen() {
           <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
         ) : isError ? (
           <View style={styles.emptyWrap}>
-            <Text style={[styles.emptyText, { color: colors.mutedForegroundLight }]}>Could not load notifications</Text>
+            <Text style={[styles.emptyText, { color: colors.mutedForegroundLight }]}>Couldn’t load notifications</Text>
             <TouchableOpacity style={[styles.retryBtn, { borderColor: colors.border }]} onPress={() => refetch()}>
               <Text style={[styles.retryText, { color: colors.textOnSurface }]}>Try again</Text>
             </TouchableOpacity>

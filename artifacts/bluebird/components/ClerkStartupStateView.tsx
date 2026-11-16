@@ -5,10 +5,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import {
   getClerkStartupDiagnosticLines,
+  shouldShowClerkStartupDiagnostics,
   type ClerkStartupFailureReason,
   type ClerkStartupState,
 } from '@/lib/clerkStartup';
 import { isNativeProductionAuthTestEnabled, shouldShowNativeAuthStartupDiagnostics } from '@/lib/nativeAuthTestPolicy';
+
+/** Reads build-time flags only (not a hook). */
+export function clerkStartupDiagnosticsVisible(): boolean {
+  return shouldShowClerkStartupDiagnostics({
+    productionClerkDebug: process.env.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_CLERK_DEBUG,
+    nativeAuthTestDiagnostics: shouldShowNativeAuthStartupDiagnostics({
+      platformOS: Platform.OS,
+      nativeAuthTestEnabled: isNativeProductionAuthTestEnabled(),
+      apiEnvironment: process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT,
+      developmentBuild: typeof __DEV__ !== 'undefined' && __DEV__,
+    }),
+  });
+}
 
 export function ClerkStartupDiagnosticDetails({
   failureReason,
@@ -20,17 +34,11 @@ export function ClerkStartupDiagnosticDetails({
   isLoaded: boolean;
 }) {
   const colors = useColors();
-  const visible = shouldShowNativeAuthStartupDiagnostics({
-    platformOS: Platform.OS,
-    nativeAuthTestEnabled: isNativeProductionAuthTestEnabled(),
-    apiEnvironment: process.env.EXPO_PUBLIC_BLUEBIRD_API_ENVIRONMENT,
-    developmentBuild: typeof __DEV__ !== 'undefined' && __DEV__,
-  });
-  if (!visible) return null;
+  if (!clerkStartupDiagnosticsVisible()) return null;
 
   return (
     <View
-      accessibilityLabel="Clerk startup diagnostics"
+      accessibilityLabel="Sign-in diagnostics"
       style={[styles.diagnosticsBox, { borderColor: colors.border }]}
       testID="clerk-startup-diagnostics"
     >
@@ -115,7 +123,7 @@ export function ClerkStartupStateView({
             style={[styles.retryButton, { backgroundColor: colors.primary }]}
             testID="clerk-startup-retry"
           >
-            <Text style={[styles.retryText, { color: colors.textOnBrand }]}>Retry</Text>
+            <Text style={[styles.retryText, { color: colors.textOnBrand }]}>Try again</Text>
           </Pressable>
         </>
       ) : (

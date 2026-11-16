@@ -64,7 +64,7 @@ export function FullAppDemoQueueProvider({ children }: { children: React.ReactNo
         if (cancelled) return;
         stateRef.current = { entries: [], passCount: 0 };
         setState(stateRef.current);
-        setStorageError('Local demo queue storage could not be read. Queue actions are unavailable.');
+        setStorageError('Local demo queue storage couldn’t be read. Queue actions are unavailable.');
       })
       .finally(() => {
         if (!cancelled) setHydrated(true);
@@ -83,7 +83,7 @@ export function FullAppDemoQueueProvider({ children }: { children: React.ReactNo
       setState(next);
       setStorageError(null);
     } catch {
-      setStorageError('Local demo queue could not be saved. Check this browser’s local storage.');
+      setStorageError('Local demo queue couldn’t be saved. Check this browser’s local storage.');
       throw new Error('Local demo queue could not be saved.');
     }
   }, [hydrated, storageError]);

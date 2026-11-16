@@ -51,7 +51,7 @@ export default function CompleteRegistrationScreen() {
       },
       onError: (err: any) => {
         const status = err?.response?.status;
-        const message = err?.response?.data?.error || err?.message || 'Could not create your account. Please try again.';
+        const message = err?.response?.data?.error || err?.message || 'Couldn’t create your account. Please try again.';
         setGrantExpired(status === 401);
         setError(message);
       },

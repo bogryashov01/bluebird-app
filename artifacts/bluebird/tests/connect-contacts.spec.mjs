@@ -293,7 +293,7 @@ test("Share Another Way uses the verified link and does not address a contact", 
   assert.deepEqual(finishShareSheet("sharedAction"), { notice: null, claimedDelivery: false });
   assert.deepEqual(finishShareSheet("dismissedAction"), { notice: null, claimedDelivery: false });
   assert.equal(finishShareSheet(undefined).claimedDelivery, false);
-  assert.match(finishShareSheet(undefined).notice, /could not be opened/);
+  assert.match(finishShareSheet(undefined).notice, /couldn’t be opened/);
 });
 
 test("Connect Contacts keeps the legacy family screen and does not upload contacts", () => {

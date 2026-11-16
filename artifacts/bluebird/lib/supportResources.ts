@@ -67,7 +67,7 @@ export const VERIFIED_SUPPORT_RESOURCES: readonly SupportResource[] = [
 ];
 
 export const EXTERNAL_RESOURCE_OPEN_ERROR =
-  'This link could not be opened. Try again in a moment.';
+  'This link couldn’t be opened. Try again in a moment.';
 
 export function verifiedSupportResource(id: SupportResourceId): SupportResource | null {
   return VERIFIED_SUPPORT_RESOURCES.find((resource) => resource.id === id) ?? null;

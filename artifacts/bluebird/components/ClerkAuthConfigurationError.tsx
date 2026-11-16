@@ -2,7 +2,10 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
-import { ClerkStartupDiagnosticDetails } from '@/components/ClerkStartupStateView';
+import {
+  ClerkStartupDiagnosticDetails,
+  clerkStartupDiagnosticsVisible,
+} from '@/components/ClerkStartupStateView';
 
 export function ClerkAuthConfigurationError() {
   const colors = useColors();
@@ -10,14 +13,15 @@ export function ClerkAuthConfigurationError() {
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundMid }]}>
       <Text style={[styles.title, { color: colors.textOnBrand }]}>
-        Sign-in setup is incomplete
+        Sign-in unavailable
       </Text>
       <Text
         accessibilityLiveRegion="polite"
         style={[styles.message, { color: colors.mutedOnBrand }]}
         testID="clerk-configuration-error"
       >
-        {CLERK_AUTH_CONFIGURATION.configurationError ??
+        {/* Raw configuration errors name env variables; show them only with diagnostics. */}
+        {(clerkStartupDiagnosticsVisible() ? CLERK_AUTH_CONFIGURATION.configurationError : null) ??
           'Sign-in is temporarily unavailable. Please try again later.'}
       </Text>
       <ClerkStartupDiagnosticDetails

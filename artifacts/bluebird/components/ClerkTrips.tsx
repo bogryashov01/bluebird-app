@@ -321,14 +321,14 @@ export function ClerkTrips() {
     const forbidden = error.status === 403;
     state = (
       <StateMessage
-        title={unauthorized ? 'Sign in again to view trips' : forbidden ? 'Trips unavailable for this account' : 'Could not load your trips'}
+        title={unauthorized ? 'Sign in again to view trips' : forbidden ? 'Trips unavailable for this account' : 'Couldn’t load your trips'}
         description={unauthorized
           ? 'Please sign in again to view your trips.'
           : forbidden
             ? 'Your trip information is unavailable right now.'
             : 'Check your connection and try again.'}
         colors={colors}
-        actionLabel="Try Again"
+        actionLabel="Try again"
         onAction={() => { void query.refetch(); }}
       />
     );

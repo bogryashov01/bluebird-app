@@ -176,7 +176,7 @@ test("Help Center and Legal actions open only the confirmed destinations", async
 
   await page.evaluate(() => { window.open = () => { throw new Error("browser unavailable"); }; });
   await page.getByRole("link", { name: "Frequently Asked Questions" }).click();
-  await expect(page.getByTestId("help-center-open-error")).toHaveText("This link could not be opened. Try again in a moment.");
+  await expect(page.getByTestId("help-center-open-error")).toHaveText("This link couldn’t be opened. Try again in a moment.");
   await expect(page.getByTestId("help-center-screen")).toBeVisible();
 
   await page.getByTestId("help-center-back").click();

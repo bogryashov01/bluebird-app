@@ -46,9 +46,9 @@ function errorMessage(error: unknown): string {
     if (status === 403) return 'This queue action is not available.';
     if (status === 404) return 'This queue is unavailable.';
     if (status === 409) return 'This queue changed. Refresh and try again.';
-    return 'The queue could not be updated.';
+    return 'The queue couldn’t be updated.';
   }
-  return 'The queue could not be updated.';
+  return 'The queue couldn’t be updated.';
 }
 
 export function ClerkQueuePanel({
@@ -140,7 +140,7 @@ export function ClerkQueuePanel({
         <View style={styles.content}>
           <Text style={[styles.body, { color: colors.coral }]}>{errorMessage(queue.error)}</Text>
           <SecondaryButton
-            label="Try Again"
+            label="Try again"
             onPress={() => void queue.refetch()}
             backgroundColor={colors.primary}
             textColor={colors.primaryForeground}
@@ -195,9 +195,9 @@ export function ClerkQueuePanel({
           ) : eligibility.isError ? (
             <View style={styles.content}>
               <Text style={[styles.body, { color: colors.coral }]}>
-                We could not verify your membership. Try again.
+                We couldn’t verify your membership. Try again.
               </Text>
-              <SecondaryButton label="Try Again" onPress={() => void eligibility.refetch()} testID="clerk-queue-eligibility-retry" />
+              <SecondaryButton label="Try again" onPress={() => void eligibility.refetch()} testID="clerk-queue-eligibility-retry" />
             </View>
           ) : !flightPublished ? (
             <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>

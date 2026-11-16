@@ -37,7 +37,7 @@ export default function NetworkingThreadScreen() {
       }
       await Linking.openURL(parsed.toString());
     } catch {
-      setError('Could not open this social link.');
+      setError('Couldn’t open this social link.');
     }
   };
   const send = useSendNetworkingMessage();
@@ -77,7 +77,7 @@ export default function NetworkingThreadScreen() {
           ))}
         </View>
       )}
-      {isLoading ? <View style={styles.center}><ActivityIndicator color={colors.primary} /></View> : isError ? <View style={styles.center}><Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Could not load this conversation.</Text><TouchableOpacity onPress={() => refetch()}><Text style={[styles.link, { color: colors.primary }]}>Try again</Text></TouchableOpacity></View> : (
+      {isLoading ? <View style={styles.center}><ActivityIndicator color={colors.primary} /></View> : isError ? <View style={styles.center}><Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Couldn’t load this conversation.</Text><TouchableOpacity onPress={() => refetch()}><Text style={[styles.link, { color: colors.primary }]}>Try again</Text></TouchableOpacity></View> : (
         <ScrollView contentContainerStyle={styles.messages}>
           {messages.length === 0 ? <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Start the conversation with a thoughtful introduction.</Text> : messages.map((message) => {
             const mine = message.senderId === user?.id;

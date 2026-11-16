@@ -434,7 +434,7 @@ test("the Clerk profile keeps Allow incoming requests under Preferences as priva
   assert.match(source, /saveIncomingConnectionRequestsPreference/);
   assert.match(source, /label: 'Allow incoming requests'/);
   assert.match(source, /outcome\.kind === 'confirmed'/);
-  assert.match(source, /could not confirm this preference yet/i);
+  assert.match(source, /couldn’t confirm this preference yet/i);
   assert.match(source, /incomingPreferenceSaveGeneration/);
   assert.match(source, /withIncomingConnectionPreference/);
   const preferencesBlock = source

@@ -14,7 +14,7 @@ export const BLUEBIRD_WEBSITE_ENTRY_URL = 'https://bluebirdjets.com';
 export const BLUEBIRD_WEBSITE_ACTION_LABEL = 'Open Bluebird Website';
 
 export const MEMBERSHIP_PAYMENT_WEBSITE_OPEN_ERROR =
-  'The Bluebird website could not be opened. Try again in a moment.';
+  'The Bluebird website couldn’t be opened. Try again in a moment.';
 
 export function membershipPaymentWebsiteDestination(): {
   url: typeof BLUEBIRD_WEBSITE_ENTRY_URL;

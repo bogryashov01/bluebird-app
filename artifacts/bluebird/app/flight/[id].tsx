@@ -722,12 +722,12 @@ export default function FlightDetailScreen() {
       >
         {showHistoryBack ? <FloatingBackButton onPress={leaveUnavailableFlight} /> : null}
         <Text style={[styles.errText, { color: colors.textOnSurface }]}>
-          {isError ? 'Could not load flight details' : 'Flight unavailable'}
+          {isError ? 'Couldn’t load flight details' : 'Flight unavailable'}
         </Text>
         {isError && <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>Check your connection and try again.</Text>}
         {!isError && (
           <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
-            This flight could not be found in the selected flight service.
+            We couldn’t find this flight. It may have been removed or rescheduled.
           </Text>
         )}
         {canRetry && (
@@ -1313,7 +1313,7 @@ export default function FlightDetailScreen() {
     if (!myStatus) {
       return renderUnavailableCTA(
         'Queue access unavailable',
-        'We could not verify your access for this flight. No queue or booking request was sent.',
+        'We couldn’t verify your access for this flight. No queue or booking request was sent.',
       );
     }
 
@@ -1543,7 +1543,7 @@ export default function FlightDetailScreen() {
           )}
           {displayedProduction.refreshFailed && (
             <Text testID="flight-detail-refresh-error" style={[styles.dateText, { color: colors.mutedForegroundLight }]}>
-              Flight details could not be refreshed.
+              Flight details couldn’t be refreshed.
             </Text>
           )}
           {productionFlightQuery.isFetching && displayedProduction.showingCachedDiscover && (
@@ -1642,7 +1642,7 @@ export default function FlightDetailScreen() {
               <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]}>
                 {queueRosterStatus === 401 || queueRosterStatus === 403 ?
                   'Queue details are not available for this account.'
-                : 'The queue could not be loaded.'}
+                : 'The queue couldn’t be loaded.'}
               </Text>
               <TouchableOpacity
                 onPress={() => {
@@ -1668,7 +1668,7 @@ export default function FlightDetailScreen() {
             </Text>
           : !localReadMode && productionQueue.kind === 'unavailable' ?
             <View testID="flight-queue-error">
-              <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]}>The queue could not be loaded.</Text>
+              <Text style={[styles.queueState, { color: colors.mutedForegroundLight }]}>The queue couldn’t be loaded.</Text>
               <TouchableOpacity
                 onPress={() => {
                   void refetchProductionQueue();

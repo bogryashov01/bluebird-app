@@ -180,7 +180,7 @@ function ClerkPersonalInfoScreen() {
           <View style={styles.clerkInfoCard}>
             <Text style={[styles.title, { color: colors.textOnSurface }]}>Profile unavailable</Text>
             <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
-              Bluebird did not confirm this signed-in session. No profile details were loaded.
+              We couldn’t confirm your account details. Please try again.
             </Text>
             <TouchableOpacity
               style={[styles.button, { backgroundColor: colors.primary }]}
@@ -579,9 +579,9 @@ function getClerkPersonalInfoErrorMessage(error: unknown): string {
     return 'Your sign-in has expired. Sign in again, then reopen your profile.';
   }
   if (typed?.code === 'network' || typed?.code === 'timeout') {
-    return 'Bluebird could not be reached. Check your connection and try again.';
+    return 'Bluebird couldn’t be reached. Check your connection and try again.';
   }
-  return 'Bluebird could not load or save your profile. Please try again.';
+  return 'Bluebird couldn’t load or save your profile. Please try again.';
 }
 
 function toPhotoUrl(path: string): string {
@@ -748,7 +748,7 @@ export default function PersonalInfoScreen() {
                   text: 'Open Settings',
                   onPress: () => {
                     void Linking.openSettings().catch(() => {
-                      setPhotoError('Could not open Settings. You can enable photo access in your device settings.');
+                      setPhotoError('Couldn’t open Settings. You can enable photo access in your device settings.');
                     });
                   },
                 },
@@ -784,7 +784,7 @@ export default function PersonalInfoScreen() {
         uploadError?.response?.data?.error ??
         uploadError?.data?.error ??
         uploadError?.message ??
-        'Could not update your profile photo.',
+        'Couldn’t update your profile photo.',
       );
     } finally {
       setIsUploadingPhoto(false);
@@ -808,7 +808,7 @@ export default function PersonalInfoScreen() {
         updateError?.response?.data?.error ??
         updateError?.data?.error ??
         updateError?.message ??
-        'Could not remove your profile photo.',
+        'Couldn’t remove your profile photo.',
       );
     } finally {
       setIsUploadingPhoto(false);
@@ -846,7 +846,7 @@ export default function PersonalInfoScreen() {
         queryClient.invalidateQueries({ queryKey: ['/api/networking/profile'] });
         setTimeout(() => setNetworkingSaved(false), 2200);
       },
-      onError: (err: any) => setNetworkingErrorMessage(err?.data?.error ?? err?.message ?? 'Could not save your profile.'),
+      onError: (err: any) => setNetworkingErrorMessage(err?.data?.error ?? err?.message ?? 'Couldn’t save your profile.'),
     });
   };
 

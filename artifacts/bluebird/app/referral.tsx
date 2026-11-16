@@ -49,8 +49,8 @@ export default function ReferralScreen() {
       setTimeout(() => setCopied(null), 1500);
     } catch {
       showFeedback(
-        'Could not copy',
-        `Your referral ${kind} could not be copied. Please try again.`,
+        'Couldn’t copy',
+        `Your referral ${kind} couldn’t be copied. Please try again.`,
       );
     }
   };
@@ -74,7 +74,7 @@ export default function ReferralScreen() {
       );
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return;
-      showFeedback('Could not share invite', 'Sharing is not available right now. You can copy your invite link instead.');
+      showFeedback('Couldn’t share invite', 'Sharing is not available right now. You can copy your invite link instead.');
     }
   };
 
@@ -82,7 +82,7 @@ export default function ReferralScreen() {
     try {
       await simulateQualifyingActivation();
     } catch {
-      showFeedback('Demo activation unavailable', 'The local referral activation could not be saved. Try again.');
+      showFeedback('Demo activation unavailable', 'The local referral activation couldn’t be saved. Try again.');
     }
   };
 

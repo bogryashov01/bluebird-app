@@ -118,9 +118,9 @@ export default function BuyPassScreen() {
         afterPurchase();
       } catch {
         if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          window.alert('The local demo pass could not be saved. Check this browser’s local storage.');
+          window.alert('The local demo pass couldn’t be saved. Check this browser’s local storage.');
         } else {
-          Alert.alert('Demo purchase unavailable', 'The local demo pass could not be saved.');
+          Alert.alert('Demo purchase unavailable', 'The local demo pass couldn’t be saved.');
         }
       } finally {
         setDemoPurchasePending(false);

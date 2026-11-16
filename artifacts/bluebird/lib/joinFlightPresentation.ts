@@ -574,9 +574,9 @@ export function presentJoinFlightFailure(input: {
     return failure(status, code, 'Request not accepted', 'Bluebird did not accept this join request.', null, false);
   }
   if (status === null || status === 0) {
-    return failure(null, code, 'Connection problem', 'The join request could not reach Bluebird. No queue change was confirmed.', null, false);
+    return failure(null, code, 'Connection problem', 'The join request couldn’t reach Bluebird. No queue change was confirmed.', null, false);
   }
-  return failure(status, code, 'Unable to join', 'Joining could not be completed. No queue change was confirmed.', null, false);
+  return failure(status, code, 'Unable to join', 'Joining couldn’t be completed. No queue change was confirmed.', null, false);
 }
 
 export function presentQueueLeaveFailure(input: {
@@ -599,15 +599,15 @@ export function presentQueueLeaveFailure(input: {
     return failure(status, code, 'Flight departed', 'This flight has already departed. You were not removed.', null, false);
   }
   if (status === 409) {
-    return failure(status, code, 'Unable to leave', 'This queue could not be left. No queue change was confirmed.', null, false);
+    return failure(status, code, 'Unable to leave', 'This queue couldn’t be left. No queue change was confirmed.', null, false);
   }
   if (status === 400) {
     return failure(status, code, 'Request not accepted', 'Bluebird did not accept this leave request.', null, false);
   }
   if (status === null || status === 0) {
-    return failure(null, code, 'Connection problem', 'The leave request could not reach Bluebird. No queue change was confirmed.', null, false);
+    return failure(null, code, 'Connection problem', 'The leave request couldn’t reach Bluebird. No queue change was confirmed.', null, false);
   }
-  return failure(status, code, 'Unable to leave', 'Leaving the queue could not be completed. No queue change was confirmed.', null, false);
+  return failure(status, code, 'Unable to leave', 'Leaving the queue couldn’t be completed. No queue change was confirmed.', null, false);
 }
 
 export const QUEUE_JOIN_DUPLICATE = 'A queue request is already in progress. No second request was sent.';
@@ -624,7 +624,7 @@ export const QUEUE_SKIP_CONFIRMED =
 export const QUEUE_SKIP_NOTE =
   'Using a pass applies one credit and updates your place in line. Your seat isn’t confirmed yet.';
 export const QUEUE_SKIP_UNCONFIRMED = 'Bluebird did not confirm Skip the Line. No pass use was confirmed.';
-export const QUEUE_SKIP_BALANCE_UNAVAILABLE = 'Skip the Line pass balance could not be loaded.';
+export const QUEUE_SKIP_BALANCE_UNAVAILABLE = 'Skip the Line pass balance couldn’t be loaded.';
 
 /** Success copy after a verified Skip the Line response with viewerQueuePosition. */
 export function presentQueueSkipConfirmedMessage(viewerQueuePosition: number): string {
@@ -719,7 +719,7 @@ export function presentQueueSkipFailure(input: {
     return failure(status, code, 'Request not accepted', 'Bluebird did not accept this Skip the Line request. No pass use was confirmed.', null, true);
   }
   if (status === null || status === 0) {
-    return failure(null, code, 'Connection problem', 'The Skip the Line request could not reach Bluebird. No pass use was confirmed.', null, true);
+    return failure(null, code, 'Connection problem', 'The Skip the Line request couldn’t reach Bluebird. No pass use was confirmed.', null, true);
   }
   return failure(status, code, 'Pass not confirmed', QUEUE_SKIP_UNCONFIRMED, null, true);
 }

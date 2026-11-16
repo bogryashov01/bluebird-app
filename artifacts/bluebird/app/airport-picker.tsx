@@ -270,10 +270,10 @@ function ClerkHomeAirportEditor({ clerkUserId }: { clerkUserId: string }) {
         setSaveError(typed?.status === 401 || typed?.code === 'session_expired'
           ? 'Your sign-in has expired. Sign in again, then retry.'
           : typed?.code === 'network' || typed?.code === 'timeout'
-            ? 'Bluebird could not be reached. Check your connection and try again.'
+            ? 'Bluebird couldn’t be reached. Check your connection and try again.'
             : error instanceof Error
               ? error.message
-              : 'Home Airport could not be saved and verified. Please try again.');
+              : 'Home Airport couldn’t be saved and verified. Please try again.');
       }
     } finally {
       if (saveController.current === controller) saveController.current = null;
@@ -328,7 +328,7 @@ function ClerkHomeAirportEditor({ clerkUserId }: { clerkUserId: string }) {
         {profileQuery.isLoading ? <CatalogLoading label="Loading your saved profile…" /> : null}
         {profileQuery.isError ? (
           <CatalogError
-            label="Could not load your saved profile. Check your connection and try again."
+            label="Couldn’t load your saved profile. Check your connection and try again."
             retryable
             onRetry={() => void profileQuery.refetch()}
             testID="clerk-home-airport-profile-error"
@@ -551,7 +551,7 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
     : waitingToCheckCities && citiesQuery.isLoading
       ? 'The city list is still loading. Continue opens after the selected cities are checked.'
       : waitingToCheckCities && citiesQuery.isError
-        ? (cityReadFailure?.message ?? 'The city list could not be loaded. Try again before continuing.')
+        ? (cityReadFailure?.message ?? 'The city list couldn’t be loaded. Try again before continuing.')
         : draftSelectionError;
 
   const continueToReview = () => {

@@ -41,7 +41,7 @@ export default function UpgradeScreen() {
         >
           {plansQuery.isFetching
             ? <ActivityIndicator color={colors.primaryForeground} />
-            : <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>}
+            : <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try again</Text>}
         </TouchableOpacity>
       </View>
     );

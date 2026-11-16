@@ -44,7 +44,7 @@ export default function FamilyMembershipScreen() {
         refresh();
       },
       onError: (error) => {
-        setFormError(errorText(error, 'Could not update Family members.'));
+        setFormError(errorText(error, 'Couldn’t update Family members.'));
         refresh();
       },
     },
@@ -56,7 +56,7 @@ export default function FamilyMembershipScreen() {
         setFormError(null);
         refresh();
       },
-      onError: (error) => setFormError(errorText(error, 'Could not update that allocation.')),
+      onError: (error) => setFormError(errorText(error, 'Couldn’t update that allocation.')),
     },
   });
 

@@ -251,7 +251,7 @@ export default function JoinQueueAcknowledgeScreen() {
           },
         } as any);
       } catch (error) {
-        setJoinError(error instanceof Error ? error.message : 'The local demo queue could not be updated.');
+        setJoinError(error instanceof Error ? error.message : 'The local demo queue couldn’t be updated.');
       } finally {
         joinLock.current = false;
         setDemoQueueActionPending(false);

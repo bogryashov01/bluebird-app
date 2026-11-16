@@ -285,7 +285,7 @@ export function getClerkPostLoginStatusMessage(
     return 'The Main API confirmed a new account. Setup is paused until Bluebird can save the complete profile and every selected home airport.';
   }
   if (journey.kind === 'error') {
-    return 'Bluebird could not verify the next step with the Main API. No registration state was inferred and no account changes were made.';
+    return 'Bluebird couldn’t verify the next step with the Main API. No registration state was inferred and no account changes were made.';
   }
   if (journey.reason === 'unauthenticated') {
     return 'The Main API did not confirm this Clerk session. No profile, airport, or membership changes were made.';

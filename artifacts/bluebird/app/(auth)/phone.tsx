@@ -46,7 +46,7 @@ export default function PhoneScreen() {
         });
       },
       onError: (err: any) => {
-        setError(err?.response?.data?.error || err?.message || 'Could not send the code');
+        setError(err?.response?.data?.error || err?.message || 'Couldn’t send the code');
       },
     },
   });

@@ -173,7 +173,7 @@ test("local trip detail API failures and locked manifests have explicit states",
     json: { error: "Trip service unavailable." },
   }));
   await page.goto("/trip/trip-1");
-  await expect(page.getByTestId("trip-details-api-error")).toContainText("Could not load trip details");
+  await expect(page.getByTestId("trip-details-api-error")).toContainText("Couldn’t load trip details");
 
   await page.unroute("**/api/trips");
   await mockFlightApi(page, { manifestErrorStatus: 409 });

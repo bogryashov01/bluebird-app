@@ -200,7 +200,7 @@ export default function FlightChecklistScreen() {
         title={failure.title}
         body={failure.body}
         colors={colors}
-        actionLabel={canRetry ? 'Try Again' : undefined}
+        actionLabel={canRetry ? 'Try again' : undefined}
         onAction={canRetry ? () => { void query.refetch(); } : undefined}
       />
     );

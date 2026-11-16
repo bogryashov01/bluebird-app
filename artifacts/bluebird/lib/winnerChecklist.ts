@@ -434,7 +434,7 @@ export function presentTripActionFailure(status: number | null): TripActionFailu
       body: 'The queue may still be open, the selection may have been declined, or the flight may already be awarded. Nothing was changed.',
     };
   }
-  return { title: 'Connection problem', body: 'Bluebird could not be reached. Nothing was changed.' };
+  return { title: 'Connection problem', body: 'Bluebird couldn’t be reached. Nothing was changed.' };
 }
 
 export class TripChecklistSessionError extends Error {
@@ -583,7 +583,7 @@ export function presentPolicyBlock(block: PolicyActionBlock): TripActionFailure 
   if (block === 'policy-unavailable') {
     return {
       title: 'Flight policy unavailable',
-      body: 'The flight policy could not be shown. No request was sent.',
+      body: 'The flight policy couldn’t be shown. No request was sent.',
     };
   }
   if (block === 'scroll-incomplete') {

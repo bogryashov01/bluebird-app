@@ -493,7 +493,7 @@ test("join request bodies, pass consent, conflicts, and account refresh stay beh
   assert.match(missingCredit.body, /choices are still here/);
   assert.match(presentJoinFlightFailure({ status: 403 }).body, /does not confirm/);
   assert.match(presentJoinFlightFailure({ status: 404 }).body, /no longer available/);
-  assert.match(presentJoinFlightFailure({ status: null }).body, /could not reach Bluebird/);
+  assert.match(presentJoinFlightFailure({ status: null }).body, /couldn’t reach Bluebird/);
 
   const closing = "2026-11-01T18:30:00.000Z";
   const params = joinFlightRouteParams(42, {
