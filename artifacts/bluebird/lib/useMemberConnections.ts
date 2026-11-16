@@ -18,6 +18,7 @@ import {
   isMemberConnectionsIntegrationEnabled,
   projectOutgoingConnectionRequest,
   readMemberConnectionsSnapshot,
+  reconcilePendingOutgoingRecipients,
   rememberMemberConnectionsSnapshot,
   retainMemberConnectionsForAccount,
   type AcceptedConnection,
@@ -26,6 +27,7 @@ import {
   type DiscoveredConnectionMember,
   type MemberConnectionsFailure,
   type OutgoingConnectionRequest,
+  type PendingOutgoingRequestReceipt,
 } from '@/lib/memberConnections';
 
 const FAILURE_COPY: Record<MemberConnectionsFailure, string> = {
@@ -104,6 +106,7 @@ export function useMemberConnections() {
   const inFlight = React.useRef<string | null>(null);
   const outgoingRef = React.useRef<OutgoingConnectionRequest[]>([]);
   const pendingOutgoingRecipientUserIdsRef = React.useRef<string[]>([]);
+  const pendingOutgoingReceiptsRef = React.useRef<PendingOutgoingRequestReceipt[]>([]);
   const outgoingSupportedRef = React.useRef(false);
   outgoingRef.current = outgoing;
   pendingOutgoingRecipientUserIdsRef.current = pendingOutgoingRecipientUserIds;
@@ -115,6 +118,7 @@ export function useMemberConnections() {
     setIncoming([]);
     setOutgoing([]);
     setPendingOutgoingRecipientUserIds([]);
+    pendingOutgoingReceiptsRef.current = [];
     setOutgoingSupported(false);
     setAccepted([]);
     setDiscovery(undefined);
@@ -156,6 +160,7 @@ export function useMemberConnections() {
         setIncoming(cached.incoming);
         setOutgoing(cached.outgoing);
         setPendingOutgoingRecipientUserIds(cached.pendingOutgoingRecipientUserIds);
+        pendingOutgoingReceiptsRef.current = cached.pendingOutgoingRequestReceipts ?? [];
         setOutgoingSupported(cached.outgoingSupported);
         setAccepted(cached.accepted);
         setStatus('ready');
@@ -166,6 +171,7 @@ export function useMemberConnections() {
         baseUrl: configuration.apiBaseUrl,
         getAccessToken: () => sessionRef.current?.getToken() ?? Promise.resolve(null),
       });
+      const listRequestedAt = Date.now();
       const [incomingResult, acceptedResult, outgoingResult] = await Promise.all([
         client.listIncoming(),
         client.listAccepted(),
@@ -181,6 +187,7 @@ export function useMemberConnections() {
         setIncoming([]);
         setOutgoing([]);
         setPendingOutgoingRecipientUserIds([]);
+        pendingOutgoingReceiptsRef.current = [];
         setOutgoingSupported(false);
         setAccepted([]);
         setStatus('disabled');
@@ -203,8 +210,17 @@ export function useMemberConnections() {
       if (outgoingResult.kind === 'loaded') {
         nextOutgoing = outgoingResult.data.requests;
         nextOutgoingSupported = true;
-        // Redacted GET has no recipient user IDs — keep create-confirmed IDs only.
-        nextPendingRecipientUserIds = pendingOutgoingRecipientUserIdsRef.current;
+        // Redacted GET has no recipient user IDs — keep create-confirmed IDs only,
+        // releasing those whose request ID this newer list no longer reports pending.
+        const reconciled = reconcilePendingOutgoingRecipients({
+          recipientUserIds: pendingOutgoingRecipientUserIdsRef.current,
+          receipts: pendingOutgoingReceiptsRef.current,
+          outgoing: outgoingResult.data.requests,
+          listRequestedAt,
+        });
+        nextPendingRecipientUserIds = reconciled.recipientUserIds;
+        pendingOutgoingRecipientUserIdsRef.current = reconciled.recipientUserIds;
+        pendingOutgoingReceiptsRef.current = reconciled.receipts;
       } else if (outgoingResult.code === 'outgoing_unsupported') {
         nextOutgoingSupported = false;
         nextOutgoing = outgoingRef.current;
@@ -229,6 +245,7 @@ export function useMemberConnections() {
         incoming: incomingResult.data.requests,
         outgoing: nextOutgoing,
         pendingOutgoingRecipientUserIds: nextPendingRecipientUserIds,
+        pendingOutgoingRequestReceipts: pendingOutgoingReceiptsRef.current,
         accepted: acceptedResult.data.connections,
         outgoingSupported: nextOutgoingSupported,
       });
@@ -305,6 +322,12 @@ export function useMemberConnections() {
     const configuration = getMainBluebirdApiConfigurationOrNull();
     const projected = projectOutgoingConnectionRequest(created);
     const recipientUserId = created.recipient.userId.trim();
+    if (recipientUserId && created.status === 'pending') {
+      pendingOutgoingReceiptsRef.current = [
+        ...pendingOutgoingReceiptsRef.current.filter((receipt) => receipt.requestId !== created.id),
+        { recipientUserId, requestId: created.id, confirmedAt: Date.now() },
+      ];
+    }
     setOutgoing((previous) => {
       const nextOutgoing = upsertOutgoingRequest(previous, projected);
       setPendingOutgoingRecipientUserIds((previousIds) => {
@@ -322,6 +345,7 @@ export function useMemberConnections() {
             incoming: cached?.incoming ?? [],
             outgoing: nextOutgoing,
             pendingOutgoingRecipientUserIds: nextIds,
+            pendingOutgoingRequestReceipts: pendingOutgoingReceiptsRef.current,
             accepted: cached?.accepted ?? [],
             outgoingSupported: outgoingSupportedRef.current,
           });
@@ -426,6 +450,7 @@ export function useMemberConnections() {
             incoming: cached?.incoming ?? [],
             outgoing: cached?.outgoing ?? outgoingRef.current,
             pendingOutgoingRecipientUserIds: nextIds,
+            pendingOutgoingRequestReceipts: pendingOutgoingReceiptsRef.current,
             accepted: cached?.accepted ?? [],
             outgoingSupported: outgoingSupportedRef.current,
           });

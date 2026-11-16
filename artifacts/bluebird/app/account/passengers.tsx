@@ -26,7 +26,7 @@ import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
 import {
   applyPhonePlusPrefix,
-  optionalPhonePlusPrefixValue,
+  passengerPhoneForSave,
   phonePlusPrefixFieldProps,
 } from '@/lib/phonePlusPrefix';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
@@ -128,7 +128,7 @@ export default function PassengersScreen() {
     const payload: SavedPassengerInput = {
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
-      phone: optionalPhonePlusPrefixValue(form.phone),
+      phone: passengerPhoneForSave(form.phone, editing?.id ? editing.phone : null),
       email: form.email?.trim() || null,
       weightKg: Number(form.weightKg),
     };

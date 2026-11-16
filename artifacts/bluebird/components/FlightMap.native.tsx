@@ -181,6 +181,8 @@ export default function FlightMap({ flights, airports, onMapGestureActive }: Pro
   const lastFittedSelectionKeyRef = React.useRef<string | null>(null);
   const lastFittedResetTokenRef = React.useRef(0);
   const [resetToken, setResetToken] = React.useState(0);
+  // The first camera fit waits for onMapReady (see planFlightMapCameraUpdate).
+  const [mapReady, setMapReady] = React.useState(false);
 
   const fitPadding = React.useMemo<FlightMapEdgePadding>(
     () => flightMapFitEdgePadding({
@@ -304,12 +306,20 @@ export default function FlightMap({ flights, airports, onMapGestureActive }: Pro
       resetToken,
       lastFittedResetToken: lastFittedResetTokenRef.current,
       fitCoordinateCount: fitCoordinates.length,
+      mapReady,
     });
     if (decision.action !== 'fit') return;
     applyFit();
     lastFittedSelectionKeyRef.current = decision.selectionKey;
     lastFittedResetTokenRef.current = decision.resetToken;
-  }, [selectionKey, resetToken, fitCoordinates.length, applyFit]);
+  }, [selectionKey, resetToken, fitCoordinates.length, applyFit, mapReady]);
+
+  // The MapView unmounts while there are no routes; a remounted map must
+  // report ready again before it is fitted.
+  const hasRoutes = routes.length > 0;
+  React.useEffect(() => {
+    if (!hasRoutes) setMapReady(false);
+  }, [hasRoutes]);
 
   const productionRoutes = routes.some(({ flight }) => flight.source === 'production');
   const availableLocalRoutes = routes.some(({ flight }) => flight.status === 'available');
@@ -363,6 +373,7 @@ export default function FlightMap({ flights, airports, onMapGestureActive }: Pro
         zoomControlEnabled={false}
         moveOnMarkerPress={false}
         onPanDrag={gestureTracker.panDrag}
+        onMapReady={() => setMapReady(true)}
         onRegionChangeComplete={(region) => {
           regionRef.current = region;
         }}

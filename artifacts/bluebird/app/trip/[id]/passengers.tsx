@@ -27,7 +27,7 @@ import { prefillPrimaryPassenger } from '@/lib/passenger-name';
 import { MAX_OCCUPANTS, maxPassengersForBooking } from '@/lib/passengerCapacity';
 import {
   applyPhonePlusPrefix,
-  optionalPhonePlusPrefixValue,
+  passengerPhoneForSave,
   phonePlusPrefixFieldProps,
 } from '@/lib/phonePlusPrefix';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
@@ -37,6 +37,8 @@ import { PRODUCTION_AUTH_UNAVAILABLE_MESSAGE } from '@/lib/productionAuthState';
 type DraftPassenger = Omit<Passenger, 'dateOfBirth' | 'weightKg'> & {
   dateOfBirth: string;
   weightKg: string;
+  /** Phone as stored server-side; untouched phones are saved back unchanged. */
+  storedPhone?: string | null;
 };
 type PetDraft = {
   weightLb: string;
@@ -113,6 +115,7 @@ export default function PassengerListScreen() {
     const restoredPassengers = data.passengers.map((passenger) => ({
       ...passenger,
       phone: passenger.phone ? applyPhonePlusPrefix(passenger.phone) : '',
+      storedPhone: passenger.phone ?? null,
       dateOfBirth: passenger.dateOfBirth ?? '',
       weightKg: passenger.weightKg == null ? '' : String(passenger.weightKg),
     }));
@@ -240,7 +243,7 @@ export default function PassengerListScreen() {
       passengerOrder: index + 1,
       firstName: passenger.firstName,
       lastName: passenger.lastName,
-      phone: optionalPhonePlusPrefixValue(passenger.phone),
+      phone: passengerPhoneForSave(passenger.phone, passenger.storedPhone),
       email: passenger.email || null,
       dateOfBirth: passenger.dateOfBirth || null,
       weightKg: optionalMeasurement(passenger.weightKg),
@@ -271,6 +274,7 @@ export default function PassengerListScreen() {
             firstName: saved.firstName,
             lastName: saved.lastName,
             phone: saved.phone ? applyPhonePlusPrefix(saved.phone) : '',
+            storedPhone: saved.phone ?? null,
             email: saved.email ?? '',
             weightKg: String(saved.weightKg),
           }
@@ -285,7 +289,7 @@ export default function PassengerListScreen() {
       data: {
         firstName: passenger.firstName.trim(),
         lastName: passenger.lastName.trim(),
-        phone: optionalPhonePlusPrefixValue(passenger.phone),
+        phone: passengerPhoneForSave(passenger.phone, passenger.storedPhone),
         email: passenger.email?.trim() || null,
         weightKg: Number(passenger.weightKg),
       },

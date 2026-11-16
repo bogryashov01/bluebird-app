@@ -637,7 +637,15 @@ test("message day separators use createdAt when present", () => {
   assert.equal(memberMessageDayKey("not-a-date"), null);
   assert.equal(formatMemberMessageDaySeparator(today, now.getTime()), "Today");
   assert.equal(formatMemberMessageDaySeparator(yesterday, now.getTime()), "Yesterday");
-  assert.match(formatMemberMessageDaySeparator(older, now.getTime()) ?? "", /Oct/);
+  // Older days use the device locale; compare against the runtime's own
+  // formatting so the test passes on any machine locale (e.g. uk-UA, en-US).
+  const olderLabel = formatMemberMessageDaySeparator(older, now.getTime());
+  assert.equal(
+    olderLabel,
+    new Date(older).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
+  );
+  assert.notEqual(olderLabel, "Today");
+  assert.notEqual(olderLabel, "Yesterday");
 });
 
 test("markRead success can refresh shared unread snapshot state", async () => {

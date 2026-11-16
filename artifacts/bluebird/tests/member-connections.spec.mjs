@@ -15,6 +15,7 @@ import {
   parseIncomingConnectionRequests,
   parseOutgoingConnectionRequest,
   parseOutgoingConnectionRequests,
+  reconcilePendingOutgoingRecipients,
   projectOutgoingConnectionRequest,
   outgoingRecipientLabel,
   parseQueueConnectionStatus,
@@ -901,4 +902,83 @@ test("discover outgoingRequestPending: true, false, and missing field", async ()
   assert.match(hook, /Never clear session-local pending on discover false/);
   assert.match(hook, /generationRef/);
   assert.match(hook, /accountRef\.current !== accountId/);
+});
+
+test("declined outgoing request releases the create-confirmed pending mark", () => {
+  const sent = (id, status = "pending") => ({
+    id,
+    status,
+    createdAt: "2026-11-16T10:00:00.000Z",
+    recipient: { firstName: "Noah", lastName: "Bennett" },
+  });
+  const receipt = { recipientUserId: "user_to", requestId: 41, confirmedAt: 1_000 };
+
+  // Still pending in a newer list: stay "Request sent".
+  const stillPending = reconcilePendingOutgoingRecipients({
+    recipientUserIds: ["user_to"],
+    receipts: [receipt],
+    outgoing: [sent(41)],
+    listRequestedAt: 2_000,
+  });
+  assert.deepEqual(stillPending.recipientUserIds, ["user_to"]);
+  assert.deepEqual(stillPending.receipts, [receipt]);
+
+  // Recipient declined: request gone from a list requested after the create.
+  const declined = reconcilePendingOutgoingRecipients({
+    recipientUserIds: ["user_to"],
+    receipts: [receipt],
+    outgoing: [],
+    listRequestedAt: 2_000,
+  });
+  assert.deepEqual(declined.recipientUserIds, []);
+  assert.deepEqual(declined.receipts, []);
+  assert.equal(presentDiscoveredMember({
+    userId: "user_to",
+    acceptedUserIds: [],
+    incomingRequesterIds: [],
+    outgoingRecipientIds: declined.recipientUserIds,
+    outgoingRequestPending: false,
+  }), "available");
+
+  // Non-pending status in the list also releases.
+  assert.deepEqual(reconcilePendingOutgoingRecipients({
+    recipientUserIds: ["user_to"],
+    receipts: [receipt],
+    outgoing: [sent(41, "declined")],
+    listRequestedAt: 2_000,
+  }).recipientUserIds, []);
+
+  // Stale list (requested before/at the create) never releases.
+  for (const listRequestedAt of [500, 1_000]) {
+    assert.deepEqual(reconcilePendingOutgoingRecipients({
+      recipientUserIds: ["user_to"],
+      receipts: [receipt],
+      outgoing: [],
+      listRequestedAt,
+    }).recipientUserIds, ["user_to"]);
+  }
+
+  // IDs without a receipt (discover-sourced) keep stale protection.
+  assert.deepEqual(reconcilePendingOutgoingRecipients({
+    recipientUserIds: ["user_to", "user_discovered"],
+    receipts: [receipt],
+    outgoing: [],
+    listRequestedAt: 2_000,
+  }).recipientUserIds, ["user_discovered"]);
+
+  // A newer re-send to the same member keeps the mark.
+  const resend = { recipientUserId: "user_to", requestId: 42, confirmedAt: 3_000 };
+  const afterResend = reconcilePendingOutgoingRecipients({
+    recipientUserIds: ["user_to"],
+    receipts: [receipt, resend],
+    outgoing: [],
+    listRequestedAt: 2_500,
+  });
+  assert.deepEqual(afterResend.recipientUserIds, ["user_to"]);
+  assert.deepEqual(afterResend.receipts, [resend]);
+
+  const hook = readFileSync(resolve(projectRoot, "lib/useMemberConnections.ts"), "utf8");
+  assert.match(hook, /const listRequestedAt = Date\.now\(\);[\s\S]*client\.listOutgoing\(\)/);
+  assert.match(hook, /reconcilePendingOutgoingRecipients\(/);
+  assert.match(hook, /requestId: created\.id, confirmedAt: Date\.now\(\)/);
 });

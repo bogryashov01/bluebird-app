@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { test } from "node:test";
 import {
   applyPhonePlusPrefix,
   isPhonePlusPrefixOnly,
   optionalPhonePlusPrefixValue,
+  passengerPhoneForSave,
   phonePlusPrefixFieldProps,
   phonePlusPrefixForLegacyNormalize,
 } from "../scripts/.phone-plus-prefix.test.mjs";
@@ -83,4 +86,35 @@ test("field props keep plus visible and use phone-pad", () => {
   assert.equal(dirty.value, "+1555");
   dirty.onFocus();
   assert.deepEqual(updates, ["+1555"]);
+});
+
+test("passenger phone save never rewrites an untouched stored number", () => {
+  // Legacy formats survive opening the form (display adds "+") and saving.
+  for (const stored of ["(555) 555-0100", "5555550100", "+44 20 7946 0958", "+15555550100"]) {
+    const displayed = applyPhonePlusPrefix(stored);
+    assert.equal(passengerPhoneForSave(displayed, stored), stored);
+  }
+});
+
+test("passenger phone save normalizes edited numbers consistently", () => {
+  // 10 digits are US, matching the sign-in field rule.
+  assert.equal(passengerPhoneForSave("+5555550100", null), "+15555550100");
+  assert.equal(passengerPhoneForSave("+5555550199", "(555) 555-0100"), "+15555550199");
+  assert.equal(passengerPhoneForSave("+447700900123", null), "+447700900123");
+  assert.equal(passengerPhoneForSave("+15555550100", ""), "+15555550100");
+  // Clearing the field removes the phone; empty stays empty.
+  assert.equal(passengerPhoneForSave("+", "(555) 555-0100"), null);
+  assert.equal(passengerPhoneForSave("", null), null);
+  assert.equal(passengerPhoneForSave(undefined, undefined), null);
+});
+
+test("passenger screens save phones through passengerPhoneForSave", () => {
+  const root = resolve(import.meta.dirname, "..");
+  const account = readFileSync(resolve(root, "app/account/passengers.tsx"), "utf8");
+  const trip = readFileSync(resolve(root, "app/trip/[id]/passengers.tsx"), "utf8");
+  assert.match(account, /phone: passengerPhoneForSave\(form\.phone, editing\?\.id \? editing\.phone : null\)/);
+  assert.equal((trip.match(/passengerPhoneForSave\(passenger\.phone, passenger\.storedPhone\)/g) ?? []).length, 2);
+  assert.match(trip, /storedPhone: passenger\.phone \?\? null/);
+  assert.match(trip, /storedPhone: saved\.phone \?\? null/);
+  assert.doesNotMatch(account + trip, /phone: optionalPhonePlusPrefixValue\(/);
 });

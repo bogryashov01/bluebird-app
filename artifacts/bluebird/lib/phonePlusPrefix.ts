@@ -61,3 +61,24 @@ export function phonePlusPrefixFieldProps(
     },
   };
 }
+
+/**
+ * Optional passenger phone for save payloads.
+ * - Untouched digits (same as the stored value after prefixing) keep the stored
+ *   string exactly, so opening/saving a passenger never rewrites legacy formats.
+ * - Edited values save as E.164-style `+digits`; 10 digits are US (+1), matching
+ *   the sign-in field rule "enter 10 US digits after +".
+ * - Empty or bare "+" clears the phone.
+ */
+export function passengerPhoneForSave(
+  edited: string | null | undefined,
+  stored: string | null | undefined,
+): string | null {
+  const editedValue = optionalPhonePlusPrefixValue(edited);
+  if (typeof stored === 'string' && stored.trim() !== '' && editedValue === optionalPhonePlusPrefixValue(stored)) {
+    return stored;
+  }
+  if (editedValue === null) return null;
+  const digits = editedValue.slice(1);
+  return digits.length === 10 ? `+1${digits}` : editedValue;
+}

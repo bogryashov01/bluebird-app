@@ -170,8 +170,54 @@ interface MemberConnectionsSnapshot {
   outgoing: OutgoingConnectionRequest[];
   /** Recipient user IDs from confirmed creates only — never from redacted GET outgoing. */
   pendingOutgoingRecipientUserIds: string[];
+  /** Create receipts that let a later outgoing list release a declined/cancelled pending mark. */
+  pendingOutgoingRequestReceipts?: PendingOutgoingRequestReceipt[];
   accepted: AcceptedConnection[];
   outgoingSupported: boolean;
+}
+
+/** Links a create-confirmed recipient user ID to its server request ID. */
+export interface PendingOutgoingRequestReceipt {
+  recipientUserId: string;
+  requestId: number;
+  /** Client clock (ms) when the create response was confirmed. */
+  confirmedAt: number;
+}
+
+/**
+ * The redacted outgoing list has no recipient user IDs, but it does carry
+ * request IDs. A create-confirmed recipient is released only when an outgoing
+ * list requested strictly after that create no longer reports the request as
+ * pending (declined, cancelled, or accepted). Recipient IDs without a receipt
+ * (e.g. from discover) keep their existing stale protection.
+ */
+export function reconcilePendingOutgoingRecipients(input: {
+  recipientUserIds: readonly string[];
+  receipts: readonly PendingOutgoingRequestReceipt[];
+  outgoing: readonly OutgoingConnectionRequest[];
+  listRequestedAt: number;
+}): { recipientUserIds: string[]; receipts: PendingOutgoingRequestReceipt[] } {
+  const stillPending = new Set(
+    input.outgoing.filter((request) => request.status === 'pending').map((request) => request.id),
+  );
+  const released = new Set<string>();
+  const receipts: PendingOutgoingRequestReceipt[] = [];
+  for (const receipt of input.receipts) {
+    if (receipt.confirmedAt < input.listRequestedAt && !stillPending.has(receipt.requestId)) {
+      released.add(receipt.recipientUserId);
+    } else {
+      receipts.push(receipt);
+    }
+  }
+  if (released.size === 0) {
+    return { recipientUserIds: [...input.recipientUserIds], receipts };
+  }
+  // A newer receipt for the same recipient keeps the mark.
+  for (const receipt of receipts) released.delete(receipt.recipientUserId);
+  return {
+    recipientUserIds: input.recipientUserIds.filter((userId) => !released.has(userId)),
+    receipts,
+  };
 }
 
 const snapshots = new Map<string, MemberConnectionsSnapshot>();

@@ -192,7 +192,14 @@ export function planFlightMapCameraUpdate(input: {
   resetToken: number;
   lastFittedResetToken: number;
   fitCoordinateCount: number;
+  /**
+   * Native map has fired onMapReady. iOS react-native-maps applies
+   * `initialRegion` when rendering starts, overwriting any earlier fit, so the
+   * first fit must wait. Omitted (web/tests) is treated as ready.
+   */
+  mapReady?: boolean;
 }): FlightMapCameraDecision {
+  if (input.mapReady === false) return { action: 'none' };
   if (input.fitCoordinateCount === 0) return { action: 'none' };
   if (
     !shouldRefitFlightMapCamera({

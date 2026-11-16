@@ -250,4 +250,39 @@ assert.match(mapWeb, /EXPO_PUBLIC_FLIGHT_MAP_ENDPOINT_DEBUG/);
 assert.match(mapNative, /onPanDrag=\{gestureTracker\.panDrag\}/);
 assert.doesNotMatch(mapNative, /onPanDrag=\{\(\) => setGestureActive\(true\)\}/);
 
+// Regression: iOS react-native-maps applies initialRegion when rendering starts
+// (after mount), overwriting an early fit. The first fit must wait for
+// onMapReady and must not be recorded as done before then.
+{
+  const base = {
+    selectionKey: "1:DAL>SFO",
+    lastFittedSelectionKey: null,
+    resetToken: 0,
+    lastFittedResetToken: 0,
+    fitCoordinateCount: 2,
+  };
+  assert.deepEqual(planFlightMapCameraUpdate({ ...base, mapReady: false }), { action: "none" });
+  assert.deepEqual(planFlightMapCameraUpdate({ ...base, mapReady: true }), {
+    action: "fit",
+    selectionKey: "1:DAL>SFO",
+    resetToken: 0,
+  });
+  // Omitted readiness (web/tests) keeps the previous behavior.
+  assert.equal(planFlightMapCameraUpdate(base).action, "fit");
+  // Not ready still blocks a Reset route request.
+  assert.equal(planFlightMapCameraUpdate({
+    ...base,
+    lastFittedSelectionKey: "1:DAL>SFO",
+    resetToken: 1,
+    mapReady: false,
+  }).action, "none");
+}
+assert.match(mapNative, /onMapReady=\{\(\) => setMapReady\(true\)\}/);
+assert.match(mapNative, /fitCoordinateCount: fitCoordinates\.length,\s*mapReady,/);
+assert.match(mapNative, /if \(!hasRoutes\) setMapReady\(false\)/);
+assert.ok(
+  mapNative.indexOf("if (!hasRoutes) setMapReady(false)") < mapNative.indexOf("if (routes.length === 0) {"),
+  "readiness reset effect must run before the empty-routes early return",
+);
+
 console.log("Flight map camera tests passed.");
