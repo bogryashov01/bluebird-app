@@ -210,3 +210,38 @@ export function planFlightMapCameraUpdate(input: {
     resetToken: input.resetToken,
   };
 }
+
+export interface FlightMapGestureTracker {
+  touchStart: () => void;
+  panDrag: () => void;
+  touchEnd: () => void;
+  isActive: () => boolean;
+}
+
+/**
+ * Tracks whether a finger is on the native map so the parent page can pause
+ * scrolling. Touch start/end are balanced per finger; `onPanDrag` fires many
+ * times per gesture and must only mark the gesture active, never stack depth.
+ */
+export function createFlightMapGestureTracker(
+  notify: (active: boolean) => void,
+): FlightMapGestureTracker {
+  let depth = 0;
+  return {
+    touchStart: () => {
+      depth += 1;
+      if (depth === 1) notify(true);
+    },
+    panDrag: () => {
+      if (depth > 0) return;
+      depth = 1;
+      notify(true);
+    },
+    touchEnd: () => {
+      if (depth === 0) return;
+      depth -= 1;
+      if (depth === 0) notify(false);
+    },
+    isActive: () => depth > 0,
+  };
+}

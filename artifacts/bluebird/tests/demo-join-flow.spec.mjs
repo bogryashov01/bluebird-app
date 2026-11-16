@@ -302,7 +302,7 @@ test("demo screens and the join button do not call production mutations", () => 
   assert.match(confirmation, /disabled=\{\(!canSubmitProductionQueueJoin\(\) && !demoEnabled\) \|\| submitting\}/);
   const trips = readFileSync(resolve(projectRoot, "components/ClerkTrips.tsx"), "utf8");
   assert.match(trips, /separateDemoTrip\(query\.data, demo\.entry\)/);
-  assert.match(trips, /\(items \?\? \[\]\)\.map/);
+  assert.match(trips, /\(visibleItems \?\? \[\]\)\.map/);
   assert.doesNotMatch(trips, /current\.push|past\.push|\.\.\.items/);
   const readiness = readFileSync(resolve(projectRoot, "lib/productionQueueReadiness.ts"), "utf8");
   assert.match(readiness, /deployedMainService: false/);

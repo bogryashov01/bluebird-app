@@ -163,7 +163,14 @@ function DeleteAccountClerkScreen() {
 
   const applyCompleted = useCallback(async () => {
     setPhase({ kind: 'completed' });
-    await signOut();
+    try {
+      await signOut();
+    } catch {
+      // The backend already confirmed deletion. A Clerk sign-out failure (the
+      // session may already be revoked server-side) must never surface as
+      // "Your account was not deleted" or invite a duplicate deletion request.
+      router.replace('/(auth)/welcome');
+    }
   }, [signOut]);
 
   const loadEligibility = useCallback(async () => {

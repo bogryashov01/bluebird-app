@@ -32,12 +32,14 @@ import {
   FLIGHT_MAP_ROUTE_STROKE,
   airportMapCoordinate,
   collectFlightMapFitCoordinates,
+  createFlightMapGestureTracker,
   flightMapFitEdgePadding,
   flightMapSelectionKey,
   isValidMapCoordinate,
   planFlightMapCameraUpdate,
   zoomFlightMapRegion,
   type FlightMapEdgePadding,
+  type FlightMapGestureTracker,
   type FlightMapRegion,
 } from '@/lib/flightMapCamera';
 import type { AirportRecord, FlightView } from '@/lib/productionFlights';
@@ -179,7 +181,6 @@ export default function FlightMap({ flights, airports, onMapGestureActive }: Pro
   const lastFittedSelectionKeyRef = React.useRef<string | null>(null);
   const lastFittedResetTokenRef = React.useRef(0);
   const [resetToken, setResetToken] = React.useState(0);
-  const gestureDepthRef = React.useRef(0);
 
   const fitPadding = React.useMemo<FlightMapEdgePadding>(
     () => flightMapFitEdgePadding({
@@ -198,15 +199,15 @@ export default function FlightMap({ flights, airports, onMapGestureActive }: Pro
     ));
   }, []);
 
-  const setGestureActive = React.useCallback((active: boolean) => {
-    if (active) {
-      gestureDepthRef.current += 1;
-      if (gestureDepthRef.current === 1) onMapGestureActive?.(true);
-      return;
-    }
-    gestureDepthRef.current = Math.max(0, gestureDepthRef.current - 1);
-    if (gestureDepthRef.current === 0) onMapGestureActive?.(false);
-  }, [onMapGestureActive]);
+  const onMapGestureActiveRef = React.useRef(onMapGestureActive);
+  onMapGestureActiveRef.current = onMapGestureActive;
+  const gestureTrackerRef = React.useRef<FlightMapGestureTracker | null>(null);
+  if (!gestureTrackerRef.current) {
+    gestureTrackerRef.current = createFlightMapGestureTracker((active) => {
+      onMapGestureActiveRef.current?.(active);
+    });
+  }
+  const gestureTracker = gestureTrackerRef.current;
 
   const airportsByCode = React.useMemo(
     () => new Map(airports.map((airport) => [airport.code, airport])),
@@ -334,7 +335,7 @@ export default function FlightMap({ flights, airports, onMapGestureActive }: Pro
   };
 
   const endGesture = (_event?: GestureResponderEvent) => {
-    setGestureActive(false);
+    gestureTracker.touchEnd();
   };
 
   return (
@@ -342,7 +343,7 @@ export default function FlightMap({ flights, airports, onMapGestureActive }: Pro
       style={[styles.container, { height: mapHeight }]}
       testID="flight-map"
       onLayout={onMapLayout}
-      onTouchStart={() => setGestureActive(true)}
+      onTouchStart={gestureTracker.touchStart}
       onTouchEnd={endGesture}
       onTouchCancel={endGesture}
     >
@@ -361,7 +362,7 @@ export default function FlightMap({ flights, airports, onMapGestureActive }: Pro
         pitchEnabled={false}
         zoomControlEnabled={false}
         moveOnMarkerPress={false}
-        onPanDrag={() => setGestureActive(true)}
+        onPanDrag={gestureTracker.panDrag}
         onRegionChangeComplete={(region) => {
           regionRef.current = region;
         }}

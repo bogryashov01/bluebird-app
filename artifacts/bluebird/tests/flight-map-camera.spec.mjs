@@ -7,6 +7,7 @@ import {
   airportMapCoordinate,
   collectFlightMapFitCoordinates,
   coordinatesEqual,
+  createFlightMapGestureTracker,
   flightMapFitEdgePadding,
   flightMapSelectionKey,
   isValidMapCoordinate,
@@ -210,5 +211,43 @@ assert.doesNotMatch(mapNative, /ROUTE_STROKE_WIDTH\s*=\s*2\.75/);
 assert.doesNotMatch(mapWeb, /ROUTE_STROKE_WEIGHT\s*=\s*2\.75/);
 assert.match(mapNative, /EXPO_PUBLIC_FLIGHT_MAP_ENDPOINT_DEBUG/);
 assert.match(mapWeb, /EXPO_PUBLIC_FLIGHT_MAP_ENDPOINT_DEBUG/);
+
+// Regression (TF20): repeated onPanDrag events in one gesture must not stack
+// depth, or Discover's page scroll stays disabled after the first map pan.
+{
+  const events = [];
+  const tracker = createFlightMapGestureTracker((active) => events.push(active));
+  tracker.touchStart();
+  for (let i = 0; i < 25; i += 1) tracker.panDrag();
+  assert.equal(tracker.isActive(), true);
+  tracker.touchEnd();
+  assert.equal(tracker.isActive(), false);
+  assert.deepEqual(events, [true, false]);
+
+  // A second gesture re-locks and releases page scroll again.
+  tracker.touchStart();
+  tracker.panDrag();
+  tracker.touchEnd();
+  assert.deepEqual(events, [true, false, true, false]);
+
+  // Two fingers: release only after both lift; extra end/cancel is a no-op.
+  tracker.touchStart();
+  tracker.touchStart();
+  tracker.panDrag();
+  tracker.touchEnd();
+  assert.equal(tracker.isActive(), true);
+  tracker.touchEnd();
+  tracker.touchEnd();
+  assert.deepEqual(events, [true, false, true, false, true, false]);
+
+  // Pan without an observed touch start still releases on touch end.
+  tracker.panDrag();
+  tracker.panDrag();
+  tracker.touchEnd();
+  assert.equal(tracker.isActive(), false);
+  assert.deepEqual(events, [true, false, true, false, true, false, true, false]);
+}
+assert.match(mapNative, /onPanDrag=\{gestureTracker\.panDrag\}/);
+assert.doesNotMatch(mapNative, /onPanDrag=\{\(\) => setGestureActive\(true\)\}/);
 
 console.log("Flight map camera tests passed.");

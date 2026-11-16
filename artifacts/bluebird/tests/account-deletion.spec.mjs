@@ -658,6 +658,14 @@ test('Profile opens Delete Account after Alert and the screen never deletes Cler
   assert.match(screen, /await signOut\(\)/);
   assert.match(screen, /kind: 'completed'/);
   assert.ok(screen.indexOf("kind: 'completed'") < screen.indexOf('await signOut()'));
+  // Regression: a sign-out failure after confirmed deletion must not fall into
+  // submitDeletion's catch ("Your account was not deleted" + retry).
+  const applyCompletedBlock = screen.slice(
+    screen.indexOf('const applyCompleted = useCallback'),
+    screen.indexOf('const loadEligibility = useCallback'),
+  );
+  assert.match(applyCompletedBlock, /try \{\s*await signOut\(\);\s*\} catch/);
+  assert.match(applyCompletedBlock, /router\.replace\('\/\(auth\)\/welcome'\)/);
   assert.doesNotMatch(screen, /users\.deleteUser|deleteUser\(|clerk\.user\.delete|client\.users/);
   assert.doesNotMatch(client, /users\.deleteUser|deleteUser\(|clerk\.user\.delete/);
   assert.doesNotMatch(client, /method: 'DELETE'/);
