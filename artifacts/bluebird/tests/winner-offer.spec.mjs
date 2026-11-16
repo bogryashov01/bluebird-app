@@ -33,7 +33,8 @@ function offer(overrides = {}) {
 test("a closed queue does not make the first-ranked member a winner", () => {
   const result = offer({ viewerIsEffectiveWinner: false, viewerConfirmationStatus: null });
   assert.equal(result.kind, "non-winner");
-  assert.equal(presentWinnerOfferCopy(result)?.body, "Queue position does not award this flight.");
+  assert.equal(presentWinnerOfferCopy(result)?.title, "You weren’t selected for this flight");
+  assert.equal(presentWinnerOfferCopy(result)?.body, "Queue position doesn’t award this flight.");
 });
 
 test("a pending offer, confirmed booking, decline, cancellation, and expiry stay distinct", () => {
@@ -112,7 +113,7 @@ test("expired winner stays non-actionable without a backend deadline field", () 
   }).kind, "expired");
   assert.equal(presentWinnerOfferCopy(offer({
     deadlineIso: "2026-11-03T18:00:00.000Z",
-  }))?.title, "This confirmation offer has expired");
+  }))?.title, "This offer has expired");
   assert.match(screen, /offer\.kind === 'expired'/);
   assert.match(screen, /winner-review-expired/);
   assert.doesNotMatch(screen, /Date\.now\(\)\s*\+|expiresAt:\s*['"]|deadlineIso:\s*['"]/);

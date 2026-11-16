@@ -157,10 +157,10 @@ export function presentWinnerOfferCopy(offer: WinnerOffer): { title: string; bod
     return { title: 'This flight was cancelled', body: 'No confirmation is available for this flight.' };
   }
   if (offer.kind === 'expired') {
-    return { title: 'This confirmation offer has expired', body: 'No confirmation request is sent from this screen.' };
+    return { title: 'This offer has expired', body: 'Nothing else is needed on this screen.' };
   }
   if (offer.kind === 'non-winner') {
-    return { title: 'This account is not the selected winner', body: 'Queue position does not award this flight.' };
+    return { title: 'You weren’t selected for this flight', body: 'Queue position doesn’t award this flight.' };
   }
   return null;
 }

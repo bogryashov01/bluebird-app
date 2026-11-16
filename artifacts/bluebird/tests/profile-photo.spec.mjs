@@ -242,7 +242,7 @@ test("social links save, reopen, edit and clear independently of account details
   await facebook.fill("not a URL");
   await instagram.fill("https://www.instagram.com/member");
   await page.getByText("Save profile", { exact: true }).click();
-  await expect(page.getByText("Enter a valid http(s) URL for Facebook, or leave it blank.")).toBeVisible();
+  await expect(page.getByText("Enter a valid link for Facebook, or leave it blank.")).toBeVisible();
   await expect(linkedin).toHaveValue("https://www.linkedin.com/in/member");
   expect(requests.filter(({ kind }) => kind === "networking-update")).toHaveLength(0);
 

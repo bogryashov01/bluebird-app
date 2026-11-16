@@ -172,8 +172,8 @@ test("queue read display uses participant count and viewer position without seat
   assert.equal(joinFlightQueueCountLabel(2), "2 people are in this queue.");
   assert.equal(joinFlightQueuePositionLabel(2), "Your position is #2.");
   assert.doesNotMatch(joinFlightQueueCountLabel(2), /seat|eligible/i);
-  assert.match(JOIN_FLIGHT_QUEUE_FOOTNOTE, /not a count of available seats/);
-  assert.match(JOIN_FLIGHT_QUEUE_FOOTNOTE, /does not confirm that you can join/);
+  assert.match(JOIN_FLIGHT_QUEUE_FOOTNOTE, /isn’t seats available/);
+  assert.match(JOIN_FLIGHT_QUEUE_FOOTNOTE, /doesn’t mean you can join yet/);
 
   assert.deepEqual(presentJoinFlightQueuePanel({
     flightStatus: "published",
@@ -405,10 +405,10 @@ test("the join screens do not call queue, payment, or membership mutations", () 
     balance: { count: 2 },
     passAlreadyApplied: false,
   }).kind, "closed");
-  assert.match(QUEUE_SKIP_NOTE, /updates your queue rank/);
-  assert.match(QUEUE_SKIP_NOTE, /does not award the flight or confirm the seat/);
-  assert.match(presentQueueSkipConfirmedMessage(1), /You are now #1/);
-  assert.match(presentQueueSkipConfirmedMessage(1), /does not award the flight/);
+  assert.match(QUEUE_SKIP_NOTE, /updates your place in line/);
+  assert.match(QUEUE_SKIP_NOTE, /seat isn’t confirmed yet/);
+  assert.match(presentQueueSkipConfirmedMessage(1), /You’re now #1/);
+  assert.match(presentQueueSkipConfirmedMessage(1), /seat isn’t confirmed yet/);
   assert.equal(presentQueueSkipFailure({ status: 402, code: "insufficient_credit" }).title, "No passes available");
   assert.equal(presentQueueSkipFailure({ status: 403, code: "ineligible" }).title, "Not eligible");
   assert.equal(presentQueueSkipFailure({ status: 409, code: "closed" }).title, "Queue closed");

@@ -52,7 +52,7 @@ export function ClerkPushPermissionStatus() {
           onPress={() => { void Linking.openSettings(); }}
         >
           <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold', fontSize: 14 }}>
-            Open iOS Settings
+            Open Settings
           </Text>
         </TouchableOpacity>
       ) : null}

@@ -307,7 +307,9 @@ test("keeps a device preference after leaving Notifications and does not write t
   await allFlights.click();
   await expect(allFlights).toHaveAttribute("aria-checked", "true");
   await expect(allFlights).not.toHaveAttribute("aria-disabled", "true");
-  await expect(page.getByTestId("clerk-device-notification-preferences")).toHaveText("Saved on this device.");
+  await expect(page.getByTestId("clerk-device-notification-preferences")).toHaveText(
+    "Saved on this iPhone only—not synced to your Bluebird account.",
+  );
   await page.getByText("TEB", { exact: true }).click();
   await expect(page.getByTestId("clerk-home-airport-editor")).toBeVisible();
   await page.getByRole("button", { name: "Back to Notification Settings", exact: true }).click();
@@ -412,6 +414,7 @@ test("keeps cached profile values visible while refreshing them", async ({ page 
 test("keeps unsupported rows disabled, omits history and supports back navigation", async ({ page }) => {
   await expect(page.getByText("International Flights", { exact: true })).toBeVisible();
   await expect(page.getByText("Membership Updates", { exact: true })).toBeVisible();
+  await expect(page.getByText("Connection Requests", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Notification history", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Push notifications", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("switch", { name: "International Flights", exact: true })).toHaveAttribute("aria-disabled", "true");

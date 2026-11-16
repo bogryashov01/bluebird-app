@@ -335,7 +335,7 @@ export function ClerkTrips() {
   } else if (visibleItems?.length === 0) {
     state = (
       <StateMessage
-        title={activeList === 'current' ? 'No Upcoming Flights' : 'No Past Flights'}
+        title={activeList === 'current' ? 'No upcoming flights' : 'No past flights'}
         description={activeList === 'current'
           ? 'Browse empty legs and join a queue to book your first flight.'
           : 'Completed flights will appear here.'}

@@ -657,7 +657,7 @@ export default function MembershipScreen() {
         <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
           {isError
             ? 'We could not confirm your membership. This does not mean your membership has ended.'
-            : 'No account-bound membership details are available right now.'}
+            : 'Membership details for this account aren’t available right now.'}
         </Text>
         {isError ? (
           <TouchableOpacity testID="legacy-membership-retry" style={[styles.retryBtn, { backgroundColor: colors.primary }]} onPress={() => refetch()}>
@@ -901,7 +901,7 @@ export default function MembershipScreen() {
           <Text style={[styles.usageTitle, { color: colors.textOnSurface }]}>Skip the Line Pass</Text>
           <Text style={[styles.catalogStatusText, { color: colors.mutedForegroundLight, marginTop: 8 }]}>
             {linePasses === null
-              ? 'Pass balance unavailable. We could not verify an account-bound balance.'
+              ? 'Pass balance unavailable. We couldn’t verify the balance for this account.'
               : linePasses === 0
                 ? 'No passes are currently available on this account.'
                 : `${linePasses} account-confirmed pass${linePasses === 1 ? '' : 'es'} available.`}

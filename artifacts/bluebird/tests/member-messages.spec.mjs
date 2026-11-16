@@ -8,20 +8,28 @@ import {
   MEMBER_MESSAGE_PAGE_SIZE,
   MEMBER_MESSAGE_PATHS,
   MEMBER_MESSAGE_POLL_MS,
+  MEMBER_MESSAGE_SCROLL_NEAR_BOTTOM_PX,
+  classifyMemberMessageThreadScrollChange,
   clearMemberMessagesCache,
   conversationTitle,
   createMemberMessagesClient,
   formatMemberMessageDaySeparator,
   formatMemberMessagesUnreadBadge,
+  isMemberMessageThreadNearBottom,
   isMemberMessagesIntegrationEnabled,
   limitMemberMessageBody,
   memberMessageBodyIssue,
   memberMessageComposerLengthWarning,
   memberMessageDayKey,
+  memberMessageThreadPreserveScrollAfterPrepend,
+  memberMessageThreadShouldAutoScroll,
+  memberMessageThreadShowJumpButton,
+  memberMessagesSnapshotConfirmsConversations,
   messageHistoryPath,
   nextMemberMessageSend,
   parseMessageConversation,
   parseMessageHistory,
+  presentMemberConversationsView,
   readMemberMessagesSnapshot,
   refreshMemberMessageThreadLatest,
   rememberMemberMessagesSnapshot,
@@ -331,6 +339,7 @@ test("message cache is scoped to the signed-in account", () => {
     apiBaseUrl: baseUrl,
     conversations: [conversation(1)],
     unreadCount: 1,
+    conversationsLoaded: true,
   });
   rememberMemberMessagesSnapshot({
     clerkUserId: "user_b",
@@ -338,6 +347,7 @@ test("message cache is scoped to the signed-in account", () => {
     apiBaseUrl: baseUrl,
     conversations: [conversation(2, 0)],
     unreadCount: 0,
+    conversationsLoaded: true,
   });
   retainMemberMessagesForAccount("user_b");
   assert.equal(readMemberMessagesSnapshot({
@@ -418,18 +428,27 @@ test("the messages screens stay off the demo store and the networking API", () =
   const auth = readFileSync(resolve(projectRoot, "context/AuthContext.tsx"), "utf8");
   assert.equal(auth.match(/clearMemberMessagesCache\(\)/g).length, 3);
   const screen = readFileSync(resolve(projectRoot, "components/MemberConnectionsScreen.tsx"), "utf8");
-  assert.match(screen, /Connections are not available yet/);
+  assert.match(screen, /Connections aren’t available yet/);
   assert.match(screen, /connection\.member\.userId/);
   assert.match(screen, /messages\.open|useOpenAcceptedConversation/);
   assert.doesNotMatch(screen, /participantUserId/);
   const list = readFileSync(resolve(projectRoot, "components/MemberConversationList.tsx"), "utf8");
   assert.doesNotMatch(list, /member-messages-unread-total|unread messages/);
   assert.match(list, /formatMemberMessagesUnreadBadge/);
+  assert.match(list, /member-messages-skeleton/);
+  assert.match(list, /inbox\.view/);
+  assert.match(hook, /listConfirmed/);
+  assert.match(hook, /presentMemberConversationsView/);
+  assert.match(hook, /memberMessagesSnapshotConfirmsConversations/);
   const thread = readFileSync(resolve(projectRoot, "components/MemberMessageThread.tsx"), "utf8");
   assert.match(thread, /memberMessageComposerLengthWarning/);
   assert.match(thread, /formatMemberMessageDaySeparator/);
   assert.match(thread, /maxWidth: '80%'/);
   assert.match(thread, /arrow-up/);
+  assert.match(thread, /member-message-jump-latest/);
+  assert.match(thread, /scrollToEnd/);
+  assert.match(thread, /classifyMemberMessageThreadScrollChange/);
+  assert.match(thread, /memberMessageThreadPreserveScrollAfterPrepend/);
   assert.doesNotMatch(thread, /\{Array\.from\(draft\)\.length\}\/\{MEMBER_MESSAGE_MAX_LENGTH\}/);
   const tabs = readFileSync(resolve(projectRoot, "app/(tabs)/_layout.tsx"), "utf8");
   assert.match(tabs, /useMemberMessagesUnreadCount/);
@@ -438,6 +457,150 @@ test("the messages screens stay off the demo store and the networking API", () =
   const policy = readFileSync(resolve(projectRoot, "lib/nativeAuthTestPolicy.ts"), "utf8");
   assert.doesNotMatch(policy, /\/me\/messages/);
   assert.equal(MEMBER_MESSAGE_POLL_MS, 10000);
+});
+
+test("conversation inbox presentation never treats unconfirmed empty cache as empty", () => {
+  assert.equal(memberMessagesSnapshotConfirmsConversations(null), false);
+  assert.equal(memberMessagesSnapshotConfirmsConversations({
+    clerkUserId: "user_a",
+    environment: "production",
+    apiBaseUrl: baseUrl,
+    conversations: [],
+    unreadCount: 2,
+    conversationsLoaded: false,
+  }), false);
+  assert.equal(memberMessagesSnapshotConfirmsConversations({
+    clerkUserId: "user_a",
+    environment: "production",
+    apiBaseUrl: baseUrl,
+    conversations: [],
+    unreadCount: 0,
+    conversationsLoaded: true,
+  }), true);
+  assert.equal(presentMemberConversationsView({
+    enabled: true,
+    status: "loading",
+    conversations: [],
+    listConfirmed: false,
+    refreshing: false,
+    message: null,
+  }).kind, "skeleton");
+  assert.equal(presentMemberConversationsView({
+    enabled: true,
+    status: "ready",
+    conversations: [],
+    listConfirmed: false,
+    refreshing: false,
+    message: null,
+  }).kind, "skeleton");
+  assert.equal(presentMemberConversationsView({
+    enabled: true,
+    status: "ready",
+    conversations: [],
+    listConfirmed: true,
+    refreshing: false,
+    message: null,
+  }).kind, "empty");
+  assert.equal(presentMemberConversationsView({
+    enabled: true,
+    status: "error",
+    conversations: [],
+    listConfirmed: false,
+    refreshing: false,
+    message: "Messages could not be loaded. Try again.",
+  }).kind, "error");
+  const refreshing = presentMemberConversationsView({
+    enabled: true,
+    status: "ready",
+    conversations: [conversation(3)],
+    listConfirmed: true,
+    refreshing: true,
+    message: null,
+  });
+  assert.equal(refreshing.kind, "list");
+  if (refreshing.kind === "list") {
+    assert.equal(refreshing.refreshing, true);
+    assert.equal(refreshing.conversations.length, 1);
+  }
+  clearMemberMessagesCache();
+  rememberMemberMessagesSnapshot({
+    clerkUserId: "user_flash",
+    environment: "production",
+    apiBaseUrl: baseUrl,
+    conversations: [],
+    unreadCount: 3,
+    conversationsLoaded: false,
+  });
+  assert.equal(memberMessagesSnapshotConfirmsConversations(readMemberMessagesSnapshot({
+    environment: "production",
+    apiBaseUrl: baseUrl,
+    clerkUserId: "user_flash",
+  })), false);
+  retainMemberMessagesForAccount("user_other");
+  assert.equal(readMemberMessagesSnapshot({
+    environment: "production",
+    apiBaseUrl: baseUrl,
+    clerkUserId: "user_flash",
+  }), null);
+});
+
+test("thread auto-scroll follows the bottom unless the reader scrolled away", () => {
+  assert.equal(MEMBER_MESSAGE_SCROLL_NEAR_BOTTOM_PX, 96);
+  assert.equal(isMemberMessageThreadNearBottom({
+    contentHeight: 1000,
+    layoutHeight: 400,
+    scrollOffset: 520,
+  }), true);
+  assert.equal(isMemberMessageThreadNearBottom({
+    contentHeight: 1000,
+    layoutHeight: 400,
+    scrollOffset: 200,
+  }), false);
+  assert.equal(classifyMemberMessageThreadScrollChange({
+    previous: null,
+    newestId: 3,
+    oldestId: 1,
+    count: 3,
+  }), "open");
+  assert.equal(classifyMemberMessageThreadScrollChange({
+    previous: { newestId: 3, oldestId: 1, count: 3 },
+    newestId: 4,
+    oldestId: 1,
+    count: 4,
+  }), "append");
+  assert.equal(classifyMemberMessageThreadScrollChange({
+    previous: { newestId: 4, oldestId: 2, count: 3 },
+    newestId: 4,
+    oldestId: 1,
+    count: 4,
+  }), "prepend");
+  assert.equal(classifyMemberMessageThreadScrollChange({
+    previous: { newestId: 4, oldestId: 1, count: 4 },
+    newestId: 4,
+    oldestId: 1,
+    count: 4,
+  }), "unchanged");
+  assert.equal(classifyMemberMessageThreadScrollChange({
+    previous: { newestId: 4, oldestId: 1, count: 4 },
+    newestId: 4,
+    oldestId: 1,
+    count: 4,
+    forceSendFollow: true,
+  }), "send");
+  assert.equal(memberMessageThreadShouldAutoScroll({ change: "open", nearBottom: false }), true);
+  assert.equal(memberMessageThreadShouldAutoScroll({ change: "send", nearBottom: false }), true);
+  assert.equal(memberMessageThreadShouldAutoScroll({ change: "append", nearBottom: true }), true);
+  assert.equal(memberMessageThreadShouldAutoScroll({ change: "append", nearBottom: false }), false);
+  assert.equal(memberMessageThreadShouldAutoScroll({ change: "prepend", nearBottom: true }), false);
+  assert.equal(memberMessageThreadShouldAutoScroll({ change: "unchanged", nearBottom: true }), false);
+  assert.equal(memberMessageThreadShowJumpButton({ nearBottom: false, hasMessages: true }), true);
+  assert.equal(memberMessageThreadShowJumpButton({ nearBottom: true, hasMessages: true }), false);
+  assert.equal(memberMessageThreadShowJumpButton({ nearBottom: false, hasMessages: false }), false);
+  assert.equal(memberMessageThreadPreserveScrollAfterPrepend({
+    previousContentHeight: 800,
+    nextContentHeight: 1100,
+    previousScrollOffset: 120,
+  }), 420);
 });
 
 test("unread badges hide at zero and cap at 9+", () => {
@@ -484,6 +647,7 @@ test("markRead success can refresh shared unread snapshot state", async () => {
     environment: "production",
     apiBaseUrl: baseUrl,
     unreadCount: 4,
+    conversationsLoaded: true,
     conversations: [conversation(7, 2), conversation(8, 2)],
   });
   const state = threadPollState();
@@ -513,6 +677,7 @@ test("markRead success can refresh shared unread snapshot state", async () => {
         environment: "production",
         apiBaseUrl: baseUrl,
         unreadCount: readState.unreadCount,
+        conversationsLoaded: existing?.conversationsLoaded === true,
         conversations: (existing?.conversations ?? []).map((item) => (
           item.id === 7 ? { ...item, unreadCount: 0 } : item
         )),

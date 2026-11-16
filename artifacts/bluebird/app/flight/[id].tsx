@@ -72,13 +72,17 @@ import {
   flightDetailViewerScope,
   isDiscoverFlightListKey,
   isFlightDetailIdentityReady,
+  planFlightDetailExitNavigation,
   prepareFlightDetailRequest,
   presentSeatsAvailable,
   productionFlightDetailQueryKey,
   readProductionFlightDetailCache,
   selectDisplayedFlight,
+  shouldShowFlightDetailHistoryBack,
   type FlightDetailPhase,
 } from '@/lib/flightDetailPresentation';
+import { FloatingBackButton } from '@/components/FloatingBackButton';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import { mainBluebirdAuthenticatedQueryKey } from '@/lib/mainBluebirdApi';
 import { createMemberConnectionsClient, isMemberConnectionsIntegrationEnabled } from '@/lib/memberConnections';
@@ -654,6 +658,18 @@ export default function FlightDetailScreen() {
     );
   };
 
+  const leaveUnavailableFlight = React.useCallback(() => {
+    const plan = planFlightDetailExitNavigation({ canGoBack: router.canGoBack() });
+    logJoinNav('flight-details-unavailable-exit', {
+      currentPathname: pathname,
+      routerMethod: plan.method,
+      destination: plan.method === 'back' ? 'previous' : plan.href,
+      reason: 'flight-unavailable-exit',
+    });
+    if (plan.method === 'back') router.back();
+    else router.replace(plan.href);
+  }, [pathname]);
+
   // ── Loading / Error — guards before any flight-property access ──
   if (isLoading && !flight) {
     return (
@@ -663,20 +679,49 @@ export default function FlightDetailScreen() {
     );
   }
   if (!flight) {
+    const showHistoryBack = shouldShowFlightDetailHistoryBack({ canGoBack: router.canGoBack() });
     if (!localReadMode && displayedProduction.confirmedMissing) {
       return (
-        <View style={[styles.centered, { backgroundColor: colors.offWhite }]}>
-          <Text style={[styles.errText, { color: colors.mutedForegroundLight }]}>Flight unavailable</Text>
+        <View
+          style={[
+            styles.centered,
+            {
+              backgroundColor: colors.offWhite,
+              paddingBottom: insets.bottom + 24,
+              paddingHorizontal: 28,
+            },
+          ]}
+          testID="flight-detail-unavailable-screen"
+        >
+          {showHistoryBack ? <FloatingBackButton onPress={leaveUnavailableFlight} /> : null}
+          <Text style={[styles.errText, { color: colors.textOnSurface }]}>Flight unavailable</Text>
           <Text testID="flight-detail-unavailable" style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>
             This flight is no longer available.
           </Text>
+          <PrimaryButton
+            label="Back to Flights"
+            testID="flight-detail-back-to-flights"
+            onPress={leaveUnavailableFlight}
+            style={styles.unavailableExitBtn}
+          />
         </View>
       );
     }
     const canRetry = localReadMode ? !!id : numericFlightId !== null;
     return (
-      <View style={[styles.centered, { backgroundColor: colors.offWhite }]}>
-        <Text style={[styles.errText, { color: colors.mutedForegroundLight }]}>
+      <View
+        style={[
+          styles.centered,
+          {
+            backgroundColor: colors.offWhite,
+            paddingBottom: insets.bottom + 24,
+            paddingHorizontal: 28,
+          },
+        ]}
+        testID="flight-detail-missing-screen"
+      >
+        {showHistoryBack ? <FloatingBackButton onPress={leaveUnavailableFlight} /> : null}
+        <Text style={[styles.errText, { color: colors.textOnSurface }]}>
           {isError ? 'Could not load flight details' : 'Flight unavailable'}
         </Text>
         {isError && <Text style={[styles.errorBody, { color: colors.mutedForegroundLight }]}>Check your connection and try again.</Text>}
@@ -697,6 +742,12 @@ export default function FlightDetailScreen() {
             : <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try again</Text>}
           </TouchableOpacity>
         )}
+        <PrimaryButton
+          label="Back to Flights"
+          testID="flight-detail-back-to-flights"
+          onPress={leaveUnavailableFlight}
+          style={styles.unavailableExitBtn}
+        />
       </View>
     );
   }
@@ -1415,15 +1466,15 @@ export default function FlightDetailScreen() {
           const now = Date.now();
           if (now - flightBackAt.current < 600) return;
           flightBackAt.current = now;
-          const canGoBack = router.canGoBack();
+          const plan = planFlightDetailExitNavigation({ canGoBack: router.canGoBack() });
           logJoinNav('flight-details-back', {
             currentPathname: pathname,
-            routerMethod: canGoBack ? 'back' : 'replace',
-            destination: canGoBack ? 'previous' : '/(tabs)/discover',
+            routerMethod: plan.method,
+            destination: plan.method === 'back' ? 'previous' : plan.href,
             reason: 'flight-details-back-press',
           });
-          if (canGoBack) router.back();
-          else router.replace('/(tabs)/discover');
+          if (plan.method === 'back') router.back();
+          else router.replace(plan.href);
         }}
         activeOpacity={0.75}
         accessibilityRole="button"
@@ -1988,8 +2039,12 @@ export default function FlightDetailScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errText: { fontFamily: 'Inter_400Regular', fontSize: 16 },
-  errorBody: { fontFamily: 'Inter_400Regular', fontSize: 14, textAlign: 'center', marginTop: 8, paddingHorizontal: 28 },
+  errText: { fontFamily: 'Inter_700Bold', fontSize: 18, textAlign: 'center' },
+  errorBody: { fontFamily: 'Inter_400Regular', fontSize: 14, textAlign: 'center', marginTop: 8, paddingHorizontal: 0 },
+  unavailableExitBtn: {
+    alignSelf: 'stretch',
+    marginTop: 22,
+  },
   retryBtn: {
     borderRadius: 999,
     minHeight: 44,

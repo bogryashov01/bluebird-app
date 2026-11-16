@@ -21,9 +21,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MemberConversationList } from '@/components/MemberConversationList';
 import { MemberInitialsAvatar, MemberProfileSheet } from '@/components/MemberProfileSheet';
 import { useColors } from '@/hooks/useColors';
-import { connectionMemberLabel, discoverConnectionQuery, type AcceptedConnection, type ConnectionRelationship } from '@/lib/memberConnections';
+import {
+  connectionMemberLabel,
+  discoverConnectionQuery,
+  outgoingRecipientLabel,
+  type AcceptedConnection,
+  type ConnectionRelationship,
+  type OutgoingConnectionRequest,
+} from '@/lib/memberConnections';
 import { presentDiscoveredMember } from '@/lib/memberConnectPresentation';
 import { isMemberMessagesIntegrationEnabled } from '@/lib/memberMessages';
+import { phonePlusPrefixFieldProps } from '@/lib/phonePlusPrefix';
 import { useMemberConnections } from '@/lib/useMemberConnections';
 import { useOpenAcceptedConversation } from '@/lib/useMemberMessages';
 
@@ -99,6 +107,11 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
       userId: foundMember.userId,
       acceptedUserIds: connections.accepted.map((connection) => connection.member.userId),
       incomingRequesterIds: connections.incoming.map((request) => request.requester.userId),
+      // Create-confirmed IDs and/or discover.outgoingRequestPending === true.
+      outgoingRecipientIds: connections.pendingOutgoingRecipientUserIds,
+      ...(typeof foundMember.outgoingRequestPending === 'boolean'
+        ? { outgoingRequestPending: foundMember.outgoingRequestPending }
+        : {}),
     })
     : null;
 
@@ -173,16 +186,19 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
           <MemberConversationList names={names} active={pane === 'chats'} bottomInset={bottomInset} />
       ) : connections.status === 'disabled' || !connections.enabled ? (
         <View style={styles.state} testID="member-connections-unavailable">
-          <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Connections are not available yet</Text>
+          <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Connections aren’t available yet</Text>
           <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]}>
             Try again later.
           </Text>
         </View>
       ) : connections.status === 'signed-out' ? (
         <View style={styles.state} testID="member-connections-signed-out">
-          <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Sign in to view Connections</Text>
+          <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Sign in to view connections</Text>
         </View>
-      ) : connections.status === 'loading' && connections.incoming.length === 0 && connections.accepted.length === 0 ? (
+      ) : connections.status === 'loading'
+        && connections.incoming.length === 0
+        && connections.outgoing.length === 0
+        && connections.accepted.length === 0 ? (
         <View style={styles.state} testID="member-connections-loading">
           <ActivityIndicator color={colors.primary} />
           <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]}>Loading Connections…</Text>
@@ -242,10 +258,20 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
               ) : null}
             </TouchableOpacity>
           </View>
+          {connections.outgoing.length > 0 ? (
+            <>
+              <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]} testID="member-connections-sent-label">
+                Sent Requests
+              </Text>
+              {connections.outgoing.map((request) => (
+                <OutgoingRequestRow key={request.id} request={request} colors={colors} />
+              ))}
+            </>
+          ) : null}
           <Text style={[styles.sectionLabel, { color: colors.mutedForegroundLight }]}>My Connections</Text>
           {connections.accepted.length === 0 ? (
             <View style={styles.emptyCopy} testID="member-connections-empty">
-              <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>No Connections Yet</Text>
+              <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>No connections yet</Text>
               <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]}>People you connect with will appear here.</Text>
             </View>
           ) : connections.accepted.map((connection) => (
@@ -269,11 +295,12 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
                 ? connectionMemberLabel(discovery)
                 : ''
         }
-        lines={sheetLines(accepted, incoming, discovery)}
+        lines={sheetLines(accepted, incoming, discovery, discoveredState)}
         primary={sheetPrimary({
           accepted,
           incoming,
           discovery,
+          discoveredState,
           messagesEnabled: messages.enabled,
           pending: connections.pending || messages.opening,
           onMessage: () => { if (accepted) openConversation(accepted.member.userId); },
@@ -323,10 +350,8 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
             <Text style={[styles.sheetTitle, { color: colors.textOnSurface }]}>Find Member</Text>
             <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>Search by phone number.</Text>
             <ThemedTextInput
-              value={phone}
-              onChangeText={(value) => { setPhone(value); setPhoneError(null); }}
+              {...phonePlusPrefixFieldProps(phone, (value) => { setPhone(value); setPhoneError(null); })}
               autoCorrect={false}
-              keyboardType="phone-pad"
               textContentType="telephoneNumber"
               placeholder="+15551234567"
               placeholderTextColor={colors.mutedForegroundLight}
@@ -358,10 +383,17 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
                       ? 'Already connected'
                       : discoveredState === 'incoming'
                         ? 'This member already sent you a request'
-                        : 'Bluebird member'}
+                        : discoveredState === 'outgoing'
+                          ? 'Request pending'
+                          : 'Bluebird member'}
                   </Text>
                 </View>
               </View>
+            ) : null}
+            {foundMember && discoveredState === 'outgoing' ? (
+              <Text style={[styles.meta, { color: colors.mutedForegroundLight }]} testID="member-connections-request-pending">
+                Request pending
+              </Text>
             ) : null}
             {foundMember && discoveredState === 'available' ? (
               <TouchableOpacity
@@ -438,9 +470,13 @@ function sheetLines(
   accepted: AcceptedConnection | null,
   incoming: ConnectionRelationship | null,
   discovery: { userId: string } | null,
+  discoveredState: ReturnType<typeof presentDiscoveredMember> | null,
 ): string[] {
   if (accepted) return ['Bluebird member', 'Connected'];
   if (incoming) return ['Bluebird member', 'Incoming request'];
+  if (discovery && discoveredState === 'outgoing') return ['Bluebird member', 'Request pending'];
+  if (discovery && discoveredState === 'connected') return ['Bluebird member', 'Connected'];
+  if (discovery && discoveredState === 'incoming') return ['Bluebird member', 'Incoming request'];
   if (discovery) return ['Bluebird member', 'Not connected'];
   return [];
 }
@@ -449,6 +485,7 @@ function sheetPrimary(input: {
   accepted: AcceptedConnection | null;
   incoming: ConnectionRelationship | null;
   discovery: { userId: string } | null;
+  discoveredState: ReturnType<typeof presentDiscoveredMember> | null;
   messagesEnabled: boolean;
   pending: boolean;
   onMessage: () => void;
@@ -471,7 +508,7 @@ function sheetPrimary(input: {
       onPress: input.onAccept,
     };
   }
-  if (input.discovery) {
+  if (input.discovery && input.discoveredState === 'available') {
     return {
       label: 'Connect',
       testID: 'member-connections-request',
@@ -480,6 +517,30 @@ function sheetPrimary(input: {
     };
   }
   return null;
+}
+
+function OutgoingRequestRow({
+  request,
+  colors,
+}: {
+  request: OutgoingConnectionRequest;
+  colors: ReturnType<typeof useColors>;
+}) {
+  const label = outgoingRecipientLabel(request.recipient);
+  return (
+    <View
+      accessibilityRole="text"
+      accessibilityLabel={`${label}, pending`}
+      testID={`member-connections-outgoing-${request.id}`}
+      style={[styles.row, { borderBottomColor: colors.separator }]}
+    >
+      <MemberInitialsAvatar name={label} />
+      <View style={styles.rowCopy}>
+        <Text style={[styles.name, { color: colors.textOnSurface }]}>{label}</Text>
+        <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>Pending</Text>
+      </View>
+    </View>
+  );
 }
 
 function IncomingRequest({

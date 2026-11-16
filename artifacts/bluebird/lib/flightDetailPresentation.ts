@@ -237,3 +237,27 @@ export function presentAircraftGallery(flight: Pick<FlightView, 'imageUrl' | 'ai
   if (urls.length > 0) return urls;
   return flight.imageUrl ? [flight.imageUrl] : [];
 }
+
+/** Flights listing used when leaving an unavailable flight with no stack history. */
+export const FLIGHT_DETAIL_FLIGHTS_HREF = '/(tabs)/discover' as const;
+
+export type FlightDetailExitNavigation =
+  | { method: 'back' }
+  | { method: 'replace'; href: typeof FLIGHT_DETAIL_FLIGHTS_HREF };
+
+/**
+ * Leaves Flight Details without trapping the member on a missing/expired leg.
+ * Direct links and push opens with an empty stack replace into Discover.
+ */
+export function planFlightDetailExitNavigation(input: {
+  canGoBack: boolean;
+}): FlightDetailExitNavigation {
+  if (input.canGoBack === true) return { method: 'back' };
+  return { method: 'replace', href: FLIGHT_DETAIL_FLIGHTS_HREF };
+}
+
+export function shouldShowFlightDetailHistoryBack(input: {
+  canGoBack: boolean;
+}): boolean {
+  return input.canGoBack === true;
+}

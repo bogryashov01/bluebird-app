@@ -571,9 +571,10 @@ test('the live internal TestFlight profile enables queue mutations, connections,
     EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS: 'true',
     EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES: 'true',
     EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION: 'true',
+    EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION: 'true',
   });
   assert.equal(Object.hasOwn(live.env, 'EXPO_PUBLIC_BLUEBIRD_MESSAGING_REALTIME'), false);
-  assert.equal(Object.hasOwn(live.env, 'EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION'), false);
+  assert.equal(live.env.EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION, 'true');
   assert.equal(Object.hasOwn(live.env, 'EXPO_PUBLIC_BLUEBIRD_AI_CONCIERGE'), false);
   const production = eas.build.production.env ?? {};
   const clerkDebug = eas.build['production-clerk-debug'].env;

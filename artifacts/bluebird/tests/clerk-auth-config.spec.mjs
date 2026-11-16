@@ -315,7 +315,7 @@ test("sign-out invokes only the injected Clerk action and reports failures witho
     });
     assert.deepEqual(failure, {
       ok: false,
-      message: "Clerk authentication could not be completed. Please try again.",
+      message: "Sign-in couldn’t be completed. Please try again.",
     });
     assert.equal(clerkSignOutCalls, 2);
     assert.equal(fetchCalls, 0);
@@ -376,10 +376,10 @@ test("production debug on a development client isolates the Clerk token cache by
 test("unknown error shapes get a safe message and are not logged or rethrown", async () => {
   assert.equal(
     getClerkAuthErrorMessage({ code: "mock_error" }),
-    "Clerk authentication could not be completed. Please try again.",
+    "Sign-in couldn’t be completed. Please try again.",
   );
   assert.deepEqual(await performClerkSignOut(async () => { throw { code: "mock_error" }; }), {
     ok: false,
-    message: "Clerk authentication could not be completed. Please try again.",
+    message: "Sign-in couldn’t be completed. Please try again.",
   });
 });

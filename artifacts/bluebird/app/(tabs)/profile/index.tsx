@@ -29,6 +29,7 @@ import { isMemberConnectionsIntegrationEnabled } from '@/lib/memberConnections';
 import {
   IncomingConnectionPreferenceError,
   saveIncomingConnectionRequestsPreference,
+  withIncomingConnectionPreference,
 } from '@/lib/clerkConnectionPrivacy';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; hint: string }[] = [
@@ -146,6 +147,7 @@ export default function ProfileScreen() {
   const [incomingPreference, setIncomingPreference] = React.useState<boolean | null>(null);
   const [incomingPreferenceSaving, setIncomingPreferenceSaving] = React.useState(false);
   const [incomingPreferenceError, setIncomingPreferenceError] = React.useState<string | null>(null);
+  const incomingPreferenceSaveGeneration = React.useRef(0);
   const cachedClerkProfile = React.useRef<{ clerkUserId: string; profile: ProductionUserProfile } | null>(null);
   const currentClerkIdentity = React.useRef<string | null>(clerkSession?.userId ?? null);
   currentClerkIdentity.current = clerkSession?.userId ?? null;
@@ -305,12 +307,14 @@ export default function ProfileScreen() {
     const saveIncomingPreference = async (next: boolean) => {
       if (!profile || !clerkSession.userId || incomingPreferenceSaving || !incomingSupported) return;
       const requestedClerkUserId = clerkSession.userId;
+      const baselineProfile = profile;
+      const saveGeneration = ++incomingPreferenceSaveGeneration.current;
       setIncomingPreference(next);
       setIncomingPreferenceSaving(true);
       setIncomingPreferenceError(null);
       try {
         const api = createClerkApi().authenticated;
-        const saved = await saveIncomingConnectionRequestsPreference({
+        const outcome = await saveIncomingConnectionRequestsPreference({
           getCurrentSession: () => {
             const session = currentClerkSession.current;
             if (!session) return null;
@@ -325,18 +329,45 @@ export default function ProfileScreen() {
           updateProfile: (data, options) => api.updateProfile(data, options),
           allowIncomingConnectionRequests: next,
         });
-        if (currentClerkIdentity.current !== requestedClerkUserId) return;
-        cachedClerkProfile.current = { clerkUserId: requestedClerkUserId, profile: saved };
-        setProfileLoadState({ kind: 'loaded', clerkUserId: requestedClerkUserId, profile: saved });
+        if (
+          currentClerkIdentity.current !== requestedClerkUserId ||
+          saveGeneration !== incomingPreferenceSaveGeneration.current
+        ) return;
+        if (outcome.kind === 'confirmed') {
+          cachedClerkProfile.current = { clerkUserId: requestedClerkUserId, profile: outcome.profile };
+          setProfileLoadState({ kind: 'loaded', clerkUserId: requestedClerkUserId, profile: outcome.profile });
+          setIncomingPreference(null);
+          setIncomingPreferenceError(null);
+          return;
+        }
+        // Write settled; confirmation GET was stale or unavailable. Keep the
+        // requested value locally without claiming the save failed, and without
+        // treating the toggle as server-confirmed success.
+        const retained = withIncomingConnectionPreference(
+          outcome.profile ?? baselineProfile,
+          outcome.requestedValue,
+        );
+        cachedClerkProfile.current = { clerkUserId: requestedClerkUserId, profile: retained };
+        setProfileLoadState({ kind: 'loaded', clerkUserId: requestedClerkUserId, profile: retained });
         setIncomingPreference(null);
+        setIncomingPreferenceError(
+          outcome.writeAccepted
+            ? 'Bluebird could not confirm this preference yet. Refresh your profile if the toggle looks wrong.'
+            : 'Couldn’t save this preference. Try again.',
+        );
       } catch (error) {
-        if (currentClerkIdentity.current !== requestedClerkUserId) return;
+        if (
+          currentClerkIdentity.current !== requestedClerkUserId ||
+          saveGeneration !== incomingPreferenceSaveGeneration.current
+        ) return;
         setIncomingPreference(null);
         setIncomingPreferenceError(error instanceof IncomingConnectionPreferenceError
           ? error.message
-          : 'The preference could not be saved.');
+          : 'Couldn’t save this preference. Try again.');
       } finally {
-        setIncomingPreferenceSaving(false);
+        if (saveGeneration === incomingPreferenceSaveGeneration.current) {
+          setIncomingPreferenceSaving(false);
+        }
       }
     };
     const membershipStatus = presentClerkMembershipDesign({
@@ -428,9 +459,10 @@ export default function ProfileScreen() {
                 label: 'Notification Settings',
                 onPress: () => router.push('/notifications'),
               },
+              // Privacy: whether members may send requests — not push delivery.
               ...(incomingSupported ? [{
-                label: 'Connection requests',
-                hint: 'Allow members to request a connection',
+                label: 'Allow incoming requests',
+                hint: 'Let members request a connection',
                 testID: 'clerk-incoming-connection-requests',
                 right: (
                   <Switch

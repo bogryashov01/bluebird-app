@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -16,6 +15,25 @@ import { formatMemberActivityTime } from '@/lib/memberConnectPresentation';
 import { conversationTitle, formatMemberMessagesUnreadBadge } from '@/lib/memberMessages';
 import { useMemberConversations } from '@/lib/useMemberMessages';
 
+function ConversationListSkeleton({ colors }: { colors: ReturnType<typeof useColors> }) {
+  return (
+    <View style={styles.list} testID="member-messages-skeleton">
+      {[0, 1, 2].map((index) => (
+        <View
+          key={index}
+          style={[styles.row, styles.skeletonRow, { borderBottomColor: colors.separator }]}
+        >
+          <View style={[styles.skeletonAvatar, { backgroundColor: colors.surface }]} />
+          <View style={styles.rowCopy}>
+            <View style={[styles.skeletonLine, styles.skeletonTitle, { backgroundColor: colors.surface }]} />
+            <View style={[styles.skeletonLine, styles.skeletonPreview, { backgroundColor: colors.surface }]} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export function MemberConversationList({
   names,
   active,
@@ -28,6 +46,7 @@ export function MemberConversationList({
   const colors = useColors();
   const inbox = useMemberConversations(active);
   const [nowMs, setNowMs] = React.useState(() => Date.now());
+  const view = inbox.view;
 
   React.useEffect(() => {
     if (!active) return undefined;
@@ -35,10 +54,10 @@ export function MemberConversationList({
     return undefined;
   }, [active, inbox.conversations]);
 
-  if (!inbox.enabled || inbox.status === 'disabled') {
+  if (view.kind === 'disabled') {
     return (
       <View style={styles.state} testID="member-connections-messages-unavailable">
-        <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Messages are not available yet</Text>
+          <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Messages aren’t available yet</Text>
         <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]}>
           Try again later.
         </Text>
@@ -46,7 +65,7 @@ export function MemberConversationList({
     );
   }
 
-  if (inbox.status === 'signed-out') {
+  if (view.kind === 'signed-out') {
     return (
       <View style={styles.state} testID="member-messages-signed-out">
         <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Sign in to view messages</Text>
@@ -54,10 +73,33 @@ export function MemberConversationList({
     );
   }
 
-  if (inbox.status === 'loading' && inbox.conversations.length === 0) {
+  if (view.kind === 'skeleton') {
     return (
-      <View style={styles.state} testID="member-messages-loading">
-        <ActivityIndicator color={colors.primary} />
+      <ScrollView
+        testID="member-messages-list"
+        style={{ backgroundColor: colors.offWhite }}
+        contentContainerStyle={{ paddingBottom: bottomInset }}
+      >
+        <ConversationListSkeleton colors={colors} />
+      </ScrollView>
+    );
+  }
+
+  if (view.kind === 'error') {
+    return (
+      <View style={styles.state} testID="member-messages-error">
+        <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Messages couldn’t be loaded</Text>
+        <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]}>
+          {view.message || 'Try again.'}
+        </Text>
+        <TouchableOpacity
+          accessibilityRole="button"
+          testID="member-messages-retry"
+          onPress={() => { void inbox.refresh(); }}
+          style={styles.retry}
+        >
+          <Text style={[styles.retryLabel, { color: colors.primary }]}>Try again</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -69,28 +111,28 @@ export function MemberConversationList({
       contentContainerStyle={[styles.list, { paddingBottom: bottomInset }]}
       refreshControl={(
         <RefreshControl
-          refreshing={inbox.refreshing}
+          refreshing={view.kind === 'list' ? view.refreshing : inbox.refreshing}
           onRefresh={() => { void inbox.refresh(); }}
           tintColor={colors.primary}
           progressBackgroundColor={colors.surface}
         />
       )}
     >
-      {inbox.message ? (
-        <Text style={[styles.meta, { color: colors.textOnSurface }]} testID="member-messages-feedback">{inbox.message}</Text>
+      {view.kind === 'list' && view.message ? (
+        <Text style={[styles.meta, { color: colors.textOnSurface }]} testID="member-messages-feedback">{view.message}</Text>
       ) : null}
-      {inbox.status === 'error' ? (
+      {view.kind === 'list' && view.message ? (
         <TouchableOpacity accessibilityRole="button" testID="member-messages-retry" onPress={() => { void inbox.refresh(); }} style={styles.retry}>
           <Text style={[styles.retryLabel, { color: colors.primary }]}>Try again</Text>
         </TouchableOpacity>
       ) : null}
-      {inbox.conversations.length === 0 && inbox.status === 'ready' ? (
+      {view.kind === 'empty' ? (
         <View testID="member-messages-empty" style={styles.empty}>
-          <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>No Messages Yet</Text>
+          <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>No messages yet</Text>
           <Text style={[styles.stateBody, { color: colors.mutedForegroundLight }]}>Your conversations will appear here.</Text>
         </View>
       ) : null}
-      {inbox.conversations.map((conversation) => {
+      {view.kind === 'list' ? view.conversations.map((conversation) => {
         const title = conversationTitle(conversation.participantUserId, names);
         const activity = conversation.latestMessage?.createdAt ?? conversation.updatedAt;
         const unreadBadge = formatMemberMessagesUnreadBadge(conversation.unreadCount);
@@ -125,7 +167,7 @@ export function MemberConversationList({
             <Feather name="chevron-right" size={18} color={colors.mutedForegroundLight} />
           </TouchableOpacity>
         );
-      })}
+      }) : null}
     </ScrollView>
   );
 }
@@ -134,6 +176,11 @@ const styles = StyleSheet.create({
   list: { paddingTop: 4 },
   sectionLabel: { fontFamily: 'Inter_700Bold', fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase', paddingHorizontal: 20, marginBottom: 4 },
   row: { minHeight: 76, paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  skeletonRow: { opacity: 0.9 },
+  skeletonAvatar: { width: 44, height: 44, borderRadius: 22 },
+  skeletonLine: { borderRadius: 6 },
+  skeletonTitle: { height: 14, width: '46%' },
+  skeletonPreview: { height: 12, width: '72%', marginTop: 8 },
   rowCopy: { flex: 1, gap: 3 },
   titleLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   name: { flex: 1, fontFamily: 'Inter_600SemiBold', fontSize: 16 },

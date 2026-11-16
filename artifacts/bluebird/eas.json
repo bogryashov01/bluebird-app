@@ -47,7 +47,8 @@
         "EXPO_PUBLIC_BLUEBIRD_MEMBERSHIP_DATA_MODE": "production",
         "EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS": "true",
         "EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES": "true",
-        "EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION": "true"
+        "EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION": "true",
+        "EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION": "true"
       }
     },
     "production-live-journey-internal": {

@@ -14,22 +14,11 @@ import { useColors } from '@/hooks/useColors';
 import { BluebirdLogo } from '@/components/BluebirdLogo';
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 import { usePendingReferralCode } from '@/hooks/usePendingReferralCode';
-
-/**
- * Formats the phone input while typing. US-style numbers get (XXX) XXX-XXXX;
- * numbers starting with "+" are kept as international E.164 (up to 15 digits)
- * with no reformatting so any country code works.
- */
-function formatPhoneInput(raw: string): string {
-  if (raw.trim().startsWith('+')) {
-    return '+' + raw.replace(/\D/g, '').slice(0, 15);
-  }
-  const digits = raw.replace(/\D/g, '').slice(0, 11);
-  const d = digits.startsWith('1') && digits.length > 10 ? digits.slice(1) : digits;
-  if (d.length <= 3) return d;
-  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6, 10)}`;
-}
+import {
+  applyPhonePlusPrefix,
+  phonePlusPrefixFieldProps,
+  phonePlusPrefixForLegacyNormalize,
+} from '@/lib/phonePlusPrefix';
 
 export default function PhoneScreen() {
   const insets = useSafeAreaInsets();
@@ -62,9 +51,9 @@ export default function PhoneScreen() {
     },
   });
 
-  const digits = phone.replace(/\D/g, '');
-  // US-style entry needs 10 digits; international "+" entry needs 11–15.
-  const valid = phone.startsWith('+') ? digits.length >= 11 && digits.length <= 15 : digits.length >= 10;
+  const digits = applyPhonePlusPrefix(phone).slice(1);
+  // 10 digits → legacy US path; 11–15 → international E.164 with country code.
+  const valid = digits.length === 10 || (digits.length >= 11 && digits.length <= 15);
 
   if (CLERK_AUTH_CONFIGURATION.authExpected) {
     return <Redirect href="/(clerk-auth)/sign-in" />;
@@ -73,7 +62,7 @@ export default function PhoneScreen() {
   const handleContinue = () => {
     if (!valid || requestCode.isPending || !referralCodeReady || referralStorageError) return;
     setError(null);
-    requestCode.mutate({ data: { phone } });
+    requestCode.mutate({ data: { phone: phonePlusPrefixForLegacyNormalize(phone) } });
   };
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
@@ -101,7 +90,7 @@ export default function PhoneScreen() {
         <Text style={[styles.title, { color: colors.textOnBrand }]}>Enter your phone number</Text>
         <Text style={[styles.subtitle, { color: colors.mutedOnBrand }]}>
           We'll text you a 6-digit code to sign in or create your account.
-          Outside the US? Start with your country code, e.g. +44.
+          Numbers start with +. Add your country code (for example +44), or enter 10 US digits after +.
         </Text>
 
         <View style={styles.fieldGroup}>
@@ -111,11 +100,9 @@ export default function PhoneScreen() {
               styles.input,
               { backgroundColor: colors.input, borderColor: error ? colors.destructive : colors.border, color: colors.foreground },
             ]}
-            placeholder="(555) 555-0100"
+            placeholder="+15555550100"
             placeholderTextColor={colors.mutedForeground}
-            value={phone}
-            onChangeText={(t) => { setPhone(formatPhoneInput(t)); setError(null); }}
-            keyboardType="phone-pad"
+            {...phonePlusPrefixFieldProps(phone, (t) => { setPhone(t); setError(null); })}
             autoComplete="tel"
             textContentType="telephoneNumber"
             autoFocus

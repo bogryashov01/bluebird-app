@@ -307,7 +307,7 @@ function ClerkPersonalInfoForm({
       );
       if (controller.signal.aborted || currentIdentity.current !== clerkUserId) return;
       setBaseline(values);
-      setSaveNotice('Bluebird accepted your changes.');
+      setSaveNotice('Your changes were saved.');
     } catch (error) {
       if (!controller.signal.aborted && currentIdentity.current === clerkUserId) {
         setSaveError(getClerkPersonalInfoErrorMessage(error));
@@ -826,7 +826,7 @@ export default function PersonalInfoScreen() {
         if (['http:', 'https:'].includes(url.protocol) && url.hostname &&
             !url.username && !url.password && input.trim().length <= 2048) continue;
       } catch { /* Preserve typed values on validation failure. */ }
-      setNetworkingErrorMessage(`Enter a valid http(s) URL for ${label}, or leave it blank.`);
+      setNetworkingErrorMessage(`Enter a valid link for ${label}, or leave it blank.`);
       return;
     }
     networkingSave.mutate({

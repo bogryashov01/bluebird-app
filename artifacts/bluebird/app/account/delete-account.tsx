@@ -71,7 +71,7 @@ export default function DeleteAccountScreen() {
     return (
       <ProductionAuthenticatedUnavailableNotice
         title="Account deletion unavailable"
-        description="Account deletion is available for signed-in Bluebird members using Clerk."
+        description="Account deletion is available for signed-in Bluebird members."
         testID="delete-account-unavailable"
       />
     );
@@ -203,6 +203,13 @@ function DeleteAccountClerkScreen() {
       return;
     }
     if (eligibility.kind === 'error') {
+      // Undeployed Main API routes (404/501) and transient unavailability stay
+      // on a non-destructive banner — never treat as completed deletion.
+      if (eligibility.code === 'unavailable') {
+        setRequiresMembershipAck(false);
+        setPhase({ kind: 'unavailable' });
+        return;
+      }
       setPhase({
         kind: 'error',
         code: eligibility.code,
@@ -416,7 +423,7 @@ function DeleteAccountClerkScreen() {
             Active trips or open flight offers may temporarily block deletion until they are resolved.
           </Text>
           <Text style={[styles.note, { color: colors.mutedForegroundLight }]}>
-            Deletion requires a fresh phone SMS verification through Clerk. Ordinary sign-in is not enough by itself.
+            Deletion requires a fresh SMS verification. Being signed in isn’t enough by itself.
           </Text>
         </View>
 

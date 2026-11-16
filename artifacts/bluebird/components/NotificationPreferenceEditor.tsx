@@ -17,6 +17,12 @@ const CHANNELS: { value: NotificationChannel; label: string }[] = [
   { value: 'both', label: 'Both' },
 ];
 
+function channelHint(value: NotificationChannel | null | undefined): string {
+  if (value === 'sms') return 'SMS';
+  if (value === 'both') return 'Email + SMS';
+  return 'Email';
+}
+
 type ChannelPreferenceKey =
   | 'allChannels'
   | 'emptyLegHomeAirport'
@@ -283,7 +289,7 @@ export function NotificationPreferenceEditor({
     <View style={{ gap: 8 }}>
       {persistence === 'device' ? (
         <Text style={{ color: colors.mutedForegroundLight, fontSize: 12, lineHeight: 16 }} testID="clerk-device-notification-preferences">
-          Saved on this device.
+          Saved on this iPhone only—not synced to your Bluebird account.
         </Text>
       ) : null}
       <View style={{ borderRadius: 16, backgroundColor: colors.surface, overflow: 'hidden' }}>
@@ -361,12 +367,14 @@ export function NotificationPreferenceEditor({
         <FlightRow
           label="Queue Updates"
           switchLabel="Queue Updates"
+          hint={channelHint(draft.queueUpdates)}
           checked
           disabled={blocked}
           expanded={expanded === 'queue'}
           onToggle={() => toggleExpanded('queue')}
           onExpand={() => toggleExpanded('queue')}
           testID="clerk-notification-queue-switch"
+          control="channels"
         >
           {expanded === 'queue' ? (
             <ChannelSelector
@@ -382,12 +390,14 @@ export function NotificationPreferenceEditor({
         <FlightRow
           label="Flight Confirmations"
           switchLabel="Flight Confirmations"
+          hint={channelHint(draft.winningNotifications)}
           checked
           disabled={blocked}
           expanded={expanded === 'confirmations'}
           onToggle={() => toggleExpanded('confirmations')}
           onExpand={() => toggleExpanded('confirmations')}
           testID="clerk-notification-confirmation-switch"
+          control="channels"
           last
         >
           {expanded === 'confirmations' ? (
@@ -414,7 +424,7 @@ export function NotificationPreferenceEditor({
       ) : null}
       {onRefresh && error ? (
         <TouchableOpacity accessibilityRole="button" onPress={() => { void onRefresh(); }} testID="clerk-refresh-notification-preferences-after-save">
-          <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>Refresh preferences</Text>
+          <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>Try again</Text>
         </TouchableOpacity>
       ) : null}
     </View>
@@ -432,6 +442,7 @@ function FlightRow({
   onExpand,
   testID,
   last = false,
+  control = 'toggle',
   children,
 }: {
   label: string;
@@ -444,6 +455,8 @@ function FlightRow({
   onExpand: () => void;
   testID: string;
   last?: boolean;
+  /** `toggle` = mode on/off. `channels` = required email/SMS channel (no off in Main API). */
+  control?: 'toggle' | 'channels';
   children?: React.ReactNode;
 }) {
   const colors = useColors();
@@ -464,6 +477,7 @@ function FlightRow({
           disabled={disabled && !checked}
           onPress={onExpand}
           style={{ flex: 1, paddingVertical: 10 }}
+          testID={control === 'channels' ? testID : undefined}
         >
           <Text style={{ color: colors.textOnSurface, fontFamily: 'Inter_500Medium', fontSize: 15 }}>
             {label}
@@ -474,13 +488,23 @@ function FlightRow({
             </Text>
           ) : null}
         </TouchableOpacity>
-        <SettingsSwitch
-          label={switchLabel}
-          checked={checked}
-          disabled={disabled}
-          onPress={onToggle}
-          testID={testID}
-        />
+        {control === 'toggle' ? (
+          <SettingsSwitch
+            label={switchLabel}
+            checked={checked}
+            disabled={disabled}
+            onPress={onToggle}
+            testID={testID}
+          />
+        ) : (
+          <Text
+            style={{ color: colors.mutedForegroundLight, fontSize: 20, lineHeight: 22 }}
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+          >
+            {expanded ? '˄' : '›'}
+          </Text>
+        )}
       </View>
       {children}
       {last ? null : <View style={{ height: 1, marginLeft: 16, backgroundColor: colors.separator }} />}

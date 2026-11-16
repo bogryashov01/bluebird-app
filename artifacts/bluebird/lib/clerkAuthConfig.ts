@@ -350,7 +350,7 @@ export function getClerkAuthErrorMessage(error: unknown): string {
   if (code === 'too_many_requests' || code === 'rate_limit_exceeded') {
     return 'Too many attempts. Wait a moment, then try again.';
   }
-  return 'Clerk authentication could not be completed. Please try again.';
+  return 'Sign-in couldn’t be completed. Please try again.';
 }
 
 function getClerkErrorCode(error: unknown): string | null {

@@ -72,7 +72,7 @@ export type JoinFlightQueuePanel =
     };
 
 export const JOIN_FLIGHT_QUEUE_EMPTY = 'No one is currently in this queue.';
-export const JOIN_FLIGHT_QUEUE_FOOTNOTE = 'The queue count is not a count of available seats. This response does not confirm that you can join.';
+export const JOIN_FLIGHT_QUEUE_FOOTNOTE = 'Queue size isn’t seats available, and it doesn’t mean you can join yet.';
 
 export interface QueueJoinSuccessModel {
   flightId: number;
@@ -620,9 +620,9 @@ export const QUEUE_SKIP_NONE = 'No Skip the Line passes are available.';
 export const QUEUE_SKIP_ALREADY_USED = 'A Skip the Line pass is already applied to this flight.';
 export const QUEUE_SKIP_WINNER = 'Skip the Line is not offered again for this flight.';
 export const QUEUE_SKIP_CONFIRMED =
-  'Skip the Line was confirmed. Your queue position was updated. This does not award the flight or confirm the seat.';
+  'Skip the Line confirmed. Your place in line was updated. Your seat isn’t confirmed yet.';
 export const QUEUE_SKIP_NOTE =
-  'Using a pass applies one existing credit and updates your queue rank. It does not award the flight or confirm the seat.';
+  'Using a pass applies one credit and updates your place in line. Your seat isn’t confirmed yet.';
 export const QUEUE_SKIP_UNCONFIRMED = 'Bluebird did not confirm Skip the Line. No pass use was confirmed.';
 export const QUEUE_SKIP_BALANCE_UNAVAILABLE = 'Skip the Line pass balance could not be loaded.';
 
@@ -631,7 +631,7 @@ export function presentQueueSkipConfirmedMessage(viewerQueuePosition: number): s
   if (!Number.isSafeInteger(viewerQueuePosition) || viewerQueuePosition < 1) {
     return QUEUE_SKIP_CONFIRMED;
   }
-  return `Skip the Line was confirmed. You are now #${viewerQueuePosition} in this queue. This does not award the flight or confirm the seat.`;
+  return `Skip the Line confirmed. You’re now #${viewerQueuePosition} in this queue. Your seat isn’t confirmed yet.`;
 }
 
 export type QueueSkipLineBalance = 'loading' | 'unavailable' | { count: number };

@@ -25,6 +25,11 @@ import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
 import { prefillPrimaryPassenger } from '@/lib/passenger-name';
 import { MAX_OCCUPANTS, maxPassengersForBooking } from '@/lib/passengerCapacity';
+import {
+  applyPhonePlusPrefix,
+  optionalPhonePlusPrefixValue,
+  phonePlusPrefixFieldProps,
+} from '@/lib/phonePlusPrefix';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { parseTripRouteId } from '@/lib/tripRoutes';
 import { TripAvailabilityState } from '@/components/TripAvailabilityState';
@@ -107,6 +112,7 @@ export default function PassengerListScreen() {
 
     const restoredPassengers = data.passengers.map((passenger) => ({
       ...passenger,
+      phone: passenger.phone ? applyPhonePlusPrefix(passenger.phone) : '',
       dateOfBirth: passenger.dateOfBirth ?? '',
       weightKg: passenger.weightKg == null ? '' : String(passenger.weightKg),
     }));
@@ -234,7 +240,7 @@ export default function PassengerListScreen() {
       passengerOrder: index + 1,
       firstName: passenger.firstName,
       lastName: passenger.lastName,
-      phone: passenger.phone || null,
+      phone: optionalPhonePlusPrefixValue(passenger.phone),
       email: passenger.email || null,
       dateOfBirth: passenger.dateOfBirth || null,
       weightKg: optionalMeasurement(passenger.weightKg),
@@ -264,7 +270,7 @@ export default function PassengerListScreen() {
             ...passenger,
             firstName: saved.firstName,
             lastName: saved.lastName,
-            phone: saved.phone ?? '',
+            phone: saved.phone ? applyPhonePlusPrefix(saved.phone) : '',
             email: saved.email ?? '',
             weightKg: String(saved.weightKg),
           }
@@ -279,7 +285,7 @@ export default function PassengerListScreen() {
       data: {
         firstName: passenger.firstName.trim(),
         lastName: passenger.lastName.trim(),
-        phone: passenger.phone?.trim() || null,
+        phone: optionalPhonePlusPrefixValue(passenger.phone),
         email: passenger.email?.trim() || null,
         weightKg: Number(passenger.weightKg),
       },
@@ -501,9 +507,7 @@ export default function PassengerListScreen() {
                   <Field
                     testID={`passenger-${index + 1}-phone`}
                     label="Phone (optional)"
-                    value={passenger.phone ?? ''}
-                    onChangeText={(value: string) => updatePassenger(index, 'phone', value)}
-                    keyboardType="phone-pad"
+                    {...phonePlusPrefixFieldProps(passenger.phone ?? '', (value: string) => updatePassenger(index, 'phone', value))}
                     colors={colors}
                   />
                   <Field

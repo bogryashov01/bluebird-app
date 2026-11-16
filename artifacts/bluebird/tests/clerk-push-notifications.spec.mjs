@@ -84,7 +84,7 @@ test("permission granted, provisional, and denied stay distinct", () => {
   }), false);
   assert.equal(shouldOfferNotificationSettings("denied"), true);
   assert.equal(shouldOfferNotificationSettings("provisional"), false);
-  assert.match(describePushPermission("denied"), /will not show the permission prompt again/);
+  assert.match(describePushPermission("denied"), /Turn them on in Settings/);
 });
 
 test("a missing project id, simulator, and token failure never invent a token", () => {
@@ -353,13 +353,14 @@ test("Clerk push registration does not call the legacy JWT endpoint or persist t
   assert.equal(live.EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS, "true");
   assert.equal(live.EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES, "true");
   assert.equal(Object.hasOwn(live, "EXPO_PUBLIC_BLUEBIRD_MESSAGING_REALTIME"), false);
-  assert.equal(Object.hasOwn(live, "EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION"), false);
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION, "true");
   assert.equal(Object.hasOwn(live, "EXPO_PUBLIC_BLUEBIRD_AI_CONCIERGE"), false);
   const journey = builds["production-live-journey-internal"].env;
   assert.equal(journey.EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS, "true");
   assert.equal(journey.EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES, "true");
   assert.equal(Object.hasOwn(journey, "EXPO_PUBLIC_BLUEBIRD_MESSAGING_REALTIME"), false);
-  assert.equal(Object.hasOwn(journey, "EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION"), false);
+  // Journey inherits ACCOUNT_DELETION from production-live-internal; do not disable it.
+  assert.notEqual(journey.EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION, "false");
   assert.equal(Object.hasOwn(journey, "EXPO_PUBLIC_BLUEBIRD_AI_CONCIERGE"), false);
   for (const [name, profile] of Object.entries(builds)) {
     if (name === "production-live-internal" || name === "production-live-journey-internal") continue;
@@ -397,7 +398,7 @@ test("Clerk push registration does not call the legacy JWT endpoint or persist t
     method: "DELETE",
     path: "/me/push-tokens",
   });
-  assert.match(PUSH_DELIVERY_UNAVAILABLE, /does not register the device token/);
+  assert.match(PUSH_DELIVERY_UNAVAILABLE, /aren’t enabled in this build yet/);
   const registration = readFileSync(resolve(projectRoot, "lib/clerkPushRegistration.ts"), "utf8");
   const destination = readFileSync(resolve(projectRoot, "lib/clerkPushDestination.ts"), "utf8");
   for (const source of [registration, destination, runtime, coordinator]) {

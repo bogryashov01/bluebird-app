@@ -37,6 +37,10 @@ import {
 import { CLERK_AUTH_CONFIGURATION } from '@/lib/clerkAuthConfig';
 import type { ClerkStartupFailureReason } from '@/lib/clerkStartup';
 import { logClerkStartupDiagnostic } from '@/lib/clerkStartup';
+import {
+  phonePlusPrefixFieldProps,
+  phonePlusPrefixForLegacyNormalize,
+} from '@/lib/phonePlusPrefix';
 
 type FormStep = 'phone' | 'code';
 
@@ -145,7 +149,7 @@ function ClerkAuthForm({
       });
       navigateToClerkSignedIn(providerMounted, () => {
         setErrorStage('navigation');
-        setError('Your Clerk session is active, but the signed-in screen could not be opened.');
+        setError('You’re signed in, but we couldn’t open your account. Try again.');
       });
     }
   }, [isLoaded, isSignedIn, providerMounted]);
@@ -156,7 +160,7 @@ function ClerkAuthForm({
       requestCount.current = 0;
       setError(null);
       setErrorStage(null);
-      return beginClerkPhoneAuth('sign-in', phone, actions);
+      return beginClerkPhoneAuth('sign-in', phonePlusPrefixForLegacyNormalize(phone), actions);
     });
     if (!guarded.accepted) return;
     const result = guarded.value;
@@ -192,7 +196,7 @@ function ClerkAuthForm({
     });
     navigateToClerkSignedIn(providerMounted, () => {
       setErrorStage('navigation');
-      setError('Your Clerk session is active, but the signed-in screen could not be opened.');
+      setError('You’re signed in, but we couldn’t open your account. Try again.');
     });
   };
 
@@ -300,14 +304,13 @@ function ClerkAuthForm({
                     autoComplete="tel"
                     autoCapitalize="none"
                     editable={authResourcesReady}
-                    keyboardType="phone-pad"
-                    onChangeText={(value) => {
+                    {...phonePlusPrefixFieldProps(phone, (value) => {
                       setPhone(value);
                       setFlowMode('sign-in');
                       setError(null);
-                    }}
+                    })}
                     onSubmitEditing={authResourcesReady ? handleRequestCode : undefined}
-                    placeholder="+1 555 555 0100"
+                    placeholder="+15555550100"
                     placeholderTextColor={colors.mutedForeground}
                     returnKeyType="go"
                     style={[
@@ -315,18 +318,17 @@ function ClerkAuthForm({
                       { backgroundColor: colors.input, borderColor: error ? colors.destructive : colors.border, color: colors.foreground },
                     ]}
                     textContentType="telephoneNumber"
-                    value={phone}
                     testID="clerk-phone-input"
                   />
                   <Text style={[styles.helperText, { color: colors.mutedOnBrand }]}>
-                    Use 10 US digits or start an international number with + and its country code.
+                    Numbers start with +. Add your country code (for example +1… or +44…), or enter 10 US digits after +.
                   </Text>
                 </View>
               ) : (
                 <View style={styles.fieldGroup} testID="clerk-code-entry">
                   <Text style={[styles.label, { color: colors.mutedOnBrand }]}>SMS verification code</Text>
                   <Text style={[styles.helperText, { color: colors.mutedOnBrand }]}>
-                    Enter the code Clerk sent to your phone. Your number is not shown here.
+                    Enter the code we texted you.
                   </Text>
                   <ThemedTextInput
                     accessibilityLabel="SMS verification code"
@@ -489,21 +491,21 @@ function getErrorTitle(stage: ClerkPhoneAuthFailureStage | null): string {
     case 'input':
       return 'Check your phone number';
     case 'create':
-      return 'Could not start sign-in';
+      return 'Couldn’t start sign-in';
     case 'code-preparation':
-      return 'Could not prepare the code';
+      return 'Couldn’t send the code';
     case 'response':
-      return 'Could not confirm the verification step';
+      return 'Couldn’t continue verification';
     case 'verification':
-      return 'Could not verify the code';
+      return 'Couldn’t verify the code';
     case 'session-activation':
-      return 'Could not activate your session';
+      return 'Couldn’t finish signing in';
     case 'resend':
-      return 'Could not resend the code';
+      return 'Couldn’t resend the code';
     case 'navigation':
-      return 'Could not open the signed-in screen';
+      return 'Couldn’t open your account';
     default:
-      return 'Authentication issue';
+      return 'Something went wrong';
   }
 }
 

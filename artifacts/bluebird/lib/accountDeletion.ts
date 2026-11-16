@@ -7,6 +7,11 @@
  * from the device. Strict reverification must complete through Clerk Session
  * verification APIs — ordinary getToken() alone is never treated as enough.
  *
+ * TestFlight enablement: `production-live-internal` sets
+ * EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION=true. Missing or undeployed Main API
+ * endpoints must surface as unavailable errors — never crash the Delete Account
+ * screen or treat failures as successful deletion.
+ *
  * Contract (Main API, verified):
  * - GET  /me/account-deletion → { enabled, blockers, requiresMembershipCancellationAcknowledgement }
  * - POST /me/account-deletion → { confirmation: "DELETE", acknowledgeMembershipCancellation: boolean }
@@ -439,6 +444,10 @@ function mapDeletionFailure(error: unknown): {
         conflictCode: serverCode,
         retryable: false,
       };
+    }
+    if (error.status === 404 || error.status === 501 || serverCode === 'not_found') {
+      // Undeployed or not-yet-published Main API routes stay non-fatal.
+      return { code: 'unavailable', conflictCode: serverCode, retryable: false };
     }
     if (error.status === 503) {
       return { code: 'unavailable', conflictCode: serverCode, retryable: true };

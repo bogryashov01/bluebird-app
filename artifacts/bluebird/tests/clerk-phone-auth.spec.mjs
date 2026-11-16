@@ -241,7 +241,7 @@ test("missing phone-code factors fail during preparation without opening code en
 
   assert.equal(started.ok, false);
   assert.equal(started.stage, "code-preparation");
-  assert.match(started.message, /does not offer SMS verification/i);
+  assert.match(started.message, /SMS sign-in isn’t available/i);
   assert.deepEqual(fixture.calls, [
     ["create-sign-in", { identifier: "+15555550199" }],
   ]);
@@ -279,7 +279,7 @@ test("existing Clerk accounts get a sign-in recovery message without echoing pho
   const result = await beginClerkPhoneAuth("sign-up", "+15555550199", fixture.actions);
   assert.equal(result.ok, false);
   assert.equal(result.stage, "create");
-  assert.match(result.message, /already has a Clerk account\. Sign in instead/);
+  assert.match(result.message, /already has a Bluebird account\. Sign in instead/);
   assert.equal(result.message.includes("+15555550199"), false);
 });
 
@@ -331,7 +331,7 @@ test("only Clerk's explicit account-not-found response starts sign-up and reques
   );
   assert.equal(signupRateLimit.ok, false);
   assert.equal(signupRateLimit.stage, "code-preparation");
-  assert.match(signupRateLimit.message, /limiting verification requests/i);
+  assert.match(signupRateLimit.message, /Too many verification attempts/i);
   assert.deepEqual(signupRateLimitFixture.calls.map(([name]) => name), [
     "create-sign-in",
     "create-sign-up",
@@ -350,8 +350,8 @@ test("only Clerk's explicit account-not-found response starts sign-up and reques
     other422Fixture.actions,
   );
   assert.equal(other422.ok, false);
-  assert.match(other422.message, /could not start authentication/i);
-  assert.doesNotMatch(other422.message, /No Clerk account was found/);
+  assert.match(other422.message, /couldn’t start sign-in/i);
+  assert.doesNotMatch(other422.message, /No Bluebird account was found/);
   assert.deepEqual(other422Fixture.calls.map(([name]) => name), ["create-sign-in"]);
 
   const wrappedNotFoundFixture = makeResources({
@@ -391,7 +391,7 @@ test("only Clerk's explicit account-not-found response starts sign-up and reques
   );
   assert.equal(completedSignUp.ok, false);
   assert.equal(completedSignUp.stage, "response");
-  assert.match(completedSignUp.message, /did not send an SMS/);
+  assert.match(completedSignUp.message, /couldn’t text that number/i);
   assert.equal(completedSignUp.message.includes("+15555550199"), false);
   assert.equal(completedSignUpFixture.getActivationCalls(), 0);
   assert.deepEqual(completedSignUpFixture.calls.map(([name]) => name), [
@@ -448,7 +448,7 @@ test("network errors and Clerk verification-policy refusal do not activate sessi
   const refusedFixture = makeResources({ prepareSignUpError: { errors: [{ code: "strategy_not_enabled" }] } });
   const refused = await beginClerkPhoneAuth("sign-up", "+15555550199", refusedFixture.actions);
   assert.equal(refused.ok, false);
-  assert.match(refused.message, /did not allow phone-code verification/);
+  assert.match(refused.message, /Phone verification isn’t available for sign-up/i);
   assert.equal(refusedFixture.getActivationCalls(), 0);
   assert.equal(refusedFixture.calls.some(([name]) => name === "attempt-sign-up-code"), false);
 });
@@ -458,13 +458,13 @@ test("create, code-preparation, and verification failures report their lifecycle
   const createFailure = await beginClerkPhoneAuth("sign-in", "+15555550199", createFixture.actions);
   assert.equal(createFailure.ok, false);
   assert.equal(createFailure.stage, "create");
-  assert.match(createFailure.message, /could not start authentication/i);
+  assert.match(createFailure.message, /couldn’t start sign-in/i);
 
   const prepareFixture = makeResources({ prepareSignInError: { code: "clerk_api_error" } });
   const prepareFailure = await beginClerkPhoneAuth("sign-in", "+15555550199", prepareFixture.actions);
   assert.equal(prepareFailure.ok, false);
   assert.equal(prepareFailure.stage, "code-preparation");
-  assert.match(prepareFailure.message, /could not prepare the verification code/i);
+  assert.match(prepareFailure.message, /couldn’t send the verification code/i);
 
   const verifyFixture = makeResources({
     signInAttempts: [{ error: { code: "clerk_api_error" } }],
@@ -472,7 +472,7 @@ test("create, code-preparation, and verification failures report their lifecycle
   const verifyFailure = await verifyClerkPhoneCode("sign-in", "123456", verifyFixture.actions);
   assert.equal(verifyFailure.ok, false);
   assert.equal(verifyFailure.stage, "verification");
-  assert.match(verifyFailure.message, /could not verify this code/i);
+  assert.match(verifyFailure.message, /couldn’t be verified/i);
   assert.equal(createFixture.getActivationCalls(), 0);
   assert.equal(prepareFixture.getActivationCalls(), 0);
   assert.equal(verifyFixture.getActivationCalls(), 0);
@@ -491,7 +491,7 @@ test("create, code-preparation, and verification failures report their lifecycle
   );
   assert.equal(unexpectedResponse.ok, false);
   assert.equal(unexpectedResponse.stage, "response");
-  assert.match(unexpectedResponse.message, /did not confirm that phone verification is pending/);
+  assert.match(unexpectedResponse.message, /couldn’t confirm that a code was sent/i);
   assert.equal(unexpectedResponseFixture.calls.some(([name]) => name === "attempt-sign-in-code"), false);
 });
 
@@ -549,7 +549,7 @@ test("failed session activation can be retried without exposing the session id",
   const first = await verifyClerkPhoneCode("sign-in", "123456", fixture.actions);
   assert.equal(first.ok, false);
   assert.equal(first.stage, "session-activation");
-  assert.match(first.message, /could not activate your session/);
+  assert.match(first.message, /couldn’t finish signing you in/i);
   assert.equal(first.message.includes("mock-session-id"), false);
   const second = await verifyClerkPhoneCode("sign-in", "123456", fixture.actions);
   assert.deepEqual(second, { ok: true });
@@ -651,7 +651,7 @@ test("rate limits provide a wait message and safe Development diagnostics", asyn
   assert.equal(result.ok, false);
   assert.equal(result.stage, "code-preparation");
   assert.match(result.message, /Wait 2 minutes before trying again/);
-  assert.match(result.message, /SMS delivery can be delayed/);
+  assert.match(result.message, /SMS can take a moment to arrive/);
   assert.equal(result.message.includes(phoneNumber), false);
   assert.equal(fixture.calls.filter(([name]) => name === "prepare-sign-in-code").length, 1);
   assert.deepEqual(events, [
@@ -688,7 +688,7 @@ test("rate limits provide a wait message and safe Development diagnostics", asyn
     statusOnlyFixture.actions,
   );
   assert.equal(statusOnly.ok, false);
-  assert.match(statusOnly.message, /limiting verification requests/i);
+  assert.match(statusOnly.message, /Too many verification attempts/i);
 });
 
 test("delayed SMS delivery does not block Clerk-confirmed code entry or treat delivery as acceptance", async () => {

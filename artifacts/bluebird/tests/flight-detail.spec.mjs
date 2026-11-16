@@ -12,9 +12,12 @@ import {
   presentAircraftGallery,
   presentFlightDetailQueue,
   presentSeatsAvailable,
+  planFlightDetailExitNavigation,
   productionFlightDetailQueryKey,
   readProductionFlightDetailCache,
   selectDisplayedFlight,
+  shouldShowFlightDetailHistoryBack,
+  FLIGHT_DETAIL_FLIGHTS_HREF,
 } from "../scripts/.flight-detail-presentation.test.mjs";
 import {
   fetchProductionFlight,
@@ -106,6 +109,26 @@ const missing = selectDisplayedFlight({
 assert.equal(missing.flight, undefined);
 assert.equal(missing.confirmedMissing, true);
 assert.equal(missing.showingCachedDiscover, false);
+
+// Deleted / expired / unavailable production legs resolve as confirmed-missing (404).
+const deletedOrExpired = selectDisplayedFlight({
+  cached: undefined,
+  detail: undefined,
+  phase: "error",
+  httpStatus: 404,
+  viewerAuthenticated: true,
+});
+assert.equal(deletedOrExpired.flight, undefined);
+assert.equal(deletedOrExpired.confirmedMissing, true);
+
+assert.deepEqual(planFlightDetailExitNavigation({ canGoBack: true }), { method: "back" });
+assert.deepEqual(planFlightDetailExitNavigation({ canGoBack: false }), {
+  method: "replace",
+  href: FLIGHT_DETAIL_FLIGHTS_HREF,
+});
+assert.equal(FLIGHT_DETAIL_FLIGHTS_HREF, "/(tabs)/discover");
+assert.equal(shouldShowFlightDetailHistoryBack({ canGoBack: true }), true);
+assert.equal(shouldShowFlightDetailHistoryBack({ canGoBack: false }), false);
 
 const failed = selectDisplayedFlight({
   cached,
@@ -325,6 +348,13 @@ assert.match(joinScreen, /pathname: '\/flight\/queue-status', params: \{ flightI
 assert.match(myQueues, /pathname: '\/flight\/\[id\]', params: \{ id: String\(flightId\) \}/);
 assert.match(details, /PRODUCTION_FLIGHTS_QUERY_KEY/);
 assert.match(details, /flight-detail-unavailable/);
+assert.match(details, /flight-detail-unavailable-screen/);
+assert.match(details, /flight-detail-back-to-flights/);
+assert.match(details, /Back to Flights/);
+assert.match(details, /planFlightDetailExitNavigation/);
+assert.match(details, /shouldShowFlightDetailHistoryBack/);
+assert.match(details, /FloatingBackButton/);
+assert.match(details, /leaveUnavailableFlight/);
 assert.match(details, /flight-detail-refresh-error/);
 assert.doesNotMatch(details, /flight-detail-gallery|flight-detail-queue-count|flight-detail-queue-position|flight-skip-line-pass-card|join-nav-build-marker|join-flight-details-hint|demo-join-flow-switch/);
 assert.doesNotMatch(details, /people in queue|join-nav-bundle-2026-10-27-r2|Review what joining the queue means|Demo Join Flow|join-flight-queue-viewer/);

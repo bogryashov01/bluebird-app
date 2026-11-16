@@ -8,7 +8,9 @@ import {
   clearMemberMessagesCache,
   createMemberMessagesClient,
   isMemberMessagesIntegrationEnabled,
+  memberMessagesSnapshotConfirmsConversations,
   nextMemberMessageSend,
+  presentMemberConversationsView,
   readMemberMessagesSnapshot,
   refreshMemberMessageThreadLatest,
   rememberMemberMessagesSnapshot,
@@ -96,17 +98,21 @@ function rememberUnreadFromReadState(input: {
     apiBaseUrl: configuration.apiBaseUrl,
     clerkUserId: input.clerkUserId,
   });
-  rememberMemberMessagesSnapshot({
-    clerkUserId: input.clerkUserId,
-    environment: configuration.environment,
-    apiBaseUrl: configuration.apiBaseUrl,
-    unreadCount: input.state.unreadCount,
-    conversations: (existing?.conversations ?? []).map((conversation) => (
-      conversation.id === input.conversationId
-        ? { ...conversation, unreadCount: 0 }
-        : conversation
-    )),
-  });
+  // Never invent an empty confirmed inbox from a read receipt alone.
+  if (existing) {
+    rememberMemberMessagesSnapshot({
+      clerkUserId: input.clerkUserId,
+      environment: configuration.environment,
+      apiBaseUrl: configuration.apiBaseUrl,
+      unreadCount: input.state.unreadCount,
+      conversationsLoaded: existing.conversationsLoaded === true,
+      conversations: existing.conversations.map((conversation) => (
+        conversation.id === input.conversationId
+          ? { ...conversation, unreadCount: 0 }
+          : conversation
+      )),
+    });
+  }
   publishMemberMessageHint({
     kind: 'unread',
     clerkUserId: input.clerkUserId,
@@ -160,13 +166,18 @@ export function useMemberMessagesUnreadCount(): number {
         apiBaseUrl: configuration.apiBaseUrl,
         clerkUserId: requestedAccountId,
       });
-      rememberMemberMessagesSnapshot({
-        clerkUserId: requestedAccountId,
-        environment: configuration.environment,
-        apiBaseUrl: configuration.apiBaseUrl,
-        conversations: existing?.conversations ?? [],
-        unreadCount: result.data.unreadCount,
-      });
+      // Patch unread only onto a real inbox snapshot so Connections never
+      // treats an unread-only empty cache as "No Messages Yet".
+      if (existing) {
+        rememberMemberMessagesSnapshot({
+          clerkUserId: requestedAccountId,
+          environment: configuration.environment,
+          apiBaseUrl: configuration.apiBaseUrl,
+          conversations: existing.conversations,
+          conversationsLoaded: existing.conversationsLoaded === true,
+          unreadCount: result.data.unreadCount,
+        });
+      }
     } finally {
       inFlight.current = false;
     }
@@ -232,6 +243,7 @@ export function useMemberConversations(active: boolean) {
   const [focused, setFocused] = React.useState(false);
   const [conversations, setConversations] = React.useState<MessageConversation[]>([]);
   const [unreadCount, setUnreadCount] = React.useState(0);
+  const [listConfirmed, setListConfirmed] = React.useState(false);
   const [status, setStatus] = React.useState<'disabled' | 'signed-out' | 'loading' | 'ready' | 'error'>(
     !enabled ? 'disabled' : accountId ? 'loading' : 'signed-out',
   );
@@ -245,6 +257,7 @@ export function useMemberConversations(active: boolean) {
     generationRef.current += 1;
     setConversations([]);
     setUnreadCount(0);
+    setListConfirmed(false);
     setMessage(null);
     setStatus(!enabled ? 'disabled' : accountId ? 'loading' : 'signed-out');
   }
@@ -284,6 +297,7 @@ export function useMemberConversations(active: boolean) {
         clearMemberMessagesCache();
         setConversations([]);
         setUnreadCount(0);
+        setListConfirmed(false);
         setStatus('disabled');
         return;
       }
@@ -295,12 +309,21 @@ export function useMemberConversations(active: boolean) {
           apiBaseUrl: configuration.apiBaseUrl,
           clerkUserId: requestedAccountId,
         });
-        setStatus(cached ? 'ready' : 'error');
+        const confirmed = memberMessagesSnapshotConfirmsConversations(cached);
+        if (confirmed && cached) {
+          setConversations(cached.conversations);
+          setUnreadCount(cached.unreadCount);
+          setListConfirmed(true);
+          setStatus('ready');
+        } else {
+          setStatus('error');
+        }
         setMessage(FAILURE_COPY[code]);
         return;
       }
       setConversations(listResult.data.conversations);
       setUnreadCount(unreadResult.data.unreadCount);
+      setListConfirmed(true);
       setStatus('ready');
       setMessage(null);
       rememberMemberMessagesSnapshot({
@@ -309,6 +332,7 @@ export function useMemberConversations(active: boolean) {
         apiBaseUrl: configuration.apiBaseUrl,
         conversations: listResult.data.conversations,
         unreadCount: unreadResult.data.unreadCount,
+        conversationsLoaded: true,
       });
     } finally {
       if (inFlight.current === requestedAccountId) inFlight.current = null;
@@ -326,6 +350,7 @@ export function useMemberConversations(active: boolean) {
       setStatus('disabled');
       setConversations([]);
       setUnreadCount(0);
+      setListConfirmed(false);
       return;
     }
     if (!accountId) {
@@ -333,6 +358,7 @@ export function useMemberConversations(active: boolean) {
       setStatus('signed-out');
       setConversations([]);
       setUnreadCount(0);
+      setListConfirmed(false);
       return;
     }
     if (!active || !focused || !foreground) return;
@@ -343,10 +369,13 @@ export function useMemberConversations(active: boolean) {
       apiBaseUrl: getMainBluebirdApiConfigurationOrNull()?.apiBaseUrl ?? '',
       clerkUserId: requestedAccountId,
     });
-    if (cached) {
+    if (cached && memberMessagesSnapshotConfirmsConversations(cached)) {
       setConversations(cached.conversations);
       setUnreadCount(cached.unreadCount);
+      setListConfirmed(true);
       setStatus('ready');
+    } else if (cached) {
+      setUnreadCount(cached.unreadCount);
     }
     void load(requestedAccountId, requestedGeneration);
     const pollMs = memberMessagePollIntervalMs({
@@ -380,7 +409,26 @@ export function useMemberConversations(active: boolean) {
     }
   }, [accountId, enabled, load]);
 
-  return { enabled, status, message, conversations, unreadCount, refreshing, refresh };
+  const view = presentMemberConversationsView({
+    enabled,
+    status,
+    conversations,
+    listConfirmed,
+    refreshing,
+    message,
+  });
+
+  return {
+    enabled,
+    status,
+    message,
+    conversations,
+    unreadCount,
+    refreshing,
+    refresh,
+    listConfirmed,
+    view,
+  };
 }
 
 export function useMemberMessageThread(conversationId: number | null) {
@@ -653,6 +701,7 @@ export function useOpenAcceptedConversation() {
             environment: configuration.environment,
             apiBaseUrl: configuration.apiBaseUrl,
             unreadCount: existing?.unreadCount ?? 0,
+            conversationsLoaded: true,
             conversations: [
               result.data.conversation,
               ...(existing?.conversations ?? []).filter((item) => item.id !== result.data.conversation.id),

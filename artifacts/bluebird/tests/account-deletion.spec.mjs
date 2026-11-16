@@ -320,6 +320,26 @@ test('mocked POST success, pending, auth, conflict, reverification, and service 
         retryable: true,
       },
     },
+    {
+      status: 404,
+      body: { code: 'not_found' },
+      expected: {
+        kind: 'error',
+        code: 'unavailable',
+        conflictCode: 'not_found',
+        retryable: false,
+      },
+    },
+    {
+      status: 501,
+      body: { code: 'not_implemented' },
+      expected: {
+        kind: 'error',
+        code: 'unavailable',
+        conflictCode: 'not_implemented',
+        retryable: false,
+      },
+    },
   ];
 
   for (const sample of responses) {
@@ -409,6 +429,11 @@ test('eligibility and status GETs use the finalized account-deletion contracts',
       status: 503,
       body: { code: 'unavailable' },
       expected: { kind: 'error', code: 'unavailable', retryable: true },
+    },
+    {
+      status: 404,
+      body: { code: 'not_found' },
+      expected: { kind: 'error', code: 'unavailable', retryable: false },
     },
   ]) {
     const client = createAccountDeletionClient({
@@ -578,6 +603,22 @@ test('phone OTP session reverification helpers prepare and attempt phone_code on
   ]);
 });
 
+test('production-live-internal enables account deletion without disabling other live gates', () => {
+  const eas = JSON.parse(readFileSync(resolve(projectRoot, 'eas.json'), 'utf8'));
+  const live = eas.build['production-live-internal'].env;
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION, 'true');
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST, 'false');
+  assert.equal(live.EXPO_PUBLIC_ENABLE_PRODUCTION_CLERK_AUTH, 'true');
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS, 'true');
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES, 'true');
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION, 'true');
+  assert.equal(live.EXPO_PUBLIC_BLUEBIRD_PRODUCTION_QUEUE_MUTATIONS, 'true');
+  assert.notEqual(
+    eas.build['production-live-journey-internal'].env.EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION,
+    'false',
+  );
+});
+
 test('Profile opens Delete Account after Alert and the screen never deletes Clerk users locally', () => {
   const profile = readFileSync(resolve(projectRoot, 'app/(tabs)/profile/index.tsx'), 'utf8');
   const clerkProfile = profile
@@ -588,6 +629,10 @@ test('Profile opens Delete Account after Alert and the screen never deletes Cler
   const auth = readFileSync(resolve(projectRoot, 'context/AuthContext.tsx'), 'utf8');
   const client = readFileSync(resolve(projectRoot, 'lib/accountDeletion.ts'), 'utf8');
   const phoneHelper = readFileSync(resolve(projectRoot, 'lib/accountDeletionPhoneReverification.ts'), 'utf8');
+
+  assert.match(screen, /eligibility\.code === 'unavailable'/);
+  assert.match(screen, /setPhase\(\{ kind: 'unavailable' \}\)/);
+  assert.match(client, /error\.status === 404/);
 
   assert.match(profile, /confirmOpenDeleteAccount/);
   assert.match(profile, /confirmDialog\(/);

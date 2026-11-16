@@ -98,7 +98,7 @@ export function AccountDeletionPhoneReverificationModal({
     if (!challenge || busy) return;
     const digits = code.replace(/\D/g, '').slice(0, 8);
     if (digits.length < 4) {
-      setError('Enter the SMS verification code Clerk sent to your phone.');
+      setError('Enter the SMS code we sent to your phone.');
       return;
     }
     setBusy(true);
@@ -143,7 +143,7 @@ export function AccountDeletionPhoneReverificationModal({
         >
           <Text style={[styles.title, { color: colors.textOnSurface }]}>Confirm it is you</Text>
           <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>
-            Account deletion requires a fresh phone verification. Enter the SMS code Clerk sends
+            Account deletion requires a fresh phone verification. Enter the SMS code we send
             {safeIdentifier ? ` to ${safeIdentifier}` : ' to your phone'}.
           </Text>
 

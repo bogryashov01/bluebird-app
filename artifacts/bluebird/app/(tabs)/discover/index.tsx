@@ -105,7 +105,7 @@ let lastFlightDetailsOpenAt = 0;
 function openFlightDetails(flight: FlightView, demoMode = false): void {
   const id = typeof flight.id === 'string' ? flight.id.trim() : '';
   if (!id || (flight.source === 'production' && parseProductionFlightId(id) === null)) {
-    const message = 'Flight details are unavailable because this flight has no valid identifier.';
+    const message = 'Flight details aren’t available for this flight.';
     if (Platform.OS === 'web') {
       if (typeof window !== 'undefined') window.alert(message);
     } else {
@@ -141,6 +141,7 @@ interface HeaderProps {
   mapLoading: boolean;
   mapError: boolean;
   onMapRetry: () => void;
+  onMapGestureActive?: (active: boolean) => void;
   filter: FlightFilter;
   filters: FlightFilter[];
   onFilterChange: (filter: FlightFilter) => void;
@@ -156,7 +157,7 @@ interface HeaderProps {
  */
 const DiscoverHeader = React.memo(function DiscoverHeader({
   colors, topPad, demoMode, greetingText, userName, resultCount, productionReadOnly, featured, search, onSearchChange, onClearSearch,
-  view, onViewChange, mapFlights, mapAirports, mapLoading, mapError, onMapRetry,
+  view, onViewChange, mapFlights, mapAirports, mapLoading, mapError, onMapRetry, onMapGestureActive,
   filter, filters, onFilterChange, showEmpty, hasActiveQuery, onClearSearchFromEmpty,
 }: HeaderProps) {
   const featuredImage = featured
@@ -356,7 +357,11 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
               </TouchableOpacity>
             </View>
           ) : (
-            <FlightMapView flights={mapFlights} airports={mapAirports} />
+            <FlightMapView
+              flights={mapFlights}
+              airports={mapAirports}
+              onMapGestureActive={onMapGestureActive}
+            />
           )
         ) : (
           <View style={styles.mapPlaceholder}>
@@ -411,6 +416,7 @@ export default function DiscoverScreen() {
   const { user, isLoading: authLoading, authMode, demoMode } = useAuth();
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
+  const [mapGestureActive, setMapGestureActive] = useState(false);
   const [filter, setFilter] = useState<FlightFilter>('all');
   const [greetingText, setGreetingText] = useState(() => getGreetingForHour(new Date().getHours()));
   const [featuredFlightId, setFeaturedFlightId] = useState<string | null>(null);
@@ -617,6 +623,7 @@ export default function DiscoverScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="none"
+          scrollEnabled={!(view === 'map' && mapGestureActive)}
           refreshControl={
             <RefreshControl
               refreshing={flightsRefetching || airportQuery.isRefetching}
@@ -639,12 +646,16 @@ export default function DiscoverScreen() {
               onSearchChange={setSearch}
               onClearSearch={onClearSearch}
               view={view}
-              onViewChange={setView}
+              onViewChange={(next) => {
+                setMapGestureActive(false);
+                setView(next);
+              }}
               mapFlights={mapFlights}
               mapAirports={airportQuery.data ?? []}
               mapLoading={airportQuery.isFetching}
               mapError={airportQuery.isError}
               onMapRetry={() => airportQuery.refetch()}
+              onMapGestureActive={setMapGestureActive}
               filter={selectedFilter}
               filters={filters}
               onFilterChange={setFilter}

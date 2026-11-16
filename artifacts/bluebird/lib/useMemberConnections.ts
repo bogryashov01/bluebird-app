@@ -16,13 +16,16 @@ import {
   connectionMemberLabel,
   createMemberConnectionsClient,
   isMemberConnectionsIntegrationEnabled,
+  projectOutgoingConnectionRequest,
   readMemberConnectionsSnapshot,
   rememberMemberConnectionsSnapshot,
   retainMemberConnectionsForAccount,
   type AcceptedConnection,
   type ConnectionMemberIdentity,
   type ConnectionRelationship,
+  type DiscoveredConnectionMember,
   type MemberConnectionsFailure,
+  type OutgoingConnectionRequest,
 } from '@/lib/memberConnections';
 
 const FAILURE_COPY: Record<MemberConnectionsFailure, string> = {
@@ -36,13 +39,30 @@ const FAILURE_COPY: Record<MemberConnectionsFailure, string> = {
   invalid_body: 'That connection could not be updated.',
   unauthorized: 'Sign in again to view Connections.',
   membership_required: 'An active Bluebird membership is required.',
+  incoming_requests_disabled: 'This member is not accepting connection requests.',
   not_found: 'That member or request is no longer available.',
   conflict: 'A connection request already exists for this member.',
   unavailable: 'Connections could not be loaded. Try again.',
+  outgoing_unsupported: '',
 };
 
 export function memberConnectionsFailureCopy(code: MemberConnectionsFailure): string {
   return FAILURE_COPY[code];
+}
+
+function upsertOutgoingRequest(
+  requests: OutgoingConnectionRequest[],
+  request: OutgoingConnectionRequest,
+): OutgoingConnectionRequest[] {
+  const without = requests.filter((row) => row.id !== request.id);
+  if (request.status !== 'pending') return without;
+  return [request, ...without];
+}
+
+function upsertPendingRecipientUserId(userIds: string[], userId: string): string[] {
+  const id = userId.trim();
+  if (!id || userIds.includes(id)) return userIds;
+  return [...userIds, id];
 }
 
 function useForeground(): boolean {
@@ -68,22 +88,34 @@ export function useMemberConnections() {
 
   const [focused, setFocused] = React.useState(false);
   const [incoming, setIncoming] = React.useState<ConnectionRelationship[]>([]);
+  const [outgoing, setOutgoing] = React.useState<OutgoingConnectionRequest[]>([]);
+  const [pendingOutgoingRecipientUserIds, setPendingOutgoingRecipientUserIds] = React.useState<string[]>([]);
+  const [outgoingSupported, setOutgoingSupported] = React.useState(false);
   const [accepted, setAccepted] = React.useState<AcceptedConnection[]>([]);
   const [status, setStatus] = React.useState<'disabled' | 'signed-out' | 'loading' | 'ready' | 'error'>(
     !enabled ? 'disabled' : accountId ? 'loading' : 'signed-out',
   );
   const [message, setMessage] = React.useState<string | null>(null);
-  const [discovery, setDiscovery] = React.useState<ConnectionMemberIdentity | null | undefined>(undefined);
+  const [discovery, setDiscovery] = React.useState<DiscoveredConnectionMember | null | undefined>(undefined);
   const [refreshing, setRefreshing] = React.useState(false);
   const [pending, setPending] = React.useState(false);
   const [socketLive, setSocketLive] = React.useState(false);
   const pendingRef = React.useRef(false);
   const inFlight = React.useRef<string | null>(null);
+  const outgoingRef = React.useRef<OutgoingConnectionRequest[]>([]);
+  const pendingOutgoingRecipientUserIdsRef = React.useRef<string[]>([]);
+  const outgoingSupportedRef = React.useRef(false);
+  outgoingRef.current = outgoing;
+  pendingOutgoingRecipientUserIdsRef.current = pendingOutgoingRecipientUserIds;
+  outgoingSupportedRef.current = outgoingSupported;
 
   if (accountRef.current !== accountId) {
     accountRef.current = accountId;
     generationRef.current += 1;
     setIncoming([]);
+    setOutgoing([]);
+    setPendingOutgoingRecipientUserIds([]);
+    setOutgoingSupported(false);
     setAccepted([]);
     setDiscovery(undefined);
     setMessage(null);
@@ -122,6 +154,9 @@ export function useMemberConnections() {
       });
       if (cached && current(requestedAccountId, requestedGeneration, signal.aborted)) {
         setIncoming(cached.incoming);
+        setOutgoing(cached.outgoing);
+        setPendingOutgoingRecipientUserIds(cached.pendingOutgoingRecipientUserIds);
+        setOutgoingSupported(cached.outgoingSupported);
         setAccepted(cached.accepted);
         setStatus('ready');
       }
@@ -131,36 +166,71 @@ export function useMemberConnections() {
         baseUrl: configuration.apiBaseUrl,
         getAccessToken: () => sessionRef.current?.getToken() ?? Promise.resolve(null),
       });
-      const [incomingResult, acceptedResult] = await Promise.all([
+      const [incomingResult, acceptedResult, outgoingResult] = await Promise.all([
         client.listIncoming(),
         client.listAccepted(),
+        client.listOutgoing(),
       ]);
       if (!current(requestedAccountId, requestedGeneration, signal.aborted)) return;
-      if (incomingResult.kind === 'disabled' || acceptedResult.kind === 'disabled') {
+      if (
+        incomingResult.kind === 'disabled' ||
+        acceptedResult.kind === 'disabled' ||
+        outgoingResult.kind === 'disabled'
+      ) {
         clearMemberConnectionsCache();
         setIncoming([]);
+        setOutgoing([]);
+        setPendingOutgoingRecipientUserIds([]);
+        setOutgoingSupported(false);
         setAccepted([]);
         setStatus('disabled');
         return;
       }
       if (incomingResult.kind === 'error' && incomingResult.code === 'cancelled') return;
       if (acceptedResult.kind === 'error' && acceptedResult.code === 'cancelled') return;
+      if (outgoingResult.kind === 'error' && outgoingResult.code === 'cancelled') return;
       if (incomingResult.kind === 'error' || acceptedResult.kind === 'error') {
         const code = incomingResult.kind === 'error' ? incomingResult.code : acceptedResult.kind === 'error' ? acceptedResult.code : 'unavailable';
         setStatus(cached ? 'ready' : 'error');
         setMessage(FAILURE_COPY[code]);
         return;
       }
+
+      let nextOutgoing = outgoingRef.current;
+      let nextOutgoingSupported = outgoingSupportedRef.current;
+      let nextPendingRecipientUserIds = pendingOutgoingRecipientUserIdsRef.current;
+      let outgoingMessage: string | null = null;
+      if (outgoingResult.kind === 'loaded') {
+        nextOutgoing = outgoingResult.data.requests;
+        nextOutgoingSupported = true;
+        // Redacted GET has no recipient user IDs — keep create-confirmed IDs only.
+        nextPendingRecipientUserIds = pendingOutgoingRecipientUserIdsRef.current;
+      } else if (outgoingResult.code === 'outgoing_unsupported') {
+        nextOutgoingSupported = false;
+        nextOutgoing = outgoingRef.current;
+        nextPendingRecipientUserIds = pendingOutgoingRecipientUserIdsRef.current;
+      } else {
+        outgoingMessage = FAILURE_COPY[outgoingResult.code] || 'Sent requests could not be loaded. Try again.';
+        nextOutgoing = outgoingRef.current;
+        nextPendingRecipientUserIds = pendingOutgoingRecipientUserIdsRef.current;
+      }
+
       setIncoming(incomingResult.data.requests);
+      setOutgoing(nextOutgoing);
+      setPendingOutgoingRecipientUserIds(nextPendingRecipientUserIds);
+      setOutgoingSupported(nextOutgoingSupported);
       setAccepted(acceptedResult.data.connections);
       setStatus('ready');
-      setMessage(null);
+      setMessage(outgoingMessage);
       rememberMemberConnectionsSnapshot({
         clerkUserId: requestedAccountId,
         environment: configuration.environment,
         apiBaseUrl: configuration.apiBaseUrl,
         incoming: incomingResult.data.requests,
+        outgoing: nextOutgoing,
+        pendingOutgoingRecipientUserIds: nextPendingRecipientUserIds,
         accepted: acceptedResult.data.connections,
+        outgoingSupported: nextOutgoingSupported,
       });
     } finally {
       if (inFlight.current === requestedAccountId) inFlight.current = null;
@@ -177,6 +247,9 @@ export function useMemberConnections() {
       clearMemberConnectionsCache();
       setStatus('disabled');
       setIncoming([]);
+      setOutgoing([]);
+      setPendingOutgoingRecipientUserIds([]);
+      setOutgoingSupported(false);
       setAccepted([]);
       return;
     }
@@ -225,8 +298,45 @@ export function useMemberConnections() {
     }
   }, [accountId, enabled, load]);
 
+  const rememberLocalOutgoing = React.useCallback((
+    requestedAccountId: string,
+    created: ConnectionRelationship,
+  ) => {
+    const configuration = getMainBluebirdApiConfigurationOrNull();
+    const projected = projectOutgoingConnectionRequest(created);
+    const recipientUserId = created.recipient.userId.trim();
+    setOutgoing((previous) => {
+      const nextOutgoing = upsertOutgoingRequest(previous, projected);
+      setPendingOutgoingRecipientUserIds((previousIds) => {
+        const nextIds = upsertPendingRecipientUserId(previousIds, recipientUserId);
+        if (configuration) {
+          const cached = readMemberConnectionsSnapshot({
+            environment: configuration.environment,
+            apiBaseUrl: configuration.apiBaseUrl,
+            clerkUserId: requestedAccountId,
+          });
+          rememberMemberConnectionsSnapshot({
+            clerkUserId: requestedAccountId,
+            environment: configuration.environment,
+            apiBaseUrl: configuration.apiBaseUrl,
+            incoming: cached?.incoming ?? [],
+            outgoing: nextOutgoing,
+            pendingOutgoingRecipientUserIds: nextIds,
+            accepted: cached?.accepted ?? [],
+            outgoingSupported: outgoingSupportedRef.current,
+          });
+        }
+        return nextIds;
+      });
+      return nextOutgoing;
+    });
+  }, []);
+
   const runMutation = React.useCallback(async (
-    work: () => Promise<{ ok: true; notice: string | null } | { ok: false; message: string }>,
+    work: () => Promise<
+      | { ok: true; notice: string | null; createdOutgoing?: ConnectionRelationship }
+      | { ok: false; message: string }
+    >,
   ) => {
     if (!enabled || !accountId || pendingRef.current) return false;
     pendingRef.current = true;
@@ -241,15 +351,19 @@ export function useMemberConnections() {
         return false;
       }
       await load(requestedAccountId, requestedGeneration, new AbortController().signal);
-      if (current(requestedAccountId, requestedGeneration, false) && outcome.notice) {
-        setMessage(outcome.notice);
+      if (!current(requestedAccountId, requestedGeneration, false)) return false;
+      // Confirmed create: keep redacted display row + recipient userId for Find Member.
+      // Required when GET outgoing is unsupported; also needed when GET is redacted.
+      if (outcome.createdOutgoing) {
+        rememberLocalOutgoing(requestedAccountId, outcome.createdOutgoing);
       }
+      if (outcome.notice) setMessage(outcome.notice);
       return true;
     } finally {
       pendingRef.current = false;
       if (accountRef.current === requestedAccountId) setPending(false);
     }
-  }, [accountId, current, enabled, load]);
+  }, [accountId, current, enabled, load, rememberLocalOutgoing]);
 
   const clientForAccount = React.useCallback(() => {
     const configuration = getMainBluebirdApiConfigurationOrNull();
@@ -267,6 +381,13 @@ export function useMemberConnections() {
     status,
     message,
     incoming,
+    outgoing,
+    /**
+     * Recipient user IDs from confirmed creates in this account session only.
+     * Redacted GET outgoing cannot populate this — do not match Find Member by name.
+     */
+    pendingOutgoingRecipientUserIds,
+    outgoingSupported,
     accepted,
     discovery,
     refreshing,
@@ -281,6 +402,35 @@ export function useMemberConnections() {
       if (result.kind === 'disabled') return { ok: false, message: FAILURE_COPY.configuration };
       if (result.kind === 'error') return { ok: false, message: FAILURE_COPY[result.code] };
       setDiscovery(result.data.member);
+      // Persist server-confirmed pending for this account session (survives Find Member).
+      // Never clear session-local pending on discover false (may be stale).
+      if (result.data.member?.outgoingRequestPending === true) {
+        const configuration = getMainBluebirdApiConfigurationOrNull();
+        const recipientUserId = result.data.member.userId;
+        const nextIds = upsertPendingRecipientUserId(
+          pendingOutgoingRecipientUserIdsRef.current,
+          recipientUserId,
+        );
+        pendingOutgoingRecipientUserIdsRef.current = nextIds;
+        setPendingOutgoingRecipientUserIds(nextIds);
+        if (configuration && accountRef.current) {
+          const cached = readMemberConnectionsSnapshot({
+            environment: configuration.environment,
+            apiBaseUrl: configuration.apiBaseUrl,
+            clerkUserId: accountRef.current,
+          });
+          rememberMemberConnectionsSnapshot({
+            clerkUserId: accountRef.current,
+            environment: configuration.environment,
+            apiBaseUrl: configuration.apiBaseUrl,
+            incoming: cached?.incoming ?? [],
+            outgoing: cached?.outgoing ?? outgoingRef.current,
+            pendingOutgoingRecipientUserIds: nextIds,
+            accepted: cached?.accepted ?? [],
+            outgoingSupported: outgoingSupportedRef.current,
+          });
+        }
+      }
       return {
         ok: true,
         notice: result.data.member
@@ -293,11 +443,18 @@ export function useMemberConnections() {
     sendRequest: (member: ConnectionMemberIdentity) => runMutation(async () => {
       const client = clientForAccount();
       if (!client) return { ok: false, message: FAILURE_COPY.configuration };
+      if (pendingOutgoingRecipientUserIdsRef.current.includes(member.userId)) {
+        return { ok: false, message: 'A connection request already exists for this member.' };
+      }
       const result = await client.createRequest(member.userId);
       if (result.kind === 'disabled') return { ok: false, message: FAILURE_COPY.configuration };
       if (result.kind === 'error') return { ok: false, message: FAILURE_COPY[result.code] };
       setDiscovery(undefined);
-      return { ok: true, notice: `Request sent to ${connectionMemberLabel(result.data.connection.recipient)}.` };
+      return {
+        ok: true,
+        notice: `Request sent to ${connectionMemberLabel(result.data.connection.recipient)}.`,
+        createdOutgoing: result.data.connection,
+      };
     }),
     accept: (connectionId: number) => runMutation(async () => {
       const client = clientForAccount();

@@ -339,18 +339,18 @@ export function getClerkAuthErrorMessage(
   const code = getClerkErrorCode(originalError);
 
   if (code === 'phone_verification_not_started') {
-    return 'Clerk did not send an SMS. Sign-in did not find this number, and production sign-up completes without a verification code. Sign out, then use the phone number saved on the Bluebird account.';
+    return 'We couldn’t text that number. Sign out, then try the phone number saved on your Bluebird account.';
   }
   if (code === 'session_exists') {
-    return 'A Clerk session is already open. Sign out, then request a code for the phone number saved on the Bluebird account.';
+    return 'You’re already signed in. Sign out, then request a code for the phone number on your Bluebird account.';
   }
   if (code === 'form_identifier_exists' || code === 'identifier_exists' || code === 'form_phone_number_exists') {
-    return 'That phone number already has a Clerk account. Sign in instead.';
+    return 'That phone number already has a Bluebird account. Sign in instead.';
   }
   if (code === 'form_identifier_not_found' && isExplicitMissingIdentifierError(originalError)) {
     return mode === 'sign-up'
-      ? 'Clerk could not start an account with that number. Check the number and try again.'
-      : 'No Clerk account was found for that number. Check it or create an account.';
+      ? 'We couldn’t start an account with that number. Check the number and try again.'
+      : 'No Bluebird account was found for that number. Check it or create an account.';
   }
   if (code === 'form_code_incorrect' || code === 'form_code_expired' || code === 'verification_expired') {
     return code === 'form_code_incorrect'
@@ -362,8 +362,8 @@ export function getClerkAuthErrorMessage(
   }
   if (isClerkNetworkFailure(originalError)) {
     return stage === 'verification'
-      ? 'Clerk could not verify the code because the service could not be reached. Check your connection or request a new code.'
-      : 'Clerk could not be reached. Check your connection and try again.';
+      ? 'We couldn’t verify the code. Check your connection or request a new code.'
+      : 'We couldn’t reach Bluebird. Check your connection and try again.';
   }
   if (
     code === 'verification_strategy_not_enabled' ||
@@ -371,12 +371,12 @@ export function getClerkAuthErrorMessage(
     code === 'phone_number_verification_not_enabled' ||
     code === 'signup_phone_verification_unavailable'
   ) {
-    return 'Clerk did not allow phone-code verification for sign-up. You remain signed out. Ask the app owner to enable phone verification before trying again.';
+    return 'Phone verification isn’t available for sign-up yet. Contact Bluebird support.';
   }
   if (
     code === 'phone_code_factor_unavailable'
   ) {
-    return 'Clerk does not offer SMS verification for this account. Ask the app owner to enable phone-code sign-in before trying again.';
+    return 'SMS sign-in isn’t available for this account yet. Contact Bluebird support.';
   }
   if (
     (typeof originalError === 'object' &&
@@ -394,32 +394,32 @@ export function getClerkAuthErrorMessage(
     const waitText = retryAfter
       ? `Wait ${formatWaitDuration(retryAfter)} before trying again.`
       : 'Wait a few minutes before requesting another code.';
-    return `Clerk is limiting verification requests. ${waitText} Do not keep retrying; SMS delivery can be delayed.`;
+    return `Too many verification attempts. ${waitText} SMS can take a moment to arrive.`;
   }
 
   if (stage === 'create') {
-    return 'Clerk could not start authentication. Check the phone number and try again.';
+    return 'We couldn’t start sign-in. Check the phone number and try again.';
   }
   if (stage === 'code-preparation') {
-    return 'Clerk could not prepare the verification code. Try sending the code again.';
+    return 'We couldn’t send the verification code. Try again.';
   }
   if (stage === 'response') {
-    return 'Clerk did not confirm that phone verification is pending. Try sending a new code or check the phone number.';
+    return 'We couldn’t confirm that a code was sent. Try again or check the phone number.';
   }
   if (stage === 'resend') {
-    return 'Clerk could not resend the verification code. Check your connection and try again.';
+    return 'We couldn’t resend the code. Check your connection and try again.';
   }
   if (stage === 'verification') {
-    return 'Clerk could not verify this code. Check it or request a new code.';
+    return 'That code couldn’t be verified. Check it or request a new one.';
   }
   if (stage === 'session-activation') {
-    return 'Clerk accepted the code but could not activate your session. You remain signed out; try verifying again.';
+    return 'The code was accepted, but we couldn’t finish signing you in. Try verifying again.';
   }
   if (stage === 'navigation') {
-    return 'Your Clerk session is active, but the signed-in screen could not be opened. Try returning to the app home screen.';
+    return 'You’re signed in, but we couldn’t open your account. Try again.';
   }
 
-  return 'Clerk authentication could not be completed. Please try again.';
+  return 'Sign-in couldn’t be completed. Please try again.';
 }
 
 function getSafeRetryAfterSeconds(error: unknown): number | null {

@@ -130,6 +130,9 @@ export function shouldRedirectClerkRoute(
     ((group === 'account' && route === 'personal-info' && segments.length === 2) ||
       (group === 'account' && route === 'payment-methods' && segments.length === 2) ||
       (group === 'account' && route === 'contacts' && segments.length === 2) ||
+      // Profile → Delete Account. Screen still gates live POST on the release flag
+      // and Main API eligibility; opening the route does not delete an account.
+      (group === 'account' && route === 'delete-account' && segments.length === 2) ||
       (group === 'support' && (route === 'help-center' || route === 'legal') && segments.length === 2) ||
       (group === 'notifications' && segments.length === 1) ||
       (group === 'airport-picker' && segments.length === 1))

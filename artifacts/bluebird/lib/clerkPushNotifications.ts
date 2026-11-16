@@ -8,16 +8,16 @@
  */
 
 export const PUSH_DELIVERY_UNAVAILABLE =
-  'This build does not register the device token with Bluebird. Notifications stay off until a live-internal build enables registration.';
+  'Push notifications aren’t enabled in this build yet.';
 
 export const PUSH_REGISTRATION_WAITING =
-  'Bluebird is registering this iPhone for notifications.';
+  'Setting up notifications on this iPhone…';
 
 export const PUSH_REGISTRATION_REGISTERED =
-  'This iPhone is registered for Bluebird notifications.';
+  'Notifications are enabled on this iPhone.';
 
 export const PUSH_REGISTRATION_FAILED =
-  'Bluebird could not register this iPhone for notifications. Sign-in and messages continue without it.';
+  'We couldn’t finish setting up notifications on this iPhone. You can still sign in and message.';
 
 /**
  * Registration stays off unless this is exactly "true".
@@ -79,7 +79,7 @@ export function shouldRevokeHeldPushToken(input: {
 }
 
 export const PUSH_ACCOUNT_PREFERENCES =
-  'Email and SMS preferences belong to the Bluebird account. They do not control iOS notification permission or push delivery.';
+  'Email and SMS preferences below don’t control alerts on this iPhone. Use Allow notifications or Settings for those.';
 
 export type PushPermissionState =
   | 'undetermined'
@@ -675,18 +675,18 @@ export function foregroundPresentation(input: {
 export function describePushPermission(permission: PushPermissionState | 'checking'): string {
   switch (permission) {
     case 'checking':
-      return 'Notification permission is checked after the Clerk session is ready.';
+      return 'Checking notification permission…';
     case 'granted':
-      return 'This iPhone allows Bluebird notifications.';
+      return 'Notifications are allowed on this iPhone.';
     case 'provisional':
-      return 'This iPhone allows quiet provisional notifications.';
+      return 'Notifications may appear quietly until you fully allow them.';
     case 'denied':
-      return 'Notifications are off for Bluebird. iOS will not show the permission prompt again.';
+      return 'Notifications are off. Turn them on in Settings.';
     case 'undetermined':
-      return 'Bluebird has not asked this iPhone for notification permission.';
+      return 'Bluebird hasn’t asked for notification permission yet.';
     case 'unavailable':
-      return 'Notification permission is not available on this device.';
+      return 'Notifications aren’t available on this device.';
     default:
-      return 'Notification permission is unavailable.';
+      return 'Notifications aren’t available.';
   }
 }

@@ -293,6 +293,15 @@ test('production connection actions follow the opaque reference and the saved co
     queueConnectionRequestFailureCopy('first_in_queue_required'),
     'A connection request to the first member is not available from this queue yet.',
   );
+  // Queue-path copy must not reveal privacy opt-out.
+  assert.equal(
+    queueConnectionRequestFailureCopy('incoming_requests_disabled'),
+    'The connection request could not be sent.',
+  );
+  assert.doesNotMatch(
+    queueConnectionRequestFailureCopy('queue_target_unavailable'),
+    /not accepting|privacy|opted.?out/i,
+  );
   assert.equal(queueConnectionRequestShouldRefresh('relationship_exists'), true);
   assert.equal(queueConnectionRequestShouldRefresh('unauthorized'), false);
   clearQueueConnectionRequests();

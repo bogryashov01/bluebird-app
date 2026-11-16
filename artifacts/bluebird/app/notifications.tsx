@@ -42,6 +42,8 @@ function Toggle({ value, onToggle, activeColor, trackOff, knobColor, disabled = 
       onPress={onToggle}
       disabled={disabled}
       activeOpacity={0.8}
+      accessibilityRole="switch"
+      accessibilityState={{ disabled: !!disabled, checked: value }}
     >
       <View style={[styles.toggleKnob, { backgroundColor: knobColor, transform: [{ translateX: value ? 18 : 2 }] }]} />
     </TouchableOpacity>

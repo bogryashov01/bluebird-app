@@ -140,6 +140,17 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["membership", "join"], false), true);
   assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false), true);
   assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false, true), false);
+  // Delete Account matches Personal Info: home-ready Clerk profiles only.
+  assert.equal(shouldRedirectClerkRoute(["account", "delete-account"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["account", "delete-account"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["account", "delete-account"], false), true);
+  assert.equal(shouldRedirectClerkRoute(["account", "delete-account", "extra"], false, true), true);
+  // Incomplete-profile onboarding keeps bluebird-profile open; Delete Account stays closed.
+  assert.equal(shouldRedirectClerkRoute(["account", "bluebird-profile"], false, false), false);
+  assert.equal(shouldRedirectClerkRoute(["account", "delete-account"], false, false), true);
+  // Unauthenticated / not home-ready users stay off Delete Account and other member account routes.
+  assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false, false), true);
+  assert.equal(shouldRedirectClerkRoute(["(tabs)", "profile"], false, false), true);
   assert.equal(shouldRedirectClerkRoute(["notifications"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["account", "payment-methods"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["account", "contacts"], false, true), false);
@@ -464,6 +475,14 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(clerkProfile, /connectionsEnabled \? \(/);
   assert.match(clerkProfile, /label: 'Notification Settings'/);
   assert.match(clerkProfile, /router\.push\('\/notifications'/);
+  assert.match(clerkProfile, /label: 'Allow incoming requests'/);
+  assert.match(clerkProfile, /clerk-incoming-connection-requests-switch/);
+  const preferencesOnly = clerkProfile
+    .split('title="Preferences"')[1]
+    ?.split('title="Connections"')[0] ?? "";
+  assert.match(preferencesOnly, /clerk-incoming-connection-requests-switch/);
+  assert.match(preferencesOnly, /Allow incoming requests/);
+  assert.doesNotMatch(preferencesOnly, /Get notified when someone sends you a connection request/);
   assert.doesNotMatch(clerkProfile, /label: 'Community'/);
   assert.doesNotMatch(clerkProfile, /router\.push\('\/community'/);
   assert.match(clerkProfile, /label: 'AI Concierge'/);
@@ -541,6 +560,7 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(clerkNotifications, /useFocusEffect\(React\.useCallback/);
   assert.match(clerkNotifications, /clerk-retry-notification-preferences/);
   assert.match(clerkNotifications, /label: 'Membership Updates', hint: 'Coming soon', disabled: true/);
+  assert.doesNotMatch(clerkNotifications, /clerk-connection-request-notifications|CONNECTION_REQUEST_NOTIFICATION|canControlConnectionRequestPushPreference|title="Connections"/);
   assert.doesNotMatch(clerkNotifications, /synchronize phone information|Notification History|Push Delivery|clerk-load-notification-preferences|clerk-refresh-notification-preferences/);
   assert.match(clerkNotifications, /api\.authenticated\.updateProfile/);
   assert.match(clerkNotifications, /saveClerkNotificationPreferences/);

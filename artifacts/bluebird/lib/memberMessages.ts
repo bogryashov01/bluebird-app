@@ -114,9 +114,66 @@ interface MemberMessagesSnapshot {
   apiBaseUrl: string;
   conversations: MessageConversation[];
   unreadCount: number;
+  /** True only after a successful conversations list response for this account. */
+  conversationsLoaded: boolean;
 }
 
 const snapshots = new Map<string, MemberMessagesSnapshot>();
+
+/** Empty unread-only snapshots must not look like a confirmed empty inbox. */
+export function memberMessagesSnapshotConfirmsConversations(
+  snapshot: MemberMessagesSnapshot | null | undefined,
+): boolean {
+  if (!snapshot) return false;
+  if (snapshot.conversationsLoaded === true) return true;
+  if (snapshot.conversationsLoaded === false) return false;
+  return snapshot.conversations.length > 0;
+}
+
+export type MemberConversationsView =
+  | { kind: 'disabled' }
+  | { kind: 'signed-out' }
+  | { kind: 'skeleton' }
+  | { kind: 'empty' }
+  | { kind: 'error'; message: string | null }
+  | {
+    kind: 'list';
+    conversations: readonly MessageConversation[];
+    refreshing: boolean;
+    message: string | null;
+  };
+
+/**
+ * Chooses inbox chrome without treating an unconfirmed empty cache as "no chats".
+ */
+export function presentMemberConversationsView(input: {
+  enabled: boolean;
+  status: 'disabled' | 'signed-out' | 'loading' | 'ready' | 'error';
+  conversations: readonly MessageConversation[];
+  listConfirmed: boolean;
+  refreshing: boolean;
+  message: string | null;
+}): MemberConversationsView {
+  if (!input.enabled || input.status === 'disabled') return { kind: 'disabled' };
+  if (input.status === 'signed-out') return { kind: 'signed-out' };
+  if (input.conversations.length > 0) {
+    return {
+      kind: 'list',
+      conversations: input.conversations,
+      refreshing: input.refreshing,
+      message: input.message,
+    };
+  }
+  if (input.status === 'error' && !input.listConfirmed) {
+    return { kind: 'error', message: input.message };
+  }
+  if (!input.listConfirmed || input.status === 'loading') {
+    return { kind: 'skeleton' };
+  }
+  if (input.status === 'ready') return { kind: 'empty' };
+  if (input.status === 'error') return { kind: 'error', message: input.message };
+  return { kind: 'skeleton' };
+}
 
 export function isMemberMessagesIntegrationEnabled(input?: {
   flag?: string;
@@ -190,6 +247,85 @@ export function formatMemberMessageDaySeparator(createdAt: string, nowMs = Date.
   return message.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+/** Distance from the bottom that still counts as "following" the latest messages. */
+export const MEMBER_MESSAGE_SCROLL_NEAR_BOTTOM_PX = 96;
+
+export type MemberMessageThreadScrollChange =
+  | 'open'
+  | 'send'
+  | 'append'
+  | 'prepend'
+  | 'unchanged';
+
+export function isMemberMessageThreadNearBottom(input: {
+  contentHeight: number;
+  layoutHeight: number;
+  scrollOffset: number;
+  thresholdPx?: number;
+}): boolean {
+  const threshold = input.thresholdPx ?? MEMBER_MESSAGE_SCROLL_NEAR_BOTTOM_PX;
+  if (!(input.contentHeight > 0) || !(input.layoutHeight > 0)) return true;
+  const distance = input.contentHeight - (input.scrollOffset + input.layoutHeight);
+  return distance <= threshold;
+}
+
+export function classifyMemberMessageThreadScrollChange(input: {
+  previous: { newestId: number | null; oldestId: number | null; count: number } | null;
+  newestId: number | null;
+  oldestId: number | null;
+  count: number;
+  forceSendFollow?: boolean;
+}): MemberMessageThreadScrollChange {
+  if (input.forceSendFollow === true) return 'send';
+  if (!input.previous) return 'open';
+  if (
+    input.previous.count === input.count &&
+    input.previous.newestId === input.newestId &&
+    input.previous.oldestId === input.oldestId
+  ) {
+    return 'unchanged';
+  }
+  if (
+    input.count > input.previous.count &&
+    input.newestId === input.previous.newestId &&
+    input.oldestId !== input.previous.oldestId
+  ) {
+    return 'prepend';
+  }
+  if (input.newestId !== input.previous.newestId) return 'append';
+  if (input.count > input.previous.count) return 'append';
+  return 'unchanged';
+}
+
+export function memberMessageThreadShouldAutoScroll(input: {
+  change: MemberMessageThreadScrollChange;
+  nearBottom: boolean;
+}): boolean {
+  if (input.change === 'open' || input.change === 'send') return true;
+  if (input.change === 'append') return input.nearBottom === true;
+  return false;
+}
+
+export function memberMessageThreadShowJumpButton(input: {
+  nearBottom: boolean;
+  hasMessages: boolean;
+}): boolean {
+  return input.hasMessages === true && input.nearBottom !== true;
+}
+
+/** Keep the visible messages stable after older pages are prepended. */
+export function memberMessageThreadPreserveScrollAfterPrepend(input: {
+  previousContentHeight: number;
+  nextContentHeight: number;
+  previousScrollOffset: number;
+}): number {
+  const previousHeight = Number.isFinite(input.previousContentHeight) ? input.previousContentHeight : 0;
+  const nextHeight = Number.isFinite(input.nextContentHeight) ? input.nextContentHeight : previousHeight;
+  const previousOffset = Number.isFinite(input.previousScrollOffset) ? input.previousScrollOffset : 0;
+  const delta = Math.max(0, nextHeight - previousHeight);
+  return Math.max(0, previousOffset + delta);
+}
+
 export function memberMessagesCacheKey(input: {
   environment: string;
   apiBaseUrl: string;
@@ -200,7 +336,10 @@ export function memberMessagesCacheKey(input: {
 
 export function rememberMemberMessagesSnapshot(snapshot: MemberMessagesSnapshot): void {
   if (!snapshot.clerkUserId.trim()) return;
-  snapshots.set(memberMessagesCacheKey(snapshot), snapshot);
+  snapshots.set(memberMessagesCacheKey(snapshot), {
+    ...snapshot,
+    conversationsLoaded: snapshot.conversationsLoaded === true,
+  });
 }
 
 export function readMemberMessagesSnapshot(input: {

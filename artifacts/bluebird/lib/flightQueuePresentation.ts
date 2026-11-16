@@ -470,6 +470,7 @@ export function queueConnectionRequestFailureCopy(code: string): string {
   if (code === 'self_request') return 'You cannot send a connection request to yourself.';
   if (code === 'unauthorized') return 'Sign in again to send a connection request.';
   if (code === 'active_membership_required') return 'An active membership is required.';
+  // queue_target_unavailable covers opted-out and other unavailable front members — keep generic.
   if (code === 'first_in_queue_required' || code === 'queue_target_unavailable') {
     return 'A connection request to the first member is not available from this queue yet.';
   }

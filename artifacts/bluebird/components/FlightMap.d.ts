@@ -12,6 +12,8 @@ import type { AirportRecord, FlightView } from '@/lib/productionFlights';
 interface FlightMapProps {
   flights: FlightView[];
   airports: AirportRecord[];
+  /** Parent lists disable scrolling while the map is being panned/zoomed. */
+  onMapGestureActive?: (active: boolean) => void;
 }
 
 declare const FlightMap: ComponentType<FlightMapProps>;

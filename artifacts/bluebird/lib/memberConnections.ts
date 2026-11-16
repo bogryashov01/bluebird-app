@@ -29,6 +29,7 @@ export const MEMBER_CONNECTION_PATHS = {
   discover: '/me/connections/discover',
   requests: '/me/connections/requests',
   incoming: '/me/connections/requests/incoming',
+  outgoing: '/me/connections/requests/outgoing',
   accept: (connectionId: number) => `/me/connections/requests/${connectionId}/accept`,
   decline: (connectionId: number) => `/me/connections/requests/${connectionId}/decline`,
   list: '/me/connections',
@@ -52,6 +53,14 @@ export interface ConnectionMemberIdentity {
   lastName: string | null;
 }
 
+/**
+ * Discover projection. `outgoingRequestPending` is present only when the
+ * deployed Main API includes it; omit/undefined means the old contract.
+ */
+export interface DiscoveredConnectionMember extends ConnectionMemberIdentity {
+  outgoingRequestPending?: boolean;
+}
+
 export interface ConnectionRelationship {
   id: number;
   requester: ConnectionMemberIdentity;
@@ -61,6 +70,22 @@ export interface ConnectionRelationship {
   updatedAt: string;
   respondedAt: string | null;
   removedAt: string | null;
+}
+
+/**
+ * Privacy-redacted GET /me/connections/requests/outgoing row.
+ * Recipient Clerk user IDs and private contact fields are intentionally absent.
+ */
+export interface OutgoingConnectionRecipient {
+  firstName: string | null;
+  lastName: string | null;
+}
+
+export interface OutgoingConnectionRequest {
+  id: number;
+  status: ConnectionStatus;
+  createdAt: string;
+  recipient: OutgoingConnectionRecipient;
 }
 
 export interface AcceptedConnection {
@@ -80,9 +105,12 @@ export type MemberConnectionsFailure =
   | 'invalid_body'
   | 'unauthorized'
   | 'membership_required'
+  | 'incoming_requests_disabled'
   | 'not_found'
   | 'conflict'
-  | 'unavailable';
+  | 'unavailable'
+  /** GET /me/connections/requests/outgoing is not deployed yet (HTTP 404). */
+  | 'outgoing_unsupported';
 
 export type QueueConnectionRequestFailure =
   | 'configuration'
@@ -139,7 +167,11 @@ interface MemberConnectionsSnapshot {
   environment: string;
   apiBaseUrl: string;
   incoming: ConnectionRelationship[];
+  outgoing: OutgoingConnectionRequest[];
+  /** Recipient user IDs from confirmed creates only — never from redacted GET outgoing. */
+  pendingOutgoingRecipientUserIds: string[];
   accepted: AcceptedConnection[];
+  outgoingSupported: boolean;
 }
 
 const snapshots = new Map<string, MemberConnectionsSnapshot>();
@@ -154,11 +186,34 @@ export function isMemberConnectionsIntegrationEnabled(input?: {
 }
 
 export function connectionMemberLabel(member: ConnectionMemberIdentity): string {
-  const name = [member.firstName, member.lastName]
+  return memberDisplayName(member.firstName, member.lastName);
+}
+
+export function outgoingRecipientLabel(recipient: OutgoingConnectionRecipient): string {
+  return memberDisplayName(recipient.firstName, recipient.lastName);
+}
+
+function memberDisplayName(firstName: string | null, lastName: string | null): string {
+  const name = [firstName, lastName]
     .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
     .map((part) => part.trim())
     .join(' ');
   return name || 'Bluebird member';
+}
+
+/** Project a confirmed create response into the redacted outgoing display DTO. */
+export function projectOutgoingConnectionRequest(
+  connection: ConnectionRelationship,
+): OutgoingConnectionRequest {
+  return {
+    id: connection.id,
+    status: connection.status,
+    createdAt: connection.createdAt,
+    recipient: {
+      firstName: connection.recipient.firstName,
+      lastName: connection.recipient.lastName,
+    },
+  };
 }
 
 export function memberConnectionsCacheKey(input: {
@@ -220,13 +275,28 @@ export function parseConnectionRelationship(value: unknown, field: string): Conn
   };
 }
 
-export function parseConnectionDiscovery(value: unknown): { member: ConnectionMemberIdentity | null } {
+export function parseDiscoveredConnectionMember(value: unknown, field: string): DiscoveredConnectionMember {
+  const identity = parseConnectionMemberIdentity(value, field);
+  const raw = objectValue(value, field);
+  if (!Object.prototype.hasOwnProperty.call(raw, 'outgoingRequestPending')) {
+    return identity;
+  }
+  if (typeof raw.outgoingRequestPending !== 'boolean') {
+    schemaFailure(`${field}.outgoingRequestPending`);
+  }
+  return {
+    ...identity,
+    outgoingRequestPending: raw.outgoingRequestPending,
+  };
+}
+
+export function parseConnectionDiscovery(value: unknown): { member: DiscoveredConnectionMember | null } {
   const raw = objectValue(value, 'discovery');
   if (!Object.prototype.hasOwnProperty.call(raw, 'member')) schemaFailure('discovery.member');
   return {
     member: raw.member === null
       ? null
-      : parseConnectionMemberIdentity(raw.member, 'discovery.member'),
+      : parseDiscoveredConnectionMember(raw.member, 'discovery.member'),
   };
 }
 
@@ -322,6 +392,35 @@ export function parseIncomingConnectionRequests(value: unknown): { requests: Con
   if (!Array.isArray(raw.requests)) schemaFailure('incomingRequests.requests');
   return {
     requests: raw.requests.map((item, index) => parseConnectionRelationship(item, `incomingRequests.requests.${index}`)),
+  };
+}
+
+/**
+ * Privacy-redacted outgoing list. Parses only id, status, createdAt, and
+ * recipient first/last name. Extra identity fields are ignored, never stored.
+ */
+export function parseOutgoingConnectionRequests(value: unknown): { requests: OutgoingConnectionRequest[] } {
+  const raw = objectValue(value, 'outgoingRequests');
+  if (!Array.isArray(raw.requests)) schemaFailure('outgoingRequests.requests');
+  return {
+    requests: raw.requests.map((item, index) =>
+      parseOutgoingConnectionRequest(item, `outgoingRequests.requests.${index}`)),
+  };
+}
+
+export function parseOutgoingConnectionRequest(value: unknown, field: string): OutgoingConnectionRequest {
+  const raw = objectValue(value, field);
+  const status = stringValue(raw.status, `${field}.status`);
+  if (!STATUSES.includes(status as ConnectionStatus)) schemaFailure(`${field}.status`);
+  const recipient = objectValue(raw.recipient, `${field}.recipient`);
+  return {
+    id: positiveId(raw.id, `${field}.id`),
+    status: status as ConnectionStatus,
+    createdAt: dateTime(raw.createdAt, `${field}.createdAt`),
+    recipient: {
+      firstName: nullableString(recipient.firstName, `${field}.recipient.firstName`),
+      lastName: nullableString(recipient.lastName, `${field}.recipient.lastName`),
+    },
   };
 }
 
@@ -453,6 +552,13 @@ export function createMemberConnectionsClient(options: MemberConnectionsClientOp
       );
     },
     listIncoming: () => request(MEMBER_CONNECTION_PATHS.incoming, 'GET', parseIncomingConnectionRequests),
+    listOutgoing: () => request(
+      MEMBER_CONNECTION_PATHS.outgoing,
+      'GET',
+      parseOutgoingConnectionRequests,
+      undefined,
+      outgoingListFailureCode,
+    ),
     listQueueStatus: () => request(MEMBER_CONNECTION_PATHS.queueStatus, 'GET', parseQueueConnectionStatus),
     accept: (connectionId: number) => decision(connectionId, 'accept'),
     decline: (connectionId: number) => decision(connectionId, 'decline'),
@@ -478,6 +584,13 @@ export function createMemberConnectionsClient(options: MemberConnectionsClientOp
   }
 }
 
+function outgoingListFailureCode(error: unknown): MemberConnectionsFailure {
+  if (error instanceof ProductionAuthHttpError && error.status === 404) {
+    return 'outgoing_unsupported';
+  }
+  return failureCode(error);
+}
+
 function queueConnectionFailureCode(error: unknown): QueueConnectionRequestFailure {
   if (error instanceof ProductionAuthHttpError) {
     const code = error.serverCode;
@@ -486,6 +599,8 @@ function queueConnectionFailureCode(error: unknown): QueueConnectionRequestFailu
     if (error.status === 401) return 'unauthorized';
     if (error.status === 403 && code === 'active_membership_required') return 'active_membership_required';
     if (error.status === 403 && code === 'first_in_queue_required') return 'first_in_queue_required';
+    // Opted-out recipients are 404 queue_target_unavailable — never surface privacy here.
+    if (error.status === 403 && code === 'incoming_requests_disabled') return 'unavailable';
     if (error.status === 404 && code === 'queue_target_unavailable') return 'queue_target_unavailable';
     if (error.status === 409 && code === 'relationship_exists') return 'relationship_exists';
     return 'unavailable';
@@ -524,7 +639,11 @@ function previewName(value: unknown, field: string): string {
 function failureCode(error: unknown): MemberConnectionsFailure {
   if (error instanceof ProductionAuthHttpError) {
     if (error.status === 401) return 'unauthorized';
-    if (error.status === 403) return error.serverCode === 'active_membership_required' ? 'membership_required' : 'unavailable';
+    if (error.status === 403 && error.serverCode === 'active_membership_required') return 'membership_required';
+    if (error.status === 403 && error.serverCode === 'incoming_requests_disabled') {
+      return 'incoming_requests_disabled';
+    }
+    if (error.status === 403) return 'unavailable';
     if (error.status === 404) return 'not_found';
     if (error.status === 409) return 'conflict';
     if (error.status === 400) return 'invalid_body';

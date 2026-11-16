@@ -2,16 +2,26 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 const DAY_MS = 86_400_000;
 
-export type DiscoveredMemberState = 'available' | 'connected' | 'incoming';
+export type DiscoveredMemberState = 'available' | 'connected' | 'incoming' | 'outgoing';
 
-/** Uses lists the account already loaded. It does not send a request. */
+/**
+ * Uses lists the account already loaded plus optional discover metadata.
+ * `outgoingRecipientIds` must be stable user IDs (confirmed creates).
+ * `outgoingRequestPending` is the discover field: true/false when the server
+ * sent it; omit/undefined when the old API is deployed (never treat missing as false).
+ * Session-local pending wins over a stale discover `false`.
+ */
 export function presentDiscoveredMember(input: {
   userId: string;
   acceptedUserIds: readonly string[];
   incomingRequesterIds: readonly string[];
+  outgoingRecipientIds?: readonly string[];
+  outgoingRequestPending?: boolean;
 }): DiscoveredMemberState {
   if (input.acceptedUserIds.includes(input.userId)) return 'connected';
   if (input.incomingRequesterIds.includes(input.userId)) return 'incoming';
+  const sessionPending = (input.outgoingRecipientIds ?? []).includes(input.userId);
+  if (sessionPending || input.outgoingRequestPending === true) return 'outgoing';
   return 'available';
 }
 

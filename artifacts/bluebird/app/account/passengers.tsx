@@ -24,6 +24,11 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
+import {
+  applyPhonePlusPrefix,
+  optionalPhonePlusPrefixValue,
+  phonePlusPrefixFieldProps,
+} from '@/lib/phonePlusPrefix';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
 
@@ -69,7 +74,7 @@ export default function PassengersScreen() {
     setForm({
       firstName: passenger.firstName,
       lastName: passenger.lastName,
-      phone: passenger.phone ?? '',
+      phone: passenger.phone ? applyPhonePlusPrefix(passenger.phone) : '',
       email: passenger.email ?? '',
       weightKg: passenger.weightKg,
     });
@@ -123,7 +128,7 @@ export default function PassengersScreen() {
     const payload: SavedPassengerInput = {
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
-      phone: form.phone?.trim() || null,
+      phone: optionalPhonePlusPrefixValue(form.phone),
       email: form.email?.trim() || null,
       weightKg: Number(form.weightKg),
     };
@@ -239,11 +244,15 @@ export default function PassengersScreen() {
                 </Text>
                 <ThemedTextInput
                   testID={`saved-passenger-${field}`}
-                  value={String(form[field] ?? '')}
-                  onChangeText={(value) => setField(field, value)}
-                  placeholder={field === 'email' ? 'traveler@example.com' : field === 'phone' ? '+1 555 555 5555' : ''}
+                  {...(field === 'phone'
+                    ? phonePlusPrefixFieldProps(String(form.phone ?? ''), (value) => setField('phone', value))
+                    : {
+                        value: String(form[field] ?? ''),
+                        onChangeText: (value: string) => setField(field, value),
+                        keyboardType: field === 'email' ? 'email-address' as const : 'default' as const,
+                      })}
+                  placeholder={field === 'email' ? 'traveler@example.com' : field === 'phone' ? '+15555555555' : ''}
                   placeholderTextColor={colors.mutedForegroundLight}
-                  keyboardType={field === 'email' ? 'email-address' : field === 'phone' ? 'phone-pad' : 'default'}
                   autoCapitalize={field === 'email' ? 'none' : 'words'}
                   style={[styles.input, { backgroundColor: colors.input, color: colors.textOnSurface, borderColor: colors.border }]}
                 />
