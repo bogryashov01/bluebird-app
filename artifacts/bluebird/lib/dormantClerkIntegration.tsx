@@ -23,6 +23,8 @@ import {
 export interface ClerkAuthSnapshot extends ClerkSessionSnapshot {
   userId: string | null;
   verifiedPhoneNumber: string | null;
+  /** Clerk profile photo for this signed-in user. Null when Clerk has no custom image. */
+  imageUrl: string | null;
 }
 
 const ClerkAuthSnapshotContext = createContext<ClerkAuthSnapshot | null>(null);
@@ -68,14 +70,19 @@ function ClerkAuthSnapshotBridge({ children }: { children: React.ReactNode }) {
     phone?.verification.status === 'verified'
       ? phone.phoneNumber
       : null;
+  const sameAccount = isUserLoaded && user?.id === auth.userId;
+  const imageUrl = sameAccount && user?.hasImage === true && typeof user.imageUrl === 'string'
+    ? user.imageUrl
+    : null;
   const snapshot = useMemo<ClerkAuthSnapshot>(() => ({
     isLoaded: auth.isLoaded,
     isSignedIn: auth.isSignedIn,
     userId: auth.userId ?? null,
     verifiedPhoneNumber,
+    imageUrl,
     getToken: auth.getToken,
     signOut: async () => { await auth.signOut(); },
-  }), [auth.isLoaded, auth.isSignedIn, auth.userId, auth.getToken, auth.signOut, verifiedPhoneNumber]);
+  }), [auth.isLoaded, auth.isSignedIn, auth.userId, auth.getToken, auth.signOut, verifiedPhoneNumber, imageUrl]);
 
   useEffect(() => {
     setSnapshotStatus({ snapshotReceived: true, isLoaded: auth.isLoaded });

@@ -190,6 +190,50 @@ export interface UpdateProductionUserProfileRequest {
   allowIncomingConnectionRequests?: boolean;
 }
 
+const STORED_PROFILE_PHONE = /^\+[1-9]\d{7,14}$/;
+
+/** GET returned no usable phone while the profile still requires one. */
+export class ProfilePhoneSyncError extends Error {
+  constructor() {
+    super('Your saved profile does not include a usable phone number, so this change cannot be saved. This is a profile synchronization issue.');
+    this.name = 'ProfilePhoneSyncError';
+  }
+}
+
+/** The phone already stored on GET /api/me/profile. Never invents a number. */
+export function storedProfilePhone(
+  profile: Pick<ProductionUserProfile, 'phoneE164' | 'phoneCountry'>,
+): { phoneE164: string; phoneCountry?: string } | null {
+  const phone = typeof profile.phoneE164 === 'string' ? profile.phoneE164.trim() : '';
+  if (!STORED_PROFILE_PHONE.test(phone)) return null;
+  const country = typeof profile.phoneCountry === 'string' ? profile.phoneCountry.trim() : '';
+  if (/^[A-Za-z]{2}$/.test(country)) {
+    return { phoneE164: phone, phoneCountry: country.toUpperCase() };
+  }
+  return { phoneE164: phone };
+}
+
+/**
+ * Copy the stored phone onto a full profile update.
+ * phoneCountry is included only when GET returned one.
+ * A required phone that GET did not return stops the update.
+ */
+export function withStoredProfilePhone<T extends UpdateProductionUserProfileRequest>(
+  request: T,
+  profile: Pick<ProductionUserProfile, 'phoneE164' | 'phoneCountry' | 'phoneVerificationRequired'>,
+): T {
+  const phone = storedProfilePhone(profile);
+  if (!phone) {
+    if (profile.phoneVerificationRequired) throw new ProfilePhoneSyncError();
+    return request;
+  }
+  return {
+    ...request,
+    phoneE164: phone.phoneE164,
+    ...(phone.phoneCountry ? { phoneCountry: phone.phoneCountry } : {}),
+  };
+}
+
 export interface ProductionBillingAddress {
   line1: string;
   line2?: Nullable<string>;
@@ -966,8 +1010,6 @@ function validateProfileUpdate(data: UpdateProductionUserProfileRequest): void {
   }
   if (data.phoneE164 !== undefined && data.phoneE164 !== null && typeof data.phoneE164 !== 'string') schemaFailure('updateProfile.phoneE164');
   if (data.phoneCountry !== undefined && data.phoneCountry !== null && typeof data.phoneCountry !== 'string') schemaFailure('updateProfile.phoneCountry');
-  if (data.phoneE164 !== undefined && data.phoneE164 !== null &&
-      (data.phoneCountry === undefined || data.phoneCountry === null)) schemaFailure('updateProfile.phoneCountry');
   if (data.notificationPrefs !== undefined) parseNotificationPrefs(data.notificationPrefs, 'updateProfile.notificationPrefs');
   if (data.smsConsent !== undefined) booleanValue(data.smsConsent, 'updateProfile.smsConsent');
   if (data.email !== undefined && (typeof data.email !== 'string' || data.email.length < 3 || data.email.length > 254 || !/^\S+@\S+\.\S+$/.test(data.email))) {

@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Redirect, router } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useListAirports, useUpdateMe } from '@workspace/api-client-react';
@@ -40,15 +40,18 @@ import {
   type ProductionAirportCityGroupResponse,
 } from '@/lib/productionFlights';
 import {
+  buildFavoriteCitiesProfileUpdate,
   buildHomeAirportProfileUpdate,
   canSaveClerkNotificationPreferencesToAccount,
   getClerkNotificationPreferencesQueryKey,
   readClerkNotificationProfile,
+  saveClerkFavoriteCities,
   saveClerkHomeAirport,
 } from '@/lib/clerkNotificationPreferences';
 import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
 
 export default function AirportPickerScreen() {
+  const params = useLocalSearchParams<{ editor?: string }>();
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { user, updateUser, authMode, clerkMemberResolution } = useAuth();
@@ -89,7 +92,9 @@ export default function AirportPickerScreen() {
     return <Redirect href="/(clerk-auth)/signed-in" />;
   }
   if (isClerkProfileEditing && session?.userId) {
-    return <ClerkHomeAirportEditor key={session.userId} clerkUserId={session.userId} />;
+    return params.editor === 'cities'
+      ? <ClerkFavoriteCitiesEditor key={session.userId} clerkUserId={session.userId} />
+      : <ClerkHomeAirportEditor key={session.userId} clerkUserId={session.userId} />;
   }
   if (isClerkOnboarding && clerkIdentity) {
     return <ClerkRegistrationAirportPicker key={clerkIdentity} clerkUserId={clerkIdentity} />;
@@ -431,6 +436,292 @@ function ClerkHomeAirportEditor({ clerkUserId }: { clerkUserId: string }) {
   );
 }
 
+function sameCityKeys(left: readonly string[], right: readonly string[]): boolean {
+  const sortedLeft = [...left].sort();
+  const sortedRight = [...right].sort();
+  return sortedLeft.length === sortedRight.length &&
+    sortedLeft.every((value, index) => value === sortedRight[index]);
+}
+
+function ClerkFavoriteCitiesEditor({ clerkUserId }: { clerkUserId: string }) {
+  const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const session = useClerkAuthSnapshot();
+  const { clerkMemberResolution } = useAuth();
+  const configuration = getMainBluebirdApiConfigurationOrNull();
+  const sessionRef = React.useRef(session);
+  sessionRef.current = session;
+  const currentIdentity = React.useRef<string | null>(session?.userId ?? null);
+  currentIdentity.current = session?.userId ?? null;
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [selectedKeys, setSelectedKeys] = useState<string[] | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveController = React.useRef<AbortController | null>(null);
+  const savingRef = React.useRef(false);
+  const topPad = Platform.OS === 'web' ? 60 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const accountWritesEnabled = canSaveClerkNotificationPreferencesToAccount();
+  const canLoad = !!configuration &&
+    session?.isLoaded === true &&
+    session.isSignedIn === true &&
+    session.userId === clerkUserId &&
+    clerkMemberResolution.status === 'profile_complete' &&
+    clerkMemberResolution.clerkUserId === clerkUserId;
+
+  React.useEffect(() => () => saveController.current?.abort(), []);
+
+  const createApi = React.useCallback(() => {
+    if (!configuration || !canLoad) {
+      throw new Error('Your complete signed-in Bluebird profile is unavailable.');
+    }
+    return createMainBluebirdApiIntegration({
+      configuration,
+      tokenProvider: {
+        environment: configuration.environment,
+        getVerifiedAccessToken: async () => {
+          const active = sessionRef.current;
+          if (!active?.isLoaded || active.isSignedIn !== true || active.userId !== clerkUserId) return null;
+          const token = await active.getToken();
+          const latest = sessionRef.current;
+          return latest?.isLoaded && latest.isSignedIn === true && latest.userId === clerkUserId
+            ? token
+            : null;
+        },
+      },
+    });
+  }, [canLoad, clerkUserId, configuration]);
+
+  const profileQuery = useQuery({
+    queryKey: ['clerk-favorite-cities-profile', configuration?.environment, configuration?.apiBaseUrl, clerkUserId],
+    enabled: canLoad,
+    retry: false,
+    staleTime: 0,
+    queryFn: ({ signal }) => readClerkNotificationProfile({
+      getCurrentSession: () => sessionRef.current,
+      requestedClerkUserId: clerkUserId,
+      readProfile: (options) => createApi().authenticated.getProfile(options),
+      signal,
+    }),
+  });
+  const citiesQuery = useQuery({
+    queryKey: ['clerk-favorite-city-catalog', configuration?.environment],
+    queryFn: ({ signal }) => {
+      if (!configuration) throw new Error('Main Bluebird API configuration is unavailable.');
+      return fetchProductionAirportCities({
+        signal,
+        environment: configuration.environment,
+        baseUrl: configuration.apiBaseUrl,
+      });
+    },
+    enabled: !!configuration,
+    retry: shouldRetryProductionRead,
+    retryDelay: productionReadRetryDelay,
+    staleTime: 24 * 60 * 60 * 1000,
+  });
+
+  const profile = profileQuery.data;
+  const keys = selectedKeys ?? profile?.favoriteCityKeys ?? [];
+  const catalog = citiesQuery.data ?? [];
+  const catalogKeys = catalog.map((city) => city.key);
+  const cities = filterClerkRegistrationCities(catalog, search, keys);
+  const catalogReady = !citiesQuery.isLoading && !citiesQuery.isError && catalogKeys.length > 0;
+  const selectionIssue = catalogReady
+    ? validateClerkAirportCitySelection({
+      homeAirportCode: profile?.homeAirportCode ?? '',
+      favoriteCityKeys: keys,
+      catalogKeys,
+    })
+    : null;
+  const unchanged = !!profile && sameCityKeys(keys, profile.favoriteCityKeys);
+  const safeProfile = !!profile && catalogReady && selectionIssue === null &&
+    !!buildFavoriteCitiesProfileUpdate(profile, keys);
+  const cityReadFailure = citiesQuery.isError
+    ? describeProductionReadFailure(citiesQuery.error, 'the city list')
+    : null;
+
+  const toggleCity = (city: ProductionAirportCityGroupResponse) => {
+    if (!catalogKeys.includes(city.key)) return;
+    setSelectedKeys((current) => {
+      const base = current ?? profile?.favoriteCityKeys ?? [];
+      return base.includes(city.key)
+        ? base.filter((key) => key !== city.key)
+        : [...base, city.key];
+    });
+    setSaveError(null);
+  };
+
+  const save = async () => {
+    if (savingRef.current || !accountWritesEnabled || !safeProfile || unchanged || !canLoad || !session?.userId) return;
+    if (currentIdentity.current !== clerkUserId) {
+      setSaveError('Your signed-in account changed. Reopen Preferred Airports before saving.');
+      return;
+    }
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError(null);
+    const controller = new AbortController();
+    saveController.current = controller;
+    try {
+      const api = createApi();
+      const refreshed = await saveClerkFavoriteCities({
+        getCurrentSession: () => sessionRef.current,
+        requestedClerkUserId: clerkUserId,
+        readProfile: (options) => api.authenticated.getProfile(options),
+        updateProfile: (data, options) => api.authenticated.updateProfile(data, options),
+        favoriteCityKeys: keys,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted || currentIdentity.current !== clerkUserId) return;
+      queryClient.setQueryData(
+        getClerkNotificationPreferencesQueryKey(
+          configuration?.environment,
+          configuration?.apiBaseUrl,
+          clerkUserId,
+        ),
+        refreshed,
+      );
+      queryClient.setQueryData(
+        ['clerk-favorite-cities-profile', configuration?.environment, configuration?.apiBaseUrl, clerkUserId],
+        refreshed,
+      );
+      router.back();
+    } catch (error) {
+      if (!controller.signal.aborted && currentIdentity.current === clerkUserId) {
+        const typed = error as { code?: string; status?: number };
+        setSaveError(typed?.status === 401 || typed?.code === 'session_expired'
+          ? 'Your sign-in has expired. Sign in again, then retry.'
+          : typed?.code === 'network' || typed?.code === 'timeout'
+            ? 'Bluebird couldn’t be reached. Check your connection and try again.'
+            : error instanceof Error
+              ? error.message
+              : 'Preferred Airports couldn’t be saved and verified. Please try again.');
+      }
+    } finally {
+      savingRef.current = false;
+      if (saveController.current === controller) saveController.current = null;
+      if (!controller.signal.aborted && currentIdentity.current === clerkUserId) setSaving(false);
+    }
+  };
+
+  const saveDisabled = !accountWritesEnabled || saving || !safeProfile || unchanged || !canLoad;
+
+  return (
+    <View style={[styles.registrationContainer, { backgroundColor: colors.offWhite, paddingTop: topPad }]} testID="clerk-favorite-cities-editor">
+      <View style={styles.registrationHeader}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Back to Notification Settings"
+          style={[styles.backButton, { backgroundColor: colors.muted }]}
+          onPress={() => router.back()}
+        >
+          <Text style={[styles.backChevron, { color: colors.textOnSurface }]}>‹</Text>
+        </TouchableOpacity>
+        <View style={styles.headerText}>
+          <Text style={[styles.title, { color: colors.textOnSurface }]}>Preferred Airports</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForegroundLight }]}>
+            Choose the cities you want to fly to and from. At least one is required.
+          </Text>
+        </View>
+      </View>
+      <KeyboardAwareScrollViewCompat
+        style={styles.registrationScroll}
+        contentContainerStyle={[styles.locationListContent, { paddingBottom: bottomPad + 24 }]}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.searchWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.searchGlyph, { color: colors.mutedForeground }]}>⌕</Text>
+          <ThemedTextInput
+            style={[styles.searchInput, { color: colors.foreground }]}
+            placeholder="Search cities or country"
+            placeholderTextColor={colors.mutedForeground}
+            value={search}
+            onChangeText={(value) => { setSearch(value); setSaveError(null); }}
+            autoCorrect={false}
+            autoCapitalize="none"
+            accessibilityLabel="Search cities"
+            testID="clerk-favorite-city-search"
+          />
+        </View>
+        <Text style={[styles.selectionHint, { color: colors.mutedForegroundLight }]}>
+          Select one or more cities. At least one is required.
+        </Text>
+        {profileQuery.isLoading ? <CatalogLoading label="Loading your saved profile…" /> : null}
+        {profileQuery.isError ? (
+          <CatalogError
+            label="Couldn’t load your saved profile. Check your connection and try again."
+            retryable
+            onRetry={() => void profileQuery.refetch()}
+            testID="clerk-favorite-cities-profile-error"
+          />
+        ) : null}
+        {citiesQuery.isLoading ? <CatalogLoading label="Loading cities…" /> : null}
+        {cityReadFailure ? (
+          <CatalogError
+            label={cityReadFailure.message}
+            retryable={cityReadFailure.retryable}
+            onRetry={() => void citiesQuery.refetch()}
+            testID="clerk-favorite-cities-list-error"
+          />
+        ) : null}
+        {!configuration ? (
+          <Text style={[styles.emptyText, { color: colors.destructive }]}>Cities are unavailable right now.</Text>
+        ) : null}
+        {profile && !citiesQuery.isLoading && !citiesQuery.isError && catalogKeys.length > 0 && !safeProfile ? (
+          <Text style={[styles.emptyText, { color: colors.mutedForeground }]} testID="clerk-favorite-cities-read-only">
+            {selectionIssue ?? 'Complete your profile before changing your preferred airports.'}
+          </Text>
+        ) : null}
+        {!citiesQuery.isLoading && !citiesQuery.isError && cities.length === 0 && configuration && search.trim() ? (
+          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No cities matched “{search.trim()}”.</Text>
+        ) : null}
+        {!citiesQuery.isLoading && !citiesQuery.isError ? cities.map((city) => (
+          <CityCatalogRow
+            key={city.key}
+            city={city}
+            selected={keys.includes(city.key)}
+            onPress={() => toggleCity(city)}
+            testID={`clerk-favorite-city-${city.key}`}
+          />
+        )) : null}
+        {saveError ? (
+          <Text accessibilityRole="alert" style={[styles.error, { color: colors.destructive }]} testID="clerk-favorite-cities-save-error">
+            {saveError}
+          </Text>
+        ) : null}
+      </KeyboardAwareScrollViewCompat>
+      <View style={[styles.registrationFooter, { borderTopColor: colors.border, paddingBottom: bottomPad + 12 }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: saveDisabled }}
+          disabled={saveDisabled}
+          onPress={() => { void save(); }}
+          style={[
+            styles.actionButton,
+            { backgroundColor: colors.primary },
+            saveDisabled && { opacity: 0.5 },
+          ]}
+          testID="clerk-favorite-cities-save"
+        >
+          {saving
+            ? <ActivityIndicator color={colors.primaryForeground} />
+            : <Text style={[styles.actionText, { color: colors.primaryForeground }]}>
+              {accountWritesEnabled ? 'Save Preferred Airports' : 'Account save unavailable'}
+            </Text>}
+        </Pressable>
+        {!accountWritesEnabled ? (
+          <Text testID="clerk-favorite-cities-account-save-unavailable" style={[styles.error, { color: colors.mutedForeground, textAlign: 'center', marginTop: 8 }]}>
+            Preferred airport changes cannot be saved right now.
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }) {
   const insets = useSafeAreaInsets();
   const colors = useColors();
@@ -742,39 +1033,15 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
             {!citiesQuery.isLoading && !citiesQuery.isError && cities.length === 0 && configuration ? (
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No cities matched “{citySearch.trim()}”.</Text>
             ) : null}
-            {!citiesQuery.isLoading && !citiesQuery.isError ? cities.map((city) => {
-              const selected = draft.favoriteCityKeys.includes(city.key);
-              return (
-                <Pressable
-                  key={city.key}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: selected }}
-                  onPress={() => toggleCity(city)}
-                  style={[
-                    styles.catalogRow,
-                    { backgroundColor: colors.card, borderColor: selected ? colors.primary : colors.border },
-                  ]}
-                  testID={`registration-city-${city.key}`}
-                >
-                  <View style={[
-                    styles.checkboxMark,
-                    {
-                      backgroundColor: selected ? colors.primary : colors.card,
-                      borderColor: selected ? colors.primary : colors.border,
-                    },
-                  ]}>
-                    {selected ? <Text style={{ color: colors.primaryForeground }}>✓</Text> : null}
-                  </View>
-                  <View style={styles.catalogRowText}>
-                    <Text style={[styles.catalogTitle, { color: colors.textOnSurface }]}>{city.displayName}</Text>
-                    <Text style={[styles.catalogMeta, { color: colors.mutedForegroundLight }]}>
-                      {city.country} · {city.airportLabels.join(', ')}
-                    </Text>
-                  </View>
-                  {selected ? <Text style={[styles.selectedLabel, { color: colors.primary }]}>Selected</Text> : null}
-                </Pressable>
-              );
-            }            ) : null}
+            {!citiesQuery.isLoading && !citiesQuery.isError ? cities.map((city) => (
+              <CityCatalogRow
+                key={city.key}
+                city={city}
+                selected={draft.favoriteCityKeys.includes(city.key)}
+                onPress={() => toggleCity(city)}
+                testID={`registration-city-${city.key}`}
+              />
+            )) : null}
           </>
         )}
       </KeyboardAwareScrollViewCompat>
@@ -800,6 +1067,49 @@ function ClerkRegistrationAirportPicker({ clerkUserId }: { clerkUserId: string }
         </Pressable>
       </View>
     </View>
+  );
+}
+
+function CityCatalogRow({
+  city,
+  selected,
+  onPress,
+  testID,
+}: {
+  city: ProductionAirportCityGroupResponse;
+  selected: boolean;
+  onPress: () => void;
+  testID: string;
+}) {
+  const colors = useColors();
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: selected }}
+      onPress={onPress}
+      style={[
+        styles.catalogRow,
+        { backgroundColor: colors.card, borderColor: selected ? colors.primary : colors.border },
+      ]}
+      testID={testID}
+    >
+      <View style={[
+        styles.checkboxMark,
+        {
+          backgroundColor: selected ? colors.primary : colors.card,
+          borderColor: selected ? colors.primary : colors.border,
+        },
+      ]}>
+        {selected ? <Text style={{ color: colors.primaryForeground }}>✓</Text> : null}
+      </View>
+      <View style={styles.catalogRowText}>
+        <Text style={[styles.catalogTitle, { color: colors.textOnSurface }]}>{city.displayName}</Text>
+        <Text style={[styles.catalogMeta, { color: colors.mutedForegroundLight }]}>
+          {city.country} · {city.airportLabels.join(', ')}
+        </Text>
+      </View>
+      {selected ? <Text style={[styles.selectedLabel, { color: colors.primary }]}>Selected</Text> : null}
+    </Pressable>
   );
 }
 

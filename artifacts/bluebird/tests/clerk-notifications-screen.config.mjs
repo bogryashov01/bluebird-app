@@ -1,4 +1,7 @@
+import { existsSync } from "node:fs";
 import { defineConfig } from "@playwright/test";
+
+const replitChromium = "/repl/tools/bin/chromium";
 
 export default defineConfig({
   testDir: ".",
@@ -7,6 +10,10 @@ export default defineConfig({
   reporter: "list",
   use: {
     viewport: { width: 393, height: 844 },
-    launchOptions: { executablePath: "/repl/tools/bin/chromium", args: ["--no-sandbox"] },
+    ...(existsSync(replitChromium) ? {} : { channel: "chrome" }),
+    launchOptions: {
+      ...(existsSync(replitChromium) ? { executablePath: replitChromium } : {}),
+      args: ["--no-sandbox"],
+    },
   },
 });

@@ -17,7 +17,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
-import { ProductionAuthHttpError } from '@/lib/productionAuthApi';
+import { ProductionAuthHttpError, ProfilePhoneSyncError } from '@/lib/productionAuthApi';
 import type { ProductionNotificationPrefs } from '@/lib/productionAuthApi';
 import {
   canPrepareNotificationPreferenceEdit,
@@ -237,9 +237,11 @@ function ClerkNotificationSettings() {
         queryClient.setQueryData(queryKey, refreshed);
         setAccountDraft(null);
       }
-    } catch {
+    } catch (error) {
       if (!controller.signal.aborted) {
-        setAccountSaveError('Couldn’t save these preferences to your account.');
+        setAccountSaveError(error instanceof ProfilePhoneSyncError
+          ? error.message
+          : 'Couldn’t save these preferences to your account.');
       }
     } finally {
       setSaving(false);
@@ -284,6 +286,17 @@ function ClerkNotificationSettings() {
               ? profile.homeAirportCode || 'Choose airport'
               : preferencesQuery.isError ? 'Unavailable' : 'Loading…',
             onPress: () => router.push('/airport-picker' as any),
+          },
+          {
+            label: 'Preferred Airports',
+            hint: profile
+              ? profile.favoriteCityLabels.length
+                ? profile.favoriteCityLabels.join(', ')
+                : profile.favoriteCityKeys.length
+                  ? profile.favoriteCityKeys.join(', ')
+                  : 'Choose cities'
+              : preferencesQuery.isError ? 'Unavailable' : 'Loading…',
+            onPress: () => router.push('/airport-picker?editor=cities' as any),
           },
         ]} />
         {preferencesQuery.isLoading || (canLoadPreferences && !deviceStorageReady) ? (

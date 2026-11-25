@@ -26,6 +26,7 @@ import { connectionMemberLabel, readMemberConnectionsSnapshot } from '@/lib/memb
 import {
   classifyMemberMessageThreadScrollChange,
   conversationTitle,
+  readMemberMessagesSnapshot,
   formatMemberMessageDaySeparator,
   isMemberMessageThreadNearBottom,
   limitMemberMessageBody,
@@ -58,21 +59,47 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
     oldestId: number | null;
     count: number;
   } | null>(null);
-  const names = React.useMemo(() => {
-    const map = new Map<string, string>();
+  const participantDirectory = React.useMemo(() => {
+    const names = new Map<string, string>();
+    const images = new Map<string, string>();
     const configuration = getMainBluebirdApiConfigurationOrNull();
     const accountId = session?.isSignedIn === true ? session.userId : null;
-    if (!configuration || !accountId) return map;
+    if (!configuration || !accountId) return { names, images };
     const snapshot = readMemberConnectionsSnapshot({
       environment: configuration.environment,
       apiBaseUrl: configuration.apiBaseUrl,
       clerkUserId: accountId,
     });
     for (const connection of snapshot?.accepted ?? []) {
-      map.set(connection.member.userId, connectionMemberLabel(connection.member));
+      names.set(connection.member.userId, connectionMemberLabel(connection.member));
+      if (
+        connection.member.userId !== accountId
+        && typeof connection.member.imageUrl === 'string'
+        && connection.member.imageUrl
+      ) {
+        images.set(connection.member.userId, connection.member.imageUrl);
+      }
     }
-    return map;
+    const messages = readMemberMessagesSnapshot({
+      environment: configuration.environment,
+      apiBaseUrl: configuration.apiBaseUrl,
+      clerkUserId: accountId,
+    });
+    for (const conversation of messages?.conversations ?? []) {
+      if (
+        conversation.participantUserId !== accountId
+        && typeof conversation.imageUrl === 'string'
+        && conversation.imageUrl
+      ) {
+        images.set(conversation.participantUserId, conversation.imageUrl);
+      }
+    }
+    return { names, images };
   }, [session?.isSignedIn, session?.userId, thread.participantUserId]);
+  const names = participantDirectory.names;
+  const participantImageUrl = thread.participantUserId
+    ? participantDirectory.images.get(thread.participantUserId) ?? null
+    : null;
   const title = thread.participantUserId
     ? conversationTitle(thread.participantUserId, names)
     : 'Bluebird member';
@@ -211,7 +238,7 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back" testID="member-message-back" onPress={() => router.back()} style={styles.back}>
           <Feather name="chevron-left" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <MemberInitialsAvatar name={title} size={36} />
+        <MemberInitialsAvatar name={title} imageUrl={participantImageUrl} size={36} />
         <View style={styles.headerCopy}>
           <Text style={[styles.name, { color: colors.textOnSurface }]} numberOfLines={1}>{title}</Text>
         </View>

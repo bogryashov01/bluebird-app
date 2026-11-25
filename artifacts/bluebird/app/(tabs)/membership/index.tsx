@@ -4,17 +4,18 @@ import {
   ActivityIndicator, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetMembership } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
-import { isAiConciergeIntegrationEnabled } from '@/lib/aiConcierge';
 import { isLegacyMemberQueryEnabled } from '@/lib/clerkAuthSession';
 import { useColors } from '@/hooks/useColors';
 import { useProductionMembershipPlans } from '@/hooks/useProductionMembershipPlans';
+import { useReferralProgram } from '@/hooks/useReferralProgram';
 import { StatCard } from '@/components/StatCard';
+import { BluebirdLogo } from '@/components/BluebirdLogo';
 import {
   getTierLabel,
   TIER_COLORS,
@@ -35,7 +36,8 @@ import {
 } from '@/lib/clerkBluebirdProfile';
 import { getClerkNotificationPreferencesQueryKey } from '@/lib/clerkNotificationPreferences';
 import { getFullAppDemoMemberOverview } from '@/lib/fullAppDemo';
-import { membershipDashboardPhase, presentMembershipDashboard } from '@/lib/clerkMembershipDesign';
+import { membershipDashboardPhase, presentMemberBenefits, presentMembershipDashboard, type MembershipBalanceRead } from '@/lib/clerkMembershipDesign';
+import { isMemberConnectionsIntegrationEnabled } from '@/lib/memberConnections';
 import {
   clearDashboardMembershipCache,
   loadDashboardProductionMembership,
@@ -51,6 +53,7 @@ import {
   rememberInternationalPasses,
   rememberSkipTheLinePasses,
   retainDashboardMembershipForAccount,
+  subscribeSkipTheLineBalanceRefresh,
   shouldDisplayDashboardMembership,
   type DashboardMembershipErrorCode,
   type DashboardMembershipProjection,
@@ -125,11 +128,17 @@ export default function MembershipScreen() {
   const queryClient = useQueryClient();
   const [clerkMembershipState, setClerkMembershipState] = React.useState<ClerkMembershipLoadState>({ kind: 'loading' });
   const [passBalances, setPassBalances] = React.useState<{
+    status: 'loaded' | 'unavailable';
     clerkUserId: string;
     skipTheLine: number | null;
     internationalPass: number | null;
   } | null>(null);
+  const referralProgram = useReferralProgram();
   const [clerkMembershipAttempt, setClerkMembershipAttempt] = React.useState(0);
+  const [passBalanceRevision, setPassBalanceRevision] = React.useState(0);
+  React.useEffect(() => subscribeSkipTheLineBalanceRefresh(() => {
+    setPassBalanceRevision((revision) => revision + 1);
+  }), []);
   const cachedClerkMembership = React.useRef<{
     clerkUserId: string;
     membership: DashboardMembershipProjection;
@@ -277,13 +286,14 @@ export default function MembershipScreen() {
           clerkUserId: requestedClerkUserId,
         })
       : null;
-    if (freshSkip || freshInternational) {
+    if (freshSkip) {
       setPassBalances({
+        status: 'loaded',
         clerkUserId: requestedClerkUserId,
-        skipTheLine: freshSkip?.count ?? null,
+        skipTheLine: freshSkip.count,
         internationalPass: freshInternational?.count ?? null,
       });
-      if (freshSkip && freshInternational) return;
+      if (freshInternational) return;
     }
     const loaded = await loadDashboardUpgradeCreditBalances({
       signal,
@@ -318,7 +328,11 @@ export default function MembershipScreen() {
       aborted: signal.aborted,
     })) return;
     if (loaded.kind === 'unavailable') {
-      setPassBalances((current) => current?.clerkUserId === requestedClerkUserId ? null : current);
+      setPassBalances((current) => (
+        current?.clerkUserId === requestedClerkUserId && current.status === 'loaded' && current.skipTheLine !== null
+          ? current
+          : { status: 'unavailable', clerkUserId: requestedClerkUserId, skipTheLine: null, internationalPass: null }
+      ));
       return;
     }
     rememberSkipTheLinePasses({
@@ -335,6 +349,7 @@ export default function MembershipScreen() {
         count: loaded.internationalPass,
       });
       setPassBalances({
+        status: 'loaded',
         clerkUserId: requestedClerkUserId,
         skipTheLine: loaded.skipTheLine,
         internationalPass: loaded.internationalPass,
@@ -342,11 +357,12 @@ export default function MembershipScreen() {
       return;
     }
     setPassBalances({
+      status: 'loaded',
       clerkUserId: requestedClerkUserId,
       skipTheLine: loaded.skipTheLine,
       internationalPass: null,
     });
-  }, [authMode, clerkMembershipAttempt, queryClient, ...membershipRequestDependencies]);
+  }, [authMode, clerkMembershipAttempt, passBalanceRevision, queryClient, ...membershipRequestDependencies]);
   React.useEffect(() => {
     if (authMode !== 'clerk') return;
     if (!clerkSession?.isLoaded) {
@@ -397,7 +413,9 @@ export default function MembershipScreen() {
     const confirmedMembership = confirmedMembershipBase
       ? {
           ...confirmedMembershipBase,
-          skipTheLinePasses: accountMatchedBalances?.skipTheLine ?? null,
+          skipTheLinePasses: accountMatchedBalances?.status === 'loaded' && accountMatchedBalances.skipTheLine !== null
+            ? accountMatchedBalances.skipTheLine
+            : null,
           internationalPassPasses: accountMatchedBalances?.internationalPass ?? null,
           skipTheLineUnlimited: currentPlan?.skipTheLineUnlimited ?? null,
           internationalUnlimited: currentPlan?.internationalUnlimited ?? null,
@@ -411,6 +429,16 @@ export default function MembershipScreen() {
       clerkMemberResolution.clerkUserId === clerkSession?.userId
       ? clerkMemberResolution.currentUser
       : null;
+    const skipTheLineRead: MembershipBalanceRead = accountMatchedBalances?.status === 'loaded' && accountMatchedBalances.skipTheLine !== null
+      ? accountMatchedBalances.skipTheLine
+      : accountMatchedBalances?.status === 'unavailable'
+        ? 'unavailable'
+        : 'loading';
+    const referralBalanceRead: MembershipBalanceRead = referralProgram.state.status === 'loaded'
+      ? referralProgram.state.snapshot.statistics.balanceCents
+      : referralProgram.state.status === 'error'
+        ? 'unavailable'
+        : 'loading';
     const design = presentMembershipDashboard({
       signedIn,
       verifiedFirstName: verifiedAccount?.firstName,
@@ -423,6 +451,8 @@ export default function MembershipScreen() {
             memberTier: completedAccount.memberTier,
           }
         : { resolved: false },
+      skipTheLineRead,
+      referralBalanceRead,
     });
     logMembershipDashboardPresentation(visibleState.kind, design.tierBadge);
     if (confirmedMembership) logMembershipNormalizedFields(confirmedMembership);
@@ -492,51 +522,78 @@ export default function MembershipScreen() {
         </View>
       );
     }
-    const clerkRows = [
-      ...(isAiConciergeIntegrationEnabled() ? [{
-        label: 'AI Concierge',
-        hint: 'Not available yet',
-        onPress: () => router.push('/concierge' as any),
-      }] : []),
-      { label: 'Referral Program', onPress: () => router.push('/referral' as any) },
-    ];
+    const activeMember = confirmedMembership?.isMember === true
+      && confirmedMembership.status === 'active'
+      && (confirmedMembership.tier === 'base' || confirmedMembership.tier === 'plus');
+    const includedFeatureLabels = (plansQuery.data?.features ?? [])
+      .filter((feature) => confirmedMembership?.tier != null && feature.values[confirmedMembership.tier] === true)
+      .map((feature) => feature.label);
+    const memberBenefits = presentMemberBenefits({
+      activeMember,
+      connectionsEnabled: isMemberConnectionsIntegrationEnabled(),
+      includedFeatureLabels,
+    });
+    const planName = currentPlan?.name ?? design.tierBadge;
+    const statIcons = {
+      'Skip the Line Passes': (
+        <MaterialCommunityIcons name="ticket-confirmation-outline" size={18} color={colors.primary} />
+      ),
+      'Referral Balance': (
+        <MaterialCommunityIcons name="wallet-outline" size={18} color={colors.primary} />
+      ),
+    } as const;
     return (
       <View style={[styles.root, { backgroundColor: colors.offWhite }]} testID="clerk-membership">
         <ScrollView
           style={{ backgroundColor: colors.offWhite }}
-          contentContainerStyle={[styles.scroll, styles.clerkScroll, { paddingTop: topPad + 8, paddingBottom: botPad + 96 }]}
+          contentContainerStyle={[styles.scroll, styles.clerkScroll, { paddingTop: topPad + 12, paddingBottom: botPad + 96 }]}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.clerkHeader}>
             <View style={styles.clerkNameRow}>
-              <Text
-                style={[styles.headerName, styles.clerkName, { color: colors.textOnSurface }]}
-                numberOfLines={2}
-                testID="clerk-membership-name"
-              >
-                {design.displayName}
-              </Text>
+              <View style={styles.clerkNameCopy}>
+                <Text style={[styles.clerkEyebrow, { color: colors.mutedForegroundLight }]}>Your membership</Text>
+                <Text
+                  style={[styles.headerName, styles.clerkName, { color: colors.textOnSurface }]}
+                  testID="clerk-membership-name"
+                >
+                  {design.displayName}
+                </Text>
+              </View>
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel="Settings"
                 testID="membership-settings"
                 onPress={() => router.push('/(tabs)/profile' as any)}
                 hitSlop={8}
-                style={styles.clerkSettingsButton}
+                style={[styles.clerkSettingsButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
               >
-                <Feather name="settings" size={22} color={colors.textOnSurface} />
+                <Feather name="settings" size={20} color={colors.textOnSurface} />
               </TouchableOpacity>
             </View>
-            <View style={[styles.tierPill, styles.clerkTierPill, { backgroundColor: colors.primary }]}>
-              <Text
-                style={[styles.tierPillText, { color: colors.primaryForeground }]}
-                numberOfLines={1}
-                testID="clerk-membership-tier"
-              >
-                {design.tierBadge}
-              </Text>
-            </View>
           </View>
+          <LinearGradient
+            colors={[colors.backgroundMid, colors.primary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.membershipCard}
+            testID="membership-card"
+          >
+            <View pointerEvents="none" style={styles.cardPattern}>
+              <View style={styles.cardArc} />
+              <View style={styles.cardArcSmall} />
+              <View style={styles.cardRoute} />
+            </View>
+            <BluebirdLogo variant="full" size="small" testID="membership-card-logo" />
+            <Text style={[styles.cardKicker, { color: colors.mutedOnBrand }]}>MEMBERSHIP</Text>
+            <Text
+              style={[styles.cardPlan, { color: colors.textOnBrand }]}
+              testID="clerk-membership-tier"
+              accessibilityLabel={`Membership plan, ${planName}`}
+            >
+              {planName}
+            </Text>
+          </LinearGradient>
           {visibleState.kind === 'loading' || visibleState.kind === 'refreshing' ? (
             <ActivityIndicator color={colors.primary} style={{ marginBottom: 12 }} testID="clerk-membership-loading" />
           ) : null}
@@ -579,40 +636,62 @@ export default function MembershipScreen() {
           ) : null}
 
           <View style={styles.statGrid} testID="clerk-membership-stats">
-            {[design.metrics.slice(0, 2), design.metrics.slice(2, 4)].map((row) => (
-              <View key={row.map((metric) => metric.label).join('-')} style={styles.statRow}>
-                {row.map((metric) => (
-                  <StatCard
-                    key={metric.label}
-                    label={metric.label}
-                    value={metric.value}
-                    testID={`membership-stat-${metric.label.toLowerCase().replace(/[^a-z]+/g, '-')}`}
-                    accessibilityLabel={metric.accessibilityLabel}
-                  />
-                ))}
-              </View>
-            ))}
+            <View style={styles.statRow}>
+              {design.metrics.map((metric) => (
+                <StatCard
+                  key={metric.label}
+                  label={metric.label}
+                  value={metric.value}
+                  pending={metric.pending}
+                  icon={statIcons[metric.label as keyof typeof statIcons]}
+                  testID={`membership-stat-${metric.label.toLowerCase().replace(/[^a-z]+/g, '-')}`}
+                  accessibilityLabel={metric.accessibilityLabel}
+                />
+              ))}
+            </View>
           </View>
 
-          <View style={[styles.linkCard, styles.clerkLinkCard, { backgroundColor: colors.surface }]}>
-            {clerkRows.map((row, i) => (
-              <TouchableOpacity
-                key={row.label}
-                testID={row.label === 'Referral Program' ? 'membership-referral-program' : 'membership-concierge'}
-                activeOpacity={0.7}
-                onPress={row.onPress}
-                style={[styles.linkRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.separator }]}
-              >
-                <View style={styles.linkCopy}>
-                  <Text style={[styles.linkLabel, { color: colors.textOnSurface }]}>{row.label}</Text>
-                  {'hint' in row && row.hint ? (
-                    <Text style={[styles.linkHint, { color: colors.mutedForegroundLight }]}>{row.hint}</Text>
-                  ) : null}
-                </View>
-                <Text style={[styles.linkChevron, { color: colors.mutedForegroundLight }]}>›</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {memberBenefits.length > 0 ? (
+            <View style={styles.benefitSection} testID="membership-benefits">
+              <Text style={[styles.sectionTitle, { color: colors.textOnSurface }]}>Your Member Benefits</Text>
+              <View style={[styles.benefitCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                {memberBenefits.map((benefit, index) => (
+                  <View
+                    key={benefit.id}
+                    style={[styles.benefitRow, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator }]}
+                  >
+                    <View style={[styles.benefitIcon, { backgroundColor: colors.secondary }]}>
+                      <Feather name={benefit.icon} size={16} color={colors.primary} />
+                    </View>
+                    <View style={styles.benefitCopy}>
+                      <Text style={[styles.benefitTitle, { color: colors.textOnSurface }]}>{benefit.title}</Text>
+                      <Text style={[styles.benefitBody, { color: colors.mutedForegroundLight }]}>{benefit.description}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          <TouchableOpacity
+            testID="membership-referral-program"
+            accessibilityRole="button"
+            accessibilityLabel="Referral Program"
+            activeOpacity={0.85}
+            onPress={() => router.push('/referral' as any)}
+            style={[styles.referralCard, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+          >
+            <View style={[styles.referralIcon, { backgroundColor: colors.surface }]}>
+              <Feather name="gift" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.referralCopy}>
+              <Text style={[styles.referralTitle, { color: colors.textOnSurface }]}>Better together.</Text>
+              <Text style={[styles.referralBody, { color: colors.mutedForegroundLight }]}>
+                Invite friends to Bluebird and earn referral rewards.
+              </Text>
+              <Text style={[styles.referralCta, { color: colors.primary }]}>Referral Program</Text>
+            </View>
+          </TouchableOpacity>
         </ScrollView>
       </View>
     );
@@ -1182,9 +1261,90 @@ const styles = StyleSheet.create({
 
   clerkScroll: { paddingHorizontal: 20, gap: 12 },
   clerkHeader: { gap: 8 },
-  clerkNameRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  clerkName: { flex: 1, fontSize: 32, lineHeight: 38, letterSpacing: -0.6 },
-  clerkSettingsButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  clerkNameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  clerkNameCopy: { flex: 1, gap: 4 },
+  clerkEyebrow: { fontFamily: 'Inter_500Medium', fontSize: 13, letterSpacing: 0.2 },
+  clerkName: { fontSize: 30, lineHeight: 36, letterSpacing: -0.5 },
+  clerkSettingsButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  membershipCard: {
+    borderRadius: 24,
+    minHeight: 168,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    overflow: 'hidden',
+    justifyContent: 'space-between',
+    gap: 18,
+  },
+  cardPattern: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
+  cardArc: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    right: -70,
+    top: -80,
+  },
+  cardArcSmall: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    right: -20,
+    bottom: -50,
+  },
+  cardRoute: {
+    position: 'absolute',
+    width: 120,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    left: 20,
+    bottom: 28,
+  },
+  cardKicker: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
+    letterSpacing: 1.4,
+  },
+  cardPlan: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.4,
+  },
+  sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, letterSpacing: -0.3, marginBottom: 10 },
+  benefitSection: { marginTop: 6 },
+  benefitCard: { borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  benefitRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 14, paddingVertical: 12, alignItems: 'flex-start' },
+  benefitIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  benefitCopy: { flex: 1, gap: 2 },
+  benefitTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15, lineHeight: 20 },
+  benefitBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18 },
+  referralCard: {
+    flexDirection: 'row',
+    gap: 14,
+    alignItems: 'flex-start',
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    marginTop: 4,
+  },
+  referralIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  referralCopy: { flex: 1, gap: 4 },
+  referralTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, letterSpacing: -0.3 },
+  referralBody: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },
+  referralCta: { fontFamily: 'Inter_600SemiBold', fontSize: 14, marginTop: 4 },
   clerkTierPill: { marginTop: 0, marginBottom: 0, paddingHorizontal: 14, paddingVertical: 7 },
   clerkNoteCard: { borderRadius: 18, paddingHorizontal: 16, paddingVertical: 14 },
   clerkNoteText: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },

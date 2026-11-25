@@ -1,8 +1,8 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MemberAvatar } from '@/components/MemberAvatar';
 import { useColors } from '@/hooks/useColors';
-import { memberInitials } from '@/lib/memberConnectPresentation';
 
 export interface MemberProfileAction {
   label: string;
@@ -11,45 +11,42 @@ export interface MemberProfileAction {
   onPress: () => void;
 }
 
-export function MemberInitialsAvatar({ name, size = 48 }: { name: string; size?: number }) {
-  const colors = useColors();
-  return (
-    <View
-      style={[
-        styles.avatar,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: colors.secondary,
-        },
-      ]}
-    >
-      <Text style={[size >= 80 ? styles.avatarLarge : styles.avatarText, { color: colors.primary }]}>
-        {memberInitials(name)}
-      </Text>
-    </View>
-  );
+export type MemberProfileLine = string | { text: string; tone?: 'blocked' };
+
+export function MemberInitialsAvatar({
+  name,
+  size = 48,
+  imageUrl = null,
+}: {
+  name: string;
+  size?: number;
+  imageUrl?: string | null;
+}) {
+  return <MemberAvatar imageUrl={imageUrl} size={size} accessibilityLabel={name || 'Member'} />;
 }
 
 export function MemberProfileSheet({
   visible,
   name,
+  imageUrl = null,
   lines,
   primary,
   secondary,
   footnote,
   extra,
+  overlay,
   onClose,
   onDismiss,
 }: {
   visible: boolean;
   name: string;
-  lines: readonly string[];
+  imageUrl?: string | null;
+  lines: readonly MemberProfileLine[];
   primary?: MemberProfileAction | null;
   secondary?: MemberProfileAction | null;
   footnote?: MemberProfileAction | null;
   extra?: readonly MemberProfileAction[] | null;
+  overlay?: React.ReactNode;
   onClose: () => void;
   onDismiss?: () => void;
 }) {
@@ -65,12 +62,25 @@ export function MemberProfileSheet({
         >
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
           <View style={[styles.avatarRing, { borderColor: colors.secondary }]}>
-            <MemberInitialsAvatar name={name} size={96} />
+            <MemberInitialsAvatar name={name} imageUrl={imageUrl} size={96} />
           </View>
           <Text style={[styles.name, { color: colors.textOnSurface }]}>{name}</Text>
-          {lines.map((line) => (
-            <Text key={line} style={[styles.line, { color: colors.mutedForegroundLight }]}>{line}</Text>
-          ))}
+          {lines.map((line, index) => {
+            const text = typeof line === 'string' ? line : line.text;
+            const blocked = typeof line !== 'string' && line.tone === 'blocked';
+            return (
+              <Text
+                key={`${text}-${index}`}
+                testID={blocked ? 'member-profile-blocked' : undefined}
+                style={[
+                  blocked ? styles.blocked : styles.line,
+                  { color: blocked ? colors.destructive : colors.mutedForegroundLight },
+                ]}
+              >
+                {text}
+              </Text>
+            );
+          })}
           {primary || secondary ? (
             <View style={styles.actions}>
               {primary ? (
@@ -126,6 +136,7 @@ export function MemberProfileSheet({
             <Text style={[styles.closeLabel, { color: colors.primary }]}>Close</Text>
           </TouchableOpacity>
         </View>
+        {overlay}
       </View>
     </Modal>
   );
@@ -142,6 +153,7 @@ const styles = StyleSheet.create({
   avatarLarge: { fontFamily: 'Inter_700Bold', fontSize: 28 },
   name: { fontFamily: 'Inter_700Bold', fontSize: 28, letterSpacing: -0.4, textAlign: 'center' },
   line: { fontFamily: 'Inter_400Regular', fontSize: 15, lineHeight: 21, marginTop: 4, textAlign: 'center' },
+  blocked: { fontFamily: 'Inter_600SemiBold', fontSize: 13, lineHeight: 18, marginTop: 2, textAlign: 'center' },
   actions: { alignSelf: 'stretch', flexDirection: 'row', gap: 10, marginTop: 22 },
   filled: { flex: 1, minHeight: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   filledLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },

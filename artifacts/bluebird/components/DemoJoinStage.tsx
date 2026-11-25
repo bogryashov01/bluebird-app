@@ -34,6 +34,7 @@ export function DemoJoinStage({ stage }: { stage: DemoJoinStageName }) {
     flightId: entry.flightId,
     position: entry.position,
     participantCount: entry.participantCount,
+    lineSkipApplied: false,
   };
 
   return (

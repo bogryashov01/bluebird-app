@@ -1,6 +1,7 @@
-import type {
-  ProductionUserProfile,
-  UpdateProductionUserProfileRequest,
+import {
+  withStoredProfilePhone,
+  type ProductionUserProfile,
+  type UpdateProductionUserProfileRequest,
 } from './productionAuthApi';
 
 export class IncomingConnectionPreferenceError extends Error {
@@ -50,7 +51,7 @@ export function buildIncomingConnectionRequestsUpdate(
     favoriteCityKeys.some((key) => typeof key !== 'string' || key.length < 1 || key.length > 64)
   ) return null;
 
-  const request: UpdateProductionUserProfileRequest = {
+  const request: UpdateProductionUserProfileRequest = withStoredProfilePhone({
     firstName,
     lastName,
     dob,
@@ -60,12 +61,7 @@ export function buildIncomingConnectionRequestsUpdate(
     notificationPrefs: { ...profile.notificationPrefs },
     smsConsent: profile.smsConsent,
     allowIncomingConnectionRequests,
-  };
-  if (typeof profile.phoneE164 === 'string' && profile.phoneE164.length > 0 &&
-      typeof profile.phoneCountry === 'string' && profile.phoneCountry.length > 0) {
-    request.phoneE164 = profile.phoneE164;
-    request.phoneCountry = profile.phoneCountry;
-  }
+  }, profile);
   if (typeof profile.weightLbs === 'number') request.weightLbs = profile.weightLbs;
   if (!profile.emailLocked && typeof profile.email === 'string' && profile.email.length > 0) {
     request.email = profile.email;

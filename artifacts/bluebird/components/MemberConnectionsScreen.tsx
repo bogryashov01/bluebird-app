@@ -21,7 +21,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MemberConversationList } from '@/components/MemberConversationList';
 import { MemberInitialsAvatar, MemberProfileSheet } from '@/components/MemberProfileSheet';
 import { MemberSafetyDialogs } from '@/components/MemberSafetyDialogs';
+import { MemberUnblockConfirm } from '@/components/MemberUnblockConfirm';
 import { useColors } from '@/hooks/useColors';
+import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
+import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import {
   connectionMemberLabel,
   discoverConnectionQuery,
@@ -33,7 +36,16 @@ import {
 import { discoveredStateFromDiscoveryMember, presentDiscoveredMember } from '@/lib/memberConnectPresentation';
 import {
   advanceMemberSafetyHandoff,
+  blockedMembersAfterUnblock,
+  createMemberSafetyClient,
+  isMemberSafetyEnabled,
+  outgoingBlockForMember,
+  presentMemberSafetyFailure,
+  publishMemberSafetyRefresh,
   queueMemberSafetyHandoff,
+  subscribeMemberSafetyRefresh,
+  type BlockedMember,
+  type MemberSafetyFailure,
   type MemberSafetyHandoff,
 } from '@/lib/memberSafety';
 import { isMemberMessagesIntegrationEnabled } from '@/lib/memberMessages';
@@ -56,6 +68,39 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
   const insets = useSafeAreaInsets();
   const connections = useMemberConnections();
   const messages = useOpenAcceptedConversation();
+  const session = useClerkAuthSnapshot();
+  const sessionRef = React.useRef(session);
+  sessionRef.current = session;
+  const [outgoingBlocks, setOutgoingBlocks] = React.useState<BlockedMember[]>([]);
+  const [unblockId, setUnblockId] = React.useState<number | null>(null);
+  const [unblockPending, setUnblockPending] = React.useState(false);
+  const [unblockFailure, setUnblockFailure] = React.useState<MemberSafetyFailure | null>(null);
+  const unblockPendingRef = React.useRef(false);
+  const blockListGeneration = React.useRef(0);
+  const loadOutgoingBlocks = React.useCallback(async () => {
+    const requested = blockListGeneration.current + 1;
+    blockListGeneration.current = requested;
+    if (!isMemberSafetyEnabled()) {
+      setOutgoingBlocks([]);
+      return;
+    }
+    const configuration = getMainBluebirdApiConfigurationOrNull();
+    const getToken = sessionRef.current?.getToken;
+    if (!configuration || sessionRef.current?.isSignedIn !== true || typeof getToken !== 'function') return;
+    const client = createMemberSafetyClient({
+      enabled: true,
+      environment: configuration.environment,
+      baseUrl: configuration.apiBaseUrl,
+      getAccessToken: () => sessionRef.current?.getToken() ?? Promise.resolve(null),
+    });
+    const result = await client.listBlocks();
+    if (blockListGeneration.current !== requested || result.kind !== 'loaded') return;
+    setOutgoingBlocks(result.data.blocks);
+  }, []);
+  React.useEffect(() => {
+    void loadOutgoingBlocks();
+    return subscribeMemberSafetyRefresh(() => { void loadOutgoingBlocks(); });
+  }, [loadOutgoingBlocks]);
   const queryClient = useQueryClient();
   const refreshQueueRelationships = () => {
     void queryClient.invalidateQueries({
@@ -126,6 +171,15 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
     }
     return map;
   }, [connections.accepted]);
+  const images = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const connection of connections.accepted) {
+      if (typeof connection.member.imageUrl === 'string' && connection.member.imageUrl) {
+        map.set(connection.member.userId, connection.member.imageUrl);
+      }
+    }
+    return map;
+  }, [connections.accepted]);
 
   React.useEffect(() => {
     setPhone('');
@@ -134,11 +188,48 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
     setRequestsOpen(false);
     setPane(connections.enabled ? 'connections' : messagesEnabled ? 'chats' : 'connections');
     setSheet(null);
+    setUnblockId(null);
   }, [connections.accountId, connections.enabled, messagesEnabled]);
 
   const accepted = sheet?.kind === 'accepted'
     ? connections.accepted.find((connection) => connection.id === sheet.id) ?? null
     : null;
+  const acceptedBlock = outgoingBlockForMember(outgoingBlocks, accepted?.member.userId);
+  const confirmUnblock = () => {
+    if (acceptedBlock === null || unblockPendingRef.current) return;
+    const blockId = acceptedBlock.id;
+    unblockPendingRef.current = true;
+    setUnblockPending(true);
+    setUnblockFailure(null);
+    const configuration = getMainBluebirdApiConfigurationOrNull();
+    if (!configuration) {
+      unblockPendingRef.current = false;
+      setUnblockPending(false);
+      setUnblockFailure('configuration');
+      return;
+    }
+    const client = createMemberSafetyClient({
+      enabled: true,
+      environment: configuration.environment,
+      baseUrl: configuration.apiBaseUrl,
+      getAccessToken: () => sessionRef.current?.getToken() ?? Promise.resolve(null),
+    });
+    void client.unblock(blockId).then((result) => {
+      const succeeded = result.kind === 'loaded';
+      if (!succeeded) {
+        setUnblockFailure(result.kind === 'disabled' ? 'configuration' : result.code);
+        return;
+      }
+      blockListGeneration.current += 1;
+      setOutgoingBlocks((current) => blockedMembersAfterUnblock(current, blockId, true));
+      setUnblockId(null);
+      setUnblockFailure(null);
+      publishMemberSafetyRefresh();
+    }).finally(() => {
+      unblockPendingRef.current = false;
+      setUnblockPending(false);
+    });
+  };
   const incoming = sheet?.kind === 'incoming'
     ? connections.incoming.find((request) => request.id === sheet.id) ?? null
     : null;
@@ -257,7 +348,7 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
         ) : null}
       </View>
       {pane === 'chats' && messagesEnabled ? (
-          <MemberConversationList names={names} active={pane === 'chats'} bottomInset={bottomInset} />
+          <MemberConversationList names={names} images={images} active={pane === 'chats'} bottomInset={bottomInset} />
       ) : connections.status === 'disabled' || !connections.enabled ? (
         <View style={styles.state} testID="member-connections-unavailable">
           <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>Connections aren’t available yet</Text>
@@ -369,15 +460,22 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
                 ? connectionMemberLabel(discovery)
                 : ''
         }
-        lines={sheetLines(accepted, incoming, discovery, discoveredState)}
+        imageUrl={
+          accepted?.member.imageUrl
+          ?? incoming?.requester.imageUrl
+          ?? discovery?.imageUrl
+          ?? null
+        }
+        lines={sheetLines(accepted, incoming, discovery, discoveredState, acceptedBlock !== null)}
         primary={sheetPrimary({
           accepted,
           incoming,
           discovery,
           discoveredState,
+          blockedByCurrentMember: acceptedBlock !== null,
           messagesEnabled: messages.enabled,
           pending: connections.pending || messages.opening,
-          onMessage: () => { if (accepted) openConversation(accepted.member.userId); },
+          onMessage: () => { if (accepted && acceptedBlock === null) openConversation(accepted.member.userId); },
           onAccept: () => {
             if (!incoming) return;
             setSheet(null);
@@ -417,10 +515,18 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
             {
               label: 'Report member',
               testID: 'member-connections-report',
-              disabled: connections.pending,
+              disabled: connections.pending || unblockPending,
               onPress: () => openMemberSafety('report', userId),
             },
-            {
+            acceptedBlock ? {
+              label: 'Unblock member',
+              testID: 'member-connections-unblock',
+              disabled: connections.pending || unblockPending,
+              onPress: () => {
+                setUnblockFailure(null);
+                setUnblockId(acceptedBlock.id);
+              },
+            } : {
               label: 'Block member',
               testID: 'member-connections-block',
               disabled: connections.pending,
@@ -428,7 +534,17 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
             },
           ];
         })()}
-        onClose={() => setSheet(null)}
+        overlay={acceptedBlock && unblockId === acceptedBlock.id ? (
+          <MemberUnblockConfirm
+            embedded
+            visible
+            pending={unblockPending}
+            failure={unblockFailure ? presentMemberSafetyFailure(unblockFailure) : null}
+            onCancel={() => { if (!unblockPending) setUnblockId(null); }}
+            onConfirm={confirmUnblock}
+          />
+        ) : null}
+        onClose={() => { if (!unblockPending) { setUnblockId(null); setSheet(null); } }}
         onDismiss={applyMemberSafetyHandoff}
       />
       <MemberSafetyDialogs
@@ -471,7 +587,7 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
             ) : null}
             {foundMember ? (
               <View testID="member-connections-match" style={[styles.matchRow, { backgroundColor: colors.surface }]}>
-                <MemberInitialsAvatar name={connectionMemberLabel(foundMember)} />
+                <MemberInitialsAvatar name={connectionMemberLabel(foundMember)} imageUrl={foundMember.imageUrl} />
                 <View style={styles.rowCopy}>
                   <Text style={[styles.name, { color: colors.textOnSurface }]}>{connectionMemberLabel(foundMember)}</Text>
                   <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>
@@ -572,8 +688,13 @@ function sheetLines(
   incoming: ConnectionRelationship | null,
   discovery: { userId: string } | null,
   discoveredState: ReturnType<typeof presentDiscoveredMember> | null,
-): string[] {
-  if (accepted) return ['Bluebird member', 'Connected'];
+  blockedByCurrentMember: boolean,
+): Array<string | { text: string; tone: 'blocked' }> {
+  if (accepted) {
+    return blockedByCurrentMember
+      ? ['Bluebird member', 'Connected', { text: 'Blocked', tone: 'blocked' }]
+      : ['Bluebird member', 'Connected'];
+  }
   if (incoming) return ['Bluebird member', 'Incoming request'];
   if (discovery && discoveredState === 'outgoing') return ['Bluebird member', 'Request pending'];
   if (discovery && discoveredState === 'connected') return ['Bluebird member', 'Connected'];
@@ -590,12 +711,14 @@ function sheetPrimary(input: {
   incoming: ConnectionRelationship | null;
   discovery: { userId: string } | null;
   discoveredState: ReturnType<typeof presentDiscoveredMember> | null;
+  blockedByCurrentMember: boolean;
   messagesEnabled: boolean;
   pending: boolean;
   onMessage: () => void;
   onAccept: () => void;
   onConnect: () => void;
 }) {
+  if (input.accepted && input.blockedByCurrentMember) return null;
   if (input.accepted && input.messagesEnabled) {
     return {
       label: 'Message',
@@ -638,7 +761,7 @@ function OutgoingRequestRow({
       testID={`member-connections-outgoing-${request.id}`}
       style={[styles.row, { borderBottomColor: colors.separator }]}
     >
-      <MemberInitialsAvatar name={label} />
+      <MemberInitialsAvatar name={label} imageUrl={request.recipient.imageUrl} />
       <View style={styles.rowCopy}>
         <Text style={[styles.name, { color: colors.textOnSurface }]}>{label}</Text>
         <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>Pending</Text>
@@ -672,7 +795,7 @@ function IncomingRequest({
         onPress={onOpen}
         style={styles.requestIdentity}
       >
-        <MemberInitialsAvatar name={label} />
+        <MemberInitialsAvatar name={label} imageUrl={request.requester.imageUrl} />
         <View style={styles.rowCopy}>
           <Text style={[styles.name, { color: colors.textOnSurface }]}>{label}</Text>
           <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>Incoming request</Text>
@@ -720,7 +843,7 @@ function AcceptedRow({
       onPress={onPress}
       style={[styles.row, { borderBottomColor: colors.separator }]}
     >
-      <MemberInitialsAvatar name={label} />
+      <MemberInitialsAvatar name={label} imageUrl={connection.member.imageUrl} />
       <View style={styles.rowCopy}>
         <Text style={[styles.name, { color: colors.textOnSurface }]}>{label}</Text>
         <Text style={[styles.meta, { color: colors.mutedForegroundLight }]}>Tap to view</Text>

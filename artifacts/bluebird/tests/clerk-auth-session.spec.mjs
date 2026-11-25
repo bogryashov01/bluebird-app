@@ -422,7 +422,7 @@ test("tab bars keep Connections mountable and hide it when both member integrati
   assert.match(source, /name="connections"/);
   const profileSource = readFileSync(resolve(projectRoot, "app/(tabs)/profile/index.tsx"), "utf8");
   assert.doesNotMatch(profileSource, /router\.push\(['"]\/\(tabs\)\/connections/);
-  assert.match(profileSource, /connectionsEnabled \? \(/);
+  assert.match(profileSource, /connectionsEnabled \? \[/);
   assert.match(profileSource, /confirmOpenDeleteAccount/);
   const unreadHookSource = readFileSync(resolve(projectRoot, "hooks/useUnreadNotifications.ts"), "utf8");
   assert.match(unreadHookSource, /authMode === 'legacy' && isLocalFlightReadMode\(\)/);
@@ -434,7 +434,7 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   const plansSource = readFileSync(resolve(projectRoot, "app/membership/plans.tsx"), "utf8");
   const clerkProfile = profileSource
     .split("if (authMode === 'clerk') {")[1]
-    ?.split("const initials")[0] ?? "";
+    ?.split("const demoProfile")[0] ?? "";
   const clerkMembership = membershipSource
     .split("if (authMode === 'clerk') {")[1]
     ?.split("const currentTier")[0] ?? "";
@@ -473,7 +473,7 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(clerkProfile, /testID: 'clerk-delete-account'/);
   assert.match(clerkProfile, /confirmOpenDeleteAccount/);
   assert.match(profileSource, /router\.push\('\/account\/delete-account'/);
-  assert.match(clerkProfile, /connectionsEnabled \? \(/);
+  assert.match(clerkProfile, /connectionsEnabled \? \[/);
   assert.match(clerkProfile, /label: 'Notification Settings'/);
   assert.match(clerkProfile, /router\.push\('\/notifications'/);
   assert.match(clerkProfile, /label: 'Allow incoming requests'/);
@@ -591,7 +591,9 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.doesNotMatch(membershipSource, /loadPreparedMobileMembership|\/api\/mobile\/membership|\/api\/mobile\/plans|readApprovedDashboardMembership/);
   assert.doesNotMatch(clerkMembership, /loadClerkBluebirdMembership|getMembership\(/);
   assert.match(clerkMembership, /presentMembershipDashboard/);
-  assert.match(clerkMembership, /router\.push\('\/concierge'/);
+  assert.match(clerkMembership, /router\.push\('\/\(tabs\)\/profile'/);
+  assert.match(clerkMembership, /router\.push\('\/referral'/);
+  assert.doesNotMatch(clerkMembership, /router\.push\('\/concierge'/);
   assert.doesNotMatch(clerkMembership, /router\.(push|replace)\('\/\(tabs\)\/discover'/);
   assert.match(clerkMembership, /clerk-membership-retry/);
   assert.doesNotMatch(clerkMembership, /user\?\.membershipTier|linePassCount|annualFlightAllowance/);

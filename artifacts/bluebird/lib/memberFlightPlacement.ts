@@ -36,23 +36,19 @@ export function upcomingFlightDetailsTarget(input: {
   return { pathname: '/flight/[id]', params: { id: String(input.legId) } };
 }
 
-/** Queue-pending trips open queue status; winner confirmation opens the winner review. */
+/** Upcoming trips open Flight Details. Winner confirmation still opens the winner review. */
 export function tripLifecycleOpenTarget(input: {
   list: 'current' | 'past';
   legId: number;
   status?: string | null;
   awarded: boolean;
 }):
-  | { pathname: '/flight/queue-status'; params: { flightId: string } }
   | { pathname: '/flight/winner'; params: { flightId: string } }
   | { pathname: '/flight/[id]'; params: { id: string } }
   | null {
   if (input.list !== 'current') return null;
   if (!Number.isSafeInteger(input.legId) || input.legId < 1) return null;
   const status = typeof input.status === 'string' ? input.status.trim().toLowerCase() : '';
-  if (status === 'queue_pending' || (!status && input.awarded !== true)) {
-    return { pathname: '/flight/queue-status', params: { flightId: String(input.legId) } };
-  }
   if (status === 'winner_confirmation_required') {
     return { pathname: '/flight/winner', params: { flightId: String(input.legId) } };
   }

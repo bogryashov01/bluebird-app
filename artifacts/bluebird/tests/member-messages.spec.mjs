@@ -162,6 +162,17 @@ test("conversation parsing keeps the contract fields", () => {
   assert.equal(parsed.latestMessage.id, 4);
   assert.equal(parsed.latestMessage.body, "Hello");
   assert.equal(parsed.unreadCount, 1);
+  assert.equal(Object.prototype.hasOwnProperty.call(parsed, "imageUrl"), false);
+  const withPhoto = parseMessageConversation({
+    ...conversation(),
+    imageUrl: "https://cdn.example.test/member.jpg",
+  }, "conversation");
+  assert.equal(withPhoto.imageUrl, "https://cdn.example.test/member.jpg");
+  const invalidPhoto = parseMessageConversation({
+    ...conversation(),
+    imageUrl: "not-a-url",
+  }, "conversation");
+  assert.equal(invalidPhoto.imageUrl, null);
   const empty = parseMessageConversation({ ...conversation(), latestMessage: null, unreadCount: 0 }, "conversation");
   assert.equal(empty.latestMessage, null);
   assert.throws(() => parseMessageConversation({ ...conversation(), unreadCount: -1 }, "conversation"));

@@ -157,6 +157,8 @@ const completePersonalInfoProfile = {
   homeAirportLabel: "San Francisco International",
   favoriteCityKeys: ["san-francisco"],
   favoriteCityLabels: ["San Francisco"],
+  phoneE164: "+15555550123",
+  phoneCountry: "US",
 };
 
 test("Personal Information formats date-only birthdays without timezone shifting", () => {
@@ -279,9 +281,11 @@ test("Personal Information PUT contains only required profile fields and a chang
     homeAirportCode: "SFO",
     favoriteCityKeys: ["san-francisco"],
     weightLbs: 142,
+    phoneE164: "+15555550123",
+    phoneCountry: "US",
   });
   for (const excluded of [
-    "email", "phoneE164", "phoneCountry", "notificationPrefs", "smsConsent",
+    "email", "notificationPrefs", "smsConsent", "phoneVerifiedAt",
     "favoriteAirportCodes", "favoriteCityLabels", "homeAirportLabel",
   ]) {
     assert.equal(excluded in request, false, `${excluded} must not be included`);
@@ -754,6 +758,16 @@ test("request composition uses date-only DOB, one airport, exact city keys and o
   });
   assert.equal("notificationPrefs" in request, false);
   assert.equal("smsConsent" in request, false);
+  const storedPhone = buildClerkProfileUpdateRequest({
+    values: { ...values, phoneE164: "+15555550199" },
+    homeAirportCode: "SFO",
+    favoriteCityKeys: ["san-francisco"],
+    catalogKeys: ["san-francisco"],
+    profile: { ...profile, phoneE164: "+15555550123", phoneCountry: "US", phoneVerificationRequired: true },
+  });
+  assert.equal(storedPhone.phoneE164, "+15555550123");
+  assert.equal(storedPhone.phoneCountry, "US");
+  assert.equal("phoneVerifiedAt" in storedPhone, false);
   assert.equal("additionalAirportCodes" in request, false);
   assert.throws(() => buildClerkProfileUpdateRequest({
     values: { ...values, email: "" },

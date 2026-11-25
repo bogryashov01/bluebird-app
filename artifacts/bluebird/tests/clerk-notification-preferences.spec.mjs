@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   readClerkNotificationPreferences, readClerkNotificationProfile,
-  notificationPreferenceRows, buildHomeAirportProfileUpdate, buildNotificationProfileUpdate,
-  saveClerkHomeAirport, saveClerkNotificationPreferences,
+  notificationPreferenceRows, buildHomeAirportProfileUpdate, buildFavoriteCitiesProfileUpdate,
+  buildNotificationProfileUpdate,
+  saveClerkHomeAirport, saveClerkFavoriteCities, saveClerkNotificationPreferences,
 } from "../scripts/.clerk-notification-preferences.test.mjs";
 
 const prefs = {
@@ -136,6 +137,7 @@ test("builds a full update preserving required fields and optional weight/email 
     firstName: profile.firstName, lastName: profile.lastName, dob: profile.dob, gender: profile.gender,
     homeAirportCode: profile.homeAirportCode, favoriteCityKeys: profile.favoriteCityKeys,
     notificationPrefs: prefs, email: profile.email, weightLbs: profile.weightLbs,
+    phoneE164: profile.phoneE164, phoneCountry: profile.phoneCountry,
   });
   assert.notEqual(body.favoriteCityKeys, profile.favoriteCityKeys);
   assert.notEqual(body.notificationPrefs, prefs);
@@ -151,8 +153,17 @@ test("unsafe, missing or invalid complete profile values keep preferences read-o
     { gender: null }, { homeAirportCode: null }, { homeAirportCode: "?" },
     { favoriteCityKeys: [] }, { favoriteCityKeys: [""] }, { favoriteCityKeys: ["x".repeat(65)] },
     { email: null }, { email: "bad" }, { weightLbs: 0 }, { weightLbs: 1.5 }, { weightLbs: 1501 },
-    { smsConsent: false }, { phoneVerifiedAt: null }, { phoneE164: null }, { phoneVerificationRequired: true },
+    { smsConsent: false }, { phoneVerifiedAt: null }, { phoneE164: null },
   ]) assert.equal(buildNotificationProfileUpdate({ ...profile, ...invalid }, prefs), null, JSON.stringify(invalid));
+  const verifiedRequired = buildNotificationProfileUpdate({ ...profile, phoneVerificationRequired: true }, prefs);
+  assert.equal(verifiedRequired.phoneE164, profile.phoneE164);
+  assert.equal(verifiedRequired.phoneCountry, profile.phoneCountry);
+  assert.equal("phoneVerifiedAt" in verifiedRequired, false);
+  const emailOnly = { ...prefs, departingFavorite: "email", queueUpdates: "email", winningNotifications: "email" };
+  assert.throws(
+    () => buildNotificationProfileUpdate({ ...profile, phoneE164: null, phoneCountry: null, phoneVerificationRequired: true }, emailOnly),
+    (error) => error instanceof Error && error.name === "ProfilePhoneSyncError",
+  );
 });
 
 test("email-only preferences do not infer or grant SMS consent", () => {
@@ -189,9 +200,12 @@ test("home-airport update preserves fresh required values and existing notificat
     notificationPrefs: latest.notificationPrefs,
     email: latest.email,
     weightLbs: 152,
+    phoneE164: latest.phoneE164,
+    phoneCountry: latest.phoneCountry,
   });
   assert.equal("smsConsent" in request, false);
-  assert.equal("phoneE164" in request, false);
+  assert.equal("phoneVerifiedAt" in request, false);
+  assert.equal("favoriteAirportCodes" in request, false);
   assert.deepEqual(request.notificationPrefs, latest.notificationPrefs);
   assert.notEqual(request.favoriteCityKeys, latest.favoriteCityKeys);
   assert.equal(buildHomeAirportProfileUpdate({ ...latest, isComplete: false }, "KSFO"), null);
@@ -215,6 +229,8 @@ test("home-airport save re-reads before PUT and confirms the saved airport from 
       assert.equal(body.firstName, latest.firstName);
       assert.deepEqual(body.favoriteCityKeys, latest.favoriteCityKeys);
       assert.equal(body.homeAirportCode, "KSFO");
+      assert.equal(body.phoneE164, latest.phoneE164);
+      assert.equal(body.phoneCountry, latest.phoneCountry);
       assert.deepEqual(body.notificationPrefs, latest.notificationPrefs);
     },
   });
@@ -441,4 +457,60 @@ test("identity changes during post-save refresh discard the result without a sec
   })), /account changed/);
   assert.equal(reads, 2);
   assert.equal(writes, 1);
+});
+
+test("preferred city updates change only favoriteCityKeys and keep the stored phone", async () => {
+  const added = buildFavoriteCitiesProfileUpdate(profile, ["new-york", "boston"]);
+  assert.deepEqual(added.favoriteCityKeys, ["new-york", "boston"]);
+  assert.equal(added.homeAirportCode, profile.homeAirportCode);
+  assert.equal(added.phoneE164, profile.phoneE164);
+  assert.equal(added.phoneCountry, profile.phoneCountry);
+  assert.equal(added.firstName, profile.firstName);
+  assert.equal("favoriteAirportCodes" in added, false);
+  assert.equal("phoneVerifiedAt" in added, false);
+
+  const removed = buildFavoriteCitiesProfileUpdate(profile, ["boston"]);
+  assert.deepEqual(removed.favoriteCityKeys, ["boston"]);
+  assert.equal(removed.phoneE164, profile.phoneE164);
+
+  assert.equal(buildFavoriteCitiesProfileUpdate(profile, []), null);
+  assert.throws(
+    () => buildFavoriteCitiesProfileUpdate({
+      ...profile,
+      phoneE164: null,
+      phoneCountry: null,
+      phoneVerificationRequired: true,
+      notificationPrefs: {
+        ...profile.notificationPrefs,
+        departingFavorite: "email",
+        queueUpdates: "email",
+        winningNotifications: "email",
+      },
+    }, ["boston"]),
+    (error) => error instanceof Error && error.name === "ProfilePhoneSyncError",
+  );
+
+  const calls = [];
+  let reads = 0;
+  const savedCities = ["boston"];
+  const saved = { ...profile, favoriteCityKeys: savedCities };
+  const result = await saveClerkFavoriteCities({
+    getCurrentSession: () => makeSession(),
+    requestedClerkUserId: "clerk-user-a",
+    favoriteCityKeys: savedCities,
+    readProfile: async () => {
+      calls.push("GET /api/me/profile");
+      return ++reads === 1 ? profile : saved;
+    },
+    updateProfile: async (body) => {
+      calls.push("PUT /api/me/profile");
+      assert.deepEqual(body.favoriteCityKeys, savedCities);
+      assert.equal(body.homeAirportCode, profile.homeAirportCode);
+      assert.equal(body.phoneE164, profile.phoneE164);
+      assert.equal(body.firstName, profile.firstName);
+      assert.equal(body.dob, profile.dob);
+    },
+  });
+  assert.deepEqual(calls, ["GET /api/me/profile", "PUT /api/me/profile", "GET /api/me/profile"]);
+  assert.deepEqual(result.favoriteCityKeys, savedCities);
 });

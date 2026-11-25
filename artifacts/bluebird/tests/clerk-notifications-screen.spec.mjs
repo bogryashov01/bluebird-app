@@ -20,6 +20,11 @@ test.beforeAll(async () => {
         replace: path => { window.lastRoute = path; window.navigateRoute?.(path, 'replace'); },
         canGoBack: () => window.canGoBack || (window.routeStack?.length ?? 0) > 1,
       };
+      export const useLocalSearchParams = () => {
+        const path = String((window.routeStack ?? []).at(-1) ?? '');
+        const query = path.includes('?') ? path.slice(path.indexOf('?') + 1) : '';
+        return Object.fromEntries(new URLSearchParams(query));
+      };
       export const useFocusEffect = effect => React.useEffect(effect, [effect]);
     `,
     "@workspace/api-client-react": `
@@ -33,6 +38,17 @@ test.beforeAll(async () => {
       import React from 'react';
       export const Ionicons = ({ name }) => React.createElement('span', { 'data-icon': name }, '‹');
       export const Feather = ({ name }) => React.createElement('span', { 'data-icon': name });
+    `,
+    "expo-notifications": `
+      export const setNotificationHandler = () => {};
+      export const getPermissionsAsync = async () => ({ status: 'undetermined' });
+      export const requestPermissionsAsync = async () => ({ status: 'undetermined' });
+      export const getExpoPushTokenAsync = async () => ({ data: '' });
+      export const addNotificationReceivedListener = () => ({ remove() {} });
+      export const addNotificationResponseReceivedListener = () => ({ remove() {} });
+    `,
+    "expo-constants": `
+      export default { expoConfig: { extra: {} }, easConfig: {}, isDevice: false };
     `,
     "react-native-safe-area-context": `
       export const useSafeAreaInsets = () => ({ top: 59, bottom: 34, left: 0, right: 0 });
@@ -83,7 +99,18 @@ test.beforeAll(async () => {
             },
             updateProfile: async data => {
               window.lastProfileUpdate = data;
-              window.testProfile = { ...window.testProfile, ...data };
+              if (window.failNextProfileUpdate) {
+                window.failNextProfileUpdate = false;
+                throw new Error('temporary save failure');
+              }
+              const labels = { 'new-york': 'New York', 'san-francisco': 'San Francisco' };
+              window.testProfile = {
+                ...window.testProfile,
+                ...data,
+                ...(Array.isArray(data.favoriteCityKeys) ? {
+                  favoriteCityLabels: data.favoriteCityKeys.map(key => labels[key] ?? key),
+                } : {}),
+              };
               return window.testProfile;
             },
           },
@@ -116,7 +143,10 @@ test.beforeAll(async () => {
       export const shouldRetryProductionRead = () => false;
       export const describeProductionReadFailure = () => ({ message: 'Search failed', retryable: true });
       export const fetchProductionAirports = async () => [];
-      export const fetchProductionAirportCities = async () => [];
+      export const fetchProductionAirportCities = async () => [
+        { key: 'new-york', displayName: 'New York', country: 'United States', tier: 1, airportCodes: ['KJFK'], airportLabels: ['JFK'] },
+        { key: 'san-francisco', displayName: 'San Francisco', country: 'United States', tier: 1, airportCodes: ['KSFO'], airportLabels: ['SFO'] },
+      ];
     `,
     "@/components/KeyboardAwareScrollViewCompat": `
       import React from 'react';
@@ -130,6 +160,32 @@ test.beforeAll(async () => {
     "@/lib/productionAuthApi": `
       export class ProductionAuthHttpError extends Error {
         constructor(status) { super('request failed'); this.status = status; }
+      }
+      export class ProfilePhoneSyncError extends Error {
+        constructor() {
+          super('Your saved profile does not include a usable phone number, so this change cannot be saved. This is a profile synchronization issue.');
+          this.name = 'ProfilePhoneSyncError';
+        }
+      }
+      export function storedProfilePhone(profile) {
+        const phone = typeof profile?.phoneE164 === 'string' ? profile.phoneE164.trim() : '';
+        if (!/^\\+[1-9]\\d{7,14}$/.test(phone)) return null;
+        const country = typeof profile?.phoneCountry === 'string' ? profile.phoneCountry.trim() : '';
+        return /^[A-Za-z]{2}$/.test(country)
+          ? { phoneE164: phone, phoneCountry: country.toUpperCase() }
+          : { phoneE164: phone };
+      }
+      export function withStoredProfilePhone(request, profile) {
+        const phone = storedProfilePhone(profile);
+        if (!phone) {
+          if (profile?.phoneVerificationRequired) throw new ProfilePhoneSyncError();
+          return request;
+        }
+        return {
+          ...request,
+          phoneE164: phone.phoneE164,
+          ...(phone.phoneCountry ? { phoneCountry: phone.phoneCountry } : {}),
+        };
       }
     `,
     "@/lib/notificationRoute": `
@@ -190,7 +246,8 @@ test.beforeAll(async () => {
             window.routeStack = stack;
             setRoute(stack[stack.length - 1] ?? '/notifications');
           };
-          if (route === '/airport-picker') return <AirportPickerScreen />;
+          const pathname = String(route).split('?')[0];
+          if (pathname === '/airport-picker') return <AirportPickerScreen />;
           if (route === '/account/payment-methods') return <PaymentMethodsScreen />;
           if (route === '/(tabs)/profile') return <TestProfile presentation="clerk" />;
           if (route.startsWith('/profile-')) return <TestProfile presentation={route.slice('/profile-'.length)} />;
@@ -234,12 +291,13 @@ test.beforeAll(async () => {
     bundle: true,
     write: false,
     format: "iife",
+    jsx: "automatic",
     define: { "process.env.NODE_ENV": '"test"', __DEV__: "true" },
     alias: { "react-native": resolve(root, "node_modules/react-native-web") },
     plugins: [{
       name: "notification-screen-mocks",
       setup(build) {
-        build.onResolve({ filter: /^(expo-router|@workspace\/api-client-react|@expo\/vector-icons|react-native-safe-area-context)$/ }, args => ({
+        build.onResolve({ filter: /^(expo-router|@workspace\/api-client-react|@expo\/vector-icons|react-native-safe-area-context|expo-notifications|expo-constants)$/ }, args => ({
           path: args.path,
           namespace: "screen-mock",
         }));
@@ -348,7 +406,42 @@ test("complete Clerk profile searches, saves a catalog airport, and returns to N
   await expect(page.getByTestId("clerk-notifications")).toBeVisible();
   await expect(page.getByText("KSFO", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.lastProfileUpdate.homeAirportCode)).toBe("KSFO");
+  expect(await page.evaluate(() => window.lastProfileUpdate.phoneE164)).toBe("+12025550123");
+  expect(await page.evaluate(() => window.lastProfileUpdate.phoneCountry)).toBe("US");
+  expect(await page.evaluate(() => window.lastProfileUpdate.favoriteCityKeys)).toEqual(["new-york"]);
+  expect(await page.evaluate(() => window.lastProfileUpdate.favoriteAirportCodes)).toBeUndefined();
+  expect(await page.evaluate(() => window.lastProfileUpdate.phoneVerifiedAt)).toBeUndefined();
   expect(await page.evaluate(() => window.routeStack)).toEqual(["/notifications"]);
+});
+
+test("preferred airports keep the current cities, save a full profile, and keep a failed selection", async ({ page }) => {
+  await expect(page.getByText("New York", { exact: true })).toBeVisible();
+  await page.getByText("Preferred Airports", { exact: true }).click();
+  await expect(page.getByTestId("clerk-favorite-cities-editor")).toBeVisible();
+  await expect(page.getByTestId("clerk-favorite-city-new-york").getByText("Selected", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("clerk-favorite-cities-save")).toBeDisabled();
+  await page.getByTestId("clerk-favorite-city-new-york").click();
+  await expect(page.getByTestId("clerk-favorite-city-new-york").getByText("Selected", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Choose at least one city to continue.", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("clerk-favorite-cities-save")).toBeDisabled();
+  await page.getByTestId("clerk-favorite-city-new-york").click();
+
+  await page.getByTestId("clerk-favorite-city-san-francisco").click();
+  await expect(page.getByTestId("clerk-favorite-city-san-francisco").getByText("Selected", { exact: true })).toBeVisible();
+  await page.evaluate(() => { window.failNextProfileUpdate = true; });
+  await page.getByTestId("clerk-favorite-cities-save").click();
+  await expect(page.getByTestId("clerk-favorite-cities-save-error")).toBeVisible();
+  await expect(page.getByTestId("clerk-favorite-cities-editor")).toBeVisible();
+  await expect(page.getByTestId("clerk-favorite-city-san-francisco").getByText("Selected", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.lastProfileUpdate.favoriteCityKeys)).toEqual(["new-york", "san-francisco"]);
+  expect(await page.evaluate(() => window.lastProfileUpdate.homeAirportCode)).toBe("TEB");
+  expect(await page.evaluate(() => window.lastProfileUpdate.phoneE164)).toBe("+12025550123");
+
+  await page.getByTestId("clerk-favorite-cities-save").click();
+  await expect(page.getByTestId("clerk-notifications")).toBeVisible();
+  await expect(page.getByText("New York, San Francisco", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.lastProfileUpdate.favoriteCityKeys)).toEqual(["new-york", "san-francisco"]);
+  expect(await page.evaluate(() => window.lastProfileUpdate.phoneCountry)).toBe("US");
 });
 
 test("Payment Methods returns to either Profile presentation and uses the stack back action", async ({ page }) => {

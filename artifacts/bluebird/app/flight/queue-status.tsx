@@ -499,7 +499,7 @@ export default function ProductionQueueStatusScreen() {
               </TouchableOpacity>
             </View>
           ) : null}
-          {skipOffer.kind === 'none' ? (
+          {skipOffer.kind === 'none' && !mutation.skipMessage ? (
             <Text testID="queue-status-skip-none" style={[styles.hint, { color: colors.mutedForegroundLight }]}>{QUEUE_SKIP_NONE}</Text>
           ) : null}
           {skipOffer.kind === 'already-used' ? (

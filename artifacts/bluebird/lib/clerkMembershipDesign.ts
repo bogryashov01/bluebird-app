@@ -98,7 +98,71 @@ export interface MembershipDashboardStat {
   label: string;
   value: string;
   available: boolean;
+  /** True while the backing request is still running. This is not a zero balance. */
+  pending: boolean;
   accessibilityLabel: string;
+}
+
+export type MembershipBalanceRead = 'loading' | 'unavailable' | number;
+
+export type MemberBenefitIcon = 'navigation' | 'list' | 'users' | 'check';
+
+export interface MemberBenefit {
+  id: string;
+  title: string;
+  description: string;
+  icon: MemberBenefitIcon;
+}
+
+const UNSUPPORTED_BENEFIT = /payment|purchase|checkout|upgrade|buy now|coming soon|ai concierge/i;
+
+/**
+ * Benefits shown to an active member. Core rows are features this app already
+ * provides. Extra rows are catalog features marked included for this plan.
+ * Payment, purchase, and AI Concierge copy is omitted.
+ */
+export function presentMemberBenefits(input: {
+  activeMember: boolean;
+  connectionsEnabled: boolean;
+  includedFeatureLabels?: readonly string[];
+}): MemberBenefit[] {
+  if (input.activeMember !== true) return [];
+  const benefits: MemberBenefit[] = [
+    {
+      id: 'discover',
+      title: 'Discover available flights',
+      description: 'Browse empty-leg flights that are open to members.',
+      icon: 'navigation',
+    },
+    {
+      id: 'queues',
+      title: 'Access flight queues',
+      description: 'Join the queue for a flight you want.',
+      icon: 'list',
+    },
+  ];
+  if (input.connectionsEnabled === true) {
+    benefits.push({
+      id: 'connect',
+      title: 'Connect with fellow members',
+      description: 'Send and accept connection requests.',
+      icon: 'users',
+    });
+  }
+  const seen = new Set(benefits.map((benefit) => benefit.title.toLowerCase()));
+  for (const label of input.includedFeatureLabels ?? []) {
+    const title = label.trim();
+    const key = title.toLowerCase();
+    if (!title || seen.has(key) || UNSUPPORTED_BENEFIT.test(title)) continue;
+    seen.add(key);
+    benefits.push({
+      id: `plan-${seen.size}`,
+      title,
+      description: 'Included with your plan.',
+      icon: 'check',
+    });
+  }
+  return benefits;
 }
 
 export interface MembershipUpgradeOffer {
@@ -128,7 +192,9 @@ const PLUS_UPGRADE_DESCRIPTION = 'Priority queue placement, international empty-
  * An active Base or Plus tier comes from the membership response. Payment
  * status is shown separately and does not hide that tier. A tier name on the
  * account projection is not that confirmation. Flight totals and savings are
- * not in a reliable account contract, so those stats stay unavailable.
+ * not implemented, so those cards are omitted. Skip the Line comes from
+ * upgradeCreditBalances.skipTheLine. Referral Balance comes from
+ * creditBalanceCents. A failed read stays unavailable and is not shown as zero.
  */
 /**
  * Fields the dashboard may use. A production membership response is adapted
@@ -170,12 +236,16 @@ export function presentMembershipDashboard(input: {
   membership: MembershipDashboardMembership | null;
   account?: AccountMembershipProjection;
   referralBalanceCents?: number | null;
+  /** Overrides the membership snapshot when the profile balance request has its own state. */
+  skipTheLineRead?: MembershipBalanceRead;
+  /** Overrides referralBalanceCents when the referrals request has its own state. */
+  referralBalanceRead?: MembershipBalanceRead;
 }): MembershipDashboard {
   if (input.signedIn !== true) {
     return {
       displayName: 'Name unavailable',
       tierBadge: 'Sign in required',
-      metrics: dashboardMetrics(null, null),
+      metrics: dashboardMetrics(null, { skipTheLine: 'unavailable', referralBalanceCents: 'unavailable' }),
       upgrade: null,
       statusNote: null,
       statusLine: null,
@@ -204,7 +274,7 @@ export function presentMembershipDashboard(input: {
     return {
       displayName: verifiedDisplayName(input.verifiedFirstName, input.verifiedLastName),
       tierBadge: MEMBERSHIP_STATUS_UNAVAILABLE,
-      metrics: dashboardMetrics(null, null),
+      metrics: dashboardMetrics(null, { skipTheLine: 'unavailable', referralBalanceCents: 'unavailable' }),
       upgrade: null,
       statusNote: MEMBERSHIP_CONFLICT_NOTE,
       statusLine: null,
@@ -223,7 +293,10 @@ export function presentMembershipDashboard(input: {
   return {
     displayName: verifiedDisplayName(input.verifiedFirstName, input.verifiedLastName),
     tierBadge,
-    metrics: dashboardMetrics(membership, input.referralBalanceCents),
+    metrics: dashboardMetrics(membership, {
+      skipTheLine: resolveBalanceRead(input.skipTheLineRead, membership?.skipTheLinePasses),
+      referralBalanceCents: resolveBalanceRead(input.referralBalanceRead, input.referralBalanceCents),
+    }),
     upgrade: confirmedTier === 'base' ? baseUpgradeOffer() : null,
     statusNote: snapshotTierLabel || membership?.isMember === false || accountTier === 'Not a member'
       ? null
@@ -313,33 +386,54 @@ function membershipStateNote(
   };
 }
 
+function resolveBalanceRead(
+  explicit: MembershipBalanceRead | undefined,
+  legacy: number | null | undefined,
+): MembershipBalanceRead {
+  if (explicit === 'loading' || explicit === 'unavailable') return explicit;
+  if (typeof explicit === 'number' && Number.isSafeInteger(explicit) && explicit >= 0) return explicit;
+  if (typeof legacy === 'number' && Number.isSafeInteger(legacy) && legacy >= 0) return legacy;
+  return 'unavailable';
+}
+
 function dashboardMetrics(
   membership: MembershipDashboardMembership | null,
-  referralBalanceCents: number | null | undefined,
+  balances: {
+    skipTheLine: MembershipBalanceRead;
+    referralBalanceCents: MembershipBalanceRead;
+  },
 ): MembershipDashboardStat[] {
-  // Approved 2x2 labels stay fixed: Flights Flown, Total Saved,
-  // Skip the Line Passes, Referral Balance. International pass balances are
-  // parsed for production use but are not shown until an approved UI slot exists.
-  const skipPresentation = presentPassBalance({
-    unlimited: membership?.skipTheLineUnlimited,
-    remaining: membership?.skipTheLinePasses,
-  });
-  const referralKnown = typeof referralBalanceCents === 'number' &&
-    Number.isSafeInteger(referralBalanceCents) &&
-    referralBalanceCents >= 0;
+  // Flights flown and total saved are not returned by the account API.
+  // International pass balances stay parsed and off this grid.
   return [
-    unavailableStat('Flights Flown'),
-    unavailableStat('Total Saved'),
-    passStat('Skip the Line Passes', 'Skip the Line passes', skipPresentation),
-    referralKnown
-      ? {
-          label: 'Referral Balance',
-          value: formatDashboardCents(referralBalanceCents),
-          available: true,
-          accessibilityLabel: `Referral balance, ${formatDashboardCents(referralBalanceCents)}`,
-        }
-      : unavailableStat('Referral Balance'),
+    skipStat(membership, balances.skipTheLine),
+    referralStat(balances.referralBalanceCents),
   ];
+}
+
+function skipStat(
+  membership: MembershipDashboardMembership | null,
+  read: MembershipBalanceRead,
+): MembershipDashboardStat {
+  if (read === 'loading') return pendingStat('Skip the Line Passes');
+  if (read === 'unavailable') return unavailableStat('Skip the Line Passes');
+  return passStat('Skip the Line Passes', 'Skip the Line passes', presentPassBalance({
+    unlimited: membership?.skipTheLineUnlimited,
+    remaining: read,
+  }));
+}
+
+function referralStat(read: MembershipBalanceRead): MembershipDashboardStat {
+  if (read === 'loading') return pendingStat('Referral Balance');
+  if (read === 'unavailable') return unavailableStat('Referral Balance');
+  const value = formatDashboardCents(read);
+  return {
+    label: 'Referral Balance',
+    value,
+    available: true,
+    pending: false,
+    accessibilityLabel: `Referral balance, ${value}`,
+  };
 }
 
 function passStat(
@@ -352,7 +446,18 @@ function passStat(
     label,
     value: formatPassBalanceValue(presentation),
     available: true,
+    pending: false,
     accessibilityLabel: passBalanceAccessibilityLabel(accessibilityNoun, presentation),
+  };
+}
+
+function pendingStat(label: string): MembershipDashboardStat {
+  return {
+    label,
+    value: '',
+    available: false,
+    pending: true,
+    accessibilityLabel: `${label} loading`,
   };
 }
 
@@ -361,6 +466,7 @@ function unavailableStat(label: string): MembershipDashboardStat {
     label,
     value: MEMBERSHIP_STAT_UNAVAILABLE,
     available: false,
+    pending: false,
     accessibilityLabel: `${label} unavailable`,
   };
 }

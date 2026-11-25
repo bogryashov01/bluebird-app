@@ -2,11 +2,13 @@ import type { ClerkMemberResolution } from './clerkMemberResolution';
 import type {
   BluebirdProfileLoadResult,
 } from './clerkBluebirdProfile';
-import type {
-  ProductionCurrentUser,
-  ProductionUserProfile,
-  UpdateProductionUserProfileRequest,
-  UserGender,
+import {
+  ProfilePhoneSyncError,
+  storedProfilePhone,
+  type ProductionCurrentUser,
+  type ProductionUserProfile,
+  type UpdateProductionUserProfileRequest,
+  type UserGender,
 } from './productionAuthApi';
 
 export interface ClerkProfileFormValues {
@@ -304,9 +306,17 @@ export function buildClerkProfileUpdateRequest(input: {
   if (canEditClerkRegistrationEmail(input.profile)) {
     data.email = input.values.email.trim();
   }
-  if (input.values.phoneE164 && input.profile.phoneCountry) {
-    data.phoneE164 = input.values.phoneE164;
-    data.phoneCountry = input.profile.phoneCountry;
+  const storedPhone = storedProfilePhone(input.profile);
+  const formPhone = input.values.phoneE164.trim();
+  if (storedPhone) {
+    data.phoneE164 = storedPhone.phoneE164;
+    if (storedPhone.phoneCountry) data.phoneCountry = storedPhone.phoneCountry;
+  } else if (/^\+[1-9]\d{7,14}$/.test(formPhone)) {
+    data.phoneE164 = formPhone;
+    const country = input.profile.phoneCountry?.trim() ?? '';
+    if (/^[A-Za-z]{2}$/.test(country)) data.phoneCountry = country.toUpperCase();
+  } else if (input.profile.phoneVerificationRequired) {
+    throw new ProfilePhoneSyncError();
   }
   if (input.values.weightLbs.trim()) {
     data.weightLbs = Number(input.values.weightLbs);

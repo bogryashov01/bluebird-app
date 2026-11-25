@@ -101,7 +101,7 @@ test("pending and confirmed Upcoming cards open flight details, and the checklis
     legId: 42,
     status: "queue_pending",
     awarded: false,
-  }), { pathname: "/flight/queue-status", params: { flightId: "42" } });
+  }), { pathname: "/flight/[id]", params: { id: "42" } });
   assert.deepEqual(tripLifecycleOpenTarget({
     list: "current",
     legId: 42,
@@ -118,6 +118,8 @@ test("pending and confirmed Upcoming cards open flight details, and the checklis
   const session = readFileSync(resolve(projectRoot, "lib/clerkAuthSession.ts"), "utf8");
   assert.match(trips, /router\.push\(detailsTarget\)/);
   assert.match(trips, /tripLifecycleOpenTarget/);
+  assert.doesNotMatch(trips, /pathname:\s*'\/flight\/queue-status'/);
+  assert.match(readFileSync(resolve(projectRoot, "app/flight/[id].tsx"), "utf8"), /View Queue Status/);
   assert.match(trips, /onOpenChecklist\(flightId\)/);
   assert.doesNotMatch(trips, /router\.replace\('\/\(tabs\)\/discover'\)|router\.replace\("\/\(tabs\)\/discover"\)/);
   assert.match(session, /isClerkWinnerPath/);

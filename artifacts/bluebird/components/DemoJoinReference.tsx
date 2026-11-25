@@ -273,7 +273,7 @@ export function DemoQueueJoinedScreen() {
       <View style={styles.joinedBody}>
         <QueueJoinSuccess
           flight={flight}
-          success={{ flightId: entry.flightId, position: entry.position, participantCount: entry.participantCount }}
+          success={{ flightId: entry.flightId, position: entry.position, participantCount: entry.participantCount, lineSkipApplied: false }}
           flightStatusLabel="Open"
           demoNotice="DEMO — No real queue entry created. Position is simulated."
         />

@@ -58,6 +58,8 @@ export interface MessageConversation {
   updatedAt: string;
   latestMessage: MemberMessage | null;
   unreadCount: number;
+  /** Present only when the conversation payload included the other member's imageUrl. */
+  imageUrl?: string | null;
 }
 
 export interface MessageHistoryPage {
@@ -445,6 +447,7 @@ export function parseMessageConversation(value: unknown, field: string): Message
   if (!USER_ID.test(participantUserId)) schemaFailure(`${field}.participantUserId`);
   if (!Object.prototype.hasOwnProperty.call(raw, 'latestMessage')) schemaFailure(`${field}.latestMessage`);
   const id = positiveId(raw.id, `${field}.id`);
+  const imageUrl = optionalConversationImageUrl(raw);
   return {
     id,
     participantUserId,
@@ -454,7 +457,23 @@ export function parseMessageConversation(value: unknown, field: string): Message
       ? null
       : parseMemberMessage(raw.latestMessage, `${field}.latestMessage`, id),
     unreadCount: nonNegativeInteger(raw.unreadCount, `${field}.unreadCount`),
+    ...(imageUrl !== undefined ? { imageUrl } : {}),
   };
+}
+
+function optionalConversationImageUrl(raw: Record<string, unknown>): string | null | undefined {
+  if (!Object.prototype.hasOwnProperty.call(raw, 'imageUrl')) return undefined;
+  const value = raw.imageUrl;
+  if (value == null || typeof value !== 'string') return null;
+  const text = value.trim();
+  if (!text || text.length > 2000) return null;
+  try {
+    const url = new URL(text);
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    return text;
+  } catch {
+    return null;
+  }
 }
 
 export function parseMessageConversationResponse(value: unknown): { conversation: MessageConversation } {

@@ -36,10 +36,12 @@ function ConversationListSkeleton({ colors }: { colors: ReturnType<typeof useCol
 
 export function MemberConversationList({
   names,
+  images,
   active,
   bottomInset = 24,
 }: {
   names: ReadonlyMap<string, string>;
+  images?: ReadonlyMap<string, string>;
   active: boolean;
   bottomInset?: number;
 }) {
@@ -147,7 +149,10 @@ export function MemberConversationList({
             })}
             style={[styles.row, { borderBottomColor: colors.separator }]}
           >
-            <MemberInitialsAvatar name={title} />
+            <MemberInitialsAvatar
+              name={title}
+              imageUrl={conversation.imageUrl ?? images?.get(conversation.participantUserId) ?? null}
+            />
             <View style={styles.rowCopy}>
               <View style={styles.titleLine}>
                 <Text style={[styles.name, { color: colors.textOnSurface }]} numberOfLines={1}>{title}</Text>

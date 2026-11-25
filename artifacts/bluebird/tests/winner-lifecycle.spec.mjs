@@ -32,7 +32,7 @@ function offer(overrides = {}) {
   });
 }
 
-test("1 join queue → Pending trip opens queue status, never winner confirmation", () => {
+test("1 join queue → Pending trip opens flight details, never winner confirmation", () => {
   assert.equal(presentTripChecklistStatus({
     list: "current",
     awarded: false,
@@ -44,7 +44,7 @@ test("1 join queue → Pending trip opens queue status, never winner confirmatio
     legId: 81,
     status: "queue_pending",
     awarded: false,
-  }), { pathname: "/flight/queue-status", params: { flightId: "81" } });
+  }), { pathname: "/flight/[id]", params: { id: "81" } });
   assert.equal(winnerReviewTarget({
     list: "current",
     awarded: false,

@@ -78,6 +78,8 @@ export interface QueueJoinSuccessModel {
   flightId: number;
   position: number;
   participantCount: number;
+  /** True only when this flight's queue response says a Skip the Line pass was applied. */
+  lineSkipApplied: boolean;
 }
 
 const DISPLAY_TEXT_LIMIT = 80;
@@ -255,6 +257,7 @@ export function queueJoinSuccessModel(
       flightId: validated.emptyLegId,
       position: validated.position,
       participantCount: validated.queueCount,
+      lineSkipApplied: validated.userHasLineSkip === true,
     };
   } catch {
     return null;
@@ -617,7 +620,8 @@ export const QUEUE_LEAVE_UNCONFIRMED = 'Bluebird did not confirm that you left t
 export const QUEUE_LEFT_CONFIRMED = 'Bluebird confirmed that you left this queue.';
 export const QUEUE_SKIP_UNAVAILABLE = 'Skip the Line is unavailable right now.';
 export const QUEUE_SKIP_NONE = 'No Skip the Line passes are available.';
-export const QUEUE_SKIP_ALREADY_USED = 'A Skip the Line pass is already applied to this flight.';
+export const QUEUE_LINE_SKIPPED = 'You skipped the line';
+export const QUEUE_SKIP_ALREADY_USED = QUEUE_LINE_SKIPPED;
 export const QUEUE_SKIP_WINNER = 'Skip the Line is not offered again for this flight.';
 export const QUEUE_SKIP_CONFIRMED =
   'Skip the Line confirmed. Your place in line was updated. Your seat isn’t confirmed yet.';
@@ -647,10 +651,36 @@ export type QueueSkipLineOffer =
   | { kind: 'ready'; count: number };
 
 /**
- * A pass is offered only to a member who is already in the queue, has a known
- * remaining credit, and has not already applied a Skip the Line pass.
- * Position #1 alone is not treated as a confirmed winner.
+ * A normal join never claims a pass was used. Queue position is not evidence.
+ * A zero balance hides the pass action. A pass already applied to this flight
+ * still shows the confirmation after the balance reaches zero.
+ *
+ * Queue Status offers a pass only to a member already in the queue, with a
+ * known remaining credit, who has not already applied a pass to this flight.
  */
+export function presentJoinedLineSkip(input: {
+  userHasLineSkip: boolean | null;
+  balance: 'loading' | 'unavailable' | { count: number };
+  mutationsEnabled: boolean;
+}): { appliedMessage: string | null; offerPass: boolean; noneMessage: string | null } {
+  if (input.userHasLineSkip === true) {
+    return { appliedMessage: QUEUE_LINE_SKIPPED, offerPass: false, noneMessage: null };
+  }
+  if (input.userHasLineSkip !== false || input.mutationsEnabled !== true) {
+    return { appliedMessage: null, offerPass: false, noneMessage: null };
+  }
+  if (input.balance === 'loading') {
+    return { appliedMessage: null, offerPass: false, noneMessage: null };
+  }
+  if (input.balance === 'unavailable' || !('count' in input.balance)) {
+    return { appliedMessage: null, offerPass: false, noneMessage: QUEUE_SKIP_BALANCE_UNAVAILABLE };
+  }
+  if (!Number.isSafeInteger(input.balance.count) || input.balance.count < 1) {
+    return { appliedMessage: null, offerPass: false, noneMessage: QUEUE_SKIP_NONE };
+  }
+  return { appliedMessage: null, offerPass: true, noneMessage: null };
+}
+
 export function presentQueueSkipLineOffer(input: {
   inQueue: boolean;
   mutationsEnabled: boolean;

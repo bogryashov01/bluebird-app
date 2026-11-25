@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import {
   ActivityIndicator,
+  Image,
   Platform,
   ScrollView,
   StyleSheet,
@@ -9,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
@@ -21,11 +23,11 @@ import {
 } from '@/lib/mainBluebirdApi';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import type { ProductionTrip, ProductionTrips } from '@/lib/productionAuthApi';
-import { presentTripDeparture } from '@/lib/productionFlights';
+import { getFlightImagePresentation, presentTripDeparture, type FlightView } from '@/lib/productionFlights';
 import { useDemoJoinFlow } from '@/lib/demoJoinFlowStore';
 import { separateDemoTrip } from '@/lib/demoJoinFlow';
 import { MyQueuesPanel } from '@/components/MyQueuesPanel';
-import { awardedCurrentFlightIds, memberQueueFlightId } from '@/lib/myQueuesPresentation';
+import { awardedCurrentFlightIds, memberQueueFlightId, memberQueuePosition } from '@/lib/myQueuesPresentation';
 import { checklistFullyComplete, currentTripChecklistTarget, presentTripChecklistStatus, resolveCurrentTripChecklistNavigation } from '@/lib/winnerChecklist';
 import { canonicalTripFlightId, declinedCurrentFlightIds, tripLifecycleOpenTarget, upcomingOwnedFlightIds } from '@/lib/memberFlightPlacement';
 import { queueRosterQueryPrefix, queueViewerListQueryKey, useMyQueues } from '@/lib/useMyQueues';
@@ -39,17 +41,23 @@ function formatDeparture(value: string): string {
 function ClerkTripCard({
   trip,
   list,
+  flight,
   colors,
   onOpenChecklist,
 }: {
   trip: ProductionTrip;
   list: 'current' | 'past';
+  flight: FlightView | null;
   colors: ReturnType<typeof useColors>;
   onOpenChecklist: (legId: number) => void;
 }) {
   const { leg } = trip;
   const origin = leg.originCity || leg.originAirport || 'Origin unavailable';
   const destination = leg.destinationCity || leg.destinationAirport || 'Destination unavailable';
+  const originAirport = flight?.fromAirport || leg.originAirport;
+  const destinationAirport = flight?.toAirport || leg.destinationAirport;
+  const route = originAirport && destinationAirport ? `${originAirport} → ${destinationAirport}` : `${origin} → ${destination}`;
+  const aircraft = flight?.aircraftTypeName?.trim() || flight?.aircraftType?.trim() || leg.aircraftType?.trim() || null;
   const status = presentTripChecklistStatus({
     list,
     awarded: trip.checklist.awarded,
@@ -71,13 +79,58 @@ function ClerkTripCard({
     legId: flightId ?? leg.id,
   });
   const checklistComplete = list === 'current' && checklistFullyComplete(trip.checklist);
-  const openLabel = status === 'Pending'
-    ? 'Open queue'
-    : status === 'Winner confirmation required'
-      ? 'Review winner offer'
-      : 'Review flight';
-  const body = (
+  const queuePosition = flight && status === 'Pending' ? memberQueuePosition(flight) : null;
+  const imageUrl = flight && getFlightImagePresentation(flight) === 'provided' ? flight.imageUrl : null;
+  const upcoming = list === 'current';
+  const body = upcoming ? (
     <>
+      <View style={[styles.hero, { backgroundColor: colors.muted }]}>
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="" />
+        ) : (
+          <View style={styles.heroFallback}>
+            <Feather name="image" size={22} color={colors.mutedForeground} />
+          </View>
+        )}
+        <View style={[styles.routeBadge, { backgroundColor: imageUrl ? 'rgba(255,255,255,0.18)' : colors.surface, borderColor: imageUrl ? 'rgba(255,255,255,0.30)' : colors.border }]}>
+          <Text testID="clerk-trip-route" style={[styles.routeBadgeText, { color: imageUrl ? '#FFFFFF' : colors.textOnSurface }]} numberOfLines={1}>
+            {route}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.upcomingBody}>
+        {aircraft ? (
+          <Text testID="clerk-trip-aircraft" style={[styles.aircraft, { color: colors.textOnSurface }]} numberOfLines={1}>{aircraft}</Text>
+        ) : null}
+        <Text style={[styles.meta, { color: colors.mutedForeground }]} numberOfLines={2}>
+          {formatDeparture(leg.departureTime)}
+        </Text>
+        <Text testID="clerk-trip-status" style={[styles.status, { color: colors.textOnSurface }]}>{status}</Text>
+        {queuePosition !== null ? (
+          <Text testID="clerk-trip-position" style={[styles.meta, { color: colors.mutedForeground }]}>
+            {`Queue position #${queuePosition}`}
+          </Text>
+        ) : null}
+        {checklistTarget && flightId !== null && !checklistComplete ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Flight checklist"
+            testID="clerk-trip-checklist-link"
+            onPress={() => onOpenChecklist(flightId)}
+          >
+            <Text testID="clerk-trip-checklist-label" style={[styles.meta, { color: colors.primary }]}>
+              Flight checklist
+            </Text>
+          </TouchableOpacity>
+        ) : !detailsTarget && !checklistTarget ? (
+          <Text testID="clerk-trip-unavailable" style={[styles.meta, { color: colors.mutedForeground }]}>
+            Flight details are not available yet.
+          </Text>
+        ) : null}
+      </View>
+    </>
+  ) : (
+    <View style={styles.pastBody}>
       <View style={[styles.badge, { backgroundColor: colors.primary }]}>
         <Text style={[styles.badgeText, { color: colors.primaryForeground }]}>TRIP</Text>
       </View>
@@ -86,27 +139,7 @@ function ClerkTripCard({
       <Text style={[styles.meta, { color: colors.mutedForeground }]} numberOfLines={2}>
         {[leg.aircraftType, formatDeparture(leg.departureTime)].filter(Boolean).join(' · ')}
       </Text>
-      {checklistTarget && flightId !== null && !checklistComplete ? (
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Flight checklist"
-          testID="clerk-trip-checklist-link"
-          onPress={() => onOpenChecklist(flightId)}
-        >
-          <Text testID="clerk-trip-checklist-label" style={[styles.meta, { color: colors.primary }]}>
-            Flight checklist
-          </Text>
-        </TouchableOpacity>
-      ) : detailsTarget && !checklistTarget ? (
-        <Text testID="clerk-trip-confirm-label" style={[styles.meta, { color: colors.primary }]}>
-          {openLabel}
-        </Text>
-      ) : !detailsTarget && !checklistTarget ? (
-        <Text testID="clerk-trip-unavailable" style={[styles.meta, { color: colors.mutedForeground }]}>
-          Flight details are not available yet.
-        </Text>
-      ) : null}
-    </>
+    </View>
   );
   if (!detailsTarget && !checklistTarget) {
     return (
@@ -349,15 +382,20 @@ export function ClerkTrips() {
         showsVerticalScrollIndicator={false}
         testID={`clerk-trips-list-${activeList}`}
       >
-        {(visibleItems ?? []).map((trip) => (
-          <ClerkTripCard
-            key={trip.leg.id}
-            trip={trip}
-            list={activeList === 'past' ? 'past' : 'current'}
-            colors={colors}
-            onOpenChecklist={openChecklist}
-          />
-        ))}
+        {(visibleItems ?? []).map((trip) => {
+          const id = canonicalTripFlightId(trip);
+          const flight = id === null ? null : queues.rows.find((row) => memberQueueFlightId(row.id) === id) ?? null;
+          return (
+            <ClerkTripCard
+              key={trip.leg.id}
+              trip={trip}
+              list={activeList === 'past' ? 'past' : 'current'}
+              flight={flight}
+              colors={colors}
+              onOpenChecklist={openChecklist}
+            />
+          );
+        })}
       </ScrollView>
     );
   }
@@ -397,6 +435,7 @@ export function ClerkTrips() {
       {demoTrip && activeList === 'current' ? (
         <View testID="demo-trip-section" style={styles.demoSection}>
           <View style={[styles.tripCard, { backgroundColor: colors.card }]} testID="demo-trip-card">
+            <View style={styles.pastBody}>
             <View style={[styles.badge, { backgroundColor: colors.primary }]}>
               <Text style={[styles.badgeText, { color: colors.primaryForeground }]}>DEMO</Text>
             </View>
@@ -407,6 +446,7 @@ export function ClerkTrips() {
             {!!demoTrip.detailLabel && (
               <Text style={[styles.meta, { color: colors.mutedForeground }]}>{demoTrip.detailLabel}</Text>
             )}
+            </View>
           </View>
         </View>
       ) : null}
@@ -472,7 +512,15 @@ const styles = StyleSheet.create({
   queuesHidden: { display: 'none' },
   list: { gap: 14, paddingHorizontal: 20 },
   demoSection: { paddingHorizontal: 20, paddingBottom: 4 },
-  tripCard: { borderRadius: 20, padding: 18, gap: 8 },
+  tripCard: { borderRadius: 22, overflow: 'hidden' },
+  pastBody: { padding: 18, gap: 8 },
+  hero: { height: 148, position: 'relative', justifyContent: 'flex-end' },
+  heroFallback: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
+  routeBadge: { position: 'absolute', left: 14, bottom: 12, borderRadius: 999, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5, maxWidth: '86%' },
+  routeBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  upcomingBody: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16, gap: 4 },
+  aircraft: { fontFamily: 'Inter_700Bold', fontSize: 20, letterSpacing: -0.2 },
+  status: { fontFamily: 'Inter_600SemiBold', fontSize: 15, marginTop: 4 },
   badge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
   badgeText: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 0.5 },
   route: { fontFamily: 'Inter_700Bold', fontSize: 18 },

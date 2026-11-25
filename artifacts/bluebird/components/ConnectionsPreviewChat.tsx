@@ -12,12 +12,12 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MemberAvatar } from '@/components/MemberAvatar';
 import { useColors } from '@/hooks/useColors';
 import {
   DEMO_CONVERSATION_NOTICE,
   MESSAGE_CHARACTER_LIMIT,
   formatPreviewTimestamp,
-  memberInitials,
 } from '@/lib/connectionsPreview';
 import { useConnectionsPreview } from '@/lib/useConnectionsPreview';
 
@@ -50,9 +50,7 @@ export function ConnectionsPreviewChat({ conversationId }: { conversationId: str
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back" testID="connections-preview-back" onPress={() => router.back()} style={styles.back}>
           <Feather name="chevron-left" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <View style={[styles.avatar, { backgroundColor: colors.secondary }]}>
-          <Text style={[styles.avatarText, { color: colors.primary }]}>{memberInitials(conversation?.member.displayName ?? '')}</Text>
-        </View>
+        <MemberAvatar size={40} accessibilityLabel={conversation?.member.displayName ?? 'Member'} />
         <View style={styles.headerCopy}>
           <Text style={[styles.name, { color: colors.textOnSurface }]} numberOfLines={1}>
             {conversation?.member.displayName ?? 'Conversation'}

@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  ActivityIndicator, View, Text, Image, StyleSheet, ScrollView, TouchableOpacity,
+  ActivityIndicator, View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Platform, Modal, Pressable, Switch,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -18,12 +18,13 @@ import { useTheme, type ThemePreference } from '@/context/ThemeContext';
 import { isLocalFlightReadMode } from '@/lib/productionFlights';
 import { ProductionAuthenticatedUnavailableNotice } from '@/components/ProductionAuthenticatedUnavailableNotice';
 import { BluebirdLogo } from '@/components/BluebirdLogo';
+import { MemberAvatar } from '@/components/MemberAvatar';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
 import { createMainBluebirdApiIntegration } from '@/lib/mainBluebirdApi';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import { getClerkBluebirdProfileEffectDependencies, isClerkBluebirdProfileResultCurrent } from '@/lib/clerkBluebirdProfile';
 import { loadClerkPersonalInfo } from '@/lib/clerkPersonalInfo';
-import type { ProductionUserProfile } from '@/lib/productionAuthApi';
+import { ProfilePhoneSyncError, type ProductionUserProfile } from '@/lib/productionAuthApi';
 import { getFullAppDemoProfile } from '@/lib/fullAppDemo';
 import { presentClerkMembershipDesign } from '@/lib/clerkMembershipDesign';
 import { isMemberConnectionsIntegrationEnabled } from '@/lib/memberConnections';
@@ -364,7 +365,7 @@ export default function ProfileScreen() {
           saveGeneration !== incomingPreferenceSaveGeneration.current
         ) return;
         setIncomingPreference(null);
-        setIncomingPreferenceError(error instanceof IncomingConnectionPreferenceError
+        setIncomingPreferenceError(error instanceof IncomingConnectionPreferenceError || error instanceof ProfilePhoneSyncError
           ? error.message
           : 'Couldn’t save this preference. Try again.');
       } finally {
@@ -396,13 +397,13 @@ export default function ProfileScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.avatarRow}>
-            <View style={[styles.avatar, { backgroundColor: colors.backgroundMid }]}>
-              <Text style={[styles.avatarText, { color: colors.textOnBrand }]}>
-                {fullName
-                  ? fullName.split(/\s+/).map((part) => part[0]).join('').toUpperCase().slice(0, 2)
-                  : '—'}
-              </Text>
-            </View>
+            <MemberAvatar
+              imageUrl={visibleProfileState.kind === 'loaded' || visibleProfileState.kind === 'refreshing'
+                ? clerkSession?.imageUrl
+                : null}
+              size={64}
+              accessibilityLabel="Your profile photo"
+            />
             <View style={styles.identityCopy}>
               <Text style={[styles.name, { color: colors.textOnSurface }]} numberOfLines={2}>
                 {fullName || 'Name unavailable'}
@@ -542,7 +543,6 @@ export default function ProfileScreen() {
 
   const demoProfile = demoMode ? getFullAppDemoProfile() : null;
   const displayName = (user?.name ?? [demoProfile?.firstName, demoProfile?.lastName].filter(Boolean).join(' ')) || 'Member';
-  const initials    = displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?';
   const accountPhotoUrl = resolvePhotoUrl(user?.photoUrl);
   const tierLabel   = {
     none:      'Not a member yet',
@@ -584,11 +584,7 @@ export default function ProfileScreen() {
         ) : null}
         {/* ── Avatar + name ── */}
         <View style={styles.avatarRow}>
-          {accountPhotoUrl
-            ? <Image source={{ uri: accountPhotoUrl }} style={styles.avatar} accessibilityLabel="Profile photo" />
-            : <View style={[styles.avatar, { backgroundColor: colors.backgroundMid }]}>
-              <Text style={[styles.avatarText, { color: colors.textOnBrand }]}>{initials}</Text>
-            </View>}
+          <MemberAvatar imageUrl={accountPhotoUrl} size={64} accessibilityLabel="Your profile photo" />
           <View>
             <Text style={[styles.name, { color: colors.textOnSurface }]}>{displayName}</Text>
             <Text style={[styles.memberSince, { color: colors.mutedForegroundLight }]}>

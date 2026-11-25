@@ -315,6 +315,19 @@ export function blockedMembersAfterUnblock<T extends { id: number }>(
   return blocks.filter((block) => block.id !== blockId);
 }
 
+/**
+ * A connection is blocked by the current member only when the block list names
+ * that member. Missing target ids and another member's block are not a match.
+ */
+export function outgoingBlockForMember(
+  blocks: readonly BlockedMember[],
+  userId: string | null | undefined,
+): BlockedMember | null {
+  const id = userId?.trim() ?? '';
+  if (!USER_ID.test(id)) return null;
+  return blocks.find((block) => block.targetUserId === id) ?? null;
+}
+
 function schemaFailure(field: string): never {
   throw new TypeError(field);
 }

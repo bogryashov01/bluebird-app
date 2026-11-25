@@ -1,9 +1,10 @@
 import { isNativeProductionAuthTestEnabled } from './nativeAuthTestPolicy';
-import type {
-  NotificationChannel,
-  ProductionNotificationPrefs,
-  ProductionUserProfile,
-  UpdateProductionUserProfileRequest,
+import {
+  withStoredProfilePhone,
+  type NotificationChannel,
+  type ProductionNotificationPrefs,
+  type ProductionUserProfile,
+  type UpdateProductionUserProfileRequest,
 } from './productionAuthApi';
 
 export interface ClerkNotificationProfileSession {
@@ -151,16 +152,26 @@ export function buildHomeAirportProfileUpdate(
   return buildClerkProfileSettingsUpdate(profile, { homeAirportCode }, now);
 }
 
+export function buildFavoriteCitiesProfileUpdate(
+  profile: ProductionUserProfile,
+  favoriteCityKeys: readonly string[],
+  now = new Date(),
+): UpdateProductionUserProfileRequest | null {
+  return buildClerkProfileSettingsUpdate(profile, { favoriteCityKeys }, now);
+}
+
 export function buildClerkProfileSettingsUpdate(
   profile: ProductionUserProfile,
   changes: {
     homeAirportCode?: string;
+    favoriteCityKeys?: readonly string[];
     notificationPrefs?: ProductionNotificationPrefs;
   },
   now = new Date(),
 ): UpdateProductionUserProfileRequest | null {
   const { firstName, lastName, dob, gender, homeAirportCode, favoriteCityKeys, email } = profile;
   const nextHomeAirportCode = changes.homeAirportCode ?? homeAirportCode;
+  const nextFavoriteCityKeys = changes.favoriteCityKeys ?? favoriteCityKeys;
   const nextNotificationPrefs = changes.notificationPrefs ?? profile.notificationPrefs;
   const birth = dob ? new Date(`${dob}T00:00:00.000Z`) : null;
   const adultCutoff = new Date(Date.UTC(now.getUTCFullYear() - 18, now.getUTCMonth(), now.getUTCDate()));
@@ -172,8 +183,8 @@ export function buildClerkProfileSettingsUpdate(
     !birth || Number.isNaN(birth.valueOf()) || birth.toISOString().slice(0, 10) !== dob || birth > adultCutoff ||
     (gender !== 'male' && gender !== 'female') ||
     !nextHomeAirportCode || !/^[A-Z0-9]{3,4}$/.test(nextHomeAirportCode) ||
-    !Array.isArray(favoriteCityKeys) || !favoriteCityKeys.length ||
-    favoriteCityKeys.some((key) => !key.trim() || key.length > 64) ||
+    !Array.isArray(nextFavoriteCityKeys) || !nextFavoriteCityKeys.length ||
+    nextFavoriteCityKeys.some((key) => !key.trim() || key.length > 64) ||
     !email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
     (profile.weightLbs !== null && (!Number.isSafeInteger(profile.weightLbs) || profile.weightLbs < 1 || profile.weightLbs > 1500))
   ) return null;
@@ -189,17 +200,17 @@ export function buildClerkProfileSettingsUpdate(
     channels.some((value) => value !== null && !['email', 'sms', 'both'].includes(value)) ||
     nextNotificationPrefs.queueUpdates == null || nextNotificationPrefs.winningNotifications == null ||
     (channels.some((value) => value === 'sms' || value === 'both') &&
-      (!profile.smsConsent || !profile.phoneE164 || !profile.phoneVerifiedAt || profile.phoneVerificationRequired))
+      (!profile.smsConsent || !profile.phoneE164 || !profile.phoneVerifiedAt))
   ) return null;
-  return {
+  return withStoredProfilePhone({
     firstName, lastName, dob, gender, homeAirportCode: nextHomeAirportCode,
-    favoriteCityKeys: [...favoriteCityKeys],
+    favoriteCityKeys: [...nextFavoriteCityKeys],
     notificationPrefs: { ...nextNotificationPrefs },
     ...(!profile.emailLocked ? { email } : {}),
     weightLbs: profile.weightLbs,
-    // Omitted phone and consent fields preserve server-owned verification and
-    // existing consent. Selecting SMS never grants consent.
-  };
+    // Consent stays omitted so selecting SMS never grants it. The stored phone
+    // is copied because this endpoint replaces the whole profile.
+  }, profile);
 }
 
 export function notificationPreferenceRows(prefs: ProductionNotificationPrefs) {
@@ -276,10 +287,38 @@ export async function saveClerkHomeAirport(input: Parameters<typeof readClerkNot
   return refreshed;
 }
 
+export async function saveClerkFavoriteCities(input: Parameters<typeof readClerkNotificationProfile>[0] & {
+  favoriteCityKeys: readonly string[];
+  updateProfile: (data: UpdateProductionUserProfileRequest, options?: { signal?: AbortSignal }) => Promise<unknown>;
+}): Promise<ProductionUserProfile> {
+  const profile = await readClerkNotificationProfile(input);
+  const data = buildFavoriteCitiesProfileUpdate(profile, input.favoriteCityKeys);
+  if (!data) throw new Error('Preferred cities are read-only because a safe complete profile update is unavailable.');
+  const session = input.getCurrentSession();
+  if (input.signal?.aborted || !session?.isLoaded || !session.isSignedIn || session.userId !== input.requestedClerkUserId) {
+    throw new Error('The signed-in account changed before preferred cities could be saved.');
+  }
+  await input.updateProfile(data, { signal: input.signal });
+  const refreshed = await readClerkNotificationProfile(input);
+  const sameCities = (left: readonly string[], right: readonly string[]) => {
+    const sortedLeft = [...left].sort();
+    const sortedRight = [...right].sort();
+    return sortedLeft.length === sortedRight.length &&
+      sortedLeft.every((value, index) => value === sortedRight[index]);
+  };
+  if (
+    !sameCities(refreshed.favoriteCityKeys, input.favoriteCityKeys) ||
+    !areProfileSettingsPreserved(profile, refreshed, 'favoriteCityKeys')
+  ) {
+    throw new Error('The refreshed profile did not confirm the selected cities and preserved account settings.');
+  }
+  return refreshed;
+}
+
 function areProfileSettingsPreserved(
   before: ProductionUserProfile,
   after: ProductionUserProfile,
-  changing: 'notificationPrefs' | 'homeAirportCode',
+  changing: 'notificationPrefs' | 'homeAirportCode' | 'favoriteCityKeys',
 ): boolean {
   const sameStringSet = (left: string[], right: string[]) => {
     const sortedLeft = [...left].sort();
@@ -293,7 +332,7 @@ function areProfileSettingsPreserved(
     after.dob === before.dob &&
     after.gender === before.gender &&
     (changing === 'homeAirportCode' || after.homeAirportCode === before.homeAirportCode) &&
-    sameStringSet(after.favoriteCityKeys, before.favoriteCityKeys) &&
+    (changing === 'favoriteCityKeys' || sameStringSet(after.favoriteCityKeys, before.favoriteCityKeys)) &&
     sameStringSet(after.favoriteAirportCodes, before.favoriteAirportCodes) &&
     (changing === 'notificationPrefs' || areNotificationPreferencesEqual(after.notificationPrefs, before.notificationPrefs)) &&
     after.smsConsent === before.smsConsent &&

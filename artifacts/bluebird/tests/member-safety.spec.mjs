@@ -12,6 +12,7 @@ import {
   memberReportRequestBody,
   blockedMemberDisplayName,
   blockedMembersAfterUnblock,
+  outgoingBlockForMember,
   parseMemberBlockList,
   presentBlockedMemberUnblockConfirmation,
   presentBlockedMembersEmpty,
@@ -238,6 +239,18 @@ test('blocked member parsing keeps profile fields and the previous id-only shape
   assert.equal(blockedMemberDisplayName(parsed.blocks[2]), 'Unavailable member');
   assert.equal(blockedMemberDisplayName(parsed.blocks[1]).includes('user_'), false);
   assert.equal(presentBlockedMembersEmpty().includes('not blocked'), true);
+  assert.equal(outgoingBlockForMember(parsed.blocks, 'user_123')?.id, 42);
+  assert.equal(outgoingBlockForMember(parsed.blocks, 'user_456')?.id, 18);
+  assert.equal(outgoingBlockForMember(parsed.blocks, 'user_789'), null);
+  assert.equal(outgoingBlockForMember(parsed.blocks, 'Alex'), null);
+  assert.equal(outgoingBlockForMember([{
+    id: 9,
+    createdAt,
+    targetUserId: null,
+    firstName: 'Alex',
+    lastName: 'Morgan',
+    imageUrl: null,
+  }], 'user_123'), null);
 });
 
 test('the block list request accepts the extended response and unblock failures stay listed', async () => {
@@ -330,18 +343,31 @@ test('safety screens confirm a block, cancel it, and refuse a second submit whil
   const connections = readFileSync(resolve(projectRoot, 'components/MemberConnectionsScreen.tsx'), 'utf8');
   const thread = readFileSync(resolve(projectRoot, 'components/MemberMessageThread.tsx'), 'utf8');
   const blocked = readFileSync(resolve(projectRoot, 'app/account/blocked-members.tsx'), 'utf8');
+  const unblockConfirm = readFileSync(resolve(projectRoot, 'components/MemberUnblockConfirm.tsx'), 'utf8');
   const profileSettings = readFileSync(resolve(projectRoot, 'app/(tabs)/profile/index.tsx'), 'utf8');
   const session = readFileSync(resolve(projectRoot, 'lib/clerkAuthSession.ts'), 'utf8');
   const connectionsHook = readFileSync(resolve(projectRoot, 'lib/useMemberConnections.ts'), 'utf8');
   const messagesHook = readFileSync(resolve(projectRoot, 'lib/useMemberMessages.ts'), 'utf8');
+  assert.match(dialog, /keyboardWillShow/);
+  assert.match(dialog, /keyboardDismissMode/);
+  assert.match(dialog, /keyboardShouldPersistTaps="handled"/);
+  assert.match(dialog, /member-report-submit/);
+  assert.match(dialog, /Report message/);
   assert.match(dialog, /member-block-confirm/);
   assert.match(dialog, /member-safety-cancel/);
   assert.match(dialog, /pendingRef\.current/);
   assert.match(dialog, /if \(!targetUserId \|\| pendingRef\.current \|\| done\) return/);
   assert.match(connections, /member-connections-report/);
   assert.match(connections, /member-connections-block/);
+  assert.match(connections, /member-connections-unblock/);
+  assert.match(connections, /outgoingBlockForMember/);
+  assert.match(connections, /blockedByCurrentMember\) return null/);
+  assert.match(connections, /Unblock member/);
   assert.match(connections, /openMemberSafety\('report', userId\)/);
   assert.match(connections, /openMemberSafety\('block', userId\)/);
+  assert.match(connections, /MemberUnblockConfirm/);
+  assert.match(profile, /tone === 'blocked'/);
+  assert.match(profile, /colors\.destructive/);
   assert.match(connections, /onDismiss=\{applyMemberSafetyHandoff\}/);
   assert.match(profile, /onDismiss=\{onDismiss\}/);
   assert.doesNotMatch(connections, /onPress: \(\) => setSafety/);
@@ -356,8 +382,10 @@ test('safety screens confirm a block, cancel it, and refuse a second submit whil
   assert.match(connectionsHook, /listIncoming/);
   assert.match(messagesHook, /subscribeMemberSafetyRefresh/);
   assert.match(messagesHook, /connection_required/);
-  assert.match(blocked, /blocked-member-confirm-cancel/);
-  assert.match(blocked, /blocked-member-confirm-submit/);
+  assert.match(blocked, /MemberUnblockConfirm/);
+  assert.match(unblockConfirm, /blocked-member-confirm-cancel/);
+  assert.match(unblockConfirm, /blocked-member-confirm-submit/);
+  assert.match(unblockConfirm, /presentBlockedMemberUnblockConfirmation/);
   assert.match(blocked, /if \(confirmId === null \|\| pendingRef\.current !== null\) return/);
   assert.match(blocked, /publishMemberSafetyRefresh\(\)/);
   assert.match(blocked, /blockedMembersAfterUnblock/);
@@ -367,5 +395,5 @@ test('safety screens confirm a block, cancel it, and refuse a second submit whil
   assert.match(session, /blocked-members/);
   assert.doesNotMatch(connections, /Blocked Members/);
   assert.doesNotMatch(thread, /Blocked Members/);
-  assert.doesNotMatch(`${connections}\n${thread}\n${dialog}`, /who blocked/i);
+  assert.doesNotMatch(`${connections}\n${thread}\n${dialog}\n${unblockConfirm}`, /who blocked/i);
 });

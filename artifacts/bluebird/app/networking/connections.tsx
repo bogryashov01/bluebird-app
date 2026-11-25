@@ -2,6 +2,7 @@ import React from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { useListNetworkingConnections } from '@workspace/api-client-react';
+import { MemberAvatar } from '@/components/MemberAvatar';
 import { useColors } from '@/hooks/useColors';
 
 export default function NetworkingConnectionsScreen() {
@@ -17,7 +18,7 @@ export default function NetworkingConnectionsScreen() {
       ListEmptyComponent={<View style={styles.center}><Text style={[styles.title, { color: colors.textOnSurface }]}>No connections yet</Text><Text style={[styles.body, { color: colors.mutedForegroundLight }]}>Accepted introductions will become conversations here.</Text></View>}
       renderItem={({ item }) => (
         <TouchableOpacity style={[styles.card, { backgroundColor: colors.surface }]} onPress={() => router.push({ pathname: '/networking/connections/[id]' as any, params: { id: item.id, name: item.member.firstName } })} activeOpacity={0.75}>
-          <View style={[styles.avatar, { backgroundColor: colors.primary + '18' }]}><Text style={[styles.avatarText, { color: colors.primary }]}>{item.member.firstName?.[0] ?? '?'}</Text></View>
+          <MemberAvatar size={46} accessibilityLabel={`${item.member.firstName ?? ''} ${item.member.lastName ?? ''}`.trim() || 'Member'} />
           <View style={styles.content}>
             <Text style={[styles.name, { color: colors.textOnSurface }]}>{item.member.firstName} {item.member.lastName}</Text>
             <Text style={[styles.industry, { color: colors.mutedForegroundLight }]}>{item.member.industry}</Text>

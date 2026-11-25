@@ -51,6 +51,8 @@ export interface ConnectionMemberIdentity {
   userId: string;
   firstName: string | null;
   lastName: string | null;
+  /** Present only when the response included imageUrl. Invalid values are null. */
+  imageUrl?: string | null;
 }
 
 /**
@@ -85,6 +87,8 @@ export interface ConnectionRelationship {
 export interface OutgoingConnectionRecipient {
   firstName: string | null;
   lastName: string | null;
+  /** Present only when the response included imageUrl. Invalid values are null. */
+  imageUrl?: string | null;
 }
 
 export interface OutgoingConnectionRequest {
@@ -357,6 +361,7 @@ export function projectOutgoingConnectionRequest(
     recipient: {
       firstName: connection.recipient.firstName,
       lastName: connection.recipient.lastName,
+      ...(connection.recipient.imageUrl !== undefined ? { imageUrl: connection.recipient.imageUrl } : {}),
     },
   };
 }
@@ -393,14 +398,32 @@ export function clearMemberConnectionsCache(): void {
   snapshots.clear();
 }
 
+function optionalMemberImageUrl(raw: Record<string, unknown>): string | null | undefined {
+  if (!Object.prototype.hasOwnProperty.call(raw, 'imageUrl')) return undefined;
+  const value = raw.imageUrl;
+  if (value == null) return null;
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (!text || text.length > 2000) return null;
+  try {
+    const url = new URL(text);
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    return text;
+  } catch {
+    return null;
+  }
+}
+
 export function parseConnectionMemberIdentity(value: unknown, field: string): ConnectionMemberIdentity {
   const raw = objectValue(value, field);
   const userId = stringValue(raw.userId, `${field}.userId`).trim();
   if (!USER_ID.test(userId)) schemaFailure(`${field}.userId`);
+  const imageUrl = optionalMemberImageUrl(raw);
   return {
     userId,
     firstName: nullableString(raw.firstName, `${field}.firstName`),
     lastName: nullableString(raw.lastName, `${field}.lastName`),
+    ...(imageUrl !== undefined ? { imageUrl } : {}),
   };
 }
 
@@ -591,6 +614,7 @@ export function parseOutgoingConnectionRequest(value: unknown, field: string): O
   const status = stringValue(raw.status, `${field}.status`);
   if (!STATUSES.includes(status as ConnectionStatus)) schemaFailure(`${field}.status`);
   const recipient = objectValue(raw.recipient, `${field}.recipient`);
+  const imageUrl = optionalMemberImageUrl(recipient);
   return {
     id: positiveId(raw.id, `${field}.id`),
     status: status as ConnectionStatus,
@@ -598,6 +622,7 @@ export function parseOutgoingConnectionRequest(value: unknown, field: string): O
     recipient: {
       firstName: nullableString(recipient.firstName, `${field}.recipient.firstName`),
       lastName: nullableString(recipient.lastName, `${field}.recipient.lastName`),
+      ...(imageUrl !== undefined ? { imageUrl } : {}),
     },
   };
 }

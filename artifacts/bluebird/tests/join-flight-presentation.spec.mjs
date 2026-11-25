@@ -29,9 +29,13 @@ import {
   presentAirportCountryRead,
   productionInternationalJoinStep,
   queueJoinSuccessModel,
+  presentJoinedLineSkip,
   presentQueueSkipConfirmedMessage,
   presentQueueSkipFailure,
   presentQueueSkipLineOffer,
+  QUEUE_LINE_SKIPPED,
+  QUEUE_SKIP_BALANCE_UNAVAILABLE,
+  QUEUE_SKIP_NONE,
   QUEUE_SKIP_NOTE,
   queueRosterLabel,
   reviewProductionQueueJoin,
@@ -271,7 +275,10 @@ test("success fields come only from a validated queue response and stay hidden w
     flightId: 42,
     position: 3,
     participantCount: 11,
+    lineSkipApplied: false,
   });
+  assert.equal(queueJoinSuccessModel(42, { ...verifiedEntry, position: 1, userHasLineSkip: false })?.lineSkipApplied, false);
+  assert.equal(queueJoinSuccessModel(42, { ...verifiedEntry, userHasLineSkip: true })?.lineSkipApplied, true);
   assert.equal(queueJoinSuccessModel(99, verifiedEntry), null);
   assert.equal(queueJoinSuccessModel(42, { ...verifiedEntry, userInQueue: false }), null);
   assert.equal(queueJoinSuccessModel(42, { ...verifiedEntry, position: 0 }), null);
@@ -288,6 +295,9 @@ test("the join screens do not call queue, payment, or membership mutations", () 
   assert.match(flightDetails, /pathname: '\/flight\/join'/);
   assert.doesNotMatch(flightDetails, /pathname: demoJoin\.enabled \? '\/flight\/demo-policy'/);
   assert.match(flightDetails, /Join the Flight/);
+  assert.match(flightDetails, /viewerHasLineSkip === true/);
+  assert.match(flightDetails, /row\.isViewer && row\.hasLineSkip === true/);
+  assert.match(flightDetails, /QUEUE_LINE_SKIPPED/);
   assert.match(flightDetails, /if \(isProductionQueueVerified\(\)\)/);
   assert.doesNotMatch(flightDetails, /pathname: '\/queue\/production-unavailable'/);
   assert.match(joinScreen, /useProductionQueueMutation\(/);
@@ -322,7 +332,7 @@ test("the join screens do not call queue, payment, or membership mutations", () 
   assert.equal(queueRosterLabel(''), 'Member');
   assert.equal(queueRosterLabel(null), 'Member');
   assert.doesNotMatch(queueStatus, /queueRosterLabel|MemberInitialsAvatar|MemberProfileSheet/);
-  assert.doesNotMatch(acknowledgementScreen, /joinEmptyLegQueue|onJoin|fetch\(|payment|useInternationalPassCredit|internationalPassAuthorized/);
+  assert.doesNotMatch(acknowledgementScreen, /joinEmptyLegQueue|onJoin|fetch\(|payment|useInternationalPassCredit|internationalPassAuthorized|You skipped the line|Use Skip the Line/);
   const international = readFileSync(resolve(projectRoot, "components/ProductionInternationalNotice.tsx"), "utf8");
   const joined = readFileSync(resolve(projectRoot, "components/ProductionQueueJoined.tsx"), "utf8");
   assert.match(international, /International Flight Notice/);
@@ -334,11 +344,14 @@ test("the join screens do not call queue, payment, or membership mutations", () 
   assert.match(joined, /You're in the queue/);
   assert.match(joined, /View Queue Status/);
   assert.match(joined, /canSubmitProductionQueueJoin/);
-  assert.match(joined, /skipLineAvailable = canSubmitProductionQueueJoin\(\)/);
+  assert.match(joined, /presentJoinedLineSkip/);
+  assert.match(joined, /userHasLineSkip: success\.lineSkipApplied/);
   assert.doesNotMatch(joined, /isProductionQueueVerified/);
-  assert.match(joined, /disabled=\{!skipLineAvailable\}/);
+  assert.match(joined, /lineSkip\.offerPass/);
   assert.match(joined, /onPress=\{onViewStatus\}/);
   assert.match(joined, /production-queue-skip-line/);
+  assert.match(joined, /production-queue-line-skipped/);
+  assert.match(joined, /production-queue-skip-none/);
   assert.doesNotMatch(joined, /onPress=\{\(\) => undefined\}/);
   assert.doesNotMatch(joined, /skipLine\(|fetch\(/);
   assert.match(queueStatus, /YOUR POSITION/);
@@ -347,6 +360,8 @@ test("the join screens do not call queue, payment, or membership mutations", () 
   assert.doesNotMatch(queueStatus, /noteQueuePositionChange/);
   assert.match(queueStatus, /Leave the Queue/);
   assert.match(queueStatus, /presentQueueSkipLineOffer/);
+  assert.match(queueStatus, /skipOffer\.kind === 'none' && !mutation\.skipMessage/);
+  assert.match(queueStatus, /viewerHasLineSkip === true \|\| viewerRosterRow\?\.hasLineSkip === true/);
   assert.match(queueStatus, /mutationsEnabled: canSubmitProductionQueueJoin\(\)/);
   assert.match(queueStatus, /Use Skip the Line Pass/);
   assert.match(queueStatus, /testID="queue-status-skip-line"/);
@@ -380,6 +395,42 @@ test("the join screens do not call queue, payment, or membership mutations", () 
     balance: { count: 0 },
     passAlreadyApplied: false,
   }).kind, "none");
+  assert.equal(presentQueueSkipLineOffer({
+    inQueue: true,
+    mutationsEnabled: true,
+    balance: { count: 0 },
+    passAlreadyApplied: true,
+  }).kind, "already-used");
+  assert.deepEqual(presentJoinedLineSkip({
+    userHasLineSkip: false,
+    balance: { count: 0 },
+    mutationsEnabled: true,
+  }), { appliedMessage: null, offerPass: false, noneMessage: QUEUE_SKIP_NONE });
+  assert.deepEqual(presentJoinedLineSkip({
+    userHasLineSkip: true,
+    balance: { count: 0 },
+    mutationsEnabled: true,
+  }), { appliedMessage: QUEUE_LINE_SKIPPED, offerPass: false, noneMessage: null });
+  assert.deepEqual(presentJoinedLineSkip({
+    userHasLineSkip: false,
+    balance: { count: 1 },
+    mutationsEnabled: true,
+  }).offerPass, true);
+  assert.equal(presentJoinedLineSkip({
+    userHasLineSkip: null,
+    balance: { count: 0 },
+    mutationsEnabled: true,
+  }).appliedMessage, null);
+  assert.equal(presentJoinedLineSkip({
+    userHasLineSkip: false,
+    balance: "unavailable",
+    mutationsEnabled: true,
+  }).noneMessage, QUEUE_SKIP_BALANCE_UNAVAILABLE);
+  assert.equal(presentJoinedLineSkip({
+    userHasLineSkip: false,
+    balance: "loading",
+    mutationsEnabled: true,
+  }).offerPass, false);
   assert.equal(presentQueueSkipLineOffer({
     inQueue: true,
     mutationsEnabled: true,

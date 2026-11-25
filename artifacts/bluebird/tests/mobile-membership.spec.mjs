@@ -10,7 +10,7 @@ import {
   parseMobileMembershipPlans,
   readMobileMembership,
 } from '../scripts/.mobile-membership.test.mjs';
-import { membershipDashboardPhase, presentClerkMembershipDesign, presentMembershipDashboard } from '../scripts/.clerk-membership-design.test.mjs';
+import { membershipDashboardPhase, presentClerkMembershipDesign, presentMemberBenefits, presentMembershipDashboard } from '../scripts/.clerk-membership-design.test.mjs';
 import {
   ProductionAuthHttpError,
   ProductionAuthNetworkError,
@@ -430,8 +430,9 @@ test('the membership dashboard shows a verified tier and leaves unknown statisti
   assert.equal(unverifiedAccount.tierBadge, 'Membership status unavailable');
   assert.equal(unverifiedAccount.upgrade, null);
   assert.match(unverifiedAccount.statusNote, /not confirmed/);
-  assert.equal(unverifiedAccount.metrics.find((metric) => metric.label === 'Flights Flown').value, '\u2014');
-  assert.equal(unverifiedAccount.metrics.find((metric) => metric.label === 'Total Saved').available, false);
+  assert.equal(unverifiedAccount.metrics.some((metric) => metric.label === 'Flights Flown' || metric.label === 'Total Saved'), false);
+  assert.equal(unverifiedAccount.metrics.find((metric) => metric.label === 'Skip the Line Passes').available, false);
+  assert.equal(unverifiedAccount.metrics.find((metric) => metric.label === 'Referral Balance').pending, false);
 
   const baseMember = presentMembershipDashboard({
     signedIn: true,
@@ -446,7 +447,8 @@ test('the membership dashboard shows a verified tier and leaves unknown statisti
   assert.equal(baseMember.upgrade.title, 'Base → Plus');
   assert.equal(baseMember.annualUsage, null);
   assert.equal(baseMember.metrics.find((metric) => metric.label === 'Skip the Line Passes').value, '2');
-  assert.equal(baseMember.metrics.find((metric) => metric.label === 'Total Saved').available, false);
+  assert.equal(baseMember.metrics.some((metric) => metric.label === 'Flights Flown' || metric.label === 'Total Saved'), false);
+  assert.deepEqual(baseMember.metrics.map((metric) => metric.label), ['Skip the Line Passes', 'Referral Balance']);
   assert.equal(baseMember.metrics.find((metric) => metric.label === 'Referral Balance').available, false);
   assert.equal(JSON.stringify(baseMember).includes('14 / 20'), false);
 
@@ -464,7 +466,7 @@ test('the membership dashboard shows a verified tier and leaves unknown statisti
   });
   assert.equal(plusMember.tierBadge, 'Plus Member');
   assert.equal(plusMember.upgrade, null);
-  assert.equal(plusMember.metrics.find((metric) => metric.label === 'Total Saved').available, false);
+  assert.equal(plusMember.metrics.some((metric) => metric.label === 'Total Saved'), false);
   assert.equal(plusMember.metrics.find((metric) => metric.label === 'Referral Balance').value, '$250.00');
 
   const missing = presentMembershipDashboard({ signedIn: true, membership: nonMember });
@@ -530,7 +532,70 @@ test('the membership dashboard shows a verified tier and leaves unknown statisti
     account: { resolved: true, isMember: true, memberTier: 'base' },
   });
   assert.equal(unlimitedSkip.metrics.find((metric) => metric.label === 'Skip the Line Passes').value, 'Unlimited');
-  assert.equal(unlimitedSkip.metrics.find((metric) => metric.label === 'Total Saved').available, false);
+  assert.equal(unlimitedSkip.metrics.some((metric) => metric.label === 'Total Saved'), false);
+
+  const zeroBalances = presentMembershipDashboard({
+    signedIn: true,
+    membership: { ...member, skipTheLinePasses: 0 },
+    account: { resolved: true, isMember: true, memberTier: 'base' },
+    referralBalanceCents: 0,
+  });
+  assert.equal(zeroBalances.metrics.find((metric) => metric.label === 'Skip the Line Passes').value, '0');
+  assert.equal(zeroBalances.metrics.find((metric) => metric.label === 'Referral Balance').value, '$0.00');
+  assert.equal(zeroBalances.metrics.find((metric) => metric.label === 'Referral Balance').available, true);
+
+  const stillLoading = presentMembershipDashboard({
+    signedIn: true,
+    membership: { ...member, skipTheLinePasses: 0 },
+    account: { resolved: true, isMember: true, memberTier: 'base' },
+    referralBalanceCents: 0,
+    skipTheLineRead: 'loading',
+    referralBalanceRead: 'loading',
+  });
+  assert.equal(stillLoading.metrics.every((metric) => metric.pending === true), true);
+  assert.equal(stillLoading.metrics.some((metric) => metric.value === '0' || metric.value === '$0.00'), false);
+
+  const failedReads = presentMembershipDashboard({
+    signedIn: true,
+    membership: member,
+    account: { resolved: true, isMember: true, memberTier: 'base' },
+    referralBalanceCents: 25000,
+    skipTheLineRead: 'unavailable',
+    referralBalanceRead: 'unavailable',
+  });
+  assert.equal(failedReads.metrics.find((metric) => metric.label === 'Skip the Line Passes').value, '\u2014');
+  assert.equal(failedReads.metrics.find((metric) => metric.label === 'Referral Balance').value, '\u2014');
+  assert.equal(failedReads.metrics.some((metric) => metric.value === '0' || metric.value === '$0.00'), false);
+
+  const inactiveBenefits = presentMemberBenefits({
+    activeMember: false,
+    connectionsEnabled: true,
+    includedFeatureLabels: ['Priority queue placement'],
+  });
+  assert.deepEqual(inactiveBenefits, []);
+  const baseBenefits = presentMemberBenefits({
+    activeMember: true,
+    connectionsEnabled: false,
+    includedFeatureLabels: [
+      'Priority queue placement',
+      'AI Concierge',
+      'Purchase membership',
+      'Priority queue placement',
+    ],
+  });
+  assert.deepEqual(baseBenefits.map((benefit) => benefit.title), [
+    'Discover available flights',
+    'Access flight queues',
+    'Priority queue placement',
+  ]);
+  const plusBenefits = presentMemberBenefits({
+    activeMember: true,
+    connectionsEnabled: true,
+    includedFeatureLabels: ['Priority queue placement', 'Coming soon lounge'],
+  });
+  assert.equal(plusBenefits.some((benefit) => benefit.title === 'Connect with fellow members'), true);
+  assert.equal(plusBenefits.some((benefit) => benefit.title === 'Priority queue placement'), true);
+  assert.equal(plusBenefits.some((benefit) => /coming soon|ai concierge|purchase/i.test(benefit.title)), false);
 });
 
 test('the production membership adapter feeds the dashboard without card data or invented credits', async () => {
@@ -583,8 +648,7 @@ test('the production membership adapter feeds the dashboard without card data or
   assert.equal(baseDashboard.statusNote, null);
   assert.equal(baseDashboard.upgrade.paymentEnabled, false);
   assert.equal(baseDashboard.metrics.find((metric) => metric.label === 'Skip the Line Passes').available, false);
-  assert.equal(baseDashboard.metrics.find((metric) => metric.label === 'Flights Flown').available, false);
-  assert.equal(baseDashboard.metrics.find((metric) => metric.label === 'Total Saved').available, false);
+  assert.equal(baseDashboard.metrics.some((metric) => metric.label === 'Flights Flown' || metric.label === 'Total Saved'), false);
   assert.equal(baseDashboard.annualUsage, null);
   assert.equal(base.internationalPassPasses, null);
   assert.equal(base.skipTheLineUnlimited, null);
@@ -931,11 +995,14 @@ test('the Clerk membership screen keeps the original layout without prototype da
   assert.equal(source.includes("upgradeBtnText, { color: colors.textOnSurface }"), true);
   assert.equal(clerkSource.includes('getReferrals'), false);
   assert.equal(clerkSource.includes('listTrips'), false);
-  assert.equal(clerkSource.includes('isAiConciergeIntegrationEnabled()'), true);
+  assert.equal(clerkSource.includes('isAiConciergeIntegrationEnabled()'), false);
   assert.equal(clerkSource.includes("router.push('/account/payment-methods'"), false);
   for (const label of [
-    'AI Concierge',
     'Referral Program',
+    'Your membership',
+    'Your Member Benefits',
+    'Better together.',
+    'presentMemberBenefits',
     'design.metrics',
     'design.statusNote',
     'membership-settings',
@@ -954,6 +1021,8 @@ test('the Clerk membership screen keeps the original layout without prototype da
     '14 / 20',
     'usageProgress',
     'Upgrade Now',
+    'AI Concierge',
+    'Payment Methods',
   ]) {
     assert.equal(clerkSource.includes(removed), false, removed);
   }
@@ -973,7 +1042,7 @@ test('the Clerk membership screen keeps the original layout without prototype da
   ]) {
     assert.equal(clerkSource.includes(forbidden), false, forbidden);
   }
-  assert.equal(clerkSource.includes("router.push('/concierge'"), true);
+  assert.equal(clerkSource.includes("router.push('/concierge'"), false);
   assert.equal(clerkSource.includes("router.push('/referral'"), true);
   assert.equal(clerkSource.includes("router.push('/account/payment-methods'"), false);
 
@@ -1026,8 +1095,8 @@ test('active membership stays visible when payment is not succeeded, and credit 
   assert.equal(baseNone.statusLine, 'Active Membership');
   assert.equal(baseNone.paymentLine, 'Payment not confirmed');
   assert.equal(baseNone.periodLine, 'Current period ends Jan 15, 2027');
-  assert.equal(baseNone.metrics.find((metric) => metric.label === 'Flights Flown').available, false);
-  assert.equal(baseNone.metrics.find((metric) => metric.label === 'Total Saved').available, false);
+  assert.equal(baseNone.metrics.some((metric) => metric.label === 'Flights Flown' || metric.label === 'Total Saved'), false);
+  assert.equal(baseNone.metrics.find((metric) => metric.label === 'Skip the Line Passes').value, '\u2014');
 
   const plusNone = presentMembershipDashboard({
     signedIn: true,

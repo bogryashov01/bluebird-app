@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 
 interface StatCardProps {
@@ -9,6 +9,8 @@ interface StatCardProps {
   variant?: 'light' | 'dark';
   accessibilityLabel?: string;
   testID?: string;
+  pending?: boolean;
+  icon?: React.ReactNode;
 }
 
 export function StatCard({
@@ -17,6 +19,8 @@ export function StatCard({
   variant = 'light',
   accessibilityLabel,
   testID,
+  pending = false,
+  icon,
 }: StatCardProps) {
   const colors = useColors();
   const isLight = variant === 'light';
@@ -28,12 +32,25 @@ export function StatCard({
       styles.card,
       { backgroundColor: isLight ? colors.surface : colors.card },
     ]}>
+      {icon ? (
+        <View style={[styles.iconWrap, { backgroundColor: colors.secondary }]}>
+          {icon}
+        </View>
+      ) : null}
       <Text style={[styles.label, { color: isLight ? colors.mutedForegroundLight : colors.mutedForeground }]} numberOfLines={2}>
         {label}
       </Text>
-      <Text style={[styles.value, { color: isLight ? colors.textOnSurface : colors.foreground }]}>
-        {value}
-      </Text>
+      {pending ? (
+        <ActivityIndicator
+          color={isLight ? colors.textOnSurface : colors.foreground}
+          style={styles.pending}
+          accessibilityLabel={accessibilityLabel}
+        />
+      ) : (
+        <Text style={[styles.value, { color: isLight ? colors.textOnSurface : colors.foreground }]}>
+          {value}
+        </Text>
+      )}
     </View>
   );
 }
@@ -60,5 +77,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
     fontSize: 22,
     marginTop: 2,
+  },
+  pending: { alignSelf: 'flex-start', marginTop: 8 },
+  iconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
 });

@@ -1,7 +1,8 @@
-import type {
-  ProductionCurrentUser,
-  ProductionUserProfile,
-  UpdateProductionUserProfileRequest,
+import {
+  withStoredProfilePhone,
+  type ProductionCurrentUser,
+  type ProductionUserProfile,
+  type UpdateProductionUserProfileRequest,
 } from './productionAuthApi';
 import type { ProductionRequestOptions } from './productionAuthApi';
 import type { ClerkBluebirdProfileApi } from './clerkBluebirdProfile';
@@ -123,14 +124,14 @@ export function buildClerkPersonalInfoUpdateRequest(
   const changedFields = getChangedClerkPersonalInfoFields(values, baseline);
   if (changedFields.length === 0) throw new TypeError('There are no changes to save.');
 
-  const request: UpdateProductionUserProfileRequest = {
+  const request: UpdateProductionUserProfileRequest = withStoredProfilePhone({
     firstName,
     lastName,
     dob,
     gender: values.gender,
     homeAirportCode,
     favoriteCityKeys: [...favoriteCityKeys],
-  };
+  }, profile);
   if (changedFields.includes('weightLbs')) {
     const weight = values.weightLbs.trim();
     if (!weight) {

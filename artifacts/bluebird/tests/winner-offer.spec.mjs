@@ -75,7 +75,7 @@ test("awaiting confirmation opens the review screen and an awarded trip does not
     legId: 42,
     status: "queue_pending",
     awarded: false,
-  }), { pathname: "/flight/queue-status", params: { flightId: "42" } });
+  }), { pathname: "/flight/[id]", params: { id: "42" } });
   assert.deepEqual(tripLifecycleOpenTarget({
     list: "current",
     legId: 42,

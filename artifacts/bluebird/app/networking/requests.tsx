@@ -7,6 +7,7 @@ import {
   useDecideNetworkingRequest,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { MemberAvatar } from '@/components/MemberAvatar';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
 
@@ -63,7 +64,7 @@ export default function NetworkingRequestsScreen() {
             testID={`request-${item.id}`}
             style={[styles.card, { backgroundColor: colors.surface }]}
           >
-            <View style={[styles.avatar, { backgroundColor: colors.primary + '18' }]}><Text style={[styles.avatarText, { color: colors.primary }]}>{requester?.firstName?.[0] ?? '?'}</Text></View>
+            <MemberAvatar size={46} accessibilityLabel={name} />
             <View style={styles.content}>
               <Text style={[styles.name, { color: colors.textOnSurface }]}>{name}</Text>
               <Text style={[styles.industry, { color: colors.mutedForegroundLight }]}>{review.industry ?? 'Bluebird member'}</Text>

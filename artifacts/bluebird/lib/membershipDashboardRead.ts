@@ -420,6 +420,16 @@ export function rememberSkipTheLinePasses(input: {
   });
 }
 
+const skipBalanceListeners = new Set<() => void>();
+
+/** Membership and queue screens refetch after a pass balance is cleared. */
+export function subscribeSkipTheLineBalanceRefresh(listener: () => void): () => void {
+  skipBalanceListeners.add(listener);
+  return () => {
+    skipBalanceListeners.delete(listener);
+  };
+}
+
 /** Drops a cached Skip the Line balance so the next read refetches /api/me/profile. */
 export function forgetSkipTheLinePasses(input: {
   environment: string;
@@ -434,6 +444,7 @@ export function forgetSkipTheLinePasses(input: {
   );
   dashboardSkipTheLineCache.delete(key);
   dashboardInternationalPassCache.delete(key);
+  for (const listener of skipBalanceListeners) listener();
 }
 
 export function readFreshInternationalPasses(input: {

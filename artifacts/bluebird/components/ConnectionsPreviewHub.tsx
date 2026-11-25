@@ -15,6 +15,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MemberAvatar } from '@/components/MemberAvatar';
 import { useColors } from '@/hooks/useColors';
 import {
   CONNECTIONS_INVITE_WITHOUT_LINK,
@@ -22,7 +23,6 @@ import {
   DEMO_CONVERSATION_NOTICE,
   formatPreviewTimestamp,
   matchDemoMemberByName,
-  memberInitials,
   memberProfileAction,
   rememberConnectionsPane,
   type ConnectionsPane,
@@ -342,13 +342,8 @@ function MemberLine({
   );
 }
 
-function Avatar({ name, colors, large = false }: { name: string; colors: ReturnType<typeof useColors>; large?: boolean }) {
-  const size = large ? 96 : 48;
-  return (
-    <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2, backgroundColor: colors.secondary }]}>
-      <Text style={[large ? styles.avatarLarge : styles.avatarText, { color: colors.primary }]}>{memberInitials(name)}</Text>
-    </View>
-  );
+function Avatar({ name, large = false }: { name: string; colors?: ReturnType<typeof useColors>; large?: boolean }) {
+  return <MemberAvatar size={large ? 96 : 48} accessibilityLabel={name || 'Member'} />;
 }
 
 function MemberSheet({

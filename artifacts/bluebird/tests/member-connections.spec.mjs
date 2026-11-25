@@ -1238,6 +1238,49 @@ test("declined outgoing request releases the create-confirmed pending mark", () 
   assert.match(hook, /requestId: created\.id, confirmedAt: Date\.now\(\)/);
 });
 
+test("authorized member responses keep a valid profile image and drop anything else", () => {
+  const plain = parseDiscoveredConnectionMember({
+    userId: "user_to",
+    firstName: "Noah",
+    lastName: "Bennett",
+  }, "member");
+  assert.equal(Object.prototype.hasOwnProperty.call(plain, "imageUrl"), false);
+
+  const photo = parseDiscoveredConnectionMember({
+    userId: "user_to",
+    firstName: "Noah",
+    lastName: "Bennett",
+    imageUrl: "https://cdn.example.test/noah.jpg",
+    email: "noah@example.test",
+  }, "member");
+  assert.equal(photo.imageUrl, "https://cdn.example.test/noah.jpg");
+  assert.equal(JSON.stringify(photo).includes("@"), false);
+
+  const invalid = parseDiscoveredConnectionMember({
+    userId: "user_to",
+    firstName: "Noah",
+    lastName: "Bennett",
+    imageUrl: "http://cdn.example.test/noah.jpg",
+  }, "member");
+  assert.equal(invalid.imageUrl, null);
+
+  const outgoing = parseOutgoingConnectionRequests({
+    requests: [{
+      id: 11,
+      status: "pending",
+      createdAt: "2026-10-29T12:00:00.000Z",
+      recipient: {
+        firstName: "Noah",
+        lastName: "Bennett",
+        imageUrl: "https://cdn.example.test/noah.jpg",
+        userId: "user_secret",
+      },
+    }],
+  });
+  assert.equal(outgoing.requests[0].recipient.imageUrl, "https://cdn.example.test/noah.jpg");
+  assert.equal(Object.prototype.hasOwnProperty.call(outgoing.requests[0].recipient, "userId"), false);
+});
+
 test("Find Member is phone-only and its validation copy says so", () => {
   const hook = readFileSync(resolve(projectRoot, "lib/useMemberConnections.ts"), "utf8");
   const screen = readFileSync(resolve(projectRoot, "components/MemberConnectionsScreen.tsx"), "utf8");

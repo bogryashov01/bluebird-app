@@ -213,7 +213,9 @@ test("saves only on request and preserves the date and unrelated settings", asyn
   expect(request).not.toHaveProperty("notificationPrefs");
   expect(request).not.toHaveProperty("smsConsent");
   expect(request).not.toHaveProperty("email");
-  expect(request).not.toHaveProperty("phoneE164");
+  expect(request.phoneE164).toBe("+14155550123");
+  expect(request.phoneCountry).toBe("US");
+  expect(request).not.toHaveProperty("phoneVerifiedAt");
 });
 
 test("loads with the Bluebird mark, retries clearly, and keeps back navigation", async ({ page }) => {

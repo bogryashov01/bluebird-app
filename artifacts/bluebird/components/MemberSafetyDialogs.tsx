@@ -1,8 +1,11 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -51,6 +54,21 @@ export function MemberSafetyDialogs({
   const pendingRef = React.useRef(false);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [done, setDone] = React.useState(false);
+  const [keyboardHeight, setKeyboardHeight] = React.useState(0);
+
+  React.useEffect(() => {
+    if (Platform.OS !== 'ios') return undefined;
+    const show = Keyboard.addListener('keyboardWillShow', (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hide = Keyboard.addListener('keyboardWillHide', () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   React.useEffect(() => {
     setReason('harassment');
@@ -133,17 +151,23 @@ export function MemberSafetyDialogs({
     });
   };
 
+  const keyboardOpen = keyboardHeight > 0;
   return (
     <Modal visible={mode !== null} animationType="fade" transparent onRequestClose={onClose}>
-      <View style={styles.modal}>
+      <View style={[styles.modal, { paddingTop: insets.top, paddingBottom: keyboardHeight }]}>
         <Pressable accessibilityLabel="Close" style={styles.backdrop} onPress={pending ? undefined : onClose} />
-        <View
-          style={[
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          bounces={false}
+          showsVerticalScrollIndicator={false}
+          style={styles.sheet}
+          contentContainerStyle={[
             styles.card,
             {
               backgroundColor: colors.offWhite,
               borderColor: colors.border,
-              paddingBottom: 20 + Math.max(insets.bottom, 16),
+              paddingBottom: 20 + (keyboardOpen ? 12 : Math.max(insets.bottom, 16)),
             },
           ]}
           testID="member-safety-dialog"
@@ -194,6 +218,7 @@ export function MemberSafetyDialogs({
                 onChangeText={setDescription}
                 editable={!pending && !done}
                 multiline
+                blurOnSubmit={false}
                 placeholder="Optional details"
                 placeholderTextColor={colors.mutedForegroundLight}
                 testID="member-report-description"
@@ -238,7 +263,7 @@ export function MemberSafetyDialogs({
               </>
             )}
           </View>
-        </View>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -247,6 +272,7 @@ export function MemberSafetyDialogs({
 const styles = StyleSheet.create({
   modal: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(10,17,40,0.45)' },
+  sheet: { flexGrow: 0, maxHeight: '100%' },
   card: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: 20, gap: 12 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 22 },
   body: { fontFamily: 'Inter_400Regular', fontSize: 15, lineHeight: 21 },

@@ -34,6 +34,7 @@ import {
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
+import { MemberAvatar } from '@/components/MemberAvatar';
 import { useColors } from '@/hooks/useColors';
 import { confirmDialog } from '@/lib/confirmDialog';
 import {
@@ -89,7 +90,7 @@ import { createMemberConnectionsClient, isMemberConnectionsIntegrationEnabled } 
 import { useMemberConnections } from '@/lib/useMemberConnections';
 import { useOpenAcceptedConversation } from '@/lib/useMemberMessages';
 import { isProductionQueueVerified } from '@/lib/productionQueueReadiness';
-import { joinFlightQueueCountLabel, joinFlightRouteParams } from '@/lib/joinFlightPresentation';
+import { joinFlightQueueCountLabel, joinFlightRouteParams, QUEUE_LINE_SKIPPED } from '@/lib/joinFlightPresentation';
 import { useJoinFlightQueueRead } from '@/lib/useJoinFlightQueueRead';
 import { useDemoJoinFlow } from '@/lib/demoJoinFlowStore';
 import { logJoinNav } from '@/lib/joinNavDiagnostics';
@@ -190,16 +191,18 @@ function QueueMemberRow({
   const identity = displayName?.trim() ? displayName.trim() : null;
   const copy = (
     <>
-      <View style={[styles.queueInitials, { backgroundColor: highlighted ? colors.primary : colors.muted }]}>
-        <Text style={[styles.queueInitialsText, { color: highlighted ? colors.primaryForeground : colors.textOnSurface }]}>{initials}</Text>
-      </View>
+      <MemberAvatar size={40} accessibilityLabel={identity ?? initials} />
       <View style={styles.queueCopy}>
         <Text style={[styles.queuePosition, { color: colors.textOnSurface }]}>#{position}</Text>
         {identity ?
           <Text testID="flight-queue-leader-name" style={[styles.queueFirst, { color: colors.textOnSurface }]} numberOfLines={1}>
             {identity}
           </Text>
-        : null}
+        : (
+          <Text style={[styles.queueFirst, { color: colors.textOnSurface }]} numberOfLines={1}>
+            {initials}
+          </Text>
+        )}
         {first ?
           <Text style={[styles.queueFirst, { color: colors.primary }]}>First in line</Text>
         : null}
@@ -874,6 +877,10 @@ export default function FlightDetailScreen() {
   const viewerPosition = rosterViewerPosition ?? queueViewerPosition ?? flightViewerPosition;
   const productionViewerInQueue =
     f.userInQueue === true || rosterViewerPosition != null || (viewerPosition != null && viewerPosition >= 1);
+  const lineSkipApplied = f.viewerHasLineSkip === true || (
+    productionQueue.kind === 'participants' &&
+    productionQueue.rows.some((row) => row.isViewer && row.hasLineSkip === true)
+  );
   const leaderTarget = resolveProductionLeaderQueueTarget({
     roster: productionRoster,
     viewerPosition,
@@ -2047,6 +2054,11 @@ export default function FlightDetailScreen() {
       {/* ── Bottom sticky CTA ── */}
       {!directionsTarget && (
         <View style={[styles.ctaBar, { backgroundColor: colors.offWhite, borderTopColor: colors.separator, paddingBottom: botPad + 12 }]}>
+          {lineSkipApplied ? (
+            <Text testID="flight-detail-line-skipped" style={[styles.conciergeLinkText, { color: colors.textOnSurface, marginBottom: 8 }]}>
+              {QUEUE_LINE_SKIPPED}
+            </Text>
+          ) : null}
           {renderCTA()}
           {!demoMode && authMode !== 'clerk' && (
             <TouchableOpacity
