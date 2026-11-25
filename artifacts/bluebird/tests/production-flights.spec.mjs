@@ -5,6 +5,7 @@ import {
   fetchProductionFlights,
   findProductionFlightById,
   presentCachedDepartureClock,
+  presentTripDeparture,
   getFlightImagePresentation,
   getFlightAirportCodes,
   mapProductionAirport,
@@ -129,6 +130,8 @@ assert.equal(mappedFlight.departureDate, "2026-10-08");
 assert.equal(mappedFlight.departureTime, "08:36");
 assert.equal(mappedFlight.departureInstant, "2026-10-08T13:36:00.000Z");
 assert.equal(presentCachedDepartureClock(mappedFlight.departureTime), "08:36");
+assert.equal(presentTripDeparture("2026-11-26T06:00:00.000Z"), "Thu, Nov 26, 6:00 AM GMT");
+assert.equal(presentTripDeparture("not-a-time"), "Departure time unavailable");
 assert.equal(presentCachedDepartureClock("08:36:00"), null);
 assert.equal(presentCachedDepartureClock("2026-10-08T13:36:00.000Z"), null);
 assert.equal(presentCachedDepartureClock(null), null);

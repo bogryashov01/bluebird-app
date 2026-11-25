@@ -1178,6 +1178,29 @@ function readConnectionTargetReference(value: unknown): string | undefined {
   return value.toLowerCase();
 }
 
+function logQueueConnectionPayload(rawRows: unknown[], parsed: readonly ProductionPublicQueueEntry[]): void {
+  if (typeof __DEV__ === 'undefined' || __DEV__ !== true) return;
+  const rawLeader = rawRows.find((row) => (
+    !!row && typeof row === 'object' && !Array.isArray(row) && (row as { position?: unknown }).position === 1
+  )) as Record<string, unknown> | undefined;
+  const rawViewer = rawRows.find((row) => (
+    !!row && typeof row === 'object' && !Array.isArray(row) && (row as { isViewer?: unknown }).isViewer === true
+  )) as { position?: unknown } | undefined;
+  const rawReference = rawLeader && Object.prototype.hasOwnProperty.call(rawLeader, 'connectionTargetReference')
+    ? rawLeader.connectionTargetReference
+    : undefined;
+  const parsedLeader = parsed.find((row) => row.position === 1);
+  console.info('[QUEUE-CONNECTION-DEBUG]', JSON.stringify({
+    event: 'queue-payload',
+    viewerPosition: typeof rawViewer?.position === 'number' ? rawViewer.position : null,
+    position1Present: rawLeader != null,
+    rawReferencePresent: rawReference != null && rawReference !== '',
+    rawReferenceType: rawReference === undefined ? 'missing' : rawReference === null ? 'null' : typeof rawReference,
+    rawReferenceUuid: typeof rawReference === 'string' && CONNECTION_TARGET_REFERENCE.test(rawReference.trim()),
+    parsedReferencePresent: typeof parsedLeader?.connectionTargetReference === 'string',
+  }));
+}
+
 const QUEUE_DISPLAY_NAME = /^[\p{L}\p{M}][\p{L}\p{M}'’.\- ]{0,78}[\p{L}\p{M}'’.]$/u;
 const QUEUE_DISPLAY_NAME_SINGLE = /^[\p{L}\p{M}]{2,40}$/u;
 
@@ -1789,7 +1812,9 @@ export function createAuthenticatedProductionApiClient(options: ProductionAuthAp
     getEmptyLegQueue: (emptyLegId: number, requestOptions?: ProductionRequestOptions) =>
       request(`${emptyLegPath(emptyLegId)}/queue`, 'GET', (value) => {
         if (!Array.isArray(value)) return schemaFailure('publicQueue');
-        return value.map((item, index) => parsePublicQueueEntry(item, `publicQueue[${index}]`));
+        const parsed = value.map((item, index) => parsePublicQueueEntry(item, `publicQueue[${index}]`));
+        logQueueConnectionPayload(value, parsed);
+        return parsed;
       }, requestOptions),
     /**
      * Eligibility and ranking stay server-authoritative: complete profile,

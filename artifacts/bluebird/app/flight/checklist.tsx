@@ -22,7 +22,7 @@ import {
 } from '@/lib/mainBluebirdApi';
 import { getMainBluebirdApiConfigurationOrNull } from '@/lib/mainBluebirdApiConfig';
 import { ProductionAuthHttpError, type ProductionEmptyLegPassengerList, type ProductionTrip, type ProductionTrips } from '@/lib/productionAuthApi';
-import { parseProductionFlightId } from '@/lib/productionFlights';
+import { parseProductionFlightId, presentTripDeparture } from '@/lib/productionFlights';
 import { isNativeProductionAuthTestEnabled } from '@/lib/nativeAuthTestPolicy';
 import { manifestMatchesFlight } from '@/lib/passengerManifest';
 import {
@@ -669,15 +669,7 @@ function hasServerTime(value: string | null): boolean {
 }
 
 function formatWhen(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) return 'Departure time unavailable';
-  return date.toLocaleString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return presentTripDeparture(value);
 }
 
 const styles = StyleSheet.create({

@@ -987,6 +987,13 @@ export default function FlightDetailScreen() {
       }
       if (code === 'self_request' || code === 'queue_target_unavailable' || code === 'first_in_queue_required') {
         setLeaderSendBlocked(true);
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.info('[QUEUE-CONNECTION-DEBUG]', JSON.stringify({
+            event: 'send-blocked',
+            sendBlocked: true,
+            code,
+          }));
+        }
       }
       setLeaderRequestNotice(
         result.kind === 'disabled' ? 'Connection requests are not available yet.' : queueConnectionRequestFailureCopy(code),
@@ -1005,6 +1012,33 @@ export default function FlightDetailScreen() {
     frontPreview === 'production' ?
       previewConnection !== 'request' || leaderRequestPending
     : (previewConnection !== 'request' && previewConnection !== 'declined') || networkingRequest.isPending;
+  const parsedLeaderReferencePresent = typeof productionRoster?.find((member) => member.position === 1)?.connectionTargetReference === 'string';
+  const leaderUnavailableReason = leaderConnection.kind === 'unavailable' ? leaderConnection.reason : null;
+  useEffect(() => {
+    if (typeof __DEV__ === 'undefined' || __DEV__ !== true || localReadMode) return;
+    console.info('[QUEUE-CONNECTION-DEBUG]', JSON.stringify({
+      event: 'presentation',
+      queuePanel: productionQueue.kind,
+      viewerPosition,
+      parsedReferencePresent: parsedLeaderReferencePresent,
+      connectionsEnabled: isMemberConnectionsIntegrationEnabled(),
+      presentation: leaderConnection.kind,
+      unavailableReason: leaderUnavailableReason,
+      previewOpen: frontPreview === 'production',
+      sendEnabled: frontPreview === 'production' && !sendDisabled,
+      sendBlocked: leaderSendBlocked,
+    }));
+  }, [
+    localReadMode,
+    productionQueue.kind,
+    viewerPosition,
+    parsedLeaderReferencePresent,
+    leaderConnection.kind,
+    leaderUnavailableReason,
+    frontPreview,
+    sendDisabled,
+    leaderSendBlocked,
+  ]);
   const previewInitials =
     frontPreview === 'production' ?
       (leaderTarget.target?.initials ?? '')

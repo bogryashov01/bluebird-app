@@ -894,6 +894,21 @@ export function presentCachedDepartureClock(value: string | null | undefined): s
   return value;
 }
 
+/** Trip cards receive the raw ISO instant, which Discover already shows in UTC when no origin zone is available. */
+export function presentTripDeparture(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return 'Departure time unavailable';
+  const label = date.toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  });
+  return `${label} GMT`;
+}
+
 export function findProductionFlightById(
   flights: readonly FlightView[] | undefined,
   id: number | null,

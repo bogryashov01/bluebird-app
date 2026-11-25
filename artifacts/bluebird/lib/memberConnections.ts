@@ -656,6 +656,11 @@ export function createMemberConnectionsClient(options: MemberConnectionsClientOp
     } catch {
       return { kind: 'error', code: 'configuration' as Code };
     }
+    const queueConnectionPost = method === 'POST'
+      && path === MEMBER_CONNECTION_PATHS.requests
+      && body != null
+      && Object.prototype.hasOwnProperty.call(body, 'queueTargetReference');
+    let queueHttpStatus: number | null = null;
     try {
       const data = await requestProductionJson({
         url: `${baseUrl}${path}`,
@@ -668,6 +673,9 @@ export function createMemberConnectionsClient(options: MemberConnectionsClientOp
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         credentials: 'omit',
         timeoutMs: PRODUCTION_AUTH_TIMEOUT_MS,
+        onResponseStatus: queueConnectionPost ? (status) => {
+          queueHttpStatus = status;
+        } : undefined,
         prepareHeaders: async () => {
           let token: string | null;
           try {
@@ -695,9 +703,27 @@ export function createMemberConnectionsClient(options: MemberConnectionsClientOp
           schema: (error) => new ProductionAuthSchemaError(error instanceof Error ? error.message : 'response'),
         },
       });
+      if (typeof __DEV__ !== 'undefined' && __DEV__ && queueConnectionPost) {
+        console.info('[QUEUE-CONNECTION-DEBUG]', JSON.stringify({
+          event: 'post-response',
+          postSent: true,
+          httpStatus: queueHttpStatus,
+          code: null,
+          outcome: 'loaded',
+        }));
+      }
       return { kind: 'loaded', data };
     } catch (error) {
       const code = mapFailure(error);
+      if (typeof __DEV__ !== 'undefined' && __DEV__ && queueConnectionPost) {
+        console.info('[QUEUE-CONNECTION-DEBUG]', JSON.stringify({
+          event: 'post-response',
+          postSent: true,
+          httpStatus: error instanceof ProductionAuthHttpError ? error.status : queueHttpStatus,
+          code,
+          outcome: 'error',
+        }));
+      }
       if (error instanceof ProductionAuthHttpError && error.status === 409) {
         const relationship = parseConnectionRelationshipConflict(error.failureBody);
         if (relationship) return { kind: 'error', code, relationship };
@@ -720,9 +746,33 @@ export function createMemberConnectionsClient(options: MemberConnectionsClientOp
       return request(MEMBER_CONNECTION_PATHS.requests, 'POST', parseConnectionRequestResponse, { targetUserId: id });
     },
     createQueueRequest: (queueTargetReference: string) => {
-      if (!live) return Promise.resolve({ kind: 'disabled' } as const);
+      if (!live) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.info('[QUEUE-CONNECTION-DEBUG]', JSON.stringify({
+            event: 'post-skipped',
+            postSent: false,
+            reason: 'disabled',
+          }));
+        }
+        return Promise.resolve({ kind: 'disabled' } as const);
+      }
       const reference = normalizeQueueTargetReference(queueTargetReference);
-      if (!reference) return Promise.resolve({ kind: 'error', code: 'invalid_body' } as const);
+      if (!reference) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.info('[QUEUE-CONNECTION-DEBUG]', JSON.stringify({
+            event: 'post-skipped',
+            postSent: false,
+            reason: 'invalid-reference',
+          }));
+        }
+        return Promise.resolve({ kind: 'error', code: 'invalid_body' } as const);
+      }
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.info('[QUEUE-CONNECTION-DEBUG]', JSON.stringify({
+          event: 'post-sent',
+          postSent: true,
+        }));
+      }
       return request(
         MEMBER_CONNECTION_PATHS.requests,
         'POST',
