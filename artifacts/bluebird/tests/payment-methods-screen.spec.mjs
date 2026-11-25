@@ -21,18 +21,13 @@ const profile = readFileSync(resolve(projectRoot, "app/(tabs)/profile/index.tsx"
 const membership = readFileSync(resolve(projectRoot, "app/(tabs)/membership/index.tsx"), "utf8");
 const rootLayout = readFileSync(resolve(projectRoot, "app/_layout.tsx"), "utf8");
 
-test("Payment Methods explains website management without a saved card", () => {
+test("Payment Methods does not offer an unverified website or card flow", () => {
   assert.match(screen, /Payment Methods/);
-  assert.match(screen, /Manage Your Payment Method/);
-  assert.match(screen, /Your membership payment method is securely managed through the Bluebird website\. You can view or update your card details there\./);
-  assert.match(screen, /Your payment information is handled securely by Bluebird&apos;s payment provider\./);
-  assert.match(screen, /testID="payment-methods-website"/);
+  assert.match(screen, /Payments are not available in the app/);
+  assert.match(screen, /does not sell memberships or collect card details/);
+  assert.match(screen, /testID="payment-methods-unavailable"/);
   assert.match(screen, /name="credit-card"/);
-  assert.match(screen, /name="external-link"/);
-  assert.match(screen, /colors\.offWhite/);
-  assert.match(screen, /colors\.primary/);
-  assert.match(screen, /Inter_700Bold/);
-  assert.doesNotMatch(screen, /Payment method unavailable|No payment method on file|ActivityIndicator|4242|5100|Visa|Mastercard|Exp /);
+  assert.doesNotMatch(screen, /openMembershipPaymentWebsite|Linking\.openURL|external-link|update your card/);
   assert.doesNotMatch(screen, /Add Card|Remove Card|Set Default|TextInput|WebView/);
 });
 
@@ -43,12 +38,9 @@ test("the button opens only the official Bluebird website entry", async () => {
   assert.equal(destination.label, "Open Bluebird Website");
   assert.equal(destination.directPaymentPathVerified, false);
   assert.equal(isOfficialBluebirdWebsiteEntry(destination.url), true);
-  assert.match(screen, /accessibilityLabel=\{DESTINATION\.label\}/);
-  assert.match(screen, /\{DESTINATION\.label\}/);
   assert.match(model, /Open Bluebird Website/);
-  assert.match(screen, /Linking\.openURL\(url\)/);
-  assert.match(screen, /testID="payment-methods-open-website"/);
-  assert.match(screen, /MEMBERSHIP_PAYMENT_WEBSITE_OPEN_ERROR/);
+  assert.doesNotMatch(screen, /testID="payment-methods-open-website"/);
+  assert.doesNotMatch(screen, /Linking\.openURL/);
 
   const opened = [];
   assert.equal(
@@ -71,8 +63,7 @@ test("a failed browser open stays on the screen with a recovery note", async () 
     }),
     "unavailable",
   );
-  assert.match(screen, /payment-methods-open-error/);
-  assert.match(screen, /accessibilityRole="alert"/);
+  assert.doesNotMatch(screen, /payment-methods-open-error/);
   assert.equal(
     MEMBERSHIP_PAYMENT_WEBSITE_OPEN_ERROR,
     "The Bluebird website couldn’t be opened. Try again in a moment.",
@@ -113,17 +104,15 @@ test("no production payment request is sent and the auth-test allowlist is uncha
   assert.match(policy, /EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST === 'true'/);
 });
 
-test("Payment Methods opens from Profile and Membership, and back returns to Profile", () => {
+test("Payment Methods is not linked from the Clerk member surfaces", () => {
+  const clerkProfile = profile.split("if (authMode === 'clerk') {")[1]?.split("const demoProfile")[0] ?? "";
+  const clerkMembership = membership.split("const clerkRows")[1]?.split("const mem =")[0] ?? "";
+  assert.doesNotMatch(clerkProfile, /payment-methods/);
+  assert.doesNotMatch(clerkMembership, /payment-methods/);
   assert.equal(
     [...profile.matchAll(/router\.push\('\/account\/payment-methods'/g)].length,
-    2,
+    1,
   );
-  assert.equal(
-    [...membership.matchAll(/router\.push\('\/account\/payment-methods'/g)].length,
-    2,
-  );
-  assert.match(profile, /label: 'Payment Methods'/);
-  assert.match(membership, /label: 'Payment Methods'/);
   assert.match(screen, /accessibilityLabel="Back to Profile"/);
   assert.match(screen, /router\.canGoBack\(\)/);
   assert.match(screen, /router\.back\(\)/);

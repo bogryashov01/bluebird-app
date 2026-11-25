@@ -1,25 +1,16 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  Linking, Platform, StyleSheet, Text, TouchableOpacity, View,
+  Platform, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import {
-  MEMBERSHIP_PAYMENT_WEBSITE_OPEN_ERROR,
-  membershipPaymentWebsiteDestination,
-  openMembershipPaymentWebsite,
-} from '@/lib/membershipPaymentMethod';
-
-const DESTINATION = membershipPaymentWebsiteDestination();
 
 export default function PaymentMethodsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
-  const [openError, setOpenError] = useState(false);
-  const [opening, setOpening] = useState(false);
 
   const goToProfile = () => {
     if (router.canGoBack()) {
@@ -27,15 +18,6 @@ export default function PaymentMethodsScreen() {
     } else {
       router.replace('/(tabs)/profile' as any);
     }
-  };
-
-  const openWebsite = async () => {
-    if (opening) return;
-    setOpening(true);
-    setOpenError(false);
-    const result = await openMembershipPaymentWebsite((url) => Linking.openURL(url));
-    setOpening(false);
-    if (result === 'unavailable') setOpenError(true);
   };
 
   return (
@@ -63,43 +45,17 @@ export default function PaymentMethodsScreen() {
 
       <View
         style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
-        testID="payment-methods-website"
+        testID="payment-methods-unavailable"
       >
         <View style={[styles.iconTile, { backgroundColor: colors.muted }]}>
           <Feather name="credit-card" size={20} color={colors.primary} />
         </View>
         <Text style={[styles.cardTitle, { color: colors.textOnSurface }]}>
-          Manage Your Payment Method
+          Payments are not available in the app
         </Text>
         <Text style={[styles.body, { color: colors.mutedForegroundLight }]}>
-          Your membership payment method is securely managed through the Bluebird website. You can view or update your card details there.
+          This version does not sell memberships or collect card details. Bluebird has not confirmed an in-app or website payment step for reviewers.
         </Text>
-        <TouchableOpacity
-          onPress={() => { void openWebsite(); }}
-          disabled={opening}
-          activeOpacity={0.75}
-          accessibilityRole="button"
-          accessibilityLabel={DESTINATION.label}
-          testID="payment-methods-open-website"
-          style={[styles.button, { backgroundColor: colors.primary, opacity: opening ? 0.7 : 1 }]}
-        >
-          <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>
-            {DESTINATION.label}
-          </Text>
-          <Feather name="external-link" size={16} color={colors.primaryForeground} />
-        </TouchableOpacity>
-        <Text style={[styles.note, { color: colors.mutedForegroundLight }]}>
-          Your payment information is handled securely by Bluebird&apos;s payment provider.
-        </Text>
-        {openError ? (
-          <Text
-            accessibilityRole="alert"
-            style={[styles.note, { color: colors.mutedForegroundLight }]}
-            testID="payment-methods-open-error"
-          >
-            {MEMBERSHIP_PAYMENT_WEBSITE_OPEN_ERROR}
-          </Text>
-        ) : null}
       </View>
     </View>
   );

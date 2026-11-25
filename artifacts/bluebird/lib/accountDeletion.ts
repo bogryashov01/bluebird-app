@@ -38,7 +38,11 @@ export const ACCOUNT_DELETION_STATUS_PATH = '/me/account-deletion/status';
 export const ACCOUNT_DELETION_CONFIRMATION_WORD = 'DELETE';
 export const ACCOUNT_DELETION_REVERIFICATION_REASON = 'reverification-error';
 
-export type AccountDeletionBlocker = { code: string };
+export type AccountDeletionBlocker = {
+  code: string;
+  /** Server guidance. Omitted when the eligibility payload has no action string. */
+  action?: string;
+};
 
 export type AccountDeletionEligibility = {
   enabled: boolean;
@@ -164,6 +168,15 @@ export function isAccountDeletionEligible(eligibility: AccountDeletionEligibilit
   return eligibility.enabled === true && eligibility.blockers.length === 0;
 }
 
+function blockerAction(entry: Record<string, unknown>): string | undefined {
+  if (!Object.prototype.hasOwnProperty.call(entry, 'action')) return undefined;
+  const action = entry.action;
+  if (typeof action !== 'string') return undefined;
+  const text = action.trim().replace(/\s+/g, ' ');
+  if (!text || text.length > 400) return undefined;
+  return text;
+}
+
 export function parseAccountDeletionBlockers(value: unknown): AccountDeletionBlocker[] {
   if (!Array.isArray(value)) return schemaFailure('accountDeletion.blockers');
   const blockers: AccountDeletionBlocker[] = [];
@@ -175,11 +188,13 @@ export function parseAccountDeletionBlockers(value: unknown): AccountDeletionBlo
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
       return schemaFailure('accountDeletion.blockers.entry');
     }
-    const code = (entry as { code?: unknown }).code;
+    const record = entry as Record<string, unknown>;
+    const code = record.code;
     if (typeof code !== 'string' || !/^[a-z0-9_]{1,80}$/.test(code)) {
       return schemaFailure('accountDeletion.blockers.code');
     }
-    blockers.push({ code });
+    const action = blockerAction(record);
+    blockers.push(action ? { code, action } : { code });
   }
   return blockers;
 }
@@ -393,9 +408,28 @@ export function presentAccountDeletionConflict(conflictCode: string | null): str
       return 'A retention or compliance hold is blocking deletion right now. Your account was not deleted.';
     case 'membership_cancellation_confirmation_required':
       return 'Confirm membership cancellation before Bluebird can delete this account. Your account was not deleted.';
+    case 'flight_record_review':
+      return 'Your account is linked to flight records that require review before deletion. Please contact Bluebird support.';
+    case 'billing_configuration':
+      return 'Your membership billing details require review before your account can be deleted. Please contact Bluebird support.';
     default:
       return 'Bluebird cannot delete this account right now because of an operational restriction. Your account was not deleted.';
   }
+}
+
+/** One line per distinct blocker message. Identical fallback copy is not repeated. */
+export function presentAccountDeletionBlockerMessages(
+  blockers: readonly AccountDeletionBlocker[],
+): string[] {
+  const messages: string[] = [];
+  for (const blocker of blockers) {
+    const message = presentAccountDeletionConflict(blocker.code);
+    if (!messages.includes(message)) messages.push(message);
+  }
+  if (messages.length === 0) {
+    messages.push(presentAccountDeletionConflict('account_deletion_blocked'));
+  }
+  return messages;
 }
 
 async function readDeletionHttpBody(response: Response): Promise<unknown> {

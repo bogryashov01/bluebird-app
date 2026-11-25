@@ -15,6 +15,7 @@ startLiveMetro({
   EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES: 'true',
   EXPO_PUBLIC_BLUEBIRD_PRODUCTION_QUEUE_MUTATIONS: 'true',
   EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION: 'true',
+  EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION: 'true',
 }, {
   scope: 'RC-parity product gates on Dev Client (DEBUG=true required for Production Clerk locally). Values are not printed.',
 });

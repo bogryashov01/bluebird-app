@@ -931,11 +931,11 @@ test('the Clerk membership screen keeps the original layout without prototype da
   assert.equal(source.includes("upgradeBtnText, { color: colors.textOnSurface }"), true);
   assert.equal(clerkSource.includes('getReferrals'), false);
   assert.equal(clerkSource.includes('listTrips'), false);
+  assert.equal(clerkSource.includes('isAiConciergeIntegrationEnabled()'), true);
+  assert.equal(clerkSource.includes("router.push('/account/payment-methods'"), false);
   for (const label of [
     'AI Concierge',
-    'Not available yet',
     'Referral Program',
-    'Payment Methods',
     'design.metrics',
     'design.statusNote',
     'membership-settings',
@@ -975,7 +975,7 @@ test('the Clerk membership screen keeps the original layout without prototype da
   }
   assert.equal(clerkSource.includes("router.push('/concierge'"), true);
   assert.equal(clerkSource.includes("router.push('/referral'"), true);
-  assert.equal(clerkSource.includes("router.push('/account/payment-methods'"), true);
+  assert.equal(clerkSource.includes("router.push('/account/payment-methods'"), false);
 
   const profile = await readFile(new URL('../app/(tabs)/profile/index.tsx', import.meta.url), 'utf8');
   const profileBranch = profile.split("if (authMode === 'clerk') {")[1]?.split('const initials')[0] ?? '';
@@ -985,7 +985,6 @@ test('the Clerk membership screen keeps the original layout without prototype da
   for (const row of [
     'Personal Information',
     'Connect Contacts',
-    'Payment Methods',
     'Delete Account',
     'Notification Settings',
     'Appearance',

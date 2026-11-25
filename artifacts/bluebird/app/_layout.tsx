@@ -396,6 +396,10 @@ function RootLayoutNav() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="account/blocked-members"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
         name="account/contacts"
         options={{ headerShown: true, title: 'Family/Corporate', ...headerOptions }}
       />

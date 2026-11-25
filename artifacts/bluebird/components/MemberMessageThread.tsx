@@ -5,6 +5,7 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,6 +16,8 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { MemberInitialsAvatar } from '@/components/MemberProfileSheet';
+import { MemberSafetyDialogs } from '@/components/MemberSafetyDialogs';
+import { presentMemberAccessClosed } from '@/lib/memberSafety';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useClerkAuthSnapshot } from '@/lib/dormantClerkIntegration';
@@ -41,6 +44,9 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
   const thread = useMemberMessageThread(conversationId);
   const session = useClerkAuthSnapshot();
   const [draft, setDraft] = React.useState('');
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [safety, setSafety] = React.useState<null | { mode: 'report' | 'block'; messageId?: number }>(null);
+  const [accessClosed, setAccessClosed] = React.useState(false);
   const [nearBottom, setNearBottom] = React.useState(true);
   const scrollRef = React.useRef<ScrollView>(null);
   const metricsRef = React.useRef({ scrollOffset: 0, layoutHeight: 0, contentHeight: 0 });
@@ -87,6 +93,9 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
     pendingPrependRef.current = null;
     setNearBottom(true);
     setDraft('');
+    setMenuOpen(false);
+    setSafety(null);
+    setAccessClosed(false);
   }, [conversationId]);
 
   const scrollToLatest = React.useCallback((animated: boolean) => {
@@ -206,6 +215,17 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
         <View style={styles.headerCopy}>
           <Text style={[styles.name, { color: colors.textOnSurface }]} numberOfLines={1}>{title}</Text>
         </View>
+        {thread.participantUserId ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Conversation actions"
+            testID="member-message-actions"
+            onPress={() => setMenuOpen(true)}
+            style={styles.back}
+          >
+            <Feather name="more-horizontal" size={22} color={colors.primary} />
+          </TouchableOpacity>
+        ) : null}
       </View>
       {!thread.enabled || thread.status === 'disabled' ? (
         <View style={styles.state} testID="member-message-unavailable">
@@ -216,6 +236,10 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
         </View>
       ) : thread.status === 'signed-out' ? (
         <Text style={[styles.stateBody, { color: colors.textOnSurface }]} testID="member-message-signed-out">Sign in to view messages</Text>
+      ) : accessClosed ? (
+        <View style={styles.state} testID="member-message-access-closed">
+          <Text style={[styles.stateTitle, { color: colors.textOnSurface }]}>{presentMemberAccessClosed()}</Text>
+        </View>
       ) : thread.status === 'loading' && thread.messages.length === 0 ? (
         <View style={styles.state} testID="member-message-loading">
           <ActivityIndicator color={colors.primary} />
@@ -264,8 +288,14 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
                     </Text>
                   ) : null}
                   <View style={[styles.bubbleWrap, { alignSelf: mine ? 'flex-end' : 'flex-start' }]}>
-                    <View
+                    <Pressable
                       testID={`member-message-${message.id}`}
+                      accessibilityHint={mine ? undefined : 'Report this message'}
+                      delayLongPress={350}
+                      onLongPress={mine ? undefined : () => {
+                        if (!thread.participantUserId) return;
+                        setSafety({ mode: 'report', messageId: message.id });
+                      }}
                       style={[
                         styles.bubble,
                         {
@@ -284,7 +314,7 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
                       >
                         {message.body}
                       </Text>
-                    </View>
+                    </Pressable>
                   </View>
                 </View>
               );
@@ -306,7 +336,7 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
       {thread.message ? (
         <Text style={[styles.feedback, { color: colors.textOnSurface }]} testID="member-message-feedback">{thread.message}</Text>
       ) : null}
-      {thread.enabled && thread.status !== 'disabled' && thread.status !== 'signed-out' ? (
+      {thread.enabled && !accessClosed && thread.status !== 'disabled' && thread.status !== 'signed-out' ? (
         <View style={[styles.composer, { paddingBottom: composerBottom }]} testID="member-message-composer-bar">
           <View style={styles.composerRow}>
             <ThemedTextInput
@@ -347,12 +377,75 @@ export function MemberMessageThread({ conversationId }: { conversationId: number
           ) : null}
         </View>
       ) : null}
+      <MemberSafetyDialogs
+        targetUserId={thread.participantUserId}
+        mode={safety?.mode ?? null}
+        messageId={safety?.messageId}
+        onClose={() => setSafety(null)}
+        onBlocked={() => setAccessClosed(true)}
+      />
+      {menuOpen && thread.participantUserId ? (
+        <View style={styles.menuLayer} testID="member-message-action-menu">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close conversation actions"
+            style={styles.menuOverlay}
+            onPress={() => setMenuOpen(false)}
+          />
+          <View
+            style={[
+              styles.menu,
+              {
+                backgroundColor: colors.offWhite,
+                paddingBottom: Math.max(insets.bottom, 16),
+              },
+            ]}
+          >
+            <TouchableOpacity
+              accessibilityRole="button"
+              testID="member-message-report"
+              onPress={() => { setMenuOpen(false); setSafety({ mode: 'report' }); }}
+              style={[styles.menuItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <Text style={[styles.menuLabel, { color: colors.textOnSurface }]}>Report member</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              testID="member-message-block"
+              onPress={() => { setMenuOpen(false); setSafety({ mode: 'block' }); }}
+              style={[styles.menuItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <Text style={[styles.menuLabel, { color: colors.destructive }]}>Block member</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              testID="member-message-actions-close"
+              onPress={() => setMenuOpen(false)}
+              style={[styles.menuCancel, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <Text style={[styles.menuLabel, { color: colors.primary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  menuLayer: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', zIndex: 3 },
+  menuOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(10,17,40,0.45)' },
+  menu: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 8,
+  },
+  menuItem: { minHeight: 48, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  menuCancel: { minHeight: 48, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  menuLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingBottom: 10 },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1 },

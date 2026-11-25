@@ -30,6 +30,7 @@ import {
   parseMessageConversation,
   parseMessageHistory,
   presentMemberConversationsView,
+  projectOutboundMessageOntoConversations,
   readMemberMessagesSnapshot,
   refreshMemberMessageThreadLatest,
   rememberMemberMessagesSnapshot,
@@ -457,6 +458,37 @@ test("the messages screens stay off the demo store and the networking API", () =
   const policy = readFileSync(resolve(projectRoot, "lib/nativeAuthTestPolicy.ts"), "utf8");
   assert.doesNotMatch(policy, /\/me\/messages/);
   assert.equal(MEMBER_MESSAGE_POLL_MS, 10000);
+});
+
+test("outbound send projects onto the inbox conversation preview without inventing rows", () => {
+  const existing = conversation();
+  const sent = message(12, 7);
+  const other = { ...conversation(8), participantUserId: "user_other" };
+  const next = projectOutboundMessageOntoConversations({
+    conversations: [existing, other],
+    conversationId: 7,
+    message: sent,
+  });
+  assert.equal(next[0].id, 7);
+  assert.equal(next[0].latestMessage?.id, 12);
+  assert.equal(next[0].latestMessage?.body, sent.body);
+  assert.equal(next[0].unreadCount, 0);
+  assert.equal(next[0].updatedAt, sent.createdAt);
+  assert.equal(next[1].id, 8);
+
+  const unknown = projectOutboundMessageOntoConversations({
+    conversations: [existing],
+    conversationId: 99,
+    message: sent,
+  });
+  assert.equal(unknown.length, 1);
+  assert.equal(unknown[0].latestMessage?.id, existing.latestMessage?.id);
+
+  const hook = readFileSync(resolve(projectRoot, "lib/useMemberMessages.ts"), "utf8");
+  assert.match(hook, /rememberOutboundMessageInInbox/);
+  assert.match(hook, /projectOutboundMessageOntoConversations/);
+  assert.match(hook, /kind: 'conversation'/);
+  assert.match(hook, /publishMemberMessageHint/);
 });
 
 test("conversation inbox presentation never treats unconfirmed empty cache as empty", () => {

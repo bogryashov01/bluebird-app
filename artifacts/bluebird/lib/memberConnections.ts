@@ -59,6 +59,12 @@ export interface ConnectionMemberIdentity {
  */
 export interface DiscoveredConnectionMember extends ConnectionMemberIdentity {
   outgoingRequestPending?: boolean;
+  /**
+   * Present only when discover sent the key. `null` means the server confirmed
+   * there is no relationship. Absent means the old contract omitted it.
+   */
+  relationshipStatus?: ConnectionStatus | null;
+  relationshipDirection?: ConnectionRelationshipDirection | null;
 }
 
 export interface ConnectionRelationship {
@@ -112,6 +118,18 @@ export type MemberConnectionsFailure =
   /** GET /me/connections/requests/outgoing is not deployed yet (HTTP 404). */
   | 'outgoing_unsupported';
 
+/** Direction on Task #1844 structured HTTP 409 relationship payloads. */
+export type ConnectionRelationshipDirection = 'outgoing' | 'incoming';
+
+/**
+ * Structured relationship facts from HTTP 409 create-request conflicts.
+ * Absent or unparsable fields mean the deployed API is older than Task #1844.
+ */
+export type ConnectionRelationshipConflict = {
+  status: ConnectionStatus;
+  direction: ConnectionRelationshipDirection | null;
+};
+
 export type QueueConnectionRequestFailure =
   | 'configuration'
   | 'token'
@@ -151,7 +169,91 @@ export interface QueueTargetPreview {
 export type MemberConnectionsResult<T> =
   | { kind: 'disabled' }
   | { kind: 'loaded'; data: T }
-  | { kind: 'error'; code: MemberConnectionsFailure };
+  | {
+      kind: 'error';
+      code: MemberConnectionsFailure;
+      /** Present when HTTP 409 includes Task #1844 relationship fields. */
+      relationship?: ConnectionRelationshipConflict;
+    };
+
+function connectionStatusValue(value: unknown): ConnectionStatus | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  return (STATUSES as readonly string[]).includes(normalized)
+    ? (normalized as ConnectionStatus)
+    : null;
+}
+
+function connectionDirectionValue(value: unknown): ConnectionRelationshipDirection | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'outgoing' || normalized === 'incoming' ? normalized : null;
+}
+
+/**
+ * Reads relationship status/direction from a sanitized 409 body.
+ * Accepts Task #1844 camelCase fields plus common aliases/nesting so a
+ * Production payload without the exact keys still resolves when possible.
+ * Returns null when the payload is missing or schema-out-of-date.
+ */
+export function parseConnectionRelationshipConflict(
+  value: unknown,
+): ConnectionRelationshipConflict | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const nested =
+    record.relationship
+    && typeof record.relationship === 'object'
+    && !Array.isArray(record.relationship)
+      ? record.relationship as Record<string, unknown>
+      : record.existingRelationship
+        && typeof record.existingRelationship === 'object'
+        && !Array.isArray(record.existingRelationship)
+        ? record.existingRelationship as Record<string, unknown>
+        : null;
+
+  const status = connectionStatusValue(record.relationshipStatus)
+    ?? connectionStatusValue(record.relationship_status)
+    ?? connectionStatusValue(record.status)
+    ?? (nested
+      ? connectionStatusValue(nested.relationshipStatus)
+        ?? connectionStatusValue(nested.relationship_status)
+        ?? connectionStatusValue(nested.status)
+      : null);
+  if (!status) return null;
+
+  const direction = connectionDirectionValue(record.relationshipDirection)
+    ?? connectionDirectionValue(record.relationship_direction)
+    ?? connectionDirectionValue(record.direction)
+    ?? (nested
+      ? connectionDirectionValue(nested.relationshipDirection)
+        ?? connectionDirectionValue(nested.relationship_direction)
+        ?? connectionDirectionValue(nested.direction)
+      : null);
+
+  return { status, direction };
+}
+
+/** User-facing copy for direct createRequest HTTP 409 conflicts. */
+export function presentConnectionRequestConflict(
+  relationship: ConnectionRelationshipConflict | null | undefined,
+): string {
+  if (!relationship) {
+    return 'Connection status unavailable. Send request is disabled until Bluebird can confirm the relationship — check Connections, Incoming, or Sent Requests.';
+  }
+  switch (relationship.status) {
+    case 'pending':
+      return relationship.direction === 'incoming'
+        ? 'This member already sent you a connection request. Open Requests to respond.'
+        : 'A connection request to this member is already pending.';
+    case 'accepted':
+      return 'You’re already connected with this member.';
+    case 'declined':
+      return 'A previous connection request with this member was declined. It won’t appear under Sent Requests.';
+    case 'removed':
+      return 'This connection was removed and can’t be restored yet. Try again later.';
+  }
+}
 
 export interface MemberConnectionsClientOptions {
   enabled: boolean;
@@ -188,8 +290,11 @@ export interface PendingOutgoingRequestReceipt {
  * The redacted outgoing list has no recipient user IDs, but it does carry
  * request IDs. A create-confirmed recipient is released only when an outgoing
  * list requested strictly after that create no longer reports the request as
- * pending (declined, cancelled, or accepted). Recipient IDs without a receipt
- * (e.g. from discover) keep their existing stale protection.
+ * pending (declined, cancelled, or accepted).
+ *
+ * Recipient IDs without a create receipt are dropped: Find Member pending must
+ * come from a successful create receipt, discover.outgoingRequestPending === true,
+ * or structured 409 facts — never from an invented conflict mark.
  */
 export function reconcilePendingOutgoingRecipients(input: {
   recipientUserIds: readonly string[];
@@ -200,22 +305,16 @@ export function reconcilePendingOutgoingRecipients(input: {
   const stillPending = new Set(
     input.outgoing.filter((request) => request.status === 'pending').map((request) => request.id),
   );
-  const released = new Set<string>();
   const receipts: PendingOutgoingRequestReceipt[] = [];
   for (const receipt of input.receipts) {
     if (receipt.confirmedAt < input.listRequestedAt && !stillPending.has(receipt.requestId)) {
-      released.add(receipt.recipientUserId);
-    } else {
-      receipts.push(receipt);
+      continue;
     }
+    receipts.push(receipt);
   }
-  if (released.size === 0) {
-    return { recipientUserIds: [...input.recipientUserIds], receipts };
-  }
-  // A newer receipt for the same recipient keeps the mark.
-  for (const receipt of receipts) released.delete(receipt.recipientUserId);
+  const confirmedRecipientIds = new Set(receipts.map((receipt) => receipt.recipientUserId));
   return {
-    recipientUserIds: input.recipientUserIds.filter((userId) => !released.has(userId)),
+    recipientUserIds: input.recipientUserIds.filter((userId) => confirmedRecipientIds.has(userId)),
     receipts,
   };
 }
@@ -321,18 +420,51 @@ export function parseConnectionRelationship(value: unknown, field: string): Conn
   };
 }
 
+function optionalDiscoverStatus(
+  raw: Record<string, unknown>,
+  field: string,
+): ConnectionStatus | null | undefined {
+  const hasCamel = Object.prototype.hasOwnProperty.call(raw, 'relationshipStatus');
+  const hasSnake = Object.prototype.hasOwnProperty.call(raw, 'relationship_status');
+  if (!hasCamel && !hasSnake) return undefined;
+  const value = hasCamel ? raw.relationshipStatus : raw.relationship_status;
+  if (value === null) return null;
+  const status = connectionStatusValue(value);
+  if (!status) schemaFailure(`${field}.relationshipStatus`);
+  return status;
+}
+
+function optionalDiscoverDirection(
+  raw: Record<string, unknown>,
+  field: string,
+): ConnectionRelationshipDirection | null | undefined {
+  const hasCamel = Object.prototype.hasOwnProperty.call(raw, 'relationshipDirection');
+  const hasSnake = Object.prototype.hasOwnProperty.call(raw, 'relationship_direction');
+  if (!hasCamel && !hasSnake) return undefined;
+  const value = hasCamel ? raw.relationshipDirection : raw.relationship_direction;
+  if (value === null) return null;
+  const direction = connectionDirectionValue(value);
+  if (!direction) schemaFailure(`${field}.relationshipDirection`);
+  return direction;
+}
+
 export function parseDiscoveredConnectionMember(value: unknown, field: string): DiscoveredConnectionMember {
   const identity = parseConnectionMemberIdentity(value, field);
   const raw = objectValue(value, field);
-  if (!Object.prototype.hasOwnProperty.call(raw, 'outgoingRequestPending')) {
+  const relationshipStatus = optionalDiscoverStatus(raw, field);
+  const relationshipDirection = optionalDiscoverDirection(raw, field);
+  const hasPending = Object.prototype.hasOwnProperty.call(raw, 'outgoingRequestPending');
+  if (!hasPending && relationshipStatus === undefined && relationshipDirection === undefined) {
     return identity;
   }
-  if (typeof raw.outgoingRequestPending !== 'boolean') {
+  if (hasPending && typeof raw.outgoingRequestPending !== 'boolean') {
     schemaFailure(`${field}.outgoingRequestPending`);
   }
   return {
     ...identity,
-    outgoingRequestPending: raw.outgoingRequestPending,
+    ...(hasPending ? { outgoingRequestPending: raw.outgoingRequestPending as boolean } : {}),
+    ...(relationshipStatus !== undefined ? { relationshipStatus } : {}),
+    ...(relationshipDirection !== undefined ? { relationshipDirection } : {}),
   };
 }
 
@@ -512,7 +644,11 @@ export function createMemberConnectionsClient(options: MemberConnectionsClientOp
     parse: (value: unknown) => T,
     body?: Record<string, string>,
     mapFailure: (error: unknown) => Code = failureCode as (error: unknown) => Code,
-  ): Promise<{ kind: 'disabled' } | { kind: 'loaded'; data: T } | { kind: 'error'; code: Code }> {
+  ): Promise<
+    | { kind: 'disabled' }
+    | { kind: 'loaded'; data: T }
+    | { kind: 'error'; code: Code; relationship?: ConnectionRelationshipConflict }
+  > {
     if (!live) return { kind: 'disabled' };
     let baseUrl: string;
     try {
@@ -549,14 +685,24 @@ export function createMemberConnectionsClient(options: MemberConnectionsClientOp
           timeout: (duration) => new ProductionAuthTimeoutError(duration),
           cancelled: () => new ProductionAuthCancelledError(),
           network: () => new ProductionAuthNetworkError(),
-          http: async (response) => new ProductionAuthHttpError(response.status, await readConnectionError(response)),
+          http: async (response) => new ProductionAuthHttpError(
+            response.status,
+            await readConnectionError(response, method === 'POST' && path === MEMBER_CONNECTION_PATHS.requests
+              ? { targetUserId: body?.targetUserId }
+              : undefined),
+          ),
           invalidJson: () => new ProductionAuthInvalidJsonError(),
           schema: (error) => new ProductionAuthSchemaError(error instanceof Error ? error.message : 'response'),
         },
       });
       return { kind: 'loaded', data };
     } catch (error) {
-      return { kind: 'error', code: mapFailure(error) };
+      const code = mapFailure(error);
+      if (error instanceof ProductionAuthHttpError && error.status === 409) {
+        const relationship = parseConnectionRelationshipConflict(error.failureBody);
+        if (relationship) return { kind: 'error', code, relationship };
+      }
+      return { kind: 'error', code };
     }
   }
 
@@ -703,12 +849,91 @@ function failureCode(error: unknown): MemberConnectionsFailure {
   return 'unavailable';
 }
 
-async function readConnectionError(response: Response): Promise<{ code: string | null; body: null }> {
+function targetUserIdShape(value: string | undefined): 'missing' | 'clerk_user' | 'numeric' | 'other' {
+  if (!value) return 'missing';
+  if (value.startsWith('user_')) return 'clerk_user';
+  if (/^\d+$/.test(value)) return 'numeric';
+  return 'other';
+}
+
+function redactDiagnosticValue(value: unknown, depth = 0): unknown {
+  if (value === null || typeof value === 'boolean' || typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    if (value.startsWith('eyJ') || value.includes('@') || /^\+?\d{8,}$/.test(value) || /^user_/i.test(value)) {
+      return '[redacted]';
+    }
+    return value.replace(/user_[A-Za-z0-9]+/g, '[redacted-user]').slice(0, 240);
+  }
+  if (Array.isArray(value)) return depth > 3 ? { type: 'array', length: value.length } : value.slice(0, 8).map((item) => redactDiagnosticValue(item, depth + 1));
+  if (typeof value !== 'object' || depth > 3) return { type: typeof value };
+  const record = value as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(record)) {
+    if (/authorization|token|phone|email|secret|cookie/i.test(key)) {
+      out[key] = '[redacted]';
+    } else {
+      out[key] = redactDiagnosticValue(record[key], depth + 1);
+    }
+  }
+  return out;
+}
+
+async function readConnectionError(
+  response: Response,
+  createDiagnostic?: { targetUserId?: string },
+): Promise<{ code: string | null; body: unknown }> {
   try {
     const payload: unknown = await response.json();
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { code: null, body: null };
-    const code = (payload as { code?: unknown }).code;
-    return { code: typeof code === 'string' && SERVER_CODE.test(code) ? code : null, body: null };
+    if (typeof __DEV__ !== 'undefined' && __DEV__ && createDiagnostic) {
+      const record = payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? payload as Record<string, unknown>
+        : null;
+      console.info('[connection-create]', JSON.stringify({
+        status: response.status,
+        request: {
+          method: 'POST',
+          path: MEMBER_CONNECTION_PATHS.requests,
+          bodyKeys: ['targetUserId'],
+          targetUserIdShape: targetUserIdShape(createDiagnostic.targetUserId),
+          targetUserIdLength: createDiagnostic.targetUserId?.length ?? 0,
+        },
+        code: typeof record?.code === 'string' ? record.code : null,
+        error: typeof record?.error === 'string' ? record.error : null,
+        requestId: typeof record?.requestId === 'string' && !record.requestId.startsWith('user_')
+          ? record.requestId.slice(0, 80)
+          : typeof record?.request_id === 'string' && !record.request_id.startsWith('user_')
+            ? record.request_id.slice(0, 80)
+            : null,
+        body: redactDiagnosticValue(payload),
+      }));
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return { code: null, body: null };
+    }
+    const record = payload as Record<string, unknown>;
+    const rawCode = record.code ?? record.error;
+    const code = typeof rawCode === 'string' && SERVER_CODE.test(rawCode) ? rawCode : null;
+    const relationship = parseConnectionRelationshipConflict(record);
+    if (!code && !relationship) return { code: null, body: null };
+    return {
+      code,
+      body: {
+        ...(code ? { code } : {}),
+        ...(relationship
+          ? {
+            relationshipStatus: relationship.status,
+            ...(relationship.direction ? { relationshipDirection: relationship.direction } : {}),
+          }
+          : {}),
+        // Preserve nested relationship object for alias parsing on retry paths.
+        ...(record.relationship && typeof record.relationship === 'object'
+          ? { relationship: record.relationship }
+          : {}),
+        ...(record.existingRelationship && typeof record.existingRelationship === 'object'
+          ? { existingRelationship: record.existingRelationship }
+          : {}),
+      },
+    };
   } catch {
     return { code: null, body: null };
   }

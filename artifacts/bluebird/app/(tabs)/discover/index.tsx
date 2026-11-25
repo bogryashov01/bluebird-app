@@ -16,6 +16,7 @@ import {
   type QueueEntry, type Trip,
 } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
+import { isAiConciergeIntegrationEnabled } from '@/lib/aiConcierge';
 import { isLegacyMemberQueryEnabled, shouldUseLocalFlightReadMode } from '@/lib/clerkAuthSession';
 import {
   discoverResultCountLabel,
@@ -126,6 +127,7 @@ interface HeaderProps {
   colors: ReturnType<typeof useColors>;
   topPad: number;
   demoMode: boolean;
+  showConcierge: boolean;
   greetingText: string;
   userName?: string;
   resultCount: number;
@@ -156,7 +158,7 @@ interface HeaderProps {
  * search input focused while typing.
  */
 const DiscoverHeader = React.memo(function DiscoverHeader({
-  colors, topPad, demoMode, greetingText, userName, resultCount, productionReadOnly, featured, search, onSearchChange, onClearSearch,
+  colors, topPad, demoMode, showConcierge, greetingText, userName, resultCount, productionReadOnly, featured, search, onSearchChange, onClearSearch,
   view, onViewChange, mapFlights, mapAirports, mapLoading, mapError, onMapRetry, onMapGestureActive,
   filter, filters, onFilterChange, showEmpty, hasActiveQuery, onClearSearchFromEmpty,
 }: HeaderProps) {
@@ -180,15 +182,17 @@ const DiscoverHeader = React.memo(function DiscoverHeader({
         <View style={styles.logoRow}>
           <BluebirdLogo variant="symbol" size="small" style={styles.logoImg} />
         </View>
-        <TouchableOpacity
-          style={[styles.conciergeBtn, { backgroundColor: colors.card }]}
-          onPress={() => router.push('/concierge')}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          accessibilityLabel="AI Concierge"
-          accessibilityHint="Opens AI Concierge. Availability depends on your account."
-        >
-          <Feather name="message-circle" size={18} color={colors.foreground} />
-        </TouchableOpacity>
+        {showConcierge ? (
+          <TouchableOpacity
+            style={[styles.conciergeBtn, { backgroundColor: colors.card }]}
+            onPress={() => router.push('/concierge')}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            accessibilityLabel="AI Concierge"
+            accessibilityHint="Opens AI Concierge. Availability depends on your account."
+          >
+            <Feather name="message-circle" size={18} color={colors.foreground} />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {/* Greeting */}
@@ -637,6 +641,7 @@ export default function DiscoverScreen() {
               colors={colors}
               topPad={topPad}
               demoMode={demoMode}
+              showConcierge={demoMode || isAiConciergeIntegrationEnabled()}
               greetingText={greetingText}
               userName={user?.name?.trim().split(/\s+/)[0] || undefined}
               resultCount={visibleFlights.length}

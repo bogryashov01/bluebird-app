@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -28,7 +29,7 @@ import {
   isAccountDeletionEligible,
   isAccountDeletionMutationEnabled,
   isAccountDeletionReverificationHint,
-  presentAccountDeletionConflict,
+  presentAccountDeletionBlockerMessages,
   presentAccountDeletionFailure,
   type AccountDeletionBlocker,
   type AccountDeletionFailureCode,
@@ -37,6 +38,11 @@ import {
   isAccountDeletionReverificationCancelledError,
   type AccountDeletionReverificationSession,
 } from '@/lib/accountDeletionPhoneReverification';
+import {
+  EXTERNAL_RESOURCE_OPEN_ERROR,
+  openVerifiedSupportResource,
+  verifiedSupportResource,
+} from '@/lib/supportResources';
 import {
   AccountDeletionPhoneReverificationModal,
   type AccountDeletionPhoneReverificationChallenge,
@@ -88,7 +94,13 @@ function DeleteAccountClerkScreen() {
   const authSnapshotRef = useRef(authSnapshot);
   authSnapshotRef.current = authSnapshot;
   const { session: clerkSession } = useSession();
-  const configuration = getMainBluebirdApiConfigurationOrNull();
+  // getMainBluebirdApiConfigurationOrNull() allocates a new object every call.
+  // Memoize once so client → loadEligibility → useEffect cannot recreate every
+  // render and call setPhase('loading_eligibility') in an infinite loop
+  // (TestFlight Build 21: Maximum update depth exceeded on open).
+  const configuration = useMemo(() => getMainBluebirdApiConfigurationOrNull(), []);
+  const apiEnvironment = configuration?.environment ?? null;
+  const apiBaseUrl = configuration?.apiBaseUrl ?? null;
   const mutationEnabled = isAccountDeletionMutationEnabled();
   const [confirmation, setConfirmation] = useState('');
   const [acknowledged, setAcknowledged] = useState(false);
@@ -99,7 +111,11 @@ function DeleteAccountClerkScreen() {
   );
   const [reverifyChallenge, setReverifyChallenge] =
     useState<AccountDeletionPhoneReverificationChallenge | null>(null);
+  const [supportNotice, setSupportNotice] = useState<string | null>(null);
   const submitting = phase.kind === 'submitting';
+  // phase updates land on the next render. A ref closes the double-tap window
+  // before the button's disabled state catches up.
+  const submitInFlightRef = useRef(false);
   const confirmationValid = isAccountDeletionConfirmationValid(confirmation);
   const membershipAckSatisfied = !requiresMembershipAck || membershipCancellationAcknowledged;
   const canSubmit = acknowledged
@@ -113,10 +129,10 @@ function DeleteAccountClerkScreen() {
     && phase.kind !== 'loading_eligibility';
 
   const client = useMemo(() => {
-    if (!configuration) return null;
+    if (!apiEnvironment || !apiBaseUrl) return null;
     return createAccountDeletionClient({
-      environment: configuration.environment,
-      baseUrl: configuration.apiBaseUrl,
+      environment: apiEnvironment,
+      baseUrl: apiBaseUrl,
       enabled: mutationEnabled,
       getAccessToken: async () => {
         const current = authSnapshotRef.current;
@@ -128,7 +144,7 @@ function DeleteAccountClerkScreen() {
         return typeof token === 'string' && token.trim() ? token : null;
       },
     });
-  }, [configuration, mutationEnabled]);
+  }, [apiEnvironment, apiBaseUrl, mutationEnabled]);
 
   const clientRef = useRef(client);
   clientRef.current = client;
@@ -136,6 +152,10 @@ function DeleteAccountClerkScreen() {
   confirmationRef.current = confirmation;
   const membershipAckRef = useRef(false);
   membershipAckRef.current = requiresMembershipAck ? membershipCancellationAcknowledged : false;
+  // AuthContext.signOut is not memoized; keep applyCompleted identity stable so
+  // eligibility reload effects do not re-fire when AuthContext re-renders.
+  const signOutRef = useRef(signOut);
+  signOutRef.current = signOut;
 
   const deleteWithReverification = useReverification(
     async () => {
@@ -164,14 +184,14 @@ function DeleteAccountClerkScreen() {
   const applyCompleted = useCallback(async () => {
     setPhase({ kind: 'completed' });
     try {
-      await signOut();
+      await signOutRef.current();
     } catch {
       // The backend already confirmed deletion. A Clerk sign-out failure (the
       // session may already be revoked server-side) must never surface as
       // "Your account was not deleted" or invite a duplicate deletion request.
       router.replace('/(auth)/welcome');
     }
-  }, [signOut]);
+  }, []);
 
   const loadEligibility = useCallback(async () => {
     if (!mutationEnabled || !client) {
@@ -212,7 +232,7 @@ function DeleteAccountClerkScreen() {
     if (eligibility.kind === 'error') {
       // Undeployed Main API routes (404/501) and transient unavailability stay
       // on a non-destructive banner — never treat as completed deletion.
-      if (eligibility.code === 'unavailable') {
+      if (eligibility.code === 'unavailable' && !eligibility.retryable) {
         setRequiresMembershipAck(false);
         setPhase({ kind: 'unavailable' });
         return;
@@ -247,36 +267,41 @@ function DeleteAccountClerkScreen() {
   }, [loadEligibility]);
 
   const refreshPendingStatus = async () => {
-    if (!client || !mutationEnabled) return;
+    if (!client || !mutationEnabled || submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
     setPhase({ kind: 'submitting' });
-    const status = await client.getStatus();
-    if (status.kind === 'disabled') {
-      setPhase({ kind: 'error', code: 'disabled', conflictCode: null, retryable: false });
-      return;
+    try {
+      const status = await client.getStatus();
+      if (status.kind === 'disabled') {
+        setPhase({ kind: 'error', code: 'disabled', conflictCode: null, retryable: false });
+        return;
+      }
+      if (status.kind === 'error') {
+        setPhase({
+          kind: 'error',
+          code: status.code,
+          conflictCode: null,
+          retryable: status.retryable,
+        });
+        return;
+      }
+      if (status.data.kind === 'completed') {
+        await applyCompleted();
+        return;
+      }
+      if (status.data.kind === 'pending') {
+        setPhase({
+          kind: 'pending',
+          requestId: status.data.requestId,
+          message: status.data.message,
+          retryable: status.data.retryable,
+        });
+        return;
+      }
+      setPhase({ kind: 'form' });
+    } finally {
+      submitInFlightRef.current = false;
     }
-    if (status.kind === 'error') {
-      setPhase({
-        kind: 'error',
-        code: status.code,
-        conflictCode: null,
-        retryable: status.retryable,
-      });
-      return;
-    }
-    if (status.data.kind === 'completed') {
-      await applyCompleted();
-      return;
-    }
-    if (status.data.kind === 'pending') {
-      setPhase({
-        kind: 'pending',
-        requestId: status.data.requestId,
-        message: status.data.message,
-        retryable: status.data.retryable,
-      });
-      return;
-    }
-    setPhase({ kind: 'form' });
   };
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
@@ -287,20 +312,25 @@ function DeleteAccountClerkScreen() {
   };
 
   const submitDeletion = async () => {
-    if (!canSubmit || submitting) return;
+    if (!canSubmit || submitting || submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
     if (!client) {
+      submitInFlightRef.current = false;
       setPhase({ kind: 'error', code: 'configuration', conflictCode: null, retryable: false });
       return;
     }
     if (!mutationEnabled) {
+      submitInFlightRef.current = false;
       setPhase({ kind: 'error', code: 'disabled', conflictCode: null, retryable: false });
       return;
     }
     if (!clerkUserId || authSnapshot?.userId !== clerkUserId) {
+      submitInFlightRef.current = false;
       setPhase({ kind: 'error', code: 'unauthorized', conflictCode: null, retryable: false });
       return;
     }
     if (requiresMembershipAck && !membershipCancellationAcknowledged) {
+      submitInFlightRef.current = false;
       setPhase({
         kind: 'error',
         code: 'membership_ack_required',
@@ -363,6 +393,8 @@ function DeleteAccountClerkScreen() {
         return;
       }
       setPhase({ kind: 'error', code: 'server', conflictCode: null, retryable: true });
+    } finally {
+      submitInFlightRef.current = false;
     }
   };
 
@@ -374,11 +406,15 @@ function DeleteAccountClerkScreen() {
     })
     : null;
 
-  const blockedCopy = phase.kind === 'blocked'
-    ? phase.blockers.length > 0
-      ? phase.blockers.map((blocker) => presentAccountDeletionConflict(blocker.code)).join('\n\n')
-      : presentAccountDeletionConflict('account_deletion_blocked')
-    : null;
+  const blockerMessages = phase.kind === 'blocked'
+    ? presentAccountDeletionBlockerMessages(phase.blockers)
+    : [];
+  const supportEmail = verifiedSupportResource('support-email');
+  const openSupport = () => {
+    void openVerifiedSupportResource(supportEmail, (url) => Linking.openURL(url)).then((result) => {
+      setSupportNotice(result === 'opened' ? null : EXTERNAL_RESOURCE_OPEN_ERROR);
+    });
+  };
 
   const showForm = phase.kind === 'form'
     || phase.kind === 'submitting'
@@ -457,19 +493,38 @@ function DeleteAccountClerkScreen() {
             testID="delete-account-backend-disabled"
           >
             <Text style={[styles.bannerText, { color: colors.mutedForegroundLight }]}>
-              Account deletion is not available for this account right now. Your account was not deleted.
+              Account deletion is turned off right now. Bluebird will not delete this account until deletion is available. Your account was not deleted.
             </Text>
           </View>
         ) : null}
 
         {phase.kind === 'blocked' ? (
           <View
-            style={[styles.banner, { backgroundColor: colors.surface, borderColor: colors.destructive }]}
+            style={[styles.banner, styles.blockedBanner, { backgroundColor: colors.surface, borderColor: colors.destructive }]}
             testID="delete-account-blocked"
             accessibilityRole="alert"
           >
             <Text style={[styles.bannerTitle, { color: colors.destructive }]}>Deletion blocked</Text>
-            <Text style={[styles.bannerText, { color: colors.mutedForegroundLight }]}>{blockedCopy}</Text>
+            {blockerMessages.map((message) => (
+              <Text key={message} style={[styles.bannerText, { color: colors.mutedForegroundLight }]}>
+                {message}
+              </Text>
+            ))}
+            {supportEmail ? (
+              <TouchableOpacity
+                testID="delete-account-support"
+                accessibilityRole="button"
+                accessibilityLabel={supportEmail.label}
+                onPress={openSupport}
+                style={styles.supportButton}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.cancelText, { color: colors.primary }]}>{supportEmail.label}</Text>
+              </TouchableOpacity>
+            ) : null}
+            {supportNotice ? (
+              <Text style={[styles.bannerText, { color: colors.mutedForegroundLight }]}>{supportNotice}</Text>
+            ) : null}
           </View>
         ) : null}
 
@@ -515,7 +570,7 @@ function DeleteAccountClerkScreen() {
               <TouchableOpacity
                 testID="delete-account-retry"
                 accessibilityRole="button"
-                onPress={() => setPhase({ kind: 'form' })}
+                onPress={() => { void loadEligibility(); }}
                 style={styles.refreshButton}
                 activeOpacity={0.75}
               >
@@ -691,6 +746,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 14,
   },
+  blockedBanner: { gap: 8 },
+  supportButton: { alignSelf: 'flex-start', marginTop: 4 },
   bannerTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15, marginBottom: 6 },
   bannerText: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },
   checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginTop: 4 },

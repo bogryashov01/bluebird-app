@@ -11,6 +11,7 @@ import {
   memberMessagesSnapshotConfirmsConversations,
   nextMemberMessageSend,
   presentMemberConversationsView,
+  projectOutboundMessageOntoConversations,
   readMemberMessagesSnapshot,
   refreshMemberMessageThreadLatest,
   rememberMemberMessagesSnapshot,
@@ -29,6 +30,7 @@ import {
   subscribeMemberMessageHints,
   subscribeMemberMessageSocketLive,
 } from '@/lib/memberMessageRealtime';
+import { presentMemberAccessClosed, subscribeMemberSafetyRefresh } from '@/lib/memberSafety';
 
 const FAILURE_COPY: Record<MemberMessagesFailure, string> = {
   configuration: 'Messages are not available yet.',
@@ -117,6 +119,49 @@ function rememberUnreadFromReadState(input: {
     kind: 'unread',
     clerkUserId: input.clerkUserId,
     conversationId: input.conversationId,
+  });
+}
+
+/** Keep Chats preview + HTTP inbox subscribers aligned after a local send. */
+function rememberOutboundMessageInInbox(input: {
+  clerkUserId: string;
+  conversationId: number;
+  message: MemberMessage;
+}) {
+  const configuration = getMainBluebirdApiConfigurationOrNull();
+  if (!configuration) {
+    publishMemberMessageHint({
+      kind: 'message',
+      clerkUserId: input.clerkUserId,
+      conversationId: input.conversationId,
+      messageId: input.message.id,
+    });
+    return;
+  }
+  const existing = readMemberMessagesSnapshot({
+    environment: configuration.environment,
+    apiBaseUrl: configuration.apiBaseUrl,
+    clerkUserId: input.clerkUserId,
+  });
+  if (existing) {
+    rememberMemberMessagesSnapshot({
+      clerkUserId: input.clerkUserId,
+      environment: configuration.environment,
+      apiBaseUrl: configuration.apiBaseUrl,
+      unreadCount: existing.unreadCount,
+      conversationsLoaded: existing.conversationsLoaded === true,
+      conversations: projectOutboundMessageOntoConversations({
+        conversations: existing.conversations,
+        conversationId: input.conversationId,
+        message: input.message,
+      }),
+    });
+  }
+  publishMemberMessageHint({
+    kind: 'message',
+    clerkUserId: input.clerkUserId,
+    conversationId: input.conversationId,
+    messageId: input.message.id,
   });
 }
 
@@ -227,6 +272,13 @@ export function useMemberMessagesUnreadCount(): number {
         });
         if (cached) setUnreadCount(cached.unreadCount);
       }
+      void load(accountId, generationRef.current);
+    });
+  }, [accountId, enabled, load]);
+
+  React.useEffect(() => {
+    if (!enabled || !accountId) return;
+    return subscribeMemberSafetyRefresh(() => {
       void load(accountId, generationRef.current);
     });
   }, [accountId, enabled, load]);
@@ -399,6 +451,13 @@ export function useMemberConversations(active: boolean) {
     });
   }, [accountId, enabled, load]);
 
+  React.useEffect(() => {
+    if (!enabled || !accountId) return;
+    return subscribeMemberSafetyRefresh(() => {
+      void load(accountId, generationRef.current);
+    });
+  }, [accountId, enabled, load]);
+
   const refresh = React.useCallback(async () => {
     if (!enabled || !accountId) return;
     setRefreshing(true);
@@ -505,6 +564,12 @@ export function useMemberMessageThread(conversationId: number | null) {
         setStatus('disabled');
       },
       applyError: (code) => {
+        if (code === 'connection_required' || code === 'not_found') {
+          setMessages([]);
+          setStatus('error');
+          setMessage(presentMemberAccessClosed());
+          return;
+        }
         setStatus(messagesRef.current.length > 0 ? 'ready' : 'error');
         setMessage(FAILURE_COPY[code]);
       },
@@ -579,6 +644,13 @@ export function useMemberMessageThread(conversationId: number | null) {
     });
   }, [accountId, conversationId, enabled, loadLatest]);
 
+  React.useEffect(() => {
+    if (!enabled || !accountId || conversationId === null) return;
+    return subscribeMemberSafetyRefresh(() => {
+      void loadLatest(accountId, generationRef.current);
+    });
+  }, [accountId, conversationId, enabled, loadLatest]);
+
   const loadEarlier = React.useCallback(async () => {
     if (!enabled || !accountId || conversationId === null || !hasMore || !nextCursor || historyInFlight.current) return;
     const client = clientForAccount();
@@ -628,6 +700,11 @@ export function useMemberMessageThread(conversationId: number | null) {
       setMessages((currentMessages) => mergeMessages(currentMessages, [result.data.message]));
       setMessage(null);
       markedId.current = result.data.message.id;
+      rememberOutboundMessageInInbox({
+        clerkUserId: requestedAccountId,
+        conversationId,
+        message: result.data.message,
+      });
       const read = await client.markRead(conversationId);
       if (current(requestedAccountId, requestedGeneration) && read.kind === 'loaded') {
         rememberUnreadFromReadState({
@@ -708,6 +785,12 @@ export function useOpenAcceptedConversation() {
             ],
           });
         }
+        // Refresh any mounted Chats list over HTTP (gateway optional).
+        publishMemberMessageHint({
+          kind: 'conversation',
+          clerkUserId: accountId,
+          conversationId: result.data.conversation.id,
+        });
         setMessage(null);
       }
       return result;

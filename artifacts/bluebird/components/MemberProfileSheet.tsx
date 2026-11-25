@@ -39,7 +39,9 @@ export function MemberProfileSheet({
   primary,
   secondary,
   footnote,
+  extra,
   onClose,
+  onDismiss,
 }: {
   visible: boolean;
   name: string;
@@ -47,12 +49,14 @@ export function MemberProfileSheet({
   primary?: MemberProfileAction | null;
   secondary?: MemberProfileAction | null;
   footnote?: MemberProfileAction | null;
+  extra?: readonly MemberProfileAction[] | null;
   onClose: () => void;
+  onDismiss?: () => void;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} onDismiss={onDismiss}>
       <View style={styles.modal}>
         <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={onClose} accessibilityLabel="Close profile" />
         <View
@@ -93,6 +97,18 @@ export function MemberProfileSheet({
               ) : null}
             </View>
           ) : null}
+          {extra?.map((action) => (
+            <TouchableOpacity
+              key={action.testID}
+              accessibilityRole="button"
+              disabled={action.disabled}
+              testID={action.testID}
+              onPress={action.onPress}
+              style={[styles.extra, { borderColor: colors.border, opacity: action.disabled ? 0.55 : 1 }]}
+            >
+              <Text style={[styles.outlineLabel, { color: colors.textOnSurface }]}>{action.label}</Text>
+            </TouchableOpacity>
+          ))}
           {footnote ? (
             <TouchableOpacity
               accessibilityRole="button"
@@ -131,6 +147,7 @@ const styles = StyleSheet.create({
   filledLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
   outline: { flex: 1, minHeight: 50, borderRadius: 16, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   outlineLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
+  extra: { alignSelf: 'stretch', minHeight: 44, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   footnote: { minHeight: 44, justifyContent: 'center', marginTop: 4 },
   footnoteLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
   close: { minHeight: 48, justifyContent: 'center', marginTop: 4 },

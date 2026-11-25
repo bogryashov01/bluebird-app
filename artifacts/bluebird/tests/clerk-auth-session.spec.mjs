@@ -142,6 +142,7 @@ test("central Clerk resolution states gate member screens and distinguish outcom
   assert.equal(shouldRedirectClerkRoute(["account", "personal-info"], false, true), false);
   // Delete Account matches Personal Info: home-ready Clerk profiles only.
   assert.equal(shouldRedirectClerkRoute(["account", "delete-account"], false, true), false);
+  assert.equal(shouldRedirectClerkRoute(["account", "blocked-members"], false, true), false);
   assert.equal(shouldRedirectClerkRoute(["account", "delete-account"], false, false), true);
   assert.equal(shouldRedirectClerkRoute(["account", "delete-account"], false), true);
   assert.equal(shouldRedirectClerkRoute(["account", "delete-account", "extra"], false, true), true);
@@ -466,8 +467,8 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(clerkProfile, /router\.push\('\/account\/personal-info'/);
   assert.match(clerkProfile, /label: 'Connect Contacts'/);
   assert.match(clerkProfile, /router\.push\('\/account\/contacts'/);
-  assert.match(clerkProfile, /label: 'Payment Methods'/);
-  assert.match(clerkProfile, /router\.push\('\/account\/payment-methods'/);
+  assert.doesNotMatch(clerkProfile, /label: 'Payment Methods'/);
+  assert.doesNotMatch(clerkProfile, /router\.push\('\/account\/payment-methods'/);
   assert.match(clerkProfile, /label: 'Delete Account'/);
   assert.match(clerkProfile, /testID: 'clerk-delete-account'/);
   assert.match(clerkProfile, /confirmOpenDeleteAccount/);
@@ -485,9 +486,8 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.doesNotMatch(preferencesOnly, /Get notified when someone sends you a connection request/);
   assert.doesNotMatch(clerkProfile, /label: 'Community'/);
   assert.doesNotMatch(clerkProfile, /router\.push\('\/community'/);
+  assert.match(clerkProfile, /isAiConciergeIntegrationEnabled\(\)/);
   assert.match(clerkProfile, /label: 'AI Concierge'/);
-  assert.match(clerkProfile, /hint: 'Not available yet'/);
-  assert.match(clerkProfile, /router\.push\('\/concierge'/);
   assert.match(clerkProfile, /router\.push\('\/support\/help-center'/);
   assert.match(clerkProfile, /router\.push\('\/support\/legal'/);
   assert.match(clerkProfile, /label: 'Sign Out'/);
@@ -524,9 +524,8 @@ test("Clerk Profile restores account destinations and sign-out without claiming 
   assert.match(conciergeSource, /clerk-concierge-unavailable/);
   assert.match(conciergeSource, /ProductionAuthenticatedUnavailableNotice/);
   const paymentMethodsSource = readFileSync(resolve(projectRoot, "app/account/payment-methods.tsx"), "utf8");
-  assert.match(paymentMethodsSource, /Manage Your Payment Method/);
-  assert.match(paymentMethodsSource, /DESTINATION\.label/);
-  assert.match(paymentMethodsSource, /openMembershipPaymentWebsite/);
+  assert.match(paymentMethodsSource, /Payments are not available in the app/);
+  assert.doesNotMatch(paymentMethodsSource, /openMembershipPaymentWebsite|Open Bluebird Website|update your card/);
   const paymentWebsiteSource = readFileSync(resolve(projectRoot, "lib/membershipPaymentMethod.ts"), "utf8");
   assert.match(paymentWebsiteSource, /Open Bluebird Website/);
   assert.match(paymentWebsiteSource, /https:\/\/bluebirdjets\.com/);

@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
+import { isAiConciergeIntegrationEnabled } from '@/lib/aiConcierge';
 import { isLegacyMemberQueryEnabled } from '@/lib/clerkAuthSession';
 import { useGetMembership, useListNotifications } from '@workspace/api-client-react';
 import type { Notification } from '@workspace/api-client-react';
@@ -26,6 +27,7 @@ import type { ProductionUserProfile } from '@/lib/productionAuthApi';
 import { getFullAppDemoProfile } from '@/lib/fullAppDemo';
 import { presentClerkMembershipDesign } from '@/lib/clerkMembershipDesign';
 import { isMemberConnectionsIntegrationEnabled } from '@/lib/memberConnections';
+import { isMemberSafetyEnabled } from '@/lib/memberSafety';
 import {
   IncomingConnectionPreferenceError,
   saveIncomingConnectionRequestsPreference,
@@ -302,6 +304,7 @@ export default function ProfileScreen() {
         ? clerkMemberResolution.currentUser
         : null;
     const connectionsEnabled = isMemberConnectionsIntegrationEnabled();
+    const blockedMembersEnabled = isMemberSafetyEnabled();
     const incomingSupported = connectionsEnabled && profile?.allowIncomingConnectionRequestsSupported === true;
     const incomingValue = incomingPreference ?? profile?.allowIncomingConnectionRequests !== false;
     const saveIncomingPreference = async (next: boolean) => {
@@ -432,10 +435,6 @@ export default function ProfileScreen() {
                 hint: 'Invite friends',
                 onPress: () => router.push('/account/contacts' as any),
               },
-              {
-                label: 'Payment Methods',
-                onPress: () => router.push('/account/payment-methods' as any),
-              },
             ]}
           />
           {visibleProfileState.kind === 'error' && (
@@ -487,26 +486,31 @@ export default function ProfileScreen() {
               {incomingPreferenceError}
             </Text>
           ) : null}
-          {connectionsEnabled ? (
+          {connectionsEnabled || blockedMembersEnabled ? (
             <SettingsGroup
               title="Connections"
               rows={[
-                {
+                ...(connectionsEnabled ? [{
                   label: 'Connections',
                   testID: 'clerk-connections-preview',
                   onPress: () => router.navigate('/(tabs)/connections' as never),
-                },
+                }] : []),
+                ...(blockedMembersEnabled ? [{
+                  label: 'Blocked Members',
+                  testID: 'clerk-blocked-members',
+                  onPress: () => router.push('/account/blocked-members' as never),
+                }] : []),
               ]}
             />
           ) : null}
           <SettingsGroup
             title="Support"
             rows={[
-              {
+              ...(isAiConciergeIntegrationEnabled() ? [{
                 label: 'AI Concierge',
                 hint: 'Not available yet',
                 onPress: () => router.push('/concierge'),
-              },
+              }] : []),
               { label: 'Help Center', onPress: () => router.push('/support/help-center' as any) },
               { label: 'Legal', onPress: () => router.push('/support/legal' as any) },
             ]}

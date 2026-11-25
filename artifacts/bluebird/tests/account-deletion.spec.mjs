@@ -17,6 +17,8 @@ import {
   parseAccountDeletionEligibility,
   parseAccountDeletionResponse,
   parseAccountDeletionStatus,
+  presentAccountDeletionBlockerMessages,
+  presentAccountDeletionConflict,
   presentAccountDeletionFailure,
 } from '../scripts/.account-deletion.test.mjs';
 import {
@@ -76,6 +78,42 @@ test('GET eligibility matches enabled/blockers/membership acknowledgement contra
     enabled: true,
     blockers: [],
   }));
+
+  const productionBlockers = parseAccountDeletionEligibility({
+    enabled: true,
+    requiresMembershipCancellationAcknowledgement: true,
+    blockers: [
+      {
+        code: 'flight_record_review',
+        action: 'Contact Bluebird support to review flight manifests and immutable flight-event retention.',
+      },
+      {
+        code: 'billing_configuration',
+        action: 'Contact Bluebird support to identify the active membership billing provider.',
+      },
+    ],
+  });
+  assert.deepEqual(productionBlockers.blockers, [
+    {
+      code: 'flight_record_review',
+      action: 'Contact Bluebird support to review flight manifests and immutable flight-event retention.',
+    },
+    {
+      code: 'billing_configuration',
+      action: 'Contact Bluebird support to identify the active membership billing provider.',
+    },
+  ]);
+  assert.equal(isAccountDeletionEligible(productionBlockers), false);
+  assert.deepEqual(presentAccountDeletionBlockerMessages(productionBlockers.blockers), [
+    'Your account is linked to flight records that require review before deletion. Please contact Bluebird support.',
+    'Your membership billing details require review before your account can be deleted. Please contact Bluebird support.',
+  ]);
+  assert.deepEqual(presentAccountDeletionBlockerMessages([
+    { code: 'unknown_hold' },
+    { code: 'another_unknown_hold' },
+  ]), [
+    presentAccountDeletionConflict(null),
+  ]);
 });
 
 test('typed confirmation requires DELETE and POST/status parsers stay strict', () => {
@@ -619,6 +657,17 @@ test('production-live-internal enables account deletion without disabling other 
   );
 });
 
+test('dev-rc-parity enables account deletion to match production-live-internal', () => {
+  const eas = JSON.parse(readFileSync(resolve(projectRoot, 'eas.json'), 'utf8'));
+  const parity = readFileSync(resolve(projectRoot, 'scripts/dev-rc-parity.mjs'), 'utf8');
+  assert.equal(eas.build['production-live-internal'].env.EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION, 'true');
+  assert.match(parity, /EXPO_PUBLIC_BLUEBIRD_ACCOUNT_DELETION:\s*'true'/);
+  assert.match(parity, /EXPO_PUBLIC_BLUEBIRD_MEMBER_CONNECTIONS:\s*'true'/);
+  assert.match(parity, /EXPO_PUBLIC_BLUEBIRD_MEMBER_MESSAGES:\s*'true'/);
+  assert.match(parity, /EXPO_PUBLIC_BLUEBIRD_PRODUCTION_QUEUE_MUTATIONS:\s*'true'/);
+  assert.match(parity, /EXPO_PUBLIC_BLUEBIRD_PUSH_REGISTRATION:\s*'true'/);
+});
+
 test('Profile opens Delete Account after Alert and the screen never deletes Clerk users locally', () => {
   const profile = readFileSync(resolve(projectRoot, 'app/(tabs)/profile/index.tsx'), 'utf8');
   const clerkProfile = profile
@@ -655,16 +704,16 @@ test('Profile opens Delete Account after Alert and the screen never deletes Cler
   assert.match(screen, /skipCache:\s*true/);
   assert.match(screen, /AccountDeletionPhoneReverificationModal/);
   assert.match(screen, /isAccountDeletionMutationEnabled/);
-  assert.match(screen, /await signOut\(\)/);
+  assert.match(screen, /await signOutRef\.current\(\)/);
   assert.match(screen, /kind: 'completed'/);
-  assert.ok(screen.indexOf("kind: 'completed'") < screen.indexOf('await signOut()'));
+  assert.ok(screen.indexOf("kind: 'completed'") < screen.indexOf('await signOutRef.current()'));
   // Regression: a sign-out failure after confirmed deletion must not fall into
   // submitDeletion's catch ("Your account was not deleted" + retry).
   const applyCompletedBlock = screen.slice(
     screen.indexOf('const applyCompleted = useCallback'),
     screen.indexOf('const loadEligibility = useCallback'),
   );
-  assert.match(applyCompletedBlock, /try \{\s*await signOut\(\);\s*\} catch/);
+  assert.match(applyCompletedBlock, /try \{\s*await signOutRef\.current\(\);\s*\} catch/);
   assert.match(applyCompletedBlock, /router\.replace\('\/\(auth\)\/welcome'\)/);
   assert.doesNotMatch(screen, /users\.deleteUser|deleteUser\(|clerk\.user\.delete|client\.users/);
   assert.doesNotMatch(client, /users\.deleteUser|deleteUser\(|clerk\.user\.delete/);
@@ -679,4 +728,52 @@ test('Profile opens Delete Account after Alert and the screen never deletes Cler
   assert.match(phoneHelper, /attemptFirstFactorVerification/);
   assert.match(phoneHelper, /phone_code/);
   assert.match(auth, /await clerkSession\?\.signOut\(\)/);
+});
+
+test('Delete Account screen memoizes API config so eligibility load cannot update-depth loop', () => {
+  // TF21: getMainBluebirdApiConfigurationOrNull() returns a new object every call.
+  // Putting that raw object in useMemo([configuration]) / loadEligibility deps
+  // recreated the client every render → useEffect([loadEligibility]) →
+  // setPhase({ kind: 'loading_eligibility' }) → Maximum update depth exceeded
+  // before the user could type DELETE.
+  const screen = readFileSync(resolve(projectRoot, 'app/account/delete-account.tsx'), 'utf8');
+  const config = readFileSync(resolve(projectRoot, 'lib/mainBluebirdApiConfig.ts'), 'utf8');
+
+  assert.match(
+    config,
+    /export function getMainBluebirdApiConfigurationOrNull\(\)[\s\S]*?return getMainBluebirdApiConfiguration\(\);/,
+  );
+
+  assert.match(
+    screen,
+    /const configuration = useMemo\(\(\) => getMainBluebirdApiConfigurationOrNull\(\), \[\]\)/,
+  );
+  assert.match(screen, /const apiEnvironment = configuration\?\.environment/);
+  assert.match(screen, /const apiBaseUrl = configuration\?\.apiBaseUrl/);
+  assert.match(screen, /\[apiEnvironment, apiBaseUrl, mutationEnabled\]/);
+  assert.match(screen, /const signOutRef = useRef\(signOut\)/);
+  assert.match(screen, /signOutRef\.current = signOut/);
+  assert.match(screen, /await signOutRef\.current\(\)/);
+
+  const applyCompletedBlock = screen.slice(
+    screen.indexOf('const applyCompleted = useCallback'),
+    screen.indexOf('const loadEligibility = useCallback'),
+  );
+  assert.match(applyCompletedBlock, /useCallback\(async \(\) => \{[\s\S]*?\}, \[\]\)/);
+
+  assert.match(screen, /useEffect\(\(\) => \{\s*void loadEligibility\(\);\s*\}, \[loadEligibility\]\)/);
+  assert.match(screen, /submitInFlightRef/);
+  assert.match(screen, /void loadEligibility\(\)/);
+  assert.match(screen, /Account deletion is turned off right now/);
+  const modal = readFileSync(
+    resolve(projectRoot, 'components/AccountDeletionPhoneReverificationModal.tsx'),
+    'utf8',
+  );
+  assert.match(modal, /onDismissedRef/);
+  assert.doesNotMatch(modal, /\}, \[visible, challenge, session, onDismissed\]\)/);
+  assert.doesNotMatch(
+    screen,
+    /const configuration = getMainBluebirdApiConfigurationOrNull\(\);/,
+  );
+  assert.doesNotMatch(screen, /\}, \[configuration, mutationEnabled\]\)/);
 });

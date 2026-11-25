@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetMembership } from '@workspace/api-client-react';
 import { useAuth } from '@/context/AuthContext';
+import { isAiConciergeIntegrationEnabled } from '@/lib/aiConcierge';
 import { isLegacyMemberQueryEnabled } from '@/lib/clerkAuthSession';
 import { useColors } from '@/hooks/useColors';
 import { useProductionMembershipPlans } from '@/hooks/useProductionMembershipPlans';
@@ -492,13 +493,12 @@ export default function MembershipScreen() {
       );
     }
     const clerkRows = [
-      {
+      ...(isAiConciergeIntegrationEnabled() ? [{
         label: 'AI Concierge',
         hint: 'Not available yet',
         onPress: () => router.push('/concierge' as any),
-      },
+      }] : []),
       { label: 'Referral Program', onPress: () => router.push('/referral' as any) },
-      { label: 'Payment Methods', onPress: () => router.push('/account/payment-methods' as any) },
     ];
     return (
       <View style={[styles.root, { backgroundColor: colors.offWhite }]} testID="clerk-membership">
@@ -598,7 +598,7 @@ export default function MembershipScreen() {
             {clerkRows.map((row, i) => (
               <TouchableOpacity
                 key={row.label}
-                testID={row.label === 'Referral Program' ? 'membership-referral-program' : row.label === 'AI Concierge' ? 'membership-concierge' : 'membership-payment-methods'}
+                testID={row.label === 'Referral Program' ? 'membership-referral-program' : 'membership-concierge'}
                 activeOpacity={0.7}
                 onPress={row.onPress}
                 style={[styles.linkRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.separator }]}

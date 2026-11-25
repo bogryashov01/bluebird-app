@@ -20,6 +20,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MemberConversationList } from '@/components/MemberConversationList';
 import { MemberInitialsAvatar, MemberProfileSheet } from '@/components/MemberProfileSheet';
+import { MemberSafetyDialogs } from '@/components/MemberSafetyDialogs';
 import { useColors } from '@/hooks/useColors';
 import {
   connectionMemberLabel,
@@ -29,11 +30,21 @@ import {
   type ConnectionRelationship,
   type OutgoingConnectionRequest,
 } from '@/lib/memberConnections';
-import { presentDiscoveredMember } from '@/lib/memberConnectPresentation';
+import { discoveredStateFromDiscoveryMember, presentDiscoveredMember } from '@/lib/memberConnectPresentation';
+import {
+  advanceMemberSafetyHandoff,
+  queueMemberSafetyHandoff,
+  type MemberSafetyHandoff,
+} from '@/lib/memberSafety';
 import { isMemberMessagesIntegrationEnabled } from '@/lib/memberMessages';
 import { phonePlusPrefixFieldProps } from '@/lib/phonePlusPrefix';
 import { useMemberConnections } from '@/lib/useMemberConnections';
 import { useOpenAcceptedConversation } from '@/lib/useMemberMessages';
+
+/** Accept then open Messages with the requester's Clerk userId — never the connection row id. */
+function requesterUserIdFromIncoming(request: ConnectionRelationship): string {
+  return request.requester.userId.trim();
+}
 
 type ProfileSheet =
   | { kind: 'accepted'; id: number }
@@ -58,6 +69,52 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
   const [findOpen, setFindOpen] = React.useState(false);
   const [requestsOpen, setRequestsOpen] = React.useState(false);
   const [sheet, setSheet] = React.useState<ProfileSheet | null>(null);
+  const [safety, setSafety] = React.useState<MemberSafetyHandoff | null>(null);
+  const sheetRef = React.useRef(sheet);
+  const requestsOpenRef = React.useRef(requestsOpen);
+  const findOpenRef = React.useRef(findOpen);
+  const safetyRef = React.useRef(safety);
+  const pendingSafetyRef = React.useRef<MemberSafetyHandoff | null>(null);
+  sheetRef.current = sheet;
+  requestsOpenRef.current = requestsOpen;
+  findOpenRef.current = findOpen;
+  safetyRef.current = safety;
+  const applyMemberSafetyHandoff = React.useCallback(() => {
+    const step = advanceMemberSafetyHandoff({
+      pending: pendingSafetyRef.current,
+      profileVisible: sheetRef.current !== null,
+      requestsVisible: requestsOpenRef.current,
+      findVisible: findOpenRef.current,
+    });
+    pendingSafetyRef.current = step.pending;
+    if (step.dismissProfile) {
+      sheetRef.current = null;
+      setSheet(null);
+      if (Platform.OS !== 'ios') applyMemberSafetyHandoff();
+      return;
+    }
+    if (step.dismissRequests) {
+      requestsOpenRef.current = false;
+      setRequestsOpen(false);
+      if (Platform.OS !== 'ios') applyMemberSafetyHandoff();
+      return;
+    }
+    if (step.dismissFind) {
+      findOpenRef.current = false;
+      setFindOpen(false);
+      if (Platform.OS !== 'ios') applyMemberSafetyHandoff();
+      return;
+    }
+    if (step.present && !safetyRef.current) {
+      safetyRef.current = step.present;
+      setSafety(step.present);
+    }
+  }, []);
+  const openMemberSafety = React.useCallback((mode: MemberSafetyHandoff['mode'], userId: string) => {
+    if (safetyRef.current || pendingSafetyRef.current) return;
+    pendingSafetyRef.current = queueMemberSafetyHandoff(null, { mode, userId });
+    applyMemberSafetyHandoff();
+  }, [applyMemberSafetyHandoff]);
   const topInset = Platform.OS === 'web' ? 20 : insets.top;
   const bottomInset = Platform.OS === 'web' ? 96 : insets.bottom + 88;
   const wash = colors.scheme === 'dark' ? colors.background : colors.secondary;
@@ -112,17 +169,34 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
       ...(typeof foundMember.outgoingRequestPending === 'boolean'
         ? { outgoingRequestPending: foundMember.outgoingRequestPending }
         : {}),
+      serverDiscoveryState: discoveredStateFromDiscoveryMember(foundMember),
+      relationshipOverride: connections.relationshipOverrides[foundMember.userId] ?? null,
     })
     : null;
 
   const openConversation = (userId: string) => {
-    void messages.open(userId).then((result) => {
+    const memberUserId = userId.trim();
+    if (!memberUserId || !messagesEnabled) return;
+    void messages.open(memberUserId).then((result) => {
       if (result?.kind === 'loaded') {
         setSheet(null);
+        setRequestsOpen(false);
+        setPane('chats');
         router.push({
           pathname: '/messages/[conversationId]',
           params: { conversationId: String(result.data.conversation.id) },
         });
+      }
+    });
+  };
+
+  const acceptIncoming = (request: ConnectionRelationship) => {
+    const requesterUserId = requesterUserIdFromIncoming(request);
+    void connections.accept(request.id).then((accepted) => {
+      if (!accepted) return;
+      refreshQueueRelationships();
+      if (messagesEnabled && requesterUserId) {
+        openConversation(requesterUserId);
       }
     });
   };
@@ -306,13 +380,8 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
           onMessage: () => { if (accepted) openConversation(accepted.member.userId); },
           onAccept: () => {
             if (!incoming) return;
-            const requesterId = incoming.requester.userId;
             setSheet(null);
-            void connections.accept(incoming.id).then((accepted) => {
-              if (!accepted) return;
-              refreshQueueRelationships();
-              openConversation(requesterId);
-            });
+            acceptIncoming(incoming);
           },
           onConnect: () => {
             if (!discovery || discoveredState !== 'available') return;
@@ -341,9 +410,36 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
           disabled: connections.pending,
           onPress: () => { setSheet(null); void connections.remove(accepted.id); },
         } : null}
+        extra={(() => {
+          const userId = accepted?.member.userId ?? incoming?.requester.userId ?? discovery?.userId ?? null;
+          if (!userId) return null;
+          return [
+            {
+              label: 'Report member',
+              testID: 'member-connections-report',
+              disabled: connections.pending,
+              onPress: () => openMemberSafety('report', userId),
+            },
+            {
+              label: 'Block member',
+              testID: 'member-connections-block',
+              disabled: connections.pending,
+              onPress: () => openMemberSafety('block', userId),
+            },
+          ];
+        })()}
         onClose={() => setSheet(null)}
+        onDismiss={applyMemberSafetyHandoff}
       />
-      <Modal visible={findOpen} animationType="fade" transparent onRequestClose={() => setFindOpen(false)}>
+      <MemberSafetyDialogs
+        targetUserId={safety?.userId ?? null}
+        mode={sheet === null && !requestsOpen && !findOpen ? safety?.mode ?? null : null}
+        onClose={() => {
+          safetyRef.current = null;
+          setSafety(null);
+        }}
+      />
+      <Modal visible={findOpen} animationType="fade" transparent onRequestClose={() => setFindOpen(false)} onDismiss={applyMemberSafetyHandoff}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modal}>
           <Pressable accessibilityLabel="Close find member" style={styles.backdrop} onPress={() => setFindOpen(false)} />
           <View testID="member-connections-find-sheet" style={[styles.dialog, { backgroundColor: colors.offWhite, borderColor: colors.border }]}>
@@ -385,7 +481,9 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
                         ? 'This member already sent you a request'
                         : discoveredState === 'outgoing'
                           ? 'Request pending'
-                          : 'Bluebird member'}
+                          : discoveredState === 'unavailable'
+                            ? 'Connection status unavailable'
+                            : 'Bluebird member'}
                   </Text>
                 </View>
               </View>
@@ -393,6 +491,11 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
             {foundMember && discoveredState === 'outgoing' ? (
               <Text style={[styles.meta, { color: colors.mutedForegroundLight }]} testID="member-connections-request-pending">
                 Request pending
+              </Text>
+            ) : null}
+            {foundMember && discoveredState === 'unavailable' ? (
+              <Text style={[styles.meta, { color: colors.mutedForegroundLight }]} testID="member-connections-status-unavailable">
+                Connection status unavailable
               </Text>
             ) : null}
             {foundMember && discoveredState === 'available' ? (
@@ -429,7 +532,7 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
           </View>
         </KeyboardAvoidingView>
       </Modal>
-      <Modal visible={requestsOpen} animationType="fade" transparent onRequestClose={() => setRequestsOpen(false)}>
+      <Modal visible={requestsOpen} animationType="fade" transparent onRequestClose={() => setRequestsOpen(false)} onDismiss={applyMemberSafetyHandoff}>
         <View style={styles.modal}>
           <Pressable accessibilityLabel="Close incoming requests" style={styles.backdrop} onPress={() => setRequestsOpen(false)} />
           <View testID="member-connections-requests-sheet" style={[styles.dialog, { backgroundColor: colors.offWhite, borderColor: colors.border }]}>
@@ -447,9 +550,7 @@ export function MemberConnectionsScreen({ showBack = false }: { showBack?: boole
                   pending={connections.pending}
                   onOpen={() => setSheet({ kind: 'incoming', id: request.id })}
                   onAccept={() => {
-                    void connections.accept(request.id).then((accepted) => {
-                      if (accepted) refreshQueueRelationships();
-                    });
+                    acceptIncoming(request);
                   }}
                   onDecline={() => {
                     void connections.decline(request.id).then((declined) => {
@@ -477,6 +578,9 @@ function sheetLines(
   if (discovery && discoveredState === 'outgoing') return ['Bluebird member', 'Request pending'];
   if (discovery && discoveredState === 'connected') return ['Bluebird member', 'Connected'];
   if (discovery && discoveredState === 'incoming') return ['Bluebird member', 'Incoming request'];
+  if (discovery && discoveredState === 'unavailable') {
+    return ['Bluebird member', 'Connection status unavailable'];
+  }
   if (discovery) return ['Bluebird member', 'Not connected'];
   return [];
 }

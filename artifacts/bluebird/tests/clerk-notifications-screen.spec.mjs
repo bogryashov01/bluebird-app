@@ -357,10 +357,9 @@ test("Payment Methods returns to either Profile presentation and uses the stack 
     await page.getByRole("button", { name: "Open Payment Methods" }).click();
     await expect(page.getByTestId("payment-methods-screen")).toBeVisible();
     await expect(page.getByText("Payment Methods", { exact: true })).toBeVisible();
-    await expect(page.getByTestId("payment-methods-website")).toBeVisible();
-    await expect(page.getByText("Manage Your Payment Method", { exact: true })).toBeVisible();
-    await expect(page.getByText("Your membership payment method is securely managed through the Bluebird website. You can view or update your card details there.", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Open Bluebird Website" })).toBeVisible();
+    await expect(page.getByTestId("payment-methods-unavailable")).toBeVisible();
+    await expect(page.getByText("Payments are not available in the app", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open Bluebird Website" })).toHaveCount(0);
     await expect(page.getByText("Payment method unavailable", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Unavailable for this account", { exact: true })).toHaveCount(0);
 

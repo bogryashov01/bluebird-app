@@ -11,10 +11,12 @@ import {
   MEMBER_CONNECTION_PATHS,
   parseAcceptedConnections,
   parseConnectionDiscovery,
+  parseConnectionRelationshipConflict,
   parseDiscoveredConnectionMember,
   parseIncomingConnectionRequests,
   parseOutgoingConnectionRequest,
   parseOutgoingConnectionRequests,
+  presentConnectionRequestConflict,
   reconcilePendingOutgoingRecipients,
   projectOutgoingConnectionRequest,
   outgoingRecipientLabel,
@@ -24,7 +26,15 @@ import {
   rememberMemberConnectionsSnapshot,
   retainMemberConnectionsForAccount,
 } from "../scripts/.member-connections.test.mjs";
-import { formatMemberActivityTime, memberInitials, presentDiscoveredMember } from "../scripts/.member-connect-presentation.test.mjs";
+import {
+  discoveredStateFromDiscoveryMember,
+  discoveredStateFromRelationshipConflict,
+  formatMemberActivityTime,
+  inferDiscoveredStateFromConnectionLists,
+  memberInitials,
+  presentDiscoveredMember,
+  resolveConflictDiscoveredState,
+} from "../scripts/.member-connect-presentation.test.mjs";
 
 process.env.EXPO_PUBLIC_BLUEBIRD_NATIVE_AUTH_TEST = "false";
 
@@ -554,6 +564,7 @@ test("direct createRequest maps incoming_requests_disabled from HTTP 403", async
   }).createRequest("user_to");
   assert.equal(conflict.kind, "error");
   assert.equal(conflict.code, "conflict");
+  assert.equal(conflict.relationship, undefined);
 
   // Uppercase local codes are not accepted by the Main API parser.
   const uppercase = await createMemberConnectionsClient({
@@ -582,7 +593,10 @@ test("relationship lifecycle: hub loads incoming, outgoing, and accepted; Find M
   assert.match(hook, /client\.listAccepted\(\)/);
   assert.match(hook, /outgoing_unsupported/);
   assert.match(hook, /createdOutgoing/);
-  assert.match(hook, /conflict: 'A connection request already exists for this member\.'/);
+  assert.match(hook, /presentConnectionRequestConflict/);
+  assert.match(hook, /relationshipOverrides/);
+  assert.match(hook, /kind: 'connection-accepted'/);
+  assert.match(hook, /publishMemberMessageHint/);
 
   assert.equal(presentDiscoveredMember({
     userId: "user_pending_outgoing",
@@ -596,28 +610,211 @@ test("relationship lifecycle: hub loads incoming, outgoing, and accepted; Find M
     incomingRequesterIds: [],
     outgoingRecipientIds: [],
   }), "available");
+  assert.equal(presentDiscoveredMember({
+    userId: "user_available",
+    acceptedUserIds: [],
+    incomingRequesterIds: [],
+    outgoingRecipientIds: [],
+    relationshipOverride: "connected",
+  }), "connected");
 
   const screen = readFileSync(resolve(projectRoot, "components/MemberConnectionsScreen.tsx"), "utf8");
   assert.match(screen, /discoveredState === 'available'/);
   assert.match(screen, /discoveredState === 'outgoing'/);
+  assert.match(screen, /relationshipOverrides/);
   assert.match(screen, /Send request/);
   assert.match(screen, /Request pending/);
   assert.match(screen, /Sent Requests/);
   assert.match(screen, /member-connections-incoming-empty/);
   assert.doesNotMatch(screen, /Cancel request|cancelOutgoing/);
+  // Accept → Messages must use the requester Clerk userId, never the connection row id.
+  assert.match(screen, /requesterUserIdFromIncoming/);
+  assert.match(screen, /acceptIncoming/);
+  assert.match(screen, /request\.requester\.userId/);
+  assert.match(screen, /messages\.open\(memberUserId\)|messages\.open\(requesterUserId\)/);
+  assert.match(screen, /setPane\('chats'\)/);
+  assert.doesNotMatch(screen, /messages\.open\(incoming\.id\)|messages\.open\(request\.id\)/);
+  assert.doesNotMatch(screen, /participantUserId/);
 });
 
-test("direct createRequest: any HTTP 409 maps to conflict; privacy OFF stays a distinct code", async () => {
-  const any409 = await createMemberConnectionsClient({
+test("direct createRequest: structured HTTP 409 relationship facts drive conflict copy", async () => {
+  const pending = await createMemberConnectionsClient({
     enabled: true,
     nativeAuthTest: false,
     environment: "production",
     baseUrl,
     getAccessToken: async () => "clerk-token",
-    fetcher: async () => jsonResponse({ code: "some_other_conflict" }, 409),
+    fetcher: async () => jsonResponse({
+      code: "relationship_exists",
+      relationshipStatus: "pending",
+      relationshipDirection: "outgoing",
+    }, 409),
   }).createRequest("user_to");
-  assert.equal(any409.kind, "error");
-  assert.equal(any409.code, "conflict");
+  assert.equal(pending.kind, "error");
+  assert.equal(pending.code, "conflict");
+  assert.deepEqual(pending.relationship, { status: "pending", direction: "outgoing" });
+  assert.match(presentConnectionRequestConflict(pending.relationship), /already pending/i);
+
+  const accepted = await createMemberConnectionsClient({
+    enabled: true,
+    nativeAuthTest: false,
+    environment: "production",
+    baseUrl,
+    getAccessToken: async () => "clerk-token",
+    fetcher: async () => jsonResponse({
+      code: "relationship_exists",
+      relationshipStatus: "accepted",
+      relationshipDirection: "outgoing",
+    }, 409),
+  }).createRequest("user_to");
+  assert.deepEqual(accepted.relationship, { status: "accepted", direction: "outgoing" });
+  assert.match(presentConnectionRequestConflict(accepted.relationship), /already connected/i);
+  assert.equal(discoveredStateFromRelationshipConflict(accepted.relationship), "connected");
+
+  const declined = await createMemberConnectionsClient({
+    enabled: true,
+    nativeAuthTest: false,
+    environment: "production",
+    baseUrl,
+    getAccessToken: async () => "clerk-token",
+    fetcher: async () => jsonResponse({
+      code: "relationship_exists",
+      relationshipStatus: "declined",
+      relationshipDirection: "outgoing",
+    }, 409),
+  }).createRequest("user_to");
+  assert.deepEqual(declined.relationship, { status: "declined", direction: "outgoing" });
+  assert.match(presentConnectionRequestConflict(declined.relationship), /declined/i);
+  assert.match(presentConnectionRequestConflict(declined.relationship), /Sent Requests/);
+  assert.equal(discoveredStateFromRelationshipConflict(declined.relationship), null);
+
+  const removed = await createMemberConnectionsClient({
+    enabled: true,
+    nativeAuthTest: false,
+    environment: "production",
+    baseUrl,
+    getAccessToken: async () => "clerk-token",
+    fetcher: async () => jsonResponse({
+      code: "relationship_exists",
+      relationshipStatus: "removed",
+    }, 409),
+  }).createRequest("user_to");
+  assert.deepEqual(removed.relationship, { status: "removed", direction: null });
+  assert.match(presentConnectionRequestConflict(removed.relationship), /removed/i);
+  assert.equal(discoveredStateFromRelationshipConflict(removed.relationship), null);
+
+  const schemaOutOfDate = await createMemberConnectionsClient({
+    enabled: true,
+    nativeAuthTest: false,
+    environment: "production",
+    baseUrl,
+    getAccessToken: async () => "clerk-token",
+    fetcher: async () => jsonResponse({ code: "relationship_exists" }, 409),
+  }).createRequest("user_to");
+  assert.equal(schemaOutOfDate.kind, "error");
+  assert.equal(schemaOutOfDate.code, "conflict");
+  assert.equal(schemaOutOfDate.relationship, undefined);
+  assert.match(presentConnectionRequestConflict(null), /Connection status unavailable/i);
+  assert.equal(parseConnectionRelationshipConflict({ code: "relationship_exists" }), null);
+  // Unspecified 409 must NOT invent Request pending.
+  assert.equal(resolveConflictDiscoveredState({
+    relationship: null,
+    userId: "user_to",
+    acceptedUserIds: [],
+    incomingRequesterIds: [],
+    blockUnspecifiedConflict: true,
+  }), "unavailable");
+  assert.equal(presentDiscoveredMember({
+    userId: "user_to",
+    acceptedUserIds: [],
+    incomingRequesterIds: [],
+    relationshipOverride: "unavailable",
+  }), "unavailable");
+  assert.equal(resolveConflictDiscoveredState({
+    relationship: null,
+    userId: "user_to",
+    acceptedUserIds: ["user_to"],
+    incomingRequesterIds: [],
+    blockUnspecifiedConflict: true,
+  }), "connected");
+  assert.equal(inferDiscoveredStateFromConnectionLists({
+    userId: "user_to",
+    acceptedUserIds: [],
+    incomingRequesterIds: ["user_to"],
+  }), "incoming");
+  // Server discover pending is confirmed outgoing — not unavailable.
+  assert.equal(resolveConflictDiscoveredState({
+    relationship: null,
+    userId: "user_to",
+    acceptedUserIds: [],
+    incomingRequesterIds: [],
+    outgoingRequestPending: true,
+    blockUnspecifiedConflict: true,
+  }), "outgoing");
+  // Create-confirmed recipient ID remains outgoing.
+  assert.equal(resolveConflictDiscoveredState({
+    relationship: null,
+    userId: "user_to",
+    acceptedUserIds: [],
+    incomingRequesterIds: [],
+    outgoingRecipientIds: ["user_to"],
+    blockUnspecifiedConflict: true,
+  }), "outgoing");
+
+  const snakeCase = await createMemberConnectionsClient({
+    enabled: true,
+    nativeAuthTest: false,
+    environment: "production",
+    baseUrl,
+    getAccessToken: async () => "clerk-token",
+    fetcher: async () => jsonResponse({
+      code: "relationship_exists",
+      relationship_status: "accepted",
+      relationship_direction: "outgoing",
+    }, 409),
+  }).createRequest("user_to");
+  assert.deepEqual(snakeCase.relationship, { status: "accepted", direction: "outgoing" });
+
+  const nested = await createMemberConnectionsClient({
+    enabled: true,
+    nativeAuthTest: false,
+    environment: "production",
+    baseUrl,
+    getAccessToken: async () => "clerk-token",
+    fetcher: async () => jsonResponse({
+      error: "relationship_exists",
+      relationship: { status: "pending", direction: "incoming" },
+    }, 409),
+  }).createRequest("user_to");
+  assert.deepEqual(nested.relationship, { status: "pending", direction: "incoming" });
+
+  const schemaCode = await createMemberConnectionsClient({
+    enabled: true,
+    nativeAuthTest: false,
+    environment: "production",
+    baseUrl,
+    getAccessToken: async () => "clerk-token",
+    fetcher: async () => jsonResponse({ code: "connection_schema_out_of_date" }, 409),
+  }).createRequest("user_to");
+  assert.equal(schemaCode.kind, "error");
+  assert.equal(schemaCode.code, "conflict");
+  assert.equal(schemaCode.relationship, undefined);
+
+  const incoming = await createMemberConnectionsClient({
+    enabled: true,
+    nativeAuthTest: false,
+    environment: "production",
+    baseUrl,
+    getAccessToken: async () => "clerk-token",
+    fetcher: async () => jsonResponse({
+      code: "relationship_exists",
+      relationshipStatus: "pending",
+      relationshipDirection: "incoming",
+    }, 409),
+  }).createRequest("user_to");
+  assert.deepEqual(incoming.relationship, { status: "pending", direction: "incoming" });
+  assert.equal(discoveredStateFromRelationshipConflict(incoming.relationship), "incoming");
+  assert.match(presentConnectionRequestConflict(incoming.relationship), /Open Requests/i);
 
   const privacy = await createMemberConnectionsClient({
     enabled: true,
@@ -630,13 +827,36 @@ test("direct createRequest: any HTTP 409 maps to conflict; privacy OFF stays a d
   assert.equal(privacy.kind, "error");
   assert.equal(privacy.code, "incoming_requests_disabled");
 
+  // Declined/removed keep Send available (null override).
+  assert.equal(resolveConflictDiscoveredState({
+    relationship: { status: "declined", direction: "outgoing" },
+    userId: "user_to",
+    acceptedUserIds: [],
+    incomingRequesterIds: [],
+    blockUnspecifiedConflict: true,
+  }), null);
+  assert.equal(resolveConflictDiscoveredState({
+    relationship: { status: "removed", direction: null },
+    userId: "user_to",
+    acceptedUserIds: [],
+    incomingRequesterIds: [],
+    blockUnspecifiedConflict: true,
+  }), null);
+
   const hook = readFileSync(resolve(projectRoot, "lib/useMemberConnections.ts"), "utf8");
-  assert.match(hook, /conflict: 'A connection request already exists for this member\.'/);
+  assert.match(hook, /presentConnectionRequestConflict/);
   assert.match(hook, /incoming_requests_disabled: 'This member is not accepting connection requests\.'/);
-  assert.notEqual(
-    hook.match(/conflict: '([^']+)'/)?.[1],
-    hook.match(/incoming_requests_disabled: '([^']+)'/)?.[1],
-  );
+  assert.match(hook, /resolveConflictDiscoveredState/);
+  assert.match(hook, /blockUnspecifiedConflict/);
+  assert.match(hook, /listIncoming\(\)/);
+  assert.match(hook, /listAccepted\(\)/);
+  assert.match(hook, /listOutgoing\(\)/);
+  assert.match(hook, /override === 'unavailable'/);
+  assert.match(hook, /Clear any previously invented session pending/);
+  const screen = readFileSync(resolve(projectRoot, "components/MemberConnectionsScreen.tsx"), "utf8");
+  assert.match(screen, /Connection status unavailable/);
+  assert.match(screen, /member-connections-status-unavailable/);
+  assert.match(screen, /discoveredState === 'unavailable'/);
 });
 
 test("remove uses DELETE /me/connections/{id} then the hub reloads incoming + accepted", async () => {
@@ -674,8 +894,11 @@ test("queue relationship_exists stays independent of direct conflict copy", () =
   const presentation = readFileSync(resolve(projectRoot, "lib/flightQueuePresentation.ts"), "utf8");
   assert.match(presentation, /relationship_exists.*A connection with this member already exists/);
   const hook = readFileSync(resolve(projectRoot, "lib/useMemberConnections.ts"), "utf8");
-  assert.match(hook, /A connection request already exists for this member/);
+  const client = readFileSync(resolve(projectRoot, "lib/memberConnections.ts"), "utf8");
+  assert.match(hook, /presentConnectionRequestConflict/);
+  assert.match(client, /You’re already connected with this member/);
   assert.doesNotMatch(hook, /A connection with this member already exists/);
+  assert.doesNotMatch(client, /A connection with this member already exists\./);
 });
 
 test("listOutgoing parses redacted responses and maps missing endpoint / network / auth distinctly", async () => {
@@ -816,6 +1039,35 @@ test("discover outgoingRequestPending: true, false, and missing field", async ()
     outgoingRequestPending: true,
   }), "outgoing");
 
+  const productionEligible = parseConnectionDiscovery({
+    member: {
+      userId: "user_to",
+      firstName: "Noah",
+      lastName: "Bennett",
+      outgoingRequestPending: false,
+      relationshipDirection: null,
+      relationshipStatus: null,
+    },
+  });
+  assert.equal(productionEligible.member.relationshipStatus, null);
+  assert.equal(productionEligible.member.relationshipDirection, null);
+  assert.equal(productionEligible.member.outgoingRequestPending, false);
+  assert.equal(discoveredStateFromDiscoveryMember(productionEligible.member), "available");
+  // Fresh discover eligibility replaces a stale unclassified 409 and a local pending mark.
+  assert.equal(presentDiscoveredMember({
+    userId: "user_to",
+    acceptedUserIds: [],
+    incomingRequesterIds: [],
+    outgoingRecipientIds: ["user_to"],
+    outgoingRequestPending: false,
+    relationshipOverride: "unavailable",
+    serverDiscoveryState: discoveredStateFromDiscoveryMember(productionEligible.member),
+  }), "available");
+  assert.equal(discoveredStateFromDiscoveryMember({
+    userId: "user_to",
+    outgoingRequestPending: false,
+  }), null);
+
   const pendingFalse = parseConnectionDiscovery({
     member: { userId: "user_to", firstName: "Noah", lastName: "Bennett", outgoingRequestPending: false },
   });
@@ -900,6 +1152,9 @@ test("discover outgoingRequestPending: true, false, and missing field", async ()
 
   const hook = readFileSync(resolve(projectRoot, "lib/useMemberConnections.ts"), "utf8");
   assert.match(hook, /Never clear session-local pending on discover false/);
+  assert.match(hook, /clearMessage: result\.data\.member != null/);
+  assert.match(hook, /discoveryState === 'available'/);
+  assert.match(hook, /discoveredStateFromDiscoveryMember/);
   assert.match(hook, /generationRef/);
   assert.match(hook, /accountRef\.current !== accountId/);
 });
@@ -958,13 +1213,13 @@ test("declined outgoing request releases the create-confirmed pending mark", () 
     }).recipientUserIds, ["user_to"]);
   }
 
-  // IDs without a receipt (discover-sourced) keep stale protection.
+  // IDs without a create receipt are dropped (no invented "Request pending").
   assert.deepEqual(reconcilePendingOutgoingRecipients({
     recipientUserIds: ["user_to", "user_discovered"],
     receipts: [receipt],
     outgoing: [],
     listRequestedAt: 2_000,
-  }).recipientUserIds, ["user_discovered"]);
+  }).recipientUserIds, []);
 
   // A newer re-send to the same member keeps the mark.
   const resend = { recipientUserId: "user_to", requestId: 42, confirmedAt: 3_000 };

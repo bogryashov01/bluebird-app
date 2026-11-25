@@ -130,6 +130,36 @@ export function memberMessagesSnapshotConfirmsConversations(
   return snapshot.conversations.length > 0;
 }
 
+/**
+ * After a successful HTTP send, keep the inbox preview current without waiting
+ * for the next list poll. Unknown conversation IDs are left unchanged so a
+ * concurrent list refresh remains authoritative.
+ */
+export function projectOutboundMessageOntoConversations(input: {
+  conversations: readonly MessageConversation[];
+  conversationId: number;
+  message: MemberMessage;
+}): MessageConversation[] {
+  const conversationId = input.conversationId;
+  const message = input.message;
+  let matched: MessageConversation | null = null;
+  const others: MessageConversation[] = [];
+  for (const conversation of input.conversations) {
+    if (conversation.id === conversationId) {
+      matched = {
+        ...conversation,
+        latestMessage: message,
+        updatedAt: message.createdAt,
+        unreadCount: 0,
+      };
+      continue;
+    }
+    others.push(conversation);
+  }
+  if (!matched) return [...input.conversations];
+  return [matched, ...others];
+}
+
 export type MemberConversationsView =
   | { kind: 'disabled' }
   | { kind: 'signed-out' }

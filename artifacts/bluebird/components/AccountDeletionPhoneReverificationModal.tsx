@@ -47,6 +47,8 @@ export function AccountDeletionPhoneReverificationModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const preparingRef = useRef(false);
+  const onDismissedRef = useRef(onDismissed);
+  onDismissedRef.current = onDismissed;
 
   useEffect(() => {
     if (!visible || !challenge) return;
@@ -56,18 +58,19 @@ export function AccountDeletionPhoneReverificationModal({
     setError(null);
     setSafeIdentifier(null);
     setBusy(true);
+    const activeChallenge = challenge;
 
     void (async () => {
       const prepared = await prepareAccountDeletionPhoneReverification({
         session,
-        level: challenge.level,
+        level: activeChallenge.level,
       });
       if (cancelled) return;
       preparingRef.current = false;
       setBusy(false);
       if (prepared.kind === 'complete') {
-        onDismissed();
-        challenge.complete();
+        onDismissedRef.current();
+        activeChallenge.complete();
         return;
       }
       if (prepared.kind === 'unavailable') {
@@ -86,7 +89,9 @@ export function AccountDeletionPhoneReverificationModal({
       cancelled = true;
       preparingRef.current = false;
     };
-  }, [visible, challenge, session, onDismissed]);
+    // Parent passes a fresh onDismissed each render. Depending on it restarts
+    // SMS prepare and can complete reverification twice.
+  }, [visible, challenge, session]);
 
   const closeCancelled = () => {
     if (busy && preparingRef.current) return;
